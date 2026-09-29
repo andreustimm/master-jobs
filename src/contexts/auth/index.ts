@@ -295,6 +295,21 @@ export function askPasswordReset(email: string, baseUrl: string) {
   return requestPasswordReset(email, resetDeps(baseUrl));
 }
 
+/**
+ * Registra que o pedido de recuperação não pôde ser enviado por falta de
+ * origem confiável (`resolvePublicOrigin` devolveu `null` — deployment sem
+ * `JHO_PUBLIC_URL`). Nunca consulta se a conta existe: grava para todo
+ * pedido, endereço cadastrado ou não, exatamente como `requestPasswordReset`
+ * faz para as outras causas de falha — a mesma disciplina de G17.
+ */
+export async function recordResetSendFailure(email: string, detail: string): Promise<void> {
+  await drizzleAuthRepository.record({
+    kind: "reset_send_failed",
+    email: email.trim().toLowerCase(),
+    detail,
+  });
+}
+
 /** O link ainda serve? Consulta sem consumir, para a tela avisar antes. */
 export function resetTokenIsLive(token: string) {
   return isResetTokenLive(token, hashToken);

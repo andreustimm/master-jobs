@@ -15,10 +15,12 @@
  *    falha fechado imediatamente: nunca cai para os ramos abaixo só porque a
  *    variável está quebrada.
  * 2. **Na Vercel**, sem `JHO_PUBLIC_URL` cadastrada: `VERCEL_ENV` e
- *    `VERCEL_PROJECT_PRODUCTION_URL`/`VERCEL_URL` são variáveis de **sistema**
- *    da plataforma — a build/runtime as recebe da própria Vercel, nunca do
- *    cliente, ao contrário do `Host` da requisição. Isso é o que faz a
- *    recuperação de senha continuar funcionando em produção e preview sem
+ *    `VERCEL_PROJECT_PRODUCTION_URL`/`VERCEL_BRANCH_URL`/`VERCEL_URL` são
+ *    variáveis de **sistema** da plataforma — a build/runtime as recebe da
+ *    própria Vercel, nunca do cliente, ao contrário do `Host` da requisição.
+ *    Em preview, `VERCEL_BRANCH_URL` (estável por branch) vem antes de
+ *    `VERCEL_URL` (único por deployment, muda a cada push). Isso é o que faz
+ *    a recuperação de senha continuar funcionando em produção e preview sem
  *    exigir cadastro manual antes desta função existir.
  * 3. **Na máquina do dono** (`isLocalProcess`), sem nenhuma das duas acima: o
  *    `Host` da requisição, como sempre — é loopback, e só o próprio dono
@@ -34,6 +36,16 @@ export type RequestOrigin = {
   readonly host: string | null;
   readonly proto: "http" | "https";
 };
+
+/**
+ * Primeiro valor de fato presente. `??` só cai para o próximo em `null`/
+ * `undefined` — uma variável de sistema declarada como string vazia (regra
+ * 17) não pode se passar por "presente" e vencer `VERCEL_URL`.
+ */
+function firstNonEmpty(...values: Array<string | undefined>): string | undefined {
+  for (const value of values) if (value?.trim()) return value;
+  return undefined;
+}
 
 /** `origin` de uma URL válida (esquema + host, sem caminho); `null` se malformada. */
 function originOf(value: string): string | null {
@@ -59,9 +71,10 @@ export function resolvePublicOrigin(env: AuthEnvironment, request: RequestOrigin
   // As duas variáveis de host abaixo só existem porque a Vercel as escreve no
   // ambiente da função — a pessoa que faz a requisição não as controla.
   if (env.VERCEL !== undefined && env.VERCEL !== "") {
-    const host = (
-      env.VERCEL_ENV === "production" ? env.VERCEL_PROJECT_PRODUCTION_URL : env.VERCEL_URL
-    )?.trim();
+    const host =
+      env.VERCEL_ENV === "production"
+        ? env.VERCEL_PROJECT_PRODUCTION_URL?.trim()
+        : firstNonEmpty(env.VERCEL_BRANCH_URL, env.VERCEL_URL);
     if (host) return originOf(`https://${host}`);
     // Declarado como Vercel, mas sem a variável de host esperada para este
     // VERCEL_ENV: nunca cai para o Host do cliente (isLocalProcess já seria

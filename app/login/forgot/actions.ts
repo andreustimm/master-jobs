@@ -2,7 +2,11 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { askPasswordReset, resolvePublicOrigin } from "../../../src/contexts/auth/index.ts";
+import {
+  askPasswordReset,
+  recordResetSendFailure,
+  resolvePublicOrigin,
+} from "../../../src/contexts/auth/index.ts";
 import { setMutationFeedbackCookie } from "../../mutation-feedback-server";
 
 /**
@@ -31,10 +35,13 @@ export async function requestResetAction(formData: FormData) {
     // Falha fechada (host poisoning, G17/G18): sem `JHO_PUBLIC_URL` num
     // deployment, o `Host` do cliente não é confiável para montar o link —
     // nenhum e-mail sai, e a resposta continua idêntica, para não revelar a
-    // conta nem o defeito de configuração a quem pediu.
+    // conta nem o defeito de configuração a quem pediu. O registro é
+    // incondicional (nunca consulta se a conta existe), a mesma disciplina
+    // de `requestPasswordReset` para as outras causas de falha de envio.
     console.warn(
       "[auth] ALERTA: recuperação de senha sem JHO_PUBLIC_URL configurada — nenhum link foi enviado.",
     );
+    await recordResetSendFailure(email, "origem pública não configurada (JHO_PUBLIC_URL)");
   }
 
   await setMutationFeedbackCookie("success");

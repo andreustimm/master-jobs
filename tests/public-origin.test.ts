@@ -72,7 +72,20 @@ describe("resolvePublicOrigin", () => {
       expect(origin).toBe("https://jobs.mastertimm.com.br");
     });
 
-    it("preview usa VERCEL_URL, nunca o Host do cliente", () => {
+    it("preview prefere VERCEL_BRANCH_URL (estável por branch) a VERCEL_URL (por deployment)", () => {
+      const origin = resolvePublicOrigin(
+        {
+          VERCEL: "1",
+          VERCEL_ENV: "preview",
+          VERCEL_BRANCH_URL: "master-jobs-git-ci-plano-b-fly.vercel.app",
+          VERCEL_URL: "master-jobs-abc123.vercel.app",
+        },
+        { host: "atacante.example", proto: "https" },
+      );
+      expect(origin).toBe("https://master-jobs-git-ci-plano-b-fly.vercel.app");
+    });
+
+    it("preview sem VERCEL_BRANCH_URL cai para VERCEL_URL, nunca o Host do cliente", () => {
       const origin = resolvePublicOrigin(
         { VERCEL: "1", VERCEL_ENV: "preview", VERCEL_URL: "master-jobs-git-tarefa.vercel.app" },
         { host: "atacante.example", proto: "https" },
@@ -80,7 +93,15 @@ describe("resolvePublicOrigin", () => {
       expect(origin).toBe("https://master-jobs-git-tarefa.vercel.app");
     });
 
-    it("VERCEL_ENV ausente ou diferente de production também usa VERCEL_URL (o mesmo ramo de preview)", () => {
+    it("VERCEL_BRANCH_URL vazia não vence VERCEL_URL (regra 17: '' não é presença)", () => {
+      const origin = resolvePublicOrigin(
+        { VERCEL: "1", VERCEL_ENV: "preview", VERCEL_BRANCH_URL: "", VERCEL_URL: "master-jobs-abc123.vercel.app" },
+        { host: "atacante.example", proto: "https" },
+      );
+      expect(origin).toBe("https://master-jobs-abc123.vercel.app");
+    });
+
+    it("VERCEL_ENV ausente ou diferente de production também usa o ramo de preview", () => {
       const origin = resolvePublicOrigin(
         { VERCEL: "1", VERCEL_URL: "master-jobs-abc123.vercel.app" },
         { host: "atacante.example", proto: "https" },

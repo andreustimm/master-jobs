@@ -123,4 +123,45 @@ describe("de quem é a requisição", () => {
   it("T6b · aceita x-real-ip quando é o que existe", () => {
     expect(clientKey(new Headers({ "x-real-ip": "198.51.100.9" }))).toBe("198.51.100.9");
   });
+
+  describe("fora da Vercel (plano B no Fly): Fly-Client-IP vence o x-forwarded-for que o cliente escolhe", () => {
+    it("usa fly-client-ip quando presente, mesmo com x-forwarded-for também presente", () => {
+      const headers = new Headers({
+        "fly-client-ip": "203.0.113.9",
+        "x-forwarded-for": "1.2.3.4, 10.0.0.1",
+      });
+      expect(clientKey(headers, {})).toBe("203.0.113.9");
+    });
+
+    it("REPRODUZ o risco: sem fly-client-ip, o cliente escolhe o balde pelo primeiro x-forwarded-for", () => {
+      // `x-forwarded-for` é o cabeçalho que o próprio cliente pode mandar; o
+      // primeiro item da lista é o que ele escreveu, não o que um proxy
+      // confiável verificou. Isto é aceito de propósito na Vercel (a borda
+      // dela sobrescreve o valor recebido do cliente antes de repassar à
+      // função) — fora dela, sem `fly-client-ip`, o mesmo valor decide o
+      // balde, e é exatamente por isso que o Fly precisa do cabeçalho dele.
+      const headers = new Headers({ "x-forwarded-for": "1.2.3.4, 10.0.0.1" });
+      expect(clientKey(headers, {})).toBe("1.2.3.4");
+    });
+
+    it("sem VERCEL declarado (padrão de process.env fora da Vercel), o comportamento é o mesmo", () => {
+      const headers = new Headers({ "fly-client-ip": "203.0.113.9" });
+      expect(clientKey(headers, { VERCEL: undefined })).toBe("203.0.113.9");
+    });
+  });
+
+  describe("na Vercel, fly-client-ip não é confiável — qualquer cliente poderia forjá-lo", () => {
+    it("ignora fly-client-ip quando VERCEL está declarado", () => {
+      const headers = new Headers({
+        "fly-client-ip": "203.0.113.9",
+        "x-forwarded-for": "198.51.100.9, 10.0.0.1",
+      });
+      expect(clientKey(headers, { VERCEL: "1" })).toBe("198.51.100.9");
+    });
+
+    it("VERCEL vazio conta como ausente (regra 17) — ainda confia em fly-client-ip", () => {
+      const headers = new Headers({ "fly-client-ip": "203.0.113.9" });
+      expect(clientKey(headers, { VERCEL: "" })).toBe("203.0.113.9");
+    });
+  });
 });

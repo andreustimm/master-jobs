@@ -87,7 +87,22 @@ da varredura fatiada não depende da sorte: `next.config.ts` inclui
 | `JHO_STORAGE_BUCKET` | Vercel (opcional) | prefixo dos objetos no Blob (bucket no S3); padrão `master-jobs` |
 | `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE` | local (MinIO) ou futuro AWS S3 | só com `JHO_STORAGE_DRIVER=s3`; `S3_ENDPOINT` ausente é a AWS ([local-storage.md](local-storage.md)) |
 | `JHO_ENV` | qualquer deployment que não seja a Vercel (o plano B no Fly, `fly.toml` **e** `Dockerfile`) | declara o ambiente para `isLocalProcess()` (`src/contexts/auth/domain/open-mode.ts`); sem ela, fora da Vercel, o processo seria tratado como a máquina do dono — libera o modo aberto, imprime link de recuperação no log (G18) e recusa a varredura |
-| `JHO_PUBLIC_URL` | opcional na Vercel; obrigatória no plano B no Fly (já fixada em `fly.toml`) | origem confiável (`https://host`) para o link de recuperação de senha (`src/contexts/auth/domain/public-origin.ts`), nunca o `Host` da requisição (G17/G18, host poisoning). **Na Vercel não precisa ser cadastrada**: sem ela, a função usa `VERCEL_PROJECT_PRODUCTION_URL` (produção) ou `VERCEL_URL` (preview) — variáveis de sistema da própria plataforma, não controladas pelo cliente. Fora da Vercel e da máquina do dono (o plano B no Fly), a ausência falha fechado |
+| `JHO_PUBLIC_URL` | opcional na Vercel; obrigatória no plano B no Fly (já fixada em `fly.toml`) | origem confiável (`https://host`) para o link de recuperação de senha (`src/contexts/auth/domain/public-origin.ts`), nunca o `Host` da requisição (G17/G18, host poisoning). **Na Vercel não precisa ser cadastrada**: sem ela, a função usa `VERCEL_PROJECT_PRODUCTION_URL` (produção) ou `VERCEL_BRANCH_URL`/`VERCEL_URL` (preview) — variáveis de sistema da própria plataforma, não controladas pelo cliente. `VERCEL_PROJECT_PRODUCTION_URL` deve resolver para `jobs.mastertimm.com.br` (o domínio próprio tem precedência sobre o `*.vercel.app` gerado, quando o projeto tem um domínio de produção configurado) — confirmar isso é o item novo do checklist pós-deploy, abaixo. Cadastrar `JHO_PUBLIC_URL=https://jobs.mastertimm.com.br` em Production elimina a dúvida por completo, sem depender de nenhuma variável de sistema. Fora da Vercel e da máquina do dono (o plano B no Fly), a ausência falha fechado |
+
+**Dependência silenciosa: "Automatically expose System Environment
+Variables".** A documentação da Vercel condiciona o acesso, em runtime de
+função (não só no build), às variáveis de sistema — `VERCEL_ENV`,
+`VERCEL_PROJECT_PRODUCTION_URL`, `VERCEL_BRANCH_URL`, `VERCEL_URL` — a essa
+opção estar ligada em **Project Settings → Environment Variables**. Vem
+ligada por padrão em projeto novo, mas é uma configuração, não uma garantia
+imutável da plataforma — projeto migrado ou reconfigurado pode tê-la
+desligado sem ninguém notar. **Não verificado nesta entrega** exatamente
+quais variáveis sobrevivem com a opção desligada (documentação da Vercel e
+comportamento real podem divergir); o efeito, se alguma delas faltar, é
+`resolvePublicOrigin` cair na falha fechada mesmo na Vercel, sem nenhum
+aviso visível além do `console.warn` no log da função. Cadastrar
+`JHO_PUBLIC_URL` explicitamente elimina esta dependência por completo — é a
+mitigação, não a verificação.
 
 **A URL pode vir de mais de um nome, e a ordem é declarada.** A integração do
 Supabase com a Vercel cadastra `POSTGRES_URL` e `POSTGRES_URL_NON_POOLING` e as
@@ -370,15 +385,20 @@ portável é `s3` contra um bucket real (não o MinIO local), documentada em
 sobem sem upload de foto e capa no plano B, o mesmo comportamento (não uma
 regressão nova) de quando `JHO_STORAGE_DRIVER` está ausente.
 
-**Limite por IP, não verificado no Fly.** `clientKey`
-(`src/core/rate-limit.ts`) lê `x-forwarded-for`/`x-real-ip` para separar
-visitantes do limite de requisição. O Fly também expõe `Fly-Client-IP` com o
-IP real do cliente; se o proxy dele não preencher `X-Forwarded-For` do mesmo
-jeito que a Vercel preenche, o limite por IP no plano B pode degradar para
-"todo mundo no mesmo balde" (mais restritivo, não mais permissivo) até
-alguém confirmar o cabeçalho de verdade contra um deployment real — **não
-verificado nesta entrega**; confirmar antes de tratar o plano B como
-equivalente à Vercel sob esse aspecto.
+**Limite por IP: a direção certa do risco.** `clientKey`
+(`src/core/rate-limit.ts`) usa o primeiro valor de `x-forwarded-for` como
+chave do balde — e o primeiro valor dessa lista é o que **o cliente
+escreveu**, não o que um proxy confiável verificou. Na Vercel isso é aceito
+porque a borda dela sobrescreve o `x-forwarded-for` recebido do cliente antes
+de repassar à função; o risco não é "degradar para um balde só" (mais
+restritivo), é o oposto — **um cliente escolhendo livremente o próprio balde**
+para escapar do limite, ou forçando outro visitante para o seu. Fora da
+Vercel essa garantia não existe. Por isso `clientKey` agora prefere
+`Fly-Client-IP` — escrito pelo proxy de borda do próprio Fly, que o cliente
+não alcança sem passar por ele — sempre que `VERCEL` não está declarado no
+ambiente; declarado (a Vercel), o cabeçalho é ignorado, porque ali qualquer
+cliente poderia forjá-lo sem que a borda o filtrasse. Prova em
+`tests/rate-limit.test.ts`.
 
 **Pré-requisitos, uma vez, antes do primeiro failover — todos passo do
 dono:**
@@ -977,3 +997,10 @@ de execução da Vercel; esse diagnóstico continua no
    limpar cache nem reinstalar. No aparelho físico, confirmar o piso protetor
    em retrato e, em paisagem baixa de telefone, a ausência da faixa artificial
    de 48px sem perder o inset real informado pelo sistema.
+7. Pedir recuperação de senha para uma conta de teste e conferir que o link no
+   e-mail (ou no log, se `RESEND_API_KEY` não estiver configurada) aponta para
+   `jobs.mastertimm.com.br` — nunca para um `*.vercel.app` gerado nem para
+   qualquer outro host. É a confirmação de que `VERCEL_PROJECT_PRODUCTION_URL`
+   resolve para o domínio próprio (ou de que `JHO_PUBLIC_URL` está cadastrada)
+   sem depender de leitura de variável em painel, que não prova o que o
+   runtime realmente recebeu.

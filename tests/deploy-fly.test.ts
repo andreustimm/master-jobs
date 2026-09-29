@@ -17,13 +17,26 @@ const PACKAGE_JSON = JSON.parse(readFileSync("package.json", "utf8")) as {
   scripts: Record<string, string>;
 };
 
+/**
+ * A última diretiva `USER` antes do último `CMD` decide quem roda o
+ * processo — é como o Docker resolve, e é o que este contrato precisa
+ * espelhar para não aprovar um Dockerfile que troca de volta para root
+ * depois de um `USER nextjs` de fachada. Sem `USER` nenhum, ou com a última
+ * sendo `root`/`0`, o contêiner roda como root.
+ */
+function runsAsNonRootBeforeCmd(dockerfile: string): boolean {
+  const cmdIndex = dockerfile.lastIndexOf("CMD");
+  if (cmdIndex < 0) return false;
+  const before = dockerfile.slice(0, cmdIndex);
+  const users = [...before.matchAll(/^USER\s+(\S+)\s*$/gm)];
+  const last = users.at(-1)?.[1];
+  return last !== undefined && last !== "root" && last !== "0";
+}
+
 describe("Dockerfile — o contêiner nunca roda como root", () => {
   it("cria um usuário não-root dedicado e o adota antes do CMD", () => {
     expect(DOCKERFILE).toMatch(/useradd\s+--uid\s+1101\s+--gid\s+nextjs/);
-    const userIndex = DOCKERFILE.lastIndexOf("USER nextjs");
-    const cmdIndex = DOCKERFILE.lastIndexOf("CMD");
-    expect(userIndex, "USER nextjs ausente").toBeGreaterThan(-1);
-    expect(userIndex).toBeLessThan(cmdIndex);
+    expect(runsAsNonRootBeforeCmd(DOCKERFILE)).toBe(true);
   });
 
   it("nunca troca de volta para root depois de adotar o usuário da aplicação", () => {
@@ -32,12 +45,31 @@ describe("Dockerfile — o contêiner nunca roda como root", () => {
     expect(afterUser).not.toMatch(/USER\s+0\b/);
   });
 
-  it("a regressão óbvia (nenhuma diretiva USER) continua reprovando", () => {
-    // Documenta o que o teste acima pega: um Dockerfile sem `USER` roda como
-    // root por padrão, e é exatamente o defeito que estas duas checagens
-    // existem para impedir.
-    const withoutUser = DOCKERFILE.replaceAll(/^USER .+$/gm, "");
-    expect(withoutUser).not.toContain("USER nextjs");
+  describe("runsAsNonRootBeforeCmd — a função da checagem, contra fixtures que ela precisa pegar", () => {
+    it("Dockerfile sem nenhuma diretiva USER roda como root", () => {
+      const fixture = "FROM node:24-slim\nWORKDIR /app\nCOPY . .\nCMD [\"node\", \"server.js\"]\n";
+      expect(runsAsNonRootBeforeCmd(fixture)).toBe(false);
+    });
+
+    it("USER root explícito também conta como root", () => {
+      const fixture = "FROM node:24-slim\nUSER root\nCMD [\"node\", \"server.js\"]\n";
+      expect(runsAsNonRootBeforeCmd(fixture)).toBe(false);
+    });
+
+    it("USER 0 (o uid de root) conta como root, mesmo sem o nome", () => {
+      const fixture = "FROM node:24-slim\nUSER 0\nCMD [\"node\", \"server.js\"]\n";
+      expect(runsAsNonRootBeforeCmd(fixture)).toBe(false);
+    });
+
+    it("USER não-root depois do CMD não conta — o Docker já decidiu antes dele", () => {
+      const fixture = "FROM node:24-slim\nCMD [\"node\", \"server.js\"]\nUSER nextjs\n";
+      expect(runsAsNonRootBeforeCmd(fixture)).toBe(false);
+    });
+
+    it("USER não-root antes do CMD passa", () => {
+      const fixture = "FROM node:24-slim\nUSER nextjs\nCMD [\"node\", \"server.js\"]\n";
+      expect(runsAsNonRootBeforeCmd(fixture)).toBe(true);
+    });
   });
 });
 

@@ -92,7 +92,13 @@ jobs:
           IMG="${{ env.IMAGEM }}:${{ steps.tag.outputs.value }}"
           achou=0
 
-          if docker run --rm --entrypoint find "$IMG" / -xdev \
+          # --user 0: a imagem roda como `nextjs` (uid 1101) por padrão, e
+          # esse usuário não lê `/root` nem outros caminhos só-root — uma
+          # inspeção sem privilégio deixaria passar segredo escondido
+          # exatamente onde só root enxerga. A imagem publicada continua sem
+          # `USER root` nenhum; isto só afeta o processo do `find`/`grep`
+          # desta checagem, nunca o `CMD` de verdade.
+          if docker run --rm --user 0 --entrypoint find "$IMG" / -xdev \
               \( -path /proc -o -path /sys \) -prune -o \
               \( -name '.env' -o -name '.env.*' -o -name '*.token.json' \
                  -o -name '.linkedin-session.json' -o -name '*.db' \) -print \
@@ -101,7 +107,7 @@ jobs:
             achou=1
           fi
 
-          if docker run --rm --entrypoint sh "$IMG" -c \
+          if docker run --rm --user 0 --entrypoint sh "$IMG" -c \
               "grep -rIlE 'DATABASE_URL=postgres|_API_KEY=[^\$]|_AUTH_TOKEN=[^\$]|READ_WRITE_TOKEN=[^\$]' / \
                 --exclude-dir=proc --exclude-dir=sys 2>/dev/null" \
               | grep -q .; then
@@ -148,10 +154,11 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v7
-      # Pinado pelo SHA da tag `v1.6`/`1.6` (checados em 29/09/2026) — nunca
+      # Pinado pelo SHA que as tags `1.6` e `v1` apontam (checado em
+      # 29/09/2026, `gh api repos/superfly/flyctl-actions/tags`) — nunca
       # `@master`, que é um branch flutuante e correria código não revisado
       # neste ponto do pipeline.
-      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # v1.6
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
       - name: Implantar a imagem publicada no Fly.io (gru)
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
