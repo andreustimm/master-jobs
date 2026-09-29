@@ -1,5 +1,5 @@
 {
-  "id": "4a65bca3-60fd-47ac-8843-446a0b114800",
+  "id": "be59abd0-65ac-40f8-9ff2-913bd3321b5c",
   "prevId": "77e852fd-3448-4a35-b941-ce8fd6568652",
   "version": "7",
   "dialect": "postgresql",
@@ -3863,6 +3863,113 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "production.quota_watch": {
+      "name": "quota_watch",
+      "schema": "production",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "byDefault",
+            "name": "quota_watch_id_seq",
+            "schema": "production",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "2147483647",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "checked_at": {
+          "name": "checked_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "to_char(clock_timestamp() at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')"
+        },
+        "vercel_deploys_24h": {
+          "name": "vercel_deploys_24h",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "actions_queue_max_wait_s": {
+          "name": "actions_queue_max_wait_s",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "actions_status": {
+          "name": "actions_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decision": {
+          "name": "decision",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trigger": {
+          "name": "trigger",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "action_recommended": {
+          "name": "action_recommended",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reversal_command": {
+          "name": "reversal_command",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "issue_number": {
+          "name": "issue_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "quota_watch_checked_at_idx": {
+          "name": "quota_watch_checked_at_idx",
+          "columns": [
+            {
+              "expression": "checked_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "production.recruiter_candidate": {
       "name": "recruiter_candidate",
       "schema": "production",
@@ -5365,12 +5472,6 @@
             "cycle": false
           }
         },
-        "candidate_id": {
-          "name": "candidate_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "name": {
           "name": "name",
           "type": "text",
@@ -5435,15 +5536,9 @@
         }
       },
       "indexes": {
-        "target_account_candidate_url_idx": {
-          "name": "target_account_candidate_url_idx",
+        "target_account_url_idx": {
+          "name": "target_account_url_idx",
           "columns": [
-            {
-              "expression": "candidate_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
             {
               "expression": "linkedin_url",
               "isExpression": false,
@@ -5457,22 +5552,7 @@
           "with": {}
         }
       },
-      "foreignKeys": {
-        "target_account_candidate_id_candidate_id_fk": {
-          "name": "target_account_candidate_id_candidate_id_fk",
-          "tableFrom": "target_account",
-          "tableTo": "candidate",
-          "schemaTo": "production",
-          "columnsFrom": [
-            "candidate_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

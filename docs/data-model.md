@@ -1343,5 +1343,5 @@ candidato ativo na CLI. A URL do LinkedIn é única **por candidato**
 (`target_account_candidate_url_idx` em `candidate_id, linkedin_url`): duas
 contas podem conhecer a mesma pessoa, cada uma com o próprio registro. Antes
 disso a tabela não tinha dono e `/referrals` mostrava a rede do dono, com nomes,
-para qualquer conta. As migrations 0030–0032 atribuíram as linhas existentes ao
+para qualquer conta. As migrations 0031–0033 atribuíram as linhas existentes ao
 candidato de slug `default`, que é quem as gravou pela CLI.

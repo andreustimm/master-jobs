@@ -1,14 +1,14 @@
 /**
  * Suíte: upgrade de banco POPULADO pelas migrations da rede por candidato (#379).
  *
- * Par backfill → constraint: a 0030 cria `target_account.candidate_id`
- * anulável, a 0031 atribui os contatos existentes ao candidato `default` (o da
- * CLI, que gravou todos eles) e a 0032 torna a coluna obrigatória. Banco vazio
- * não prova nada disso; aqui o banco chega na forma da 0029 com a rede do dono
+ * Par backfill → constraint: a 0031 cria `target_account.candidate_id`
+ * anulável, a 0032 atribui os contatos existentes ao candidato `default` (o da
+ * CLI, que gravou todos eles) e a 0033 torna a coluna obrigatória. Banco vazio
+ * não prova nada disso; aqui o banco chega na forma da 0030 com a rede do dono
  * e um convidado marcado `is_default` pelo defeito antigo de `ensureCandidate`.
  *
  * Fronteira DENTRO: o migrator real do Drizzle sobre `drizzle/postgres/`, num
- * PostgreSQL descartável; SQL bruto na forma da 0029.
+ * PostgreSQL descartável; SQL bruto na forma da 0030.
  * Fronteira FORA: migração de produção (`migrate.yml`, ADR 0028).
  */
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -22,7 +22,7 @@ import { provisionTestDatabase } from "./support/db.ts";
 
 const FOLDER = "./drizzle/postgres";
 /** A última forma sem dono no contato. */
-const PREVIOUS = "0029_perfil_publico_foto_capa";
+const PREVIOUS = "0030_quota_watch";
 
 type Journal = { entries: Array<{ idx: number; tag: string; when: number }> };
 
@@ -56,7 +56,7 @@ afterEach(async () => {
   rmSync(partial, { recursive: true, force: true });
 });
 
-/** A rede como a 0029 a guarda: sem dono. */
+/** A rede como a 0030 a guarda: sem dono. */
 async function seedNetwork(): Promise<void> {
   await client.unsafe(`
     insert into production.target_account (name, company, category, linkedin_url) values
@@ -120,7 +120,7 @@ describe("upgrade da rede de contatos (#379)", () => {
 
   it("sem candidato `default`, recusa o lote inteiro em vez de adivinhar o dono", async () => {
     // Contato órfão não é apagado nem entregue a um candidato qualquer: a
-    // 0032 falha, e a transação desfaz a 0030 e a 0031 junto.
+    // 0033 falha, e a transação desfaz a 0031 e a 0032 junto.
     await client.unsafe(`
       insert into production.candidate (id, slug, name, is_default) values
         (11, 'user-convidado', 'Convidado', true);

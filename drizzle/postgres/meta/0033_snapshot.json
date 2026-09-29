@@ -1,6 +1,6 @@
 {
-  "id": "2581f86e-d7e2-4a6b-b138-60d7c16c4097",
-  "prevId": "be59abd0-65ac-40f8-9ff2-913bd3321b5c",
+  "id": "314011c4-e942-435d-a0eb-47569f90fd5c",
+  "prevId": "2cb8fbd5-8bf9-4f4f-a7e4-f86a447587f3",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -5476,7 +5476,7 @@
           "name": "candidate_id",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "name": {
           "name": "name",

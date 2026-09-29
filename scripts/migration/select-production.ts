@@ -16,7 +16,7 @@ export const policies: Record<string, string> = {
   company: "referenced-or-researched", job: "business-references-or-manual",
   // Contato passou a ter dono (#379) e o snapshot não diz de quem é. Importar
   // sem dono recriaria o vazamento; atribuir a um candidato seria adivinhar.
-  // A rede do dono já está no alvo, atribuída pela migration 0031.
+  // A rede do dono já está no alvo, atribuída pela migration 0032.
   target_account: "exclude-unowned",
   // Derivada e agora por trilha (ADR-008): o snapshot não tem trilha, e a
   // versão 1.4.0 do scorer recalcula tudo no alvo de qualquer forma.
@@ -97,6 +97,9 @@ export const postSnapshotTables = new Set([
   "job_check_event",
   // Orçamento diário de requisições por rotina (#291): contador operacional.
   "request_budget",
+  // Checagem do vigia de cota (ADR 0030, Fase 3): estado operacional, nasce
+  // vazia — nenhuma checagem existiu antes deste agendador existir.
+  "quota_watch",
 ]);
 
 const selectedJobs = `SELECT id FROM job WHERE

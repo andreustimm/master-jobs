@@ -102,6 +102,8 @@ const ALLOWED: Record<string, string> = {
   "src/core/mail/gmail.ts": "Gmail somente leitura (ADR 0008) e callback OAuth em loopback",
   "src/contexts/auth/infra/resend-mailer.ts": "e-mail transacional da própria conta (recuperar senha)",
   "src/contexts/operations/infra/github-dispatch.ts": "dispara workflow do próprio repositório",
+  "src/contexts/operations/infra/quota-watch-metrics.ts": "vigia de cota (ADR 0030): leitura de deployments/fila em APIs da Vercel e do GitHub, e do status público",
+  "src/contexts/operations/infra/quota-watch-issue.ts": "vigia de cota (ADR 0030): abre issue no próprio repositório ao decidir aviso ou ação automática",
   "src/core/storage/infra/vercel-blob.ts": "foto e capa do perfil no Vercel Blob privado (ADR 0029)",
   "src/core/storage/infra/s3.ts": "foto e capa do perfil em S3/MinIO (ADR 0029)",
 };

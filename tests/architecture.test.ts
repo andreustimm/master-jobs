@@ -982,6 +982,14 @@ describe("authorisation (AUTH-01)", () => {
       methods: ["GET"],
       why: "serviço: `CRON_SECRET` em tempo constante via `cronDenied`; 503 sem o segredo; política de ingestão antes de rede",
     },
+    // O vigia de cota (ADR 0030, Fase 3): checagem manual/de teste da mesma
+    // decisão que o `pg_cron` do Supabase toma direto contra as APIs externas
+    // (`supabase/cron/watchdog.sql`, fora deste app de propósito). Mesma borda
+    // de segredo das outras rotas de `/api/cron/`.
+    "app/api/cron/watchdog/route.ts": {
+      methods: ["GET"],
+      why: "serviço: `CRON_SECRET` em tempo constante via `cronDenied`; 503 sem o segredo",
+    },
   };
   const ROUTE_GUARD = /await (require(?:OwnCandidatePage|Page|Session)|guard(?:OwnCandidate)?)\(/;
 
