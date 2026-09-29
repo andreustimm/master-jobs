@@ -336,8 +336,9 @@ no commit foi tentado e reprovado pelo E2E de modalidade: no voltar/avançar o
 roteador confirma a URL antes de o conteúdo da entrada chegar, e o shell
 anunciava pronto sobre a lista anterior por até alguns segundos. Na saída o
 conteúdo volta à opacidade plena e `aria-busy` só cai no `reset`. Demora
-(`prolonged`) e falta de rede (`offline`) zeram `soft` e promovem ao overlay.
-Troca de rota continua igual.
+(`prolonged`) mantém `soft` e anuncia a espera na região de status (#394).
+Falta de rede (`offline`) promove ao overlay de recuperação. Troca de rota
+continua igual.
 
 ## Baseline: antes e depois da primeira entrega
 
