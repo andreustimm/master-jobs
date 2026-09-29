@@ -19,8 +19,10 @@
  * Ambiente que não diz o que é não é tratado como seguro.
  *
  * A conveniência local vem de declarar, não de omitir: `pnpm dev` declara
- * `JHO_ENV=local` no próprio script, a suíte declara em
- * `tests/support/ingestion-env.ts`, e `.env.example` traz a linha.
+ * `JHO_ENV=local` no próprio script e a suíte declara em
+ * `tests/support/ingestion-env.ts`. `pnpm jho` e `pnpm start` locais leem o
+ * `.env`, que precisa trazer `JHO_ENV=local` para o modo aberto e o mailer
+ * de terminal.
  *
  * Recusar aqui não derruba o sistema: o pedido de modo aberto é ignorado e a
  * autenticação continua exigida, como se a variável não existisse. Quem pediu
