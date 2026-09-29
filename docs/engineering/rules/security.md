@@ -112,7 +112,8 @@ uniforme, token de uso único), `logoutAction` e `stopImpersonatingAction` (só
 revogam/restauram o próprio cookie), preferência de interface
 (`setLocaleAction`, `setAppearanceAction`), as telas pré-sessão `/login`,
 `/login/forgot`, `/login/reset` e `/login/callback`, o cron por segredo
-(`/api/cron/recheck`), `/p/[slug]` (G21) e a foto e a capa dele,
+(`/api/cron/recheck`, `/api/cron/watchdog` — checagem manual do vigia de cota,
+ADR 0030; o agendador de produção nunca chama essa rota), `/p/[slug]` (G21) e a foto e a capa dele,
 `/p/[slug]/image/[kind]` (#327), que reconfere a mesma lista de permissão a
 cada requisição.
 

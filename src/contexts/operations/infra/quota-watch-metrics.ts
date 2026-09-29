@@ -1,25 +1,37 @@
 /**
  * Coleta a amostra do vigia de cota: deployments da Vercel, fila do GitHub
- * Actions e o status público da plataforma. Cada chamada é isolada — uma
- * falhando não impede a outra, e a métrica que falhou vira `null` (regra 8
- * adaptada, F3-02), nunca um erro que derruba a checagem inteira.
+ * Actions e o status do componente "Actions" do githubstatus.com. Cada
+ * chamada é isolada — uma falhando não impede a outra, e a métrica que
+ * falhou vira `null` (regra 8 adaptada, F3-02), nunca um erro que derruba a
+ * checagem inteira.
  *
  * Os nomes das variáveis de ambiente são o que este módulo conhece; o valor
- * nunca aparece em log nem em erro (regra 16) — `describeError` só devolve o
- * status HTTP e a URL sem query string.
+ * nunca aparece em log nem em erro (regra 16). Cada chamada tem um teto de
+ * 10 s (`AbortSignal.timeout`): uma API de terceiro lenta não pode prender a
+ * checagem inteira.
+ *
+ * Premissa assumida (documentada em `docs/operations.md`): um projeto Vercel
+ * e um repositório GitHub monitorados — o mesmo par que `varredura.sql` e
+ * `github-dispatch.ts` já assumem. Múltiplos projetos/times exigiriam somar
+ * mais de uma amostra, fora do escopo desta entrega.
  */
+import { firstNonEmpty } from "../../../core/sources/http.ts";
 import type { QuotaSample } from "../domain/quota-watch.ts";
 import type { QuotaMetricsPort } from "../ports.ts";
 
 const VERCEL_TOKEN_ENV = "WATCHDOG_VERCEL_TOKEN";
 const VERCEL_PROJECT_ENV = "WATCHDOG_VERCEL_PROJECT_ID";
+/** Só times: token de conta pessoal não usa `teamId` (mesmo par que a Fase 4 vai assumir). */
 const VERCEL_TEAM_ENV = "WATCHDOG_VERCEL_TEAM_ID";
 const GITHUB_TOKEN_ENV = "WATCHDOG_GITHUB_TOKEN";
 const GITHUB_REPO_ENV = "WATCHDOG_GITHUB_REPO";
 const DEFAULT_REPO = "andreustimm/master-jobs";
-const GITHUB_STATUS_URL = "https://www.githubstatus.com/api/v2/status.json";
+const GITHUB_COMPONENTS_URL = "https://www.githubstatus.com/api/v2/components.json";
+/** Nome exato do componente na página pública — confirmado em githubstatus.com. */
+const ACTIONS_COMPONENT_NAME = "Actions";
 
 const ONE_DAY_MS = 24 * 3_600_000;
+const TIMEOUT_MS = 10_000;
 
 export type QuotaWatchMetricsOptions = {
   /** Injetável para o teste não falar com a rede. */
@@ -31,6 +43,8 @@ export type QuotaWatchMetricsOptions = {
   githubToken?: string | undefined;
   githubRepo?: string | undefined;
 };
+
+const timeout = () => AbortSignal.timeout(TIMEOUT_MS);
 
 async function vercelDeploys24h(
   send: typeof fetch,
@@ -47,13 +61,18 @@ async function vercelDeploys24h(
     url.searchParams.set("since", String(since));
     url.searchParams.set("limit", "100");
     if (teamId) url.searchParams.set("teamId", teamId);
-    const response = await send(url.toString(), { headers: { authorization: `Bearer ${token}` } });
+    const response = await send(url.toString(), { headers: { authorization: `Bearer ${token}` }, signal: timeout() });
     if (!response.ok) return null;
     const body = (await response.json()) as { deployments?: unknown[] };
     return Array.isArray(body.deployments) ? body.deployments.length : null;
   } catch {
     return null;
   }
+}
+
+/** `run_started_at` é quando o runner pegou o run; runs ainda `queued` não têm. `created_at` sempre existe. */
+function waitStartOf(run: { created_at?: string; run_started_at?: string }): string | undefined {
+  return firstNonEmpty(run.run_started_at, run.created_at) ?? undefined;
 }
 
 async function actionsQueueMaxWaitS(
@@ -71,13 +90,17 @@ async function actionsQueueMaxWaitS(
         authorization: `Bearer ${token}`,
         "x-github-api-version": "2022-11-28",
       },
+      signal: timeout(),
     });
     if (!response.ok) return null;
-    const body = (await response.json()) as { workflow_runs?: Array<{ created_at?: string }> };
+    const body = (await response.json()) as { workflow_runs?: Array<{ created_at?: string; run_started_at?: string }> };
     const runs = Array.isArray(body.workflow_runs) ? body.workflow_runs : [];
     if (runs.length === 0) return 0;
     const waits = runs
-      .map((run) => (run.created_at ? now - Date.parse(run.created_at) : null))
+      .map((run) => {
+        const startedAt = waitStartOf(run);
+        return startedAt ? now - Date.parse(startedAt) : null;
+      })
       .filter((value): value is number => value !== null && Number.isFinite(value) && value >= 0);
     if (waits.length === 0) return null;
     return Math.round(Math.max(...waits) / 1000);
@@ -86,15 +109,36 @@ async function actionsQueueMaxWaitS(
   }
 }
 
+/**
+ * M2 — status por COMPONENTE, não o indicador agregado da página (um
+ * incidente em Pages ou Codespaces não pode acender o vigia do Actions).
+ * `components.json` traz `status` textual (`operational`, `degraded_performance`,
+ * `partial_outage`, `major_outage`, `under_maintenance`), mapeado para o
+ * mesmo vocabulário de `status.json` usado pelo domínio.
+ */
+function mapComponentStatus(status: string | undefined): QuotaSample["actionsStatus"] {
+  switch (status) {
+    case "operational":
+    case "under_maintenance":
+      return "none";
+    case "degraded_performance":
+      return "minor";
+    case "partial_outage":
+      return "major";
+    case "major_outage":
+      return "critical";
+    default:
+      return null;
+  }
+}
+
 async function githubActionsStatus(send: typeof fetch): Promise<QuotaSample["actionsStatus"]> {
   try {
-    const response = await send(GITHUB_STATUS_URL);
+    const response = await send(GITHUB_COMPONENTS_URL, { signal: timeout() });
     if (!response.ok) return null;
-    const body = (await response.json()) as { status?: { indicator?: string } };
-    const indicator = body.status?.indicator;
-    return indicator === "none" || indicator === "minor" || indicator === "major" || indicator === "critical"
-      ? indicator
-      : null;
+    const body = (await response.json()) as { components?: Array<{ name?: string; status?: string }> };
+    const actions = (body.components ?? []).find((component) => component.name === ACTIONS_COMPONENT_NAME);
+    return actions ? mapComponentStatus(actions.status) : null;
   } catch {
     return null;
   }
@@ -104,18 +148,18 @@ async function githubActionsStatus(send: typeof fetch): Promise<QuotaSample["act
 export function quotaWatchMetrics(options: QuotaWatchMetricsOptions = {}): QuotaMetricsPort {
   const send = options.fetchImpl ?? fetch;
   const now = options.now ?? Date.now;
-  const vercelToken = () => options.vercelToken ?? process.env[VERCEL_TOKEN_ENV];
-  const vercelProjectId = () => options.vercelProjectId ?? process.env[VERCEL_PROJECT_ENV];
-  const vercelTeamId = () => options.vercelTeamId ?? process.env[VERCEL_TEAM_ENV];
-  const githubToken = () => options.githubToken ?? process.env[GITHUB_TOKEN_ENV];
-  const githubRepo = () => options.githubRepo ?? process.env[GITHUB_REPO_ENV] ?? DEFAULT_REPO;
+  const vercelToken = () => firstNonEmpty(options.vercelToken, process.env[VERCEL_TOKEN_ENV]);
+  const vercelProjectId = () => firstNonEmpty(options.vercelProjectId, process.env[VERCEL_PROJECT_ENV]);
+  const vercelTeamId = () => firstNonEmpty(options.vercelTeamId, process.env[VERCEL_TEAM_ENV]);
+  const githubToken = () => firstNonEmpty(options.githubToken, process.env[GITHUB_TOKEN_ENV]);
+  const githubRepo = () => firstNonEmpty(options.githubRepo, process.env[GITHUB_REPO_ENV]) ?? DEFAULT_REPO;
 
   return {
     async sample(): Promise<QuotaSample> {
       const at = now();
       const [vercel, actionsQueue, actionsStatus] = await Promise.all([
-        vercelDeploys24h(send, at, vercelToken(), vercelProjectId(), vercelTeamId()),
-        actionsQueueMaxWaitS(send, at, githubToken(), githubRepo()),
+        vercelDeploys24h(send, at, vercelToken() ?? undefined, vercelProjectId() ?? undefined, vercelTeamId() ?? undefined),
+        actionsQueueMaxWaitS(send, at, githubToken() ?? undefined, githubRepo()),
         githubActionsStatus(send),
       ]);
       return { vercelDeploys24h: vercel, actionsQueueMaxWaitS: actionsQueue, actionsStatus };

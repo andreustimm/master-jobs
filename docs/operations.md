@@ -131,44 +131,64 @@ real de qualquer um dos dois não derrube o próprio vigia junto (ADR 0030
 decisão 6). `GET /api/cron/watchdog` (mesmo `CRON_SECRET` das outras rotas de
 cron) é só a checagem manual/de teste, nunca o agendador de produção.
 
-Ativar é **passo humano**, depois de a migração de `production.quota_watch`
-estar aplicada (deploy de `main` já cria a tabela, se aditiva):
+Ativar **pode ser feito** (não é obrigatório) depois de a migração de
+`production.quota_watch` estar aplicada (deploy de `main` já cria a tabela, se
+aditiva) — é passo humano, do dono, no SQL Editor do projeto de produção:
 
-1. **PAT do GitHub**, escopo mínimo (leitura de `actions`, escrita de
-   `issues` e de `variables` do repositório) — criado em
-   github.com/settings/tokens, nunca colado em log nem em commit (regra 16).
+1. **PAT do GitHub, escopo mínimo `actions:read` e `issues:write`** — sem
+   `actions:write` nem `variables:write`, porque nada aqui escreve variável de
+   repositório nem dispara workflow (o vigia só recomenda, nunca aplica; ver
+   abaixo). Criado em github.com/settings/tokens, nunca colado em log nem em
+   commit (regra 16).
 2. **Token de leitura da API da Vercel** (dashboard → Settings → Tokens,
-   escopo de leitura) e o **project id** do projeto `master-jobs`.
+   escopo de leitura) e o **project id** do projeto `master-jobs`. Time da
+   Vercel (Teams, não conta pessoal): também o **team id**, ou o vigia lê o
+   projeto errado — premissa documentada em `quota-watch-metrics.ts`: um
+   projeto Vercel e um repositório GitHub monitorados.
 3. **Supabase, SQL Editor do projeto de produção** — os mesmos `pg_cron`/
-   `pg_net` da varredura, mais quatro segredos novos no Vault (o **valor**
-   nunca entra em commit, só o nome da variável abaixo):
+   `pg_net` da varredura, mais segredos novos no Vault (o **valor** nunca
+   entra em commit, só o nome da variável abaixo):
    ```sql
    select vault.create_secret('<PAT do passo 1>', 'watchdog_github_token');
    select vault.create_secret('andreustimm/master-jobs', 'watchdog_github_repo');
    select vault.create_secret('<token do passo 2>', 'watchdog_vercel_token');
    select vault.create_secret('<project id do passo 2>', 'watchdog_vercel_project_id');
+   -- só se o token do passo 2 for de um time da Vercel:
+   select vault.create_secret('<team id do passo 2>', 'watchdog_vercel_team_id');
    ```
    Rode [`supabase/cron/watchdog.sql`](../supabase/cron/watchdog.sql) — recusa
    aplicar fora do projeto de produção, mesma trava de `varredura.sql`.
-4. **Conferir em uma hora** (a agenda dispara na hora cheia e coleta cinco
-   minutos depois):
-   `select * from production.quota_watch order by checked_at desc limit 5;`
+4. **Conferir em uma hora** (a agenda dispara na hora cheia, coleta cinco
+   minutos depois e registra o número da issue nova mais cinco minutos além):
+   `select * from production.quota_watch order by id desc limit 5;`
    — uma linha nova, com `decision = 'ok'` no dia a dia.
 5. **Fumaça manual, sem esperar a agenda:**
    `curl -s -H "authorization: Bearer $CRON_SECRET" "https://jobs.mastertimm.com.br/api/cron/watchdog"`
    devolve o mesmo relatório, com os adapters de verdade (variáveis
    `WATCHDOG_GITHUB_TOKEN`, `WATCHDOG_GITHUB_REPO`, `WATCHDOG_VERCEL_TOKEN`,
-   `WATCHDOG_VERCEL_PROJECT_ID` na Vercel, produção).
+   `WATCHDOG_VERCEL_PROJECT_ID`, `WATCHDOG_VERCEL_TEAM_ID` na Vercel,
+   produção) — **essa checagem manual não é o agendador de produção**, que
+   roda inteiramente dentro do SQL (F3-04).
 
-**O que o vigia NÃO faz ainda, de propósito.** Em `aviso` e `acao-automatica`
-ele sempre grava a linha e sempre tenta abrir uma issue (rótulo
-`vigia-de-cota`) com o comando de reversão — mas **nunca aplica** o
-`gh variable set` recomendado sozinho: `CI_RUNS_ON` sem o runner da Fase 2
-registrado enfileiraria todo job para sempre, e `pg_net` não tem o método
-`PATCH` que a API de variáveis exige para atualizar. Ler a issue (ou a linha
-em `quota_watch`) e rodar o comando é, por ora, decisão do dono. O segredo
-`watchdog_auto_apply` no Vault fica reservado para quando essa aplicação for
-implementada.
+**O que o vigia NÃO faz, de propósito (corte de escopo desta entrega).** Em
+`aviso`, `acao-recomendada` e amostra indisponível persistente (3 checagens
+seguidas) ele sempre grava a linha e sempre tenta abrir/comentar uma issue
+(rótulo `vigia-de-cota`, com dedupe — a mesma decisão e o mesmo gatilho da
+checagem anterior comentam na issue já aberta, não abrem outra) com o comando
+de reversão — mas **nunca aplica** a mudança sozinho: nem `gh workflow
+disable` (gatilho Vercel) nem `gh variable set CI_RUNS_ON` (gatilho Actions,
+que sem o runner da Fase 2 registrado enfileiraria todo job para sempre).
+Ler a issue (ou a linha em `quota_watch`) e rodar o comando é decisão do
+dono. Não existe segredo nem variável reservados para uma aplicação
+automática futura — quando ela for implementada, entra nesta mesma seção.
+
+**Risco residual: o canal de alerta depende do GitHub.** A issue é aberta via
+API do GitHub — se o GitHub Issues estiver indisponível justamente quando o
+vigia precisa alertar (o cenário que ele existe para cobrir), a linha em
+`quota_watch` ainda é gravada (a fonte de verdade não depende da notificação),
+mas o alerta ativo não chega a lugar nenhum além do banco. Não há hoje um
+segundo canal (e-mail, por exemplo) — ver "Questões abertas" do PRD da Fase 3.
+Conferir `quota_watch` periodicamente continua sendo a rede de segurança.
 
 **Desfazer:**
 `select cron.unschedule(jobname) from cron.job where jobname like 'jho-vigia-%';`

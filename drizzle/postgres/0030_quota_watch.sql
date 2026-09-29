@@ -5,9 +5,11 @@ CREATE TABLE "production"."quota_watch" (
 	"actions_queue_max_wait_s" integer,
 	"actions_status" text,
 	"decision" text NOT NULL,
-	"action_taken" text,
+	"trigger" text,
+	"action_recommended" text,
 	"reversal_command" text,
-	"note" text
+	"note" text,
+	"issue_number" integer
 );
 --> statement-breakpoint
 CREATE INDEX "quota_watch_checked_at_idx" ON "production"."quota_watch" USING btree ("checked_at");

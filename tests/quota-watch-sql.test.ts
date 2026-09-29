@@ -29,6 +29,16 @@ function httpCallTargets(sql: string): string[] {
   return targets;
 }
 
+/** Quantas vezes `net.http_get(`/`net.http_post(` aparece de fato no arquivo. */
+function httpCallCount(sql: string): number {
+  return [...sql.matchAll(/net\.http_(?:get|post)\(/g)].length;
+}
+
+/** Os blocos `create or replace function ... $$;` — onde `jho_cron_base_url` nunca pode aparecer. */
+function functionBodies(sql: string): string[] {
+  return [...sql.matchAll(/create or replace function[\s\S]*?\n\$\$;/g)].map((m) => m[0]);
+}
+
 describe("F3-04 — o vigia mora fora dos provedores monitorados", () => {
   it("todo net.http_get/post chama um host externo permitido, nunca o próprio app", () => {
     const targets = httpCallTargets(SQL);
@@ -39,6 +49,14 @@ describe("F3-04 — o vigia mora fora dos provedores monitorados", () => {
     }
   });
 
+  it("nenhum net.http_get/post escapa da extração — o nº de chamadas bate com o nº de alvos literais (minor #9)", () => {
+    // Se alguém trocasse um `url := '<literal>'` por uma expressão 100%
+    // dinâmica (sem prefixo literal nenhum), `httpCallTargets` deixaria de
+    // vê-la, mas a chamada continuaria existindo — esta contagem cruzada pega
+    // exatamente essa lacuna.
+    expect(httpCallTargets(SQL).length).toBe(httpCallCount(SQL));
+  });
+
   it("o domínio do próprio app só aparece na trava de ambiente, nunca como alvo de chamada", () => {
     const lines = SQL.split("\n");
     const withAppHost = lines.filter((line) => line.includes(APP_HOST));
@@ -47,6 +65,14 @@ describe("F3-04 — o vigia mora fora dos provedores monitorados", () => {
       // A trava compara `jho_cron_base_url` a este valor; nenhuma linha com o
       // domínio pode conter `net.http_get`/`net.http_post`.
       expect(line).not.toMatch(/net\.http_(get|post)/);
+    }
+  });
+
+  it("jho_cron_base_url só aparece na trava de ambiente, nunca dentro do corpo de uma função (minor #9)", () => {
+    const bodies = functionBodies(SQL);
+    expect(bodies.length).toBeGreaterThan(0);
+    for (const body of bodies) {
+      expect(body).not.toContain("jho_cron_base_url");
     }
   });
 

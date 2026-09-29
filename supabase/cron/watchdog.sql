@@ -6,22 +6,32 @@
 -- tem NENHUMA dependência de execução em Vercel ou GitHub além das próprias
 -- APIs que ele lê — só Supabase e as APIs externas consultadas (F3-04).
 --
+-- O vigia NUNCA aplica mudança nenhuma sozinho (corte de escopo desta
+-- entrega, `docs/operations.md`, "Vigia de cota: ativar"): toda decisão
+-- `aviso`/`acao-recomendada` só grava a linha e abre/comenta uma issue com o
+-- texto da recomendação e o comando de reversão. A coluna chama-se
+-- `action_recommended`, não `action_taken` — a tabela não pode registrar uma
+-- ação que não foi tomada.
+--
 -- A checagem manual equivalente, para testar sem esperar o `pg_cron`, é
 -- `GET /api/cron/watchdog` (mesmo `CRON_SECRET` das outras rotas de cron) —
--- ela usa os MESMOS limiares (`src/contexts/operations/domain/quota-watch.ts`,
--- `decideQuotaWatch`), mas não é chamada por este arquivo, de propósito. Os
--- limiares abaixo espelham essa função; qualquer mudança de limiar altera as
--- duas no mesmo commit (G62).
+-- ela usa os MESMOS limiares e o MESMO dedupe
+-- (`src/contexts/operations/domain/quota-watch.ts`, `decideQuotaWatch` e
+-- `planAlert`), mas não é chamada por este arquivo, de propósito. Qualquer
+-- mudança de limiar, de dedupe ou de mapeamento de status altera os dois no
+-- mesmo commit (G62).
 --
 -- SÓ NO PROJETO SUPABASE DE PRODUÇÃO — mesma trava de `varredura.sql`,
 -- reaproveitando `jho_cron_base_url` como sinal de "este é o projeto certo"
 -- mesmo este arquivo nunca chamando essa URL.
 --
 -- NÃO é migração do Drizzle, de propósito: depende de `pg_cron`, `pg_net` e
--- do Supabase Vault, que o PostgreSQL local dos testes não tem. Quem aplica é
--- uma pessoa, no SQL Editor do projeto de produção (runbook em
--- docs/operations.md, "Vigia de cota: ativar"). Idempotente: reaplicar
--- atualiza as funções e as agendas pelo nome.
+-- do Supabase Vault, que o PostgreSQL local dos testes não tem — os testes
+-- (`tests/quota-watch-sql-function.test.ts`) aplicam só os blocos de função
+-- deste arquivo contra `net`/`vault` FALSOS, nunca as linhas de
+-- `create extension`/`cron.schedule`. Quem aplica de verdade é uma pessoa, no
+-- SQL Editor do projeto de produção (runbook em docs/operations.md).
+-- Idempotente: reaplicar atualiza as funções e as agendas pelo nome.
 --
 -- Pré-requisitos (passo humano, uma vez):
 --   1. Extensões pg_cron e pg_net habilitadas (já ligadas por varredura.sql,
@@ -29,17 +39,22 @@
 --      abaixo bastam).
 --   2. A migração do Drizzle que cria `production.quota_watch` já aplicada
 --      em produção (`pnpm jho db migrate`, ou o deploy automático de main).
---   3. No Vault, quatro segredos (regra 16 — o VALOR nunca entra neste
+--   3. Um PAT do GitHub com escopo MÍNIMO `actions:read` (ler a fila de
+--      runs) e `issues:write` (abrir/comentar) — sem `actions:write` nem
+--      `variables:write`, porque este arquivo nunca escreve variável de
+--      repositório nem dispara workflow. Um token de leitura da API da
+--      Vercel (escopo leitura) e o project id do projeto `master-jobs`.
+--      Premissa: um projeto Vercel e um repositório GitHub monitorados — o
+--      `teamId` só entra se o token for de uma conta de time (Vercel Teams),
+--      não de conta pessoal; deixe o segredo `watchdog_vercel_team_id` de
+--      fora do Vault quando for conta pessoal.
+--   4. No Vault, quatro segredos (regra 16 — o VALOR nunca entra neste
 --      arquivo nem em commit):
---        select vault.create_secret('<PAT com repo:issues e leitura de actions:read>', 'watchdog_github_token');
+--        select vault.create_secret('<PAT do passo 3>', 'watchdog_github_token');
 --        select vault.create_secret('andreustimm/master-jobs', 'watchdog_github_repo');
---        select vault.create_secret('<token de leitura da API da Vercel>', 'watchdog_vercel_token');
---        select vault.create_secret('<project id do projeto na Vercel>', 'watchdog_vercel_project_id');
---   4. Opcional, e só depois de confirmar que a Fase 2 (runner selecionável)
---      está viva em produção — sem isto o vigia sempre abre a issue e grava a
---      linha, mas NUNCA aplica a variável de verdade, só recomenda o comando
---      (ADR 0030 princípio 2, "nada ativa por omissão"):
---        select vault.create_secret('true', 'watchdog_auto_apply');
+--        select vault.create_secret('<token de leitura da Vercel>', 'watchdog_vercel_token');
+--        select vault.create_secret('<project id da Vercel>', 'watchdog_vercel_project_id');
+--      Time da Vercel (opcional): `watchdog_vercel_team_id`.
 
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
@@ -58,8 +73,9 @@ revoke all on schema jho_cron from public;
 
 -- `pg_net` é assíncrono: `http_get`/`http_post` devolvem o id do pedido na
 -- hora, e a resposta chega minutos depois em `net._http_response` (mesmo
--- modelo de `varredura.sql`). Esta tabela guarda qual pedido é qual métrica,
--- para o passo de coleta não precisar adivinhar pelo conteúdo da resposta.
+-- modelo de `varredura.sql`). Esta tabela guarda qual pedido é qual métrica —
+-- ou, para o pedido de abrir issue, qual linha de `quota_watch` ele pertence
+-- (`issue_open:<id>`), para `vigia_registrar_issue` gravar o número de volta.
 create table if not exists jho_cron.vigia_pendente (
   request_id bigint primary key,
   metrica text not null,
@@ -77,20 +93,26 @@ set search_path = ''
 as $$
 declare
   github_token text := (select decrypted_secret from vault.decrypted_secrets where name = 'watchdog_github_token');
-  github_repo text := coalesce((select decrypted_secret from vault.decrypted_secrets where name = 'watchdog_github_repo'), 'andreustimm/master-jobs');
+  github_repo text := coalesce(nullif((select decrypted_secret from vault.decrypted_secrets where name = 'watchdog_github_repo'), ''), 'andreustimm/master-jobs');
   vercel_token text := (select decrypted_secret from vault.decrypted_secrets where name = 'watchdog_vercel_token');
   vercel_project text := (select decrypted_secret from vault.decrypted_secrets where name = 'watchdog_vercel_project_id');
+  vercel_team text := nullif((select decrypted_secret from vault.decrypted_secrets where name = 'watchdog_vercel_team_id'), '');
   req bigint;
 begin
   -- Pedido de uma rodada anterior que nunca foi coletado (a função de coleta
   -- não rodou, a resposta nunca chegou): não acumula lixo indefinidamente.
-  delete from jho_cron.vigia_pendente where disparado_em < now() - interval '30 minutes';
+  -- `issue_open:%` tem prazo mais largo (até o registro seguinte, 10 min).
+  delete from jho_cron.vigia_pendente where disparado_em < now() - interval '30 minutes' and metrica not like 'issue_open:%';
+  delete from jho_cron.vigia_pendente where disparado_em < now() - interval '2 hours';
 
   if vercel_token is not null and vercel_project is not null then
+    -- Concatenação inline (não numa variável): o alvo literal fica visível no
+    -- próprio `url :=`, o que `tests/quota-watch-sql.test.ts` (F3-04) confere.
     req := net.http_get(
       url := 'https://api.vercel.com/v6/deployments?projectId=' || vercel_project
         || '&since=' || (extract(epoch from (now() - interval '24 hours')) * 1000)::bigint
-        || '&limit=100',
+        || '&limit=100'
+        || coalesce('&teamId=' || vercel_team, ''),
       headers := jsonb_build_object('authorization', 'Bearer ' || vercel_token),
       timeout_milliseconds := 10000
     );
@@ -110,8 +132,10 @@ begin
     insert into jho_cron.vigia_pendente (request_id, metrica) values (req, 'actions_queue');
   end if;
 
-  -- Sem autenticação: status público da plataforma, sempre pedido.
-  req := net.http_get(url := 'https://www.githubstatus.com/api/v2/status.json', timeout_milliseconds := 10000);
+  -- M2: o componente "Actions", não o indicador agregado da página — um
+  -- incidente em Pages/Codespaces não pode acender o vigia do Actions. Sem
+  -- autenticação: status público.
+  req := net.http_get(url := 'https://www.githubstatus.com/api/v2/components.json', timeout_milliseconds := 10000);
   insert into jho_cron.vigia_pendente (request_id, metrica) values (req, 'actions_status');
 end;
 $$;
@@ -119,7 +143,9 @@ revoke all on function jho_cron.vigia_disparar() from public;
 
 -- Passo 2 (coleta e decide): lê o que já respondeu, decide pelos mesmos
 -- limiares de `decideQuotaWatch`, grava uma linha em `quota_watch` e, se
--- precisar, alerta. Nunca decide "ok" por uma métrica que não respondeu.
+-- precisar, alerta com dedupe (M1) — nunca decide "ok" por uma métrica que
+-- não respondeu, e uma métrica com JSON inesperado vira `null` sem derrubar
+-- as outras (M3: cada parse tem seu próprio `exception when others`).
 create or replace function jho_cron.vigia_coletar()
 returns void
 language plpgsql
@@ -138,14 +164,22 @@ declare
   decisao text;
   acao text := null;
   reversao text := null;
+  streak_indisponivel int;
+  alertavel boolean := false;
+  alerta_gatilho text := null;
+  prev_decisao text;
+  prev_gatilho text;
+  prev_issue integer;
+  novo_id integer;
+  corpo_issue text;
+  req bigint;
   github_token text := (select decrypted_secret from vault.decrypted_secrets where name = 'watchdog_github_token');
-  github_repo text := coalesce((select decrypted_secret from vault.decrypted_secrets where name = 'watchdog_github_repo'), 'andreustimm/master-jobs');
-  auto_apply boolean := coalesce((select decrypted_secret from vault.decrypted_secrets where name = 'watchdog_auto_apply'), '') = 'true';
+  github_repo text := coalesce(nullif((select decrypted_secret from vault.decrypted_secrets where name = 'watchdog_github_repo'), ''), 'andreustimm/master-jobs');
 begin
   for pendente in
     select p.request_id, p.metrica
     from jho_cron.vigia_pendente p
-    where p.disparado_em >= now() - interval '30 minutes'
+    where p.disparado_em >= now() - interval '30 minutes' and p.metrica not like 'issue_open:%'
   loop
     select r.status_code, r.content into resp from net._http_response r where r.id = pendente.request_id;
     if resp.status_code is distinct from 200 or resp.content is null then
@@ -153,13 +187,40 @@ begin
     end if;
 
     if pendente.metrica = 'vercel_deploys' then
-      vercel_deploys := jsonb_array_length(coalesce((resp.content::jsonb) -> 'deployments', '[]'::jsonb));
+      begin
+        vercel_deploys := jsonb_array_length(coalesce((resp.content::jsonb) -> 'deployments', '[]'::jsonb));
+      exception when others then
+        vercel_deploys := null; -- JSON inesperado não derruba as outras métricas.
+      end;
     elsif pendente.metrica = 'actions_queue' then
-      select coalesce(max(extract(epoch from (now() - (run.value ->> 'created_at')::timestamptz)))::int, 0)
-        into actions_wait_s
-      from jsonb_array_elements(coalesce((resp.content::jsonb) -> 'workflow_runs', '[]'::jsonb)) as run;
+      begin
+        -- `run_started_at` só existe quando o runner já pegou o run; runs
+        -- ainda `queued` não têm — `created_at` é o fallback (sempre existe).
+        select coalesce(max(extract(epoch from (
+                 now() - coalesce((run.value ->> 'run_started_at'), (run.value ->> 'created_at'))::timestamptz
+               )))::int, 0)
+          into actions_wait_s
+        from jsonb_array_elements(coalesce((resp.content::jsonb) -> 'workflow_runs', '[]'::jsonb)) as run;
+      exception when others then
+        actions_wait_s := null;
+      end;
     elsif pendente.metrica = 'actions_status' then
-      actions_status := (resp.content::jsonb) -> 'status' ->> 'indicator';
+      begin
+        select case comp.value ->> 'status'
+                 when 'operational' then 'none'
+                 when 'under_maintenance' then 'none'
+                 when 'degraded_performance' then 'minor'
+                 when 'partial_outage' then 'major'
+                 when 'major_outage' then 'critical'
+                 else null
+               end
+          into actions_status
+        from jsonb_array_elements((resp.content::jsonb) -> 'components') as comp
+        where comp.value ->> 'name' = 'Actions'
+        limit 1;
+      exception when others then
+        actions_status := null;
+      end;
     end if;
   end loop;
 
@@ -204,78 +265,155 @@ begin
   end if;
 
   if decisao = 'acao' then
-    decisao := 'acao-automatica';
+    decisao := 'acao-recomendada';
+    alertavel := true;
+    alerta_gatilho := gatilho;
     if gatilho = 'vercel' then
-      acao := 'recomendar gh variable set DEPLOY_PREVIEW_ENVS --body ""';
-      reversao := 'gh variable set DEPLOY_PREVIEW_ENVS --body "<valor anterior>"';
+      -- DEPLOY_PREVIEW_ENVS é só registro (techspec); a alavanca real é
+      -- pausar a promoção, sem depender do runner da Fase 2 existir.
+      acao := 'recomendar gh workflow disable promover-para-staging.yml (pausa a promoção dev->staging)';
+      reversao := 'gh workflow enable promover-para-staging.yml';
     else
-      acao := 'recomendar gh variable set CI_RUNS_ON --body ''["self-hosted","master-jobs"]''';
+      acao := 'recomendar gh variable set CI_RUNS_ON --body ''["self-hosted","master-jobs"]'' (só se o runner da Fase 2 já existir)';
       reversao := 'gh variable set CI_RUNS_ON --body ''"ubuntu-latest"''';
     end if;
+  elsif decisao = 'aviso' then
+    alertavel := true;
+    alerta_gatilho := gatilho;
   elsif decisao = 'indisponivel' then
     decisao := 'amostra-indisponivel';
+    gatilho := null;
+    -- M4: só alerta na 3ª checagem SEGUIDA (streak) em amostra-indisponivel —
+    -- uma falha isolada de rede não abre issue.
+    select count(*) into streak_indisponivel
+    from (select decision from production.quota_watch order by id desc limit 2) s
+    where s.decision = 'amostra-indisponivel';
+    if streak_indisponivel >= 2 then
+      alertavel := true;
+      alerta_gatilho := null;
+    end if;
+  else
+    gatilho := null;
   end if;
+
+  -- M1: dedupe contra a linha imediatamente anterior — mesmo estado E mesmo
+  -- gatilho, com issue conhecida, comenta em vez de abrir outra.
+  select decision, trigger, issue_number into prev_decisao, prev_gatilho, prev_issue
+  from production.quota_watch order by id desc limit 1;
 
   insert into production.quota_watch (
     checked_at, vercel_deploys_24h, actions_queue_max_wait_s, actions_status,
-    decision, action_taken, reversal_command, note
+    decision, trigger, action_recommended, reversal_command, note, issue_number
   ) values (
     to_char(now() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
     vercel_deploys, actions_wait_s, actions_status,
-    decisao, acao, reversao, motivo
-  );
+    decisao, gatilho, acao, reversao, motivo,
+    case when alertavel and prev_decisao = decisao and prev_gatilho is not distinct from alerta_gatilho and prev_issue is not null
+         then prev_issue else null end
+  )
+  returning id into novo_id;
 
-  -- Alertar nunca é silencioso (ADR 0030 decisão 7): aviso e ação automática
-  -- sempre tentam abrir a issue, fogo e esquece — a linha acima já é a fonte
-  -- de verdade, com ou sem a issue.
-  if decisao in ('aviso', 'acao-automatica') and github_token is not null then
-    perform net.http_post(
-      url := 'https://api.github.com/repos/' || github_repo || '/issues',
-      headers := jsonb_build_object(
-        'accept', 'application/vnd.github+json',
-        'authorization', 'Bearer ' || github_token,
-        'content-type', 'application/json',
-        'x-github-api-version', '2022-11-28'
-      ),
-      body := jsonb_build_object(
-        'title', 'Vigia de cota: ' || decisao || ' (' || gatilho || ')',
-        'body', motivo || case when acao is not null then E'\n\nAção recomendada: ' || acao || E'\n\nReverter com:\n\n```\n' || reversao || E'\n```' else '' end,
-        'labels', jsonb_build_array('vigia-de-cota')
-      ),
-      timeout_milliseconds := 10000
-    );
+  if alertavel and github_token is not null then
+    corpo_issue := motivo || case when acao is not null then E'\n\nRecomendação (nunca aplicada sozinha): ' || acao || E'\n\nReverter com:\n\n```\n' || reversao || E'\n```' else '' end;
+
+    if prev_decisao = decisao and prev_gatilho is not distinct from alerta_gatilho and prev_issue is not null then
+      -- Comentário: fogo e esquece, sem precisar da resposta.
+      perform net.http_post(
+        url := 'https://api.github.com/repos/' || github_repo || '/issues/' || prev_issue || '/comments',
+        headers := jsonb_build_object(
+          'accept', 'application/vnd.github+json',
+          'authorization', 'Bearer ' || github_token,
+          'content-type', 'application/json',
+          'x-github-api-version', '2022-11-28'
+        ),
+        body := jsonb_build_object('body', 'Checagem se repete — ' || corpo_issue),
+        timeout_milliseconds := 10000
+      );
+    else
+      -- Issue nova: a resposta chega minutos depois, com o número. Guarda o
+      -- pedido marcado com a linha que acabou de ser inserida — quem grava o
+      -- número de volta é `vigia_registrar_issue` (passo 3).
+      req := net.http_post(
+        url := 'https://api.github.com/repos/' || github_repo || '/issues',
+        headers := jsonb_build_object(
+          'accept', 'application/vnd.github+json',
+          'authorization', 'Bearer ' || github_token,
+          'content-type', 'application/json',
+          'x-github-api-version', '2022-11-28'
+        ),
+        body := jsonb_build_object(
+          'title', 'Vigia de cota: ' || decisao || ' (' || coalesce(alerta_gatilho, 'amostra') || ')',
+          'body', corpo_issue,
+          'labels', jsonb_build_array('vigia-de-cota')
+        ),
+        timeout_milliseconds := 10000
+      );
+      insert into jho_cron.vigia_pendente (request_id, metrica) values (req, 'issue_open:' || novo_id);
+    end if;
   end if;
 
-  -- "Vira a chave sozinho" (aplicar `gh variable set` de verdade, não só
-  -- recomendar) fica FORA deste arquivo, de propósito. `pg_net` só oferece
-  -- `http_get`/`http_post`/`http_delete` — a API do GitHub exige `PATCH`
-  -- para atualizar uma variável existente, e simular `PATCH` sem o método
-  -- real é o tipo de gambiarra que falha em silêncio no adapter errado.
-  -- `watchdog_auto_apply` (Vault) fica reservado para quando essa aplicação
-  -- for implementada — hoje ela não faz nada, e o vigia SEMPRE só recomenda
-  -- (`action_taken`/`reversal_command` na linha) e alerta, nunca aplica.
-  -- `auto_apply` continua lido acima para o runbook decidir o segredo com
-  -- antecedência, sem precisar reaplicar este arquivo quando o dia chegar.
-
-  delete from jho_cron.vigia_pendente where request_id in (
-    select p.request_id from jho_cron.vigia_pendente p where p.disparado_em >= now() - interval '30 minutes'
+  delete from jho_cron.vigia_pendente where metrica not like 'issue_open:%' and request_id in (
+    select p.request_id from jho_cron.vigia_pendente p where p.disparado_em >= now() - interval '30 minutes' and p.metrica not like 'issue_open:%'
   );
 end;
 $$;
 revoke all on function jho_cron.vigia_coletar() from public;
 
--- Agendas: dispara na hora cheia, coleta cinco minutos depois — pg_net
--- normalmente resolve em segundos, cinco minutos é folga larga.
-select cron.unschedule(jobname) from cron.job where jobname in ('jho-vigia-disparar', 'jho-vigia-coletar');
+-- Passo 3 (registra o número da issue nova): lê a resposta do `http_post` de
+-- abertura e grava `issue_number` na linha que motivou o alerta — sem isto, a
+-- PRÓXIMA checagem não saberia em qual issue comentar (M1).
+create or replace function jho_cron.vigia_registrar_issue()
+returns void
+language plpgsql
+set search_path = ''
+as $$
+declare
+  pendente record;
+  resp record;
+  linha_id integer;
+  numero integer;
+begin
+  for pendente in
+    select p.request_id, p.metrica
+    from jho_cron.vigia_pendente p
+    where p.metrica like 'issue_open:%' and p.disparado_em >= now() - interval '2 hours'
+  loop
+    select r.status_code, r.content into resp from net._http_response r where r.id = pendente.request_id;
+    if resp.status_code is distinct from 201 or resp.content is null then
+      continue; -- ainda sem resposta, ou o GitHub recusou: tenta de novo na próxima rodada, até expirar.
+    end if;
+
+    linha_id := split_part(pendente.metrica, ':', 2)::integer;
+    begin
+      numero := (resp.content::jsonb) ->> 'number';
+    exception when others then
+      numero := null;
+    end;
+    if numero is not null then
+      update production.quota_watch set issue_number = numero where id = linha_id;
+    end if;
+    delete from jho_cron.vigia_pendente where request_id = pendente.request_id;
+  end loop;
+end;
+$$;
+revoke all on function jho_cron.vigia_registrar_issue() from public;
+
+-- Agendas: dispara na hora cheia, coleta cinco minutos depois (pg_net
+-- normalmente resolve em segundos, cinco minutos é folga larga), registra o
+-- número da issue mais cinco minutos depois (a issue nova precisa ter sido
+-- pedida por `vigia_coletar` primeiro).
+select cron.unschedule(jobname) from cron.job where jobname in ('jho-vigia-disparar', 'jho-vigia-coletar', 'jho-vigia-registrar-issue');
 select cron.schedule('jho-vigia-disparar', '0 * * * *', $$select jho_cron.vigia_disparar()$$);
 select cron.schedule('jho-vigia-coletar', '5 * * * *', $$select jho_cron.vigia_coletar()$$);
+select cron.schedule('jho-vigia-registrar-issue', '10 * * * *', $$select jho_cron.vigia_registrar_issue()$$);
 
 -- Conferir (não altera nada):
---   select * from production.quota_watch order by checked_at desc limit 10;
+--   select * from production.quota_watch order by id desc limit 10;
 --   select jobname, schedule, active from cron.job where jobname like 'jho-vigia-%';
 --
 -- Desfazer:
 --   select cron.unschedule(jobname) from cron.job where jobname like 'jho-vigia-%';
+--   drop function if exists jho_cron.vigia_registrar_issue();
 --   drop function if exists jho_cron.vigia_coletar();
 --   drop function if exists jho_cron.vigia_disparar();
 --   drop table if exists jho_cron.vigia_pendente;

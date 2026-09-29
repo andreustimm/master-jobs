@@ -1,5 +1,5 @@
 {
-  "id": "6535efbc-d82c-48ec-8085-3a8099ee0537",
+  "id": "be59abd0-65ac-40f8-9ff2-913bd3321b5c",
   "prevId": "77e852fd-3448-4a35-b941-ce8fd6568652",
   "version": "7",
   "dialect": "postgresql",
@@ -3915,8 +3915,14 @@
           "primaryKey": false,
           "notNull": true
         },
-        "action_taken": {
-          "name": "action_taken",
+        "trigger": {
+          "name": "trigger",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "action_recommended": {
+          "name": "action_recommended",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -3930,6 +3936,12 @@
         "note": {
           "name": "note",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "issue_number": {
+          "name": "issue_number",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false
         }
