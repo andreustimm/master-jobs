@@ -1,6 +1,6 @@
 # BUG-20260921-track-selector-two-principal: depois de promover outra trilha, Vagas mostra dois botões "PRINCIPAL"
 
-- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->
+- **Status:** verified
 - **Impact (user-side):** Trust-Damage
 - **Severity:** High · **Priority:** P1
 - **Persona Affected:** Andreus em triagem
@@ -40,11 +40,11 @@ aviso — a pessoa lê notas de uma trilha achando que são da outra.
 
 <!-- filled when status moves to fixed -->
 - **Root cause:** o botão da trilha principal em `app/filters.tsx` usa o rótulo genérico `filters.trackPrimary` ("principal") em vez do nome da trilha, e os demais botões usam o nome que a trilha tem. A trilha padrão se chama "Principal", então basta ela deixar de ser a principal para os dois rótulos coincidirem. O sintoma é o seletor ambíguo; a causa é o rótulo da principal não nomear a trilha.
-- **Fix commit:**
-- **Regression test:**
+- **Fix commit:** a57fc6a
+- **Regression test:** `tests/e2e/ui/track-selector.mjs`: falhou em desktop e 375px antes; 16/16 verificações passaram depois. O nome da trilha usa `normal-case`, preservando “Principal” e mantendo o rótulo funcional “PRINCIPAL”.
 
 ## Verification
 
 <!-- filled when status moves to verified -->
-- **Retested:**
-- **Result:**
+- **Retested:** 29/09/2026, Chromium, standalone com PostgreSQL isolado, jornada pública com agent-browser.
+- **Result:** pass — promoção, seleção, voltar/avançar, recarga, arquivamento e restauração confirmados por Vagas e Buscas. Evidências no relatório `2026-09-29T141137897408Z-1d3a7255-trilha-principal-391.md`.
