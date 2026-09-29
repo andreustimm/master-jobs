@@ -12,7 +12,7 @@ fix_status:
 retest_status:
 fix_commits:
 evidence: docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/revoked-404-check.txt
-last_report: docs/qa/reports/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted.md
+last_report: docs/qa/reports/2026-09-29T035351654581Z-97f37e1c-full-release-candidate-1.29-full.md
 overlaps: PUB-public-photo-cover-opt-in; PUB-public-address-private-404
 ---
 
@@ -37,3 +37,13 @@ endereço novo 200 na mesma chave de versão. Reconfirmado nos commits
 `ef8d359` (início da sessão) e `21724ef` (fim, depois das correções de
 revisão L2 da PR que mexeram em upload/leitura/armazenamento, sem tocar essa
 lógica de visibilidade) — comportamento idêntico nos dois.
+
+**Reconfirmado na Full 1.29 (2026-09-29, HEAD `494aa37`, conta
+`qa-full-candidate-e`, endereço `qa-full-pub-v2`):** (1) desligar "Mostrar" só
+na foto → `image/photo` 404, `image/cover` continua 200 (independência
+confirmada de novo); (2) perfil "Recruiters" → página e as duas imagens em
+404; (3) "Remove image" na capa → `image/cover` 404, checkbox "Show" some
+junto com o cartão (não há mais imagem para mostrar); (4) troca de endereço
+(`qa-full-pub-v1` → `qa-full-pub-v2`) → endereço antigo 404. Os quatro
+métodos de revogação continuam produzindo 404, e religar (voltar para
+Público / marcar "Show" / reenviar) restaura 200 na mesma URL.
