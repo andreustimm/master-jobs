@@ -574,3 +574,25 @@ describe("descrição mínima sem medir o texto inteiro", () => {
     expect((await boardFacets(owner, {})).described).toBe(2);
   });
 });
+
+
+describe("empregador direto (#397)", () => {
+  it("reconhece careers pelo contrato sem nomear agregador anônimo", async () => {
+    await db.insert(source).values({ id: "careers:vercel", kind: "careers", handle: "vercel", label: "Vercel" });
+    const ids = await Promise.all([
+      addJob({ title: "Staff Engineer", company: "Vercel", location: "Brazil" }),
+      addJob({ title: "Staff Engineer", company: "Vercel", location: "France" }),
+    ]);
+    for (const id of ids) await db.update(job).set({ sourceId: "careers:vercel" }).where(eq(job.id, id));
+    await addJob({ title: "Staff Engineer", company: "Board", location: "Brazil" });
+    await addJob({ title: "Staff Engineer", company: "Board", location: "France" });
+    const base = { minFit: 0, keepUnscored: true, groupRepeats: true };
+    expect(await countBoard(owner, base)).toBe(3);
+    expect(await countBoard(owner, { ...base, namedEmployer: true })).toBe(1);
+    expect((await boardFacets(owner, base)).named).toBe(1);
+    const named = await listBoard(owner, { ...base, namedEmployer: true });
+    expect(named).toHaveLength(1);
+    expect(named[0]?.companyName).toBe("Vercel");
+    expect(named[0]?.repeats).toHaveLength(2);
+  });
+});

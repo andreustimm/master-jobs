@@ -1,6 +1,6 @@
 # BUG-20260929-grouped-hidden-employer-shown-as-unnamed: quadro de empresa oculta o próprio nome é tratado como não nomeado ao agrupar
 
-- **Status:** open
+- **Status:** verified
 - **Impact (user-side):** Cosmetic
 - **Severity:** Low · **Priority:** P3
 - **Persona Affected:** Andreus em triagem
@@ -48,3 +48,7 @@ tratados como não nomeados.
 <!-- filled when status moves to verified -->
 - **Retested:**
 - **Result:**
+
+## Reteste #397
+
+docs/qa/reports/2026-09-29T150058Z-empregador-densidade-397.md. Fonte careers nomeada/agrupada e densidade persistente confirmadas após reload; paginação também coberta no E2E.

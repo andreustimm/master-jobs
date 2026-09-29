@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { LocaleId, Translator } from "../src/core/i18n/index.ts";
 import { renderScoreMessage } from "../src/core/i18n/index.ts";
-import { scoreMessages } from "../src/contexts/matching/index.ts";
+import { hasNamedEmployer, scoreMessages } from "../src/contexts/matching/index.ts";
 import type { listBoard } from "../src/contexts/matching/index.ts";
 import { isPublicJobUrl } from "../src/core/job-url.ts";
 import { explainMatch, type MatchField } from "../src/core/search.ts";
@@ -83,8 +83,7 @@ export function JobList({
         // Jobgether and other intermediaries publish under their own name, so
         // the employer is unknowable — worth saying, since you cannot research
         // the company or use your network on one of these.
-        const anonymous =
-          r.sourceLabel && r.companyName.toLowerCase() === r.sourceLabel.toLowerCase();
+        const anonymous = !hasNamedEmployer(r.sourceId, r.companyName, r.sourceLabel);
 
         return (
           <article

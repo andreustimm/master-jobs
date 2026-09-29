@@ -160,9 +160,11 @@ export const PRESETS = [
 
 export function Presets({
   base,
+  dense = false,
   t,
 }: {
   base: BoardRoute;
+  dense?: boolean;
   /** Tradutor da requisição, por prop: estes são Server Components e o
       chamador já o resolveu. */
   t: Translator["t"];
@@ -172,7 +174,7 @@ export function Presets({
       {PRESETS.map((p) => (
         <TransitionLink
           key={p.key}
-          href={`${base}?${p.query}`}
+          href={`${base}?${p.query}${dense ? "&dense=1" : ""}`}
           data-testid={`preset-${p.key}`}
           title={t(`presets.${p.key}Hint`)}
           className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-auto py-1.5 type-caption-sm font-normal")}

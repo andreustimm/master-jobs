@@ -1,6 +1,6 @@
 # BUG-20260929-density-resets-on-list-changes: densidade compacta some ao paginar, ordenar ou filtrar
 
-- **Status:** open
+- **Status:** verified
 - **Impact (user-side):** Friction
 - **Severity:** Low · **Priority:** P3
 - **Persona Affected:** Andreus em triagem
@@ -45,3 +45,7 @@ URL.
 <!-- filled when status moves to verified -->
 - **Retested:**
 - **Result:**
+
+## Reteste #397
+
+docs/qa/reports/2026-09-29T150058Z-empregador-densidade-397.md. Fonte careers nomeada/agrupada e densidade persistente confirmadas após reload; paginação também coberta no E2E.
