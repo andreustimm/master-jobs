@@ -40,9 +40,13 @@ inglês.
 ## Fix
 
 <!-- filled when status moves to fixed -->
-- **Root cause:**
+- **Root cause:** `NextRequest.url` normaliza o loopback `127.0.0.1` para
+  `localhost`; construir o 303 com `new URL(..., request.url)` vazava essa
+  origem normalizada para o navegador.
 - **Fix commit:**
-- **Regression test:**
+- **Regression test:** `tests/login-callback-route.test.ts` verifica o
+  `NextRequest` real e o `Location` relativo; `tests/e2e/ui/canonical-flows.mjs`
+  verifica origem canônica e mensagem pt-BR no build standalone.
 
 ## Verification
 

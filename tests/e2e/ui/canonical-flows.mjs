@@ -692,6 +692,8 @@ export async function run(ctx) {
   await publicPage.goto(`${BASE}/login/callback?token=${E2E_LOGIN_EXPIRED_TOKEN}`, { waitUntil: "networkidle" });
   const expiredCallback = new URL(publicPage.url());
   const expiredCallbackUrl = expiredCallback.pathname + expiredCallback.search;
+  const expiredCallbackOrigin = expiredCallback.origin;
+  const expiredCallbackMessage = await publicPage.locator('[data-testid="route-login"] [role="alert"]').textContent();
   const loginRaceContexts = await Promise.all([browser.newContext(), browser.newContext()]);
   const loginRacePages = await Promise.all(loginRaceContexts.map((context) => context.newPage()));
   await Promise.all(loginRacePages.map((loginPage) =>
@@ -750,6 +752,8 @@ export async function run(ctx) {
       && resetRaceUrls.filter((url) => url === "/login?reset=1").length === 1
       && resetRaceUrls.filter((url) => url.includes("error=invalid")).length === 1
       && expiredCallbackUrl === "/login?error=invalid"
+      && expiredCallbackOrigin === new URL(BASE).origin
+      && expiredCallbackMessage?.trim() === ptBR.login.invalid
       && loginRaceUrls.filter((url) => url === "/login").length === 1
       && loginRaceUrls.filter((url) => url === "/login?error=invalid").length === 1
       && loginRaceSessions.filter(Boolean).length === 1
@@ -778,6 +782,8 @@ export async function run(ctx) {
       resetRacePosts,
       resetRaceUrls,
       expiredCallbackUrl,
+      expiredCallbackOrigin,
+      expiredCallbackMessage,
       loginRaceUrls,
       loginRaceSessions,
       replayCallbackUrl,
