@@ -693,7 +693,7 @@ body {
    então sem ele bater no mesmo número o CSS sem camada vencia o utilitário
    Tailwind (que mora em `@layer utilities`) e todo `min-h-11` virava 40px de
    verdade num aparelho de toque, sem nenhum teste pegando porque a suíte
-   não simula `hasTouch`/`isMobile` (#403).
+   não simulava `hasTouch`/`isMobile` (issue 403).
 
    Aplicada por padding, não por altura fixa: assim o conteúdo continua
    centralizado e nada muda de posição.
