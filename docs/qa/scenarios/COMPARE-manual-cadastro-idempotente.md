@@ -6,13 +6,13 @@ persona: Andreus em triagem
 journey: J-trust-the-filtered-board
 expected: O cadastro manual leva à ficha da vaga com o resultado disponível ou o estado sem score; atualizar a ficha preserva o resultado e repetir o mesmo cadastro mantém uma única vaga
 entry_points: /compare; /jobs
-qa_status: untested
+qa_status: pass
 bug_ids: BUG-20260929-compare-false-failure-duplicates-job
-fix_status:
-retest_status:
-fix_commits:
-evidence: docs/qa/evidence/2026-09-29T035351654581Z-97f37e1c-full/CH-first-party-navigation-inventory/compare-failed.png
-last_report:
+fix_status: fixed
+retest_status: pass
+fix_commits: a80dd061b7598189e06fd8741545b7c6686f5a01
+evidence: docs/qa/evidence/2026-09-29T141502414000Z-af40deb5-comparacao-cadastro-consistente/CH-first-party-navigation-inventory-compare-retest-1-result.png; docs/qa/evidence/2026-09-29T141502414000Z-af40deb5-comparacao-cadastro-consistente/CH-first-party-navigation-inventory-compare-retest-1-refresh.png; docs/qa/evidence/2026-09-29T141502414000Z-af40deb5-comparacao-cadastro-consistente/CH-first-party-navigation-inventory-compare-retest-1-jobs-after-retry.png; docs/qa/reports/2026-09-29T141502414000Z-af40deb5-comparacao-cadastro-consistente.md
+last_report: docs/qa/reports/2026-09-29T141502414000Z-af40deb5-comparacao-cadastro-consistente.md
 overlaps: JOBS-new-account-unscored-board; NAV-first-party-navigation-contract
 ---
 

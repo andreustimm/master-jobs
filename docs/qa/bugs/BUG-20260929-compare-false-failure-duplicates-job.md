@@ -1,6 +1,6 @@
 # BUG-20260929-compare-false-failure-duplicates-job: /compare diz que falhou mas cadastra a vaga
 
-- **Status:** fixed in code; reteste de jornada pendente
+- **Status:** verified
 - **Impact (user-side):** Data-Loss
 - **Severity:** High · **Priority:** P1
 - **Persona Affected:** Andreus em triagem
@@ -52,5 +52,13 @@ mesmo cadastro mantém um único `jobId`.
 
 - **Automated:** `pnpm vitest run tests/cov-matching-manual-comparison.test.ts`
   — 20 testes passaram após o fix.
-- **Journey:** pendente de execução local com conta de QA, refresh e leitura
-  independente no acervo.
+- **E2E:** `node tests/e2e/run-isolated.mjs --areas candidate-rescore` — 25/25
+  verificações passaram, incluindo comparação, upload e viewport de 375 px.
+- **Journey:** 2026-09-29, conta isolada `daniel@local.test` sem perfil:
+  `/compare?job=7#comparison-result` mostrou o estado traduzido sem score,
+  refresh preservou a ficha, a repetição voltou ao mesmo `job=7` e `/jobs`
+  mostrou uma ocorrência de `Senior AI Software Architect` depois da segunda
+  tentativa.
+- **Evidence:** `docs/qa/evidence/2026-09-29T141502414000Z-af40deb5-comparacao-cadastro-consistente/CH-first-party-navigation-inventory-compare-retest-1-result.png`,
+  `docs/qa/evidence/2026-09-29T141502414000Z-af40deb5-comparacao-cadastro-consistente/CH-first-party-navigation-inventory-compare-retest-1-refresh.png` e
+  `docs/qa/evidence/2026-09-29T141502414000Z-af40deb5-comparacao-cadastro-consistente/CH-first-party-navigation-inventory-compare-retest-1-jobs-after-retry.png`.
