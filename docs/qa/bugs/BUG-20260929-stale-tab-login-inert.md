@@ -49,7 +49,7 @@ reload libera.
   solicitado como alvo ativo da transição. O servidor redirecionava a rota
   efetiva para `/login`, mas a guarda genérica de commit rejeitava corretamente
   essa URL diferente e nenhuma fronteira do login liberava a geração ativa.
-- **Fix commit:**
+- **Fix commit:** `2c7a4f7`.
 - **Regression test:** `tests/e2e/ui/stale-tab-login.mjs` percorre candidato e
   recrutador em duas abas do mesmo contexto de 375px, encerra a sessão em uma
   aba, navega na outra e entra novamente pelo login liberado.
