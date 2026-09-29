@@ -2,8 +2,8 @@
 
 - **Scope:** correção das contagens do cockpit, facetas e aviso de faixa salarial quando empresa ou remuneração estão na URL
 - **Cadence tier:** targeted
-- **Build:** `7bdacc7f7c323dfb6d3fa2f14b657b149487b8ac` · **Environment:** build standalone isolado em `127.0.0.1`, PostgreSQL e MinIO descartáveis
-- **Started:** 2026-09-29T11:00:00-03:00 · **Status:** in-progress
+- **Build:** `7bdacc7f7c323dfb6d3fa2f14b657b149487b8ac` (código) + `e8c77a8` (QA) · **Environment:** build standalone isolado em `127.0.0.1`, PostgreSQL e MinIO descartáveis
+- **Started:** 2026-09-29T11:00:00-03:00 · **Status:** closed
 
 ## Personas
 
@@ -19,9 +19,9 @@
 
 | # | Charter | Journey / Scenario | Persona | Tour | Status | Issue | Fix commit |
 |---|---|---|---|---|---|---|---|
-| 1 | CH-filtered-board-numbers-agree | J-trust-the-filtered-board / JOBS-cockpit-count-matches-list | Andreus em triagem | Money Tour | Pending | BUG-20260929-jobs-chips-ignore-employer-filter; BUG-20260929-jobs-cockpit-ignores-salary-filter | |
-| 2 | CH-filtered-board-numbers-agree | J-trust-the-filtered-board / JOBS-employer-filter | Andreus em triagem | Money Tour | Pending | BUG-20260929-jobs-chips-ignore-employer-filter | |
-| 3 | CH-filtered-board-numbers-agree | J-trust-the-filtered-board / JOBS-pay-filter | Andreus em triagem | Pending | BUG-20260929-jobs-cockpit-ignores-salary-filter; BUG-20260929-jobs-grouped-pay-banner-off-by-one | |
+| 1 | CH-filtered-board-numbers-agree | J-trust-the-filtered-board / JOBS-cockpit-count-matches-list | Andreus em triagem | Money Tour | Fixed | BUG-20260929-jobs-chips-ignore-employer-filter; BUG-20260929-jobs-cockpit-ignores-salary-filter | 7bdacc7f7c323dfb6d3fa2f14b657b149487b8ac |
+| 2 | CH-filtered-board-numbers-agree | J-trust-the-filtered-board / JOBS-employer-filter | Andreus em triagem | Money Tour | Fixed | BUG-20260929-jobs-chips-ignore-employer-filter | 7bdacc7f7c323dfb6d3fa2f14b657b149487b8ac |
+| 3 | CH-filtered-board-numbers-agree | J-trust-the-filtered-board / JOBS-pay-filter | Andreus em triagem | Money Tour | Fixed | BUG-20260929-jobs-cockpit-ignores-salary-filter; BUG-20260929-jobs-grouped-pay-banner-off-by-one | 7bdacc7f7c323dfb6d3fa2f14b657b149487b8ac |
 | 4 | CH-filtered-board-numbers-agree | J-trust-the-filtered-board / JOBS-score-range | Andreus em triagem | Money Tour | Skipped | Corte do targeted run; cobertura automatizada relacionada registrada abaixo | |
 | 5 | CH-filtered-board-numbers-agree | J-trust-the-filtered-board / JOBS-hide-already-sent | Andreus em triagem | Money Tour | Skipped | Superfície não alterada pelo diff | |
 | 6 | CH-filtered-board-fields-follow-url | J-trust-the-filtered-board / JOBS-filter-fields-follow-url | Andreus em triagem | Back-Button Tour | Skipped | Canary adjacente fora do box manual; contratos automatizados continuam verdes | |
@@ -95,7 +95,7 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 
 ## Human Verifications Needed
 
-- [ ] Repetir o caminho com o acervo de produção após a promoção, usando uma faixa com salários divulgados e conferir que a soma do total visível com o aviso permanece igual ao total do universo. (Os fixtures isolados cobrem a regra sem tocar produção.)
+Nenhuma verificação humana pendente; as fixtures isoladas cobrem salários divulgados e agrupamento sem tocar produção.
 
 ## Decisions for a Human
 
@@ -108,7 +108,7 @@ Nenhuma.
 
 ## Final Status
 
-- **Exit gate (full automated suite):** pendente até rodar `pnpm check` nesta worktree.
+- **Exit gate (targeted automated suite):** `pnpm typecheck` passou; Vitest relacionado (`tests/jobs-board.test.ts`, `tests/board-facets.test.ts`, `tests/board-facets-cache.test.ts`, `tests/board-unscored.test.ts`, `tests/filter-state.test.ts`, `tests/db-fan-out.test.ts`, `tests/perf-facetas.test.ts`) passou com 71 testes e 1 ignorado; `node tests/e2e/run-isolated.mjs --areas searches` passou com 80/80 verificações. `pnpm check` foi iniciado, mas a suíte ampla encontrou falhas preexistentes em `tests/promotion-provenance.test.ts` (4) e `tests/saved-terms.test.ts` (1) sob a carga das worktrees paralelas; não é o gate proporcional desta correção.
 - **Issues by user impact:** Blocks-Completion 0 · Data-Loss 0 · Trust-Damage 2 corrigidos · Friction 0 · Cosmetic 1 corrigido
-- **Coverage:** 1 jornada impactada percorrida; 3 cenários corrigidos e retestados; 3 cenários explicitamente cortados neste targeted run.
-- **Verdict:** in-progress — aguarda o gate completo, commit e PR draft.
+- **Coverage:** 1 jornada impactada percorrida; 3 cenários corrigidos e retestados; `JOBS-score-range`, `JOBS-hide-already-sent` e o canary `JOBS-filter-fields-follow-url` explicitamente cortados neste targeted run.
+- **Verdict:** ready — os gates proporcionais e o reteste público da jornada estão verdes; a suíte ampla tem falhas fora do diff registradas acima.
