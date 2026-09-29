@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "subscriptionMode": "claude_only",
+  "subscriptionMode": "multi_provider",
   "modes": {
     "claude_only": [
       "anthropic"
