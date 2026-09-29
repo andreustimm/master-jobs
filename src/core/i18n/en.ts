@@ -46,6 +46,7 @@ export const en: Dictionary = {
     internal: "Internal improvements, no visible change.",
   },
   nav: {
+    skipToHeader: "Go to header",
     menu: "Menu",
     cockpit: "Cockpit",
     jobs: "Jobs",

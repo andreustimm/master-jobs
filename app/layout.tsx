@@ -229,7 +229,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <div id="application-shell">
           <ServiceWorkerRegister />
           <TooltipProvider>
-          <header className="border-b bg-card">
+          <header id="application-header" tabIndex={-1} className="border-b bg-card">
             {/*
               Três faixas: marca, links roláveis, e o estado da sessão.
 

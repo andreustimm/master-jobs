@@ -1,6 +1,6 @@
 # BUG-20260929-jobs-sort-group-missing-aria-current: ordem ativa e "agrupar repetidas" não expõem aria-current
 
-- **Status:** open
+- **Status:** verified
 - **Impact (user-side):** Friction
 - **Severity:** Medium · **Priority:** P2
 - **Persona Affected:** Candidato por teclado
@@ -47,3 +47,8 @@ equivalente).
 <!-- filled when status moves to verified -->
 - **Retested:**
 - **Result:**
+
+## Reteste #398
+
+Interface pública, teclado e recarga confirmaram o recorte corrigido. Relatório: docs/qa/reports/2026-09-29T145000Z-acessibilidade-398.md.
+VoiceOver/pinch em aparelho físico permanece pendente no cenário abrangente.

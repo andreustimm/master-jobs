@@ -1,6 +1,6 @@
 # BUG-20260929-post-login-focus-skips-header: depois do login o foco pula o cabeçalho sem link de pular conteúdo
 
-- **Status:** open
+- **Status:** verified
 - **Impact (user-side):** Friction
 - **Severity:** Medium · **Priority:** P2
 - **Persona Affected:** Candidato por teclado
@@ -47,3 +47,8 @@ do login.
 <!-- filled when status moves to verified -->
 - **Retested:**
 - **Result:**
+
+## Reteste #398
+
+Interface pública, teclado e recarga confirmaram o recorte corrigido. Relatório: docs/qa/reports/2026-09-29T145000Z-acessibilidade-398.md.
+VoiceOver/pinch em aparelho físico permanece pendente no cenário abrangente.
