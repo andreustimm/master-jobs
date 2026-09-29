@@ -420,11 +420,13 @@ describe("setApplicationStatus", () => {
         `;
 
         const creating = setApplicationStatus(candidateId, jobId, "shortlisted");
+        // Presa já: a recusa pode chegar antes de a asserção se prender.
+        const created = creating.then(() => undefined, (error: unknown) => error);
         await untilSomeoneWaitsOnALock(rawConnection);
 
         await tx`commit`;
 
-        await expect(creating).rejects.toBeInstanceOf(ApplicationTransitionConflictError);
+        expect(await created).toBeInstanceOf(ApplicationTransitionConflictError);
       } finally {
         tx.release();
       }
@@ -999,6 +1001,8 @@ describe("desfazer e voltar (repositório)", () => {
         await tx`select id from production.application where id = ${app.id} for update`;
 
         const undoing = undoApplicationStatus(candidateId, jobId, moved!);
+        // Presa já: a recusa pode chegar antes de a asserção se prender.
+        const undone = undoing.then(() => undefined, (error: unknown) => error);
         await untilSomeoneWaitsOnALock(rawConnection);
 
         // Enquanto a linha está travada, um fechamento e uma reabertura de
@@ -1021,7 +1025,7 @@ describe("desfazer e voltar (repositório)", () => {
         // topo da pilha (a reabertura virou o novo topo), e a trava garante
         // que a decisão foi tomada olhando esse estado inteiro, não uma foto
         // de antes do round-trip que por coincidência tem o mesmo status.
-        await expect(undoing).rejects.toBeInstanceOf(ApplicationTransitionConflictError);
+        expect(await undone).toBeInstanceOf(ApplicationTransitionConflictError);
       } finally {
         tx.release();
       }
