@@ -349,4 +349,21 @@ describe("evidence support from the stored profile", () => {
     expect(support.gaps).toContain("kubernetes");
     expect(support.supported).not.toContain("kubernetes");
   });
+
+  it("IT-393-01 uses the candidate's current CV instead of inherited profile evidence", async () => {
+    const [row] = await db.insert(candidate).values({ slug: "renata-cv", name: "Renata" }).returning({ id: candidate.id });
+    await setMatchingProfile(row!.id, base);
+    await saveDocument({
+      candidateId: row!.id,
+      kind: "cv",
+      label: "CV",
+      content: "Experiência comprovada com Rust e sistemas distribuídos.",
+    });
+    const target = targetOf(base);
+    target.keywords = { critical: [{ term: "rust", weight: 8 }], strong: [], stack: [], negative: [] };
+
+    const support = await trackSupport(row!.id, target);
+
+    expect(support).toEqual({ supported: ["rust"], gaps: [], inherited: false });
+  });
 });

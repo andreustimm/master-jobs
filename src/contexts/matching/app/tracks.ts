@@ -5,6 +5,7 @@
  * O candidato vem sempre de quem chama — a sessão, nunca a entrada do usuário.
  */
 import { and, eq } from "drizzle-orm";
+import { currentDocument } from "../../../core/candidate.ts";
 import { clock } from "../../../core/clock.ts";
 import { getDb } from "../../../core/db/client.ts";
 import { isDuplicateKey } from "../../../core/db/retry.ts";
@@ -331,14 +332,19 @@ async function ownEvidence(candidateId: number): Promise<OwnEvidence> {
   // que pede as três exatas deixa a requisição do lado esperando até os 30s da
   // Vercel. `loadProfile` lê arquivo e não gasta conexão, por isso viaja junto.
   const [person, owner] = await Promise.all([personProfile(candidateId), isOwner(candidateId)]);
-  const [confirmed, defaultProfile] = await Promise.all([
+  const [confirmed, defaultProfile, document] = await Promise.all([
     candidateSkills(candidateId, "confirmed"),
     loadProfile(true),
+    currentDocument(candidateId, "cv"),
   ]);
+  const cvContent = document?.content ?? null;
+  const cvLines = cvContent?.trim()
+    ? cvContent.split(/\r?\n/).filter((line) => line.trim().length > 0)
+    : null;
   return {
-    lines: person ? Object.values(person.profile.evidence).flat() : [],
+    lines: cvLines ?? (person ? Object.values(person.profile.evidence).flat() : []),
     confirmedSkills: confirmed.map((skill) => skill.name),
-    inherited: person ? evidenceInherited(person.profile, defaultProfile, { isOwner: owner }) : false,
+    inherited: cvLines ? false : person ? evidenceInherited(person.profile, defaultProfile, { isOwner: owner }) : false,
   };
 }
 
