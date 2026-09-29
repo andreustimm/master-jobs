@@ -10,7 +10,7 @@ qa_status: pass
 bug_ids: BUG-20260929-jobs-chips-ignore-employer-filter
 fix_status: fixed
 retest_status: pass
-fix_commits:
+fix_commits: 7bdacc7f7c323dfb6d3fa2f14b657b149487b8ac
 evidence: docs/qa/evidence/2026-09-21-docs-qa-jornada-do-quadro-filtrado/numbers-agree-empty-employer.png; docs/qa/evidence/2026-09-29-cockpit-contagens-filtros/CH-filtered-board-numbers-agree/company-aurora-counts-agree.png; docs/qa/evidence/2026-09-29-cockpit-contagens-filtros/CH-filtered-board-numbers-agree/jobs-company-aurora.png
 last_report: docs/qa/reports/2026-09-29-cockpit-contagens-filtros.md
 overlaps: JOBS-source-multi-select

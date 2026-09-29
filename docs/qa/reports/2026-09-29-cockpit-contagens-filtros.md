@@ -2,7 +2,7 @@
 
 - **Scope:** correção das contagens do cockpit, facetas e aviso de faixa salarial quando empresa ou remuneração estão na URL
 - **Cadence tier:** targeted
-- **Build:** `f85003cbf99e126568154c9e4d30884ffb447833` (baseline antes do commit) · **Environment:** build standalone isolado em `127.0.0.1`, PostgreSQL e MinIO descartáveis
+- **Build:** `7bdacc7f7c323dfb6d3fa2f14b657b149487b8ac` · **Environment:** build standalone isolado em `127.0.0.1`, PostgreSQL e MinIO descartáveis
 - **Started:** 2026-09-29T11:00:00-03:00 · **Status:** in-progress
 
 ## Personas
@@ -63,7 +63,7 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 
 - **Symptom:** chips do cockpit mantinham o total geral depois de filtrar empresa.
 - **Root cause:** `boardFacets` não recebia empresa nem remuneração, apesar de `listBoard` receber o quadro completo.
-- **Fix:** incluir empresa, faixa e taxas no contrato/cache das facetas e nas queries do cockpit/lista.
+- **Fix:** `7bdacc7f7c323dfb6d3fa2f14b657b149487b8ac` — incluir empresa, faixa e taxas no contrato/cache das facetas e nas queries do cockpit/lista.
 - **Regression test:** `tests/jobs-board.test.ts` — IT-396-01 falhava antes e passa depois.
 - **Retested:** cockpit e `/jobs?company=Aurora` na sessão manual; filtro de empresa também coberto pela integração.
 
@@ -71,7 +71,7 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 
 - **Symptom:** cockpit e `/jobs` respondiam números diferentes para a mesma faixa salarial.
 - **Root cause:** o cockpit só projetava filtros de `filter-state` e nunca resolvia o alvo/taxas para aplicar `pay` no `countBoard`.
-- **Fix:** resolver remuneração no cockpit com a mesma trilha primária/taxas da lista.
+- **Fix:** `7bdacc7f7c323dfb6d3fa2f14b657b149487b8ac` — resolver remuneração no cockpit com a mesma trilha primária/taxas da lista.
 - **Regression test:** `tests/jobs-board.test.ts` — IT-396-02 falhava antes e passa depois; E2E `term-search E2E-010` passa.
 - **Retested:** deep link salarial recarregado manualmente; área E2E de buscas passou 80/80.
 
@@ -79,7 +79,7 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 
 - **Symptom:** soma do total visível com o aviso de itens fora da faixa excedia o total.
 - **Root cause:** o banner comparava contagens de publicações filtradas com total agrupado e usava o grupo canônico mínimo da consulta não filtrada.
-- **Fix:** calcular o aviso como diferença entre o universo sem faixa e o universo visível, preservando o mesmo filtro de agrupamento.
+- **Fix:** `7bdacc7f7c323dfb6d3fa2f14b657b149487b8ac` — calcular o aviso como diferença entre o universo sem faixa e o universo visível, preservando o mesmo filtro de agrupamento.
 - **Regression test:** `tests/jobs-board.test.ts` — IT-396-02 cobre grupo repetido, publicação qualificada e item fora da faixa; E2E `term-search E2E-007`/`E2E-010` passam.
 - **Retested:** caminho de agrupamento e faixa na área E2E isolada.
 
