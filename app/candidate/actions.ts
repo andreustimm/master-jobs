@@ -16,9 +16,15 @@ import {
   requestCvRescore,
   setCandidateName,
   setPublicCv,
+  setPublicFacts,
   setPublicSlug,
   setVisibility,
 } from "../../src/core/candidate.ts";
+import {
+  PUBLIC_FACT_KEYS,
+  type PublicFactKey,
+  type PublicFactsError,
+} from "../../src/core/candidate-public-facts.ts";
 import {
   deleteDocument,
   documentById,
@@ -28,6 +34,8 @@ import {
   type VersionError,
 } from "../../src/core/candidate.ts";
 import type { CvPdfError } from "../../src/core/pdf.ts";
+import { removePublicImage, setPublicImage } from "../../src/core/candidate-images.ts";
+import type { PublicImageError } from "../../src/core/public-images.ts";
 
 /** Rótulo de versão sem idioma: a data. Fica gravado, então não pode ser frase. */
 function defaultCvLabel(): string {
@@ -304,6 +312,76 @@ export type PublicSlugResult = { ok: true } | { ok: false; code: PublicSlugError
 export async function setPublicSlugAction(formData: FormData): Promise<PublicSlugResult> {
   const { candidateId } = await guardOwnCandidate("candidate:write");
   const result = await setPublicSlug(candidateId, String(formData.get("publicSlug") ?? ""));
+  if (!result.ok) return result;
+  revalidatePath("/candidate");
+  return { ok: true };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Fatos do perfil público (#327)                                              */
+/* -------------------------------------------------------------------------- */
+
+export type PublicFactsResult = { ok: true } | { ok: false; code: PublicFactsError };
+
+/**
+ * Grava os sete fatos do perfil público e o "mostrar" de cada um.
+ *
+ * O candidato vem da sessão (`guardOwnCandidate`, sem id por parâmetro), e a
+ * guarda vem antes de ler o formulário. Cada opt-in chega como `show-<fato>`
+ * e só vale `on`: caixa desmarcada não é enviada, e ausência é desligado —
+ * o mesmo sentido do default da coluna.
+ */
+export async function setPublicFactsAction(formData: FormData): Promise<PublicFactsResult> {
+  const { candidateId } = await guardOwnCandidate("candidate:write");
+  const text = (name: string) => String(formData.get(name) ?? "");
+  const show: Partial<Record<PublicFactKey, boolean>> = {};
+  for (const key of PUBLIC_FACT_KEYS) show[key] = formData.get(`show-${key}`) === "on";
+
+  const result = await setPublicFacts(candidateId, {
+    workModel: formData.getAll("workModel").map(String),
+    experienceLevel: text("experienceLevel"),
+    availability: text("availability"),
+    startTimeframe: text("startTimeframe"),
+    openToRelocation: text("openToRelocation"),
+    area: text("area"),
+    languages: text("languages"),
+    show,
+  });
+  if (!result.ok) return result;
+  revalidatePath("/candidate");
+  return { ok: true };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Foto e capa do perfil público (#327)                                        */
+/* -------------------------------------------------------------------------- */
+
+export type PublicImageActionResult = { ok: true; run?: "removed" } | { ok: false; code: PublicImageError };
+
+/**
+ * Envia, troca ou remove a foto ou a capa, e grava o "mostrar" dela.
+ *
+ * A guarda vem antes de tocar no formulário — o Next já recebeu o multipart
+ * inteiro, mas nenhum byte do arquivo é copiado, decodificado nem enviado ao
+ * armazenamento antes dela. O candidato vem da
+ * sessão (`guardOwnCandidate`); `kind` é só `photo` ou `cover`, validado no
+ * domínio, e nenhum id do formulário é lido (regra 15). O botão "Remover"
+ * manda `intent=remove` no mesmo formulário.
+ */
+export async function savePublicImageAction(formData: FormData): Promise<PublicImageActionResult> {
+  const { candidateId } = await guardOwnCandidate("candidate:write");
+  const kind = String(formData.get("kind") ?? "");
+  if (formData.get("intent") === "remove") {
+    const removed = await removePublicImage(candidateId, kind);
+    if (!removed.ok) return removed;
+    revalidatePath("/candidate");
+    return { ok: true, run: "removed" };
+  }
+  const result = await setPublicImage(candidateId, {
+    kind,
+    file: formData.get("file"),
+    show: formData.get("show") === "on",
+  });
   if (!result.ok) return result;
   revalidatePath("/candidate");
   return { ok: true };

@@ -1,3 +1,6 @@
+import { en } from "../../src/core/i18n/en.ts";
+import { ptBR } from "../../src/core/i18n/pt-BR.ts";
+
 /**
  * #325: o currículo importado de PDF, visto por quem não tem sessão em
  * `/p/<slug>`, sai com seções e listas — e continua sem contato nem piso.
@@ -46,6 +49,19 @@ export const PUBLIC_CV_FIXTURE = Object.freeze({
     { name: "LangGraph", category: "ai", occurrences: 3 },
     { name: "RAG", category: "ai", occurrences: 2 },
   ]),
+  // #327: os sete fatos, todos com o opt-in LIGADO. Área e idiomas
+  // acentuados (G30): só `data-user-content` os deixa passar pela varredura de
+  // inglês sem sessão. `setup.mjs` grava as catorze colunas.
+  facts: Object.freeze({
+    workModel: ["remote", "b2b"],
+    experienceLevel: "principal",
+    availability: "open",
+    startTimeframe: "one-month",
+    openToRelocation: false,
+    area: "Arquitetura de software e IA",
+    languages: "Português (nativo), Inglês (fluente)",
+  }),
+  factsPublic: true,
   content: [
     "PERFIL FORMATADO",
     "cv-formatado@local.test · +55 11 91234-5678",
@@ -69,6 +85,44 @@ export const PUBLIC_CV_FIXTURE = Object.freeze({
     "Bacharelado em Ciência da Computação",
   ].join("\n"),
 });
+
+/**
+ * #327: um segundo candidato público com os MESMOS sete valores gravados e
+ * todos os opt-ins DESLIGADOS. Sentinelas próprias (texto que só existe
+ * aqui), para que "ausente do HTML" não passe por acaso nem reprove por texto
+ * de outro lugar da página.
+ */
+export const PUBLIC_FACTS_OFF_FIXTURE = Object.freeze({
+  slug: "e2e-fatos-desligados",
+  name: "Bruna Discreta",
+  email: "fatos-desligados@local.test",
+  facts: Object.freeze({
+    workModel: ["hybrid", "contractor"],
+    experienceLevel: "staff",
+    availability: "actively-looking",
+    startTimeframe: "two-weeks",
+    openToRelocation: true,
+    area: "Sentinela de área desligada",
+    languages: "Sentinela de idiomas desligados",
+  }),
+  factsPublic: false,
+});
+
+/** As catorze colunas de `candidate` de uma fixture: os sete valores e o mesmo opt-in em todos. */
+export function factColumns(fixture) {
+  const on = fixture.factsPublic;
+  return {
+    ...fixture.facts,
+    workModel: [...fixture.facts.workModel],
+    publicWorkModel: on,
+    publicExperienceLevel: on,
+    publicAvailability: on,
+    publicStartTimeframe: on,
+    publicRelocation: on,
+    publicArea: on,
+    publicLanguages: on,
+  };
+}
 
 export async function checkPublicCvFormat(browser, base, check) {
   const context = await browser.newContext({ viewport: { width: 375, height: 812 } });
@@ -208,12 +262,16 @@ export async function checkPublicProfileLayout(browser, base, check) {
       const shape = await page.evaluate(() => {
         const main = document.querySelector('[data-testid="route-public-profile"]');
         const groups = [...(main?.querySelectorAll('[data-testid="public-skill-group"]') ?? [])];
-        const skillsAside = main?.querySelector('[data-testid="public-profile-skills"]');
+        // #327: a lateral leva "Em resumo" ACIMA das skills; medir as skills
+        // contra o h1 passou a depender da altura do resumo. Mede-se a
+        // lateral inteira contra a coluna principal: mesmo topo, à direita.
+        const aside = main?.querySelector('[data-testid="public-profile-aside"]');
+        const mainColumn = main?.querySelector('[data-testid="public-profile-main"]');
         const rect = (el) => el?.getBoundingClientRect();
         const badgeText = (group) => [...group.querySelectorAll('[data-user-content]')].map((n) => n.textContent?.trim());
         return {
-          skillsRect: rect(skillsAside),
-          heroRect: rect(main?.querySelector("h1")),
+          asideRect: rect(aside),
+          mainRect: rect(mainColumn),
           firstGroupBadges: badgeText(groups[0]),
           uppercaseBadge: groups[1]
             ? getComputedStyle(groups[1].querySelector('[data-user-content]')).textTransform
@@ -223,11 +281,13 @@ export async function checkPublicProfileLayout(browser, base, check) {
       // Alfabética pela CHAVE: "ai" vem antes de "language".
       const aiIsFirst = (shape.firstGroupBadges ?? []).some((t) => t?.includes("LangGraph"));
       check(
-        "#326 ≥1024px: skills ao lado do conteúdo principal (duas colunas)",
-        shape.skillsRect !== undefined
-          && shape.heroRect !== undefined
-          && Math.abs(shape.skillsRect.top - shape.heroRect.top) < 400
-          && shape.skillsRect.left > shape.heroRect.left,
+        "#326 ≥1024px: lateral (resumo + skills) ao lado do conteúdo principal (duas colunas)",
+        shape.asideRect !== undefined
+          && shape.mainRect !== undefined
+          // Mesma linha do grid: topo igual (1px de subpixel) e a lateral
+          // começa depois do fim da coluna principal.
+          && Math.abs(shape.asideRect.top - shape.mainRect.top) <= 1
+          && shape.asideRect.left >= shape.mainRect.right,
         JSON.stringify(shape),
       );
       check(
@@ -257,5 +317,109 @@ export async function checkPublicProfileLayout(browser, base, check) {
     } finally {
       await context.close();
     }
+  }
+}
+
+/**
+ * #327: fatos opt-in no HTML de `/p/<slug>`.
+ *
+ * Ligado: cada fato de `PUBLIC_CV_FIXTURE.facts` aparece no lugar certo —
+ * modelo, nível e disponibilidade na faixa do topo; área, idiomas, prazo e
+ * aceita mudar no "Em resumo". Desligado: `PUBLIC_FACTS_OFF_FIXTURE` tem os
+ * mesmos sete gravados e NADA deles chega ao HTML — nem valor, nem rótulo,
+ * nem o cartão. Os rótulos são comparados contra os dois dicionários, porque
+ * o idioma da página depende do navegador e não é o que se mede aqui.
+ */
+export async function checkPublicFacts(browser, base, check) {
+  const both = (key) => [ptBR.publicFacts[key], en.publicFacts[key]];
+  const FACT_KEYS = ["workModel", "experienceLevel", "availability", "startTimeframe", "openToRelocation", "area", "languages"];
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 } });
+  try {
+    const page = await context.newPage();
+
+    const on = await page.goto(`${base}/p/${PUBLIC_CV_FIXTURE.slug}`, { waitUntil: "networkidle" });
+    const shown = await page.evaluate((keys) => {
+      const main = document.querySelector('[data-testid="route-public-profile"]');
+      const strip = main?.querySelector('[data-testid="public-profile-facts"]');
+      const glance = main?.querySelector('[data-testid="public-profile-glance"]');
+      const item = (root, key) => {
+        const node = root?.querySelector(`[data-testid="public-fact-${key}"]`);
+        if (!node) return null;
+        return {
+          label: node.querySelector("dt")?.textContent?.trim() ?? "",
+          value: node.querySelector("dd")?.textContent?.trim() ?? "",
+          userContent: node.querySelector("dd")?.hasAttribute("data-user-content") ?? false,
+        };
+      };
+      return {
+        strip: Object.fromEntries(keys.map((key) => [key, item(strip, key)])),
+        glance: Object.fromEntries(keys.map((key) => [key, item(glance, key)])),
+        overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      };
+    }, FACT_KEYS);
+    const { facts } = PUBLIC_CV_FIXTURE;
+    const inStrip = ["workModel", "experienceLevel", "availability"];
+    const inGlance = ["area", "languages", "startTimeframe", "openToRelocation"];
+    check(
+      "#327 ligado: modelo, nível e disponibilidade na faixa de fatos, com rótulo do dicionário",
+      on?.status() === 200
+        && inStrip.every((key) => shown.strip[key] && both(key).includes(shown.strip[key].label))
+        && inStrip.every((key) => shown.glance[key] === null)
+        && [ptBR.publicFacts.levelPrincipal, en.publicFacts.levelPrincipal].includes(shown.strip.experienceLevel?.value)
+        && [ptBR.publicFacts.availabilityOpen, en.publicFacts.availabilityOpen].includes(shown.strip.availability?.value)
+        && [ptBR.publicFacts.workModelB2b, en.publicFacts.workModelB2b].some((label) => shown.strip.workModel?.value.includes(label)),
+      JSON.stringify(shown.strip),
+    );
+    check(
+      "#327 ligado: área, idiomas, prazo e aceita mudar em \"Em resumo\"; texto da pessoa marcado como dado do usuário",
+      inGlance.every((key) => shown.glance[key] && both(key).includes(shown.glance[key].label))
+        && inGlance.every((key) => shown.strip[key] === null)
+        && shown.glance.area?.value === facts.area
+        && shown.glance.area?.userContent === true
+        && shown.glance.languages?.value === facts.languages
+        && shown.glance.languages?.userContent === true
+        && [ptBR.publicFacts.startOneMonth, en.publicFacts.startOneMonth].includes(shown.glance.startTimeframe?.value)
+        && [ptBR.publicFacts.no, en.publicFacts.no].includes(shown.glance.openToRelocation?.value),
+      JSON.stringify(shown.glance),
+    );
+    check("#327 375px: faixa e resumo cheios sem rolagem horizontal", shown.overflow <= 1, String(shown.overflow));
+
+    const off = await page.goto(`${base}/p/${PUBLIC_FACTS_OFF_FIXTURE.slug}`, { waitUntil: "networkidle" });
+    const hidden = await page.evaluate(() => {
+      const main = document.querySelector('[data-testid="route-public-profile"]');
+      return {
+        found: Boolean(main),
+        html: document.documentElement.outerHTML,
+        text: main?.textContent ?? "",
+        factNodes: main?.querySelectorAll('[data-testid^="public-fact-"]').length ?? -1,
+        glance: Boolean(main?.querySelector('[data-testid="public-profile-glance"]')),
+        strip: Boolean(main?.querySelector('[data-testid="public-profile-facts"]')),
+      };
+    });
+    const offFacts = PUBLIC_FACTS_OFF_FIXTURE.facts;
+    const valueSentinels = [
+      offFacts.area,
+      offFacts.languages,
+      ...both("workModelContractor"),
+      ...both("levelStaff"),
+      ...both("availabilityActivelyLooking"),
+      ...both("startTwoWeeks"),
+    ];
+    const labelSentinels = [...FACT_KEYS.flatMap(both), ...both("glance")];
+    const valueLeaks = valueSentinels.filter((term) => hidden.html.includes(term));
+    const labelLeaks = labelSentinels.filter((term) => hidden.text.includes(term));
+    check(
+      "#327 desligado: nenhum dos sete fatos gravados chega ao HTML — nem valor, nem rótulo, nem cartão",
+      off?.status() === 200
+        && hidden.found
+        && hidden.factNodes === 0
+        && !hidden.glance
+        && !hidden.strip
+        && valueLeaks.length === 0
+        && labelLeaks.length === 0,
+      JSON.stringify({ status: off?.status(), ...hidden, html: undefined, text: hidden.text.slice(0, 200), valueLeaks, labelLeaks }),
+    );
+  } finally {
+    await context.close();
   }
 }

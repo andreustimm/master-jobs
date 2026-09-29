@@ -26,7 +26,20 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 <!-- sem-nota-usuario: 1.28.2 - 2026-09-28T19:16:57.000Z -->
 
+<!-- sem-nota-usuario: 1.29.1 - 2026-09-29T04:59:42.000Z -->
+
+<!-- sem-nota-usuario: 1.30.0 - 2026-09-29T11:55:09.000Z -->
+
 ## [Unreleased]
+
+## [1.29.0] - 2026-09-29T04:43:43.000Z
+
+### Adicionado
+
+- Na Área do candidato há um cartão novo, "Foto e capa do perfil público", para enviar uma foto e uma imagem de capa (JPEG, PNG ou WebP, até 4 MB). A imagem é recortada e regravada no envio, sem metadados como a localização da câmera. Cada uma só aparece no perfil público quando você marca "Mostrar no perfil público" — começam desmarcadas —, e dá para trocar ou remover quando quiser.
+- O perfil público mostra a capa acima do nome e a foto ao lado dele. Se o perfil deixar de ser público ou a imagem deixar de ser mostrada, o link da imagem para de funcionar na hora, mesmo para quem o guardou.
+- Na Área do candidato há um cartão novo, "Dados do perfil público", para informar modelo de trabalho, nível de experiência, disponibilidade, prazo para começar, se aceita mudar de cidade ou país, área e idiomas (área e idiomas só com palavras). Cada dado só aparece no perfil público quando você marca "Mostrar no perfil público" — todos começam desmarcados. Pretensão salarial não é um desses campos e nunca aparece.
+- O perfil público mostra os dados escolhidos: modelo de trabalho, nível e disponibilidade no topo, e o restante num cartão "Em resumo".
 
 ## [1.28.1] - 2026-09-28T18:45:55.000Z
 

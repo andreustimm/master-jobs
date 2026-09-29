@@ -351,6 +351,84 @@ continuam derivadas na PÁGINA por `cvSections(profile.cv)` (#325): o texto que
 chega já passou pelos dois filtros, e `cvSections()` só lê o que sobrou —
 `publicProfile()` não muda.
 
+**Fatos opt-in, um consentimento por campo** — **28/09 (#327, parte A).**
+Modelo de trabalho, nível de experiência, disponibilidade, prazo para começar,
+aceita mudar, área e idiomas entram em `candidate` com um opt-in cada
+(`public_*`, padrão `false`; nulo, o da linha importada do snapshot, também é
+desligado). Três camadas: a coluna nasce desligada; `publicFactsFrom()`
+(`src/core/candidate-public-facts.ts`, pura) só devolve o fato com opt-in
+`=== true`, valor presente e reconhecido — valor controlado fora da lista não
+sai, e área/idiomas acima do teto, com e-mail (inclusive o cadastrado, do
+candidato e da conta), telefone (o padrão do perfil mais oito dígitos ou mais
+com separador simples, fora intervalo de anos) ou pretensão salarial saem
+vazios. Em área e idiomas vale uma **regra estrutural**, não uma lista de
+formatos (passadas L2 da #362 — cada lista de formatos de piso deixava outros
+passarem): `shortFieldProblem()` recusa contato primeiro, depois rótulo de
+pretensão (`containsPay()`, a régua do CV, mesmo sem número: "Pretensão a
+combinar"), depois **qualquer número**. O campo é normalizado antes (NFKC,
+espaço colapsado, sem espaço em volta de `@`), e dígito é `\p{Nd}`: "３０ｋ",
+"³⁰k", "①⑤⓪/h", "٣٠k" e "pia＠local.test" não escapam. Toda sequência de
+dígitos é número, exceto a de um ou dois dígitos colada a letras — e mesmo
+essa é número quando as letras são código de moeda ou regime (USD, EUR, BRL,
+GBP, CHF, CAD, AUD, JPY, US, R, PJ, CLT: "USD30k", "PJ30k", "R30k") ou quando
+os dígitos vêm seguidos de `k`, barra, decimal ou `mil` ("EUR9k/mês").
+Todo formato de piso tem número ("20k", "30 mil", "150/h", "600 a diária",
+"15kUSD"), e nenhum sai. Passam palavras, identificador curto ("Web3", "K8s",
+"S3", "EC2", "B2B", "C1", "IPv6", "Java21", "JLPT N2") e número de norma: sigla em maiúscula (ISO, IEC, IEEE, NBR, RFC,
+com barra entre siglas), até cinco dígitos (RFC, quatro), parte opcional
+(":2022"), nunca seguido de unidade de tempo, moeda, `k` ou `mil`, e só
+quando o campo não tem palavra INTEIRA de remuneração ("Piso ISO 15000" é
+recusado; "Payments e ISO 27001" e "Cadeia de valor e ISO 9001" passam). Número sem rótulo recebe a mensagem de número ("Use só
+palavras…"), não a de pretensão. **Falso positivo aceito**, declarado:
+"Streaming 4K", "8K HDR", "Dados 2015-2020", "10 mil TPS", "Qualidade iso
+9001" (norma em minúscula), identificador com três dígitos ou mais ("H100"),
+notas de proficiência ("TOEFL 110", "IELTS 7.5", "HSK 4"), versões ("Python
+3", "Next.js 15", "GPT-4", "Web 3.0", "Indústria 4.0"), "3D", "5G" e rankings
+("Tier 1", "Top 10", "Fortune 500", "Big 4"), "R" colado a dígito ("Cloudflare
+R2", lido como real) e norma ao lado de palavra de remuneração ("Rate limiting
+e ISO 27001") — sem exceção para nenhuma
+dessas classes. **Limite declarado:** número por extenso ("vinte mil") e
+e-mail ofuscado por extenso ("pia at local dot test", "[at]") passam. As expressões
+rodam sobre espaço colapsado e só abaixo do teto: a alternativa de `rate:` em
+começo de linha do currículo era quadrática numa sequência de quebras; e a página só escolhe o lugar (faixa do topo ou "Em resumo"). A gravação é `setPublicFactsAction`, com `guardOwnCandidate` antes
+de ler o formulário, e recusa com código o valor forjado, o texto longo, o
+contato e a pretensão. **Pretensão salarial não é campo nem opt-in** — teste
+de ausência explícito em `tests/public-profile.test.ts`.
+
+**Foto e capa, servidas pelo app e revogáveis** — **28/09 (#327, parte B).**
+A imagem é o primeiro arquivo que o produto guarda, e a #327 apontou o risco:
+URL de blob público é legível por quem a tiver, mesmo depois de o perfil
+deixar de ser público. As travas, em camadas
+([ADR 0029](adr/0029-armazenamento-de-objetos-formato-s3.md)):
+o objeto é **privado** no provedor (Vercel Blob `access: "private"`; o dublê
+do SDK recusa chamada pública em teste); a imagem sai só por
+`/p/<endereço>/image/<tipo>`, que reconsulta `public_slug`, `visibility =
+public` e o opt-in do tipo a CADA requisição e responde o mesmo 404, sem
+corpo, para inexistente, privado, endereço trocado, opt-in desligado e sem
+imagem (G22) — inclusive para quem guardou a URL; `no-store` em toda
+resposta, `Cross-Origin-Resource-Policy: same-origin`, service worker fora
+(G14) e CSP sem origem de provedor (`img-src 'self' data:`). O perfil recebe
+só uma versão opaca (hash da chave), nunca a chave nem URL. A rota é a
+segunda entrada de conteúdo sem sessão, registrada no inventário de G39, com
+balde próprio no limite por IP do proxy (60 em 5 min). **Custo declarado:**
+a sonda pela imagem não gasta o balde da página, então uma varredura de
+endereços ganha até 60 tentativas a mais por IP a cada 5 min — o proxy decide
+antes de a rota saber a resposta, e os dois não compartilham memória
+confiável; a imagem só responde 200 para perfil público com imagem marcada
+para mostrar (`tests/proxy-public-limits.test.ts`). No upload
+(`savePublicImageAction`, `guardOwnCandidate` antes de ler o formulário): tipo
+pela assinatura dos bytes (JPEG, PNG, WebP — SVG com script renomeado para
+`.png` é recusado), teto de 4 MiB conferido antes de copiar ou decodificar
+os bytes (o Next já recebeu o multipart inteiro; a Vercel recusa corpo acima de
+4,5 MB antes da action), lado máximo de 8000 px e 50 MP conferidos pelo
+cabeçalho antes de decodificar — contra bomba de pixels —, e reencode em
+WebP com `sharp`, que não copia EXIF,
+XMP, IPTC nem ICC: a localização da câmera não chega ao armazenamento
+(`tests/public-images.test.ts` monta JPEG com GPS e confere o que sobra).
+Chave nova a cada envio; a antiga é apagada na troca e na remoção, que também
+desliga o opt-in. Credencial (`BLOB_READ_WRITE_TOKEN`, `S3_*`) só em variável
+de ambiente, apagada pelo valor de todo erro dos adapters (G41).
+
 **Fluxo verificado ponta a ponta em 19/08**, no modo autenticado padrão: sem
 sessão o cabeçalho oferece entrar; o link de uso único resgata em
 `/login/callback` e grava o cookie `httpOnly`; a sessão passa a aparecer no

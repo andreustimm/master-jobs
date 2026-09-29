@@ -359,6 +359,27 @@ export function containsContact(text: string, known: KnownContact = {}): boolean
   return /\d{10,}/.test(normalized);
 }
 
+/**
+ * Um campo CURTO do perfil público (#327: área, idiomas) com cara de
+ * pretensão salarial — a mesma régua do bloco do currículo (`isSalaryBlock`,
+ * `isPayTitle`): rótulo de piso, palavra de remuneração como rótulo ou perto
+ * de um valor. Mesmo limite declarado no topo deste arquivo: valor sem rótulo
+ * passa — por isso o campo curto recusa também qualquer número solto
+ * (`shortFieldProblem()`, em `candidate-public-facts.ts`). Como
+ * `containsContact()`, não redige — quem chama descarta o campo.
+ *
+ * **Espaço colapsado antes das expressões.** A alternativa de `rate:` no começo
+ * de linha (`(?:^|\n|\|)\s*…`) é quadrática numa sequência de quebras — cada
+ * `\n` reabre um `\s*` sobre todas as seguintes (80 mil quebras: 3,6 s, revisão
+ * L2 da #362). Com o espaço colapsado, cada `\s*` consome no máximo um
+ * caractere. O preço é perder a âncora de linha de `rate:` ("Dados\nRate:
+ * 150" passaria aqui); no campo curto a regra de número o recusa.
+ */
+export function containsPay(text: string): boolean {
+  const normalized = text.normalize("NFC").replace(/\s+/g, " ");
+  return isSalaryBlock(normalized) || isPayTitle(normalized);
+}
+
 export function publicCvText(content: string, known: KnownContact = {}): string {
   const out: string[] = [];
   // Nível do título cuja seção inteira está saindo, ou nulo.

@@ -55,6 +55,24 @@ const PUBLIC = [
  */
 const publicProfileLimiter = createRateLimiter({ limit: 30, windowMs: 5 * 60_000 });
 
+/**
+ * Foto e capa (#327) em balde próprio. Cada visita ao perfil pede a página e
+ * até duas imagens; no mesmo balde, dez visitas esgotariam o limite de quem
+ * só abriu o link algumas vezes. O balde das imagens comporta as duas por
+ * visita.
+ *
+ * **Custo declarado.** Uma varredura de endereços que bata na rota da imagem
+ * NÃO gasta o balde da página: por IP, são até 30 sondas pela página e mais
+ * 60 pela imagem a cada 5 minutos. O preferível seria o 404 da imagem gastar
+ * também o balde da página, mas o proxy decide ANTES de a rota saber a
+ * resposta, e proxy e rota não compartilham memória confiável (na Vercel,
+ * podem rodar em funções diferentes). O que a sonda pela imagem aprende é
+ * menos do que pela página: responde 200 só para perfil público COM imagem
+ * marcada para mostrar, e o mesmo 404 para todo o resto.
+ */
+const publicImageLimiter = createRateLimiter({ limit: 60, windowMs: 5 * 60_000 });
+const PUBLIC_IMAGE_PATH = /^\/p\/[^/]+\/image\/[^/]+$/;
+
 export function proxy(request: NextRequest) {
   // Mesma regra de `isOpenMode()`, importada do domínio e não da composição:
   // a borda não pode puxar o banco. Em deployment, `open` é ignorado e a rede
@@ -66,7 +84,8 @@ export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname === "/p" || pathname.startsWith("/p/")) {
-    const decision = publicProfileLimiter.check(clientKey(request.headers));
+    const limiter = PUBLIC_IMAGE_PATH.test(pathname) ? publicImageLimiter : publicProfileLimiter;
+    const decision = limiter.check(clientKey(request.headers));
     if (!decision.allowed) {
       return new NextResponse("Too Many Requests", {
         status: 429,

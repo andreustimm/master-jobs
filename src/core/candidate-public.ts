@@ -26,10 +26,25 @@
  * qualquer texto — um nome digitado, um `profile.yaml`, uma migration futura.
  * Então todo campo de texto que sai passa por `containsContact()` e, se trouxer
  * e-mail ou telefone, sai VAZIO, independentemente de como o dado chegou lá.
+ *
+ * **Fatos opt-in (#327)** — modelo de trabalho, nível, disponibilidade, prazo,
+ * aceita mudar, área, idiomas — entram numa chave só, `facts`, e cada um
+ * depende do PRÓPRIO consentimento, desligado por padrão. O filtro mora em
+ * `publicFactsFrom()` (puro): valor controlado desconhecido não sai, e texto
+ * livre com contato ou pretensão salarial sai vazio.
+ *
+ * **Foto e capa (#327)** também dependem do próprio opt-in, e a CHAVE do
+ * objeto nunca sai daqui: o perfil recebe só uma versão opaca (hash da
+ * chave) para a URL `/p/<endereço>/image/<tipo>?v=…`, e a rota que serve os
+ * bytes pergunta de novo, a cada requisição, por `publicImageKeyForSlug()` —
+ * perfil que deixou de ser público responde 404 também pela URL antiga.
  */
+import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "./db/client.ts";
 import { authUser, candidate, candidateDocument, candidateSkill, skill } from "./db/schema.ts";
+import { publicFactsFrom, type PublicFacts } from "./candidate-public-facts.ts";
+import { publicImageKeyFrom, type PublicImageKind } from "./public-images.ts";
 import { containsContact, publicCvMarkdown, type KnownContact } from "./public-cv.ts";
 
 /**
@@ -67,6 +82,16 @@ export type PublicProfile = {
   githubUrl: string | null;
   /** Só as confirmadas. Detectada não é confirmada — regra 6 do CLAUDE.md. */
   skills: PublicSkill[];
+  /**
+   * Fatos opt-in (#327): cada um só vem preenchido quando a pessoa marcou
+   * "mostrar" para ele; o resto vem `null`/vazio. Ver `publicFactsFrom()`.
+   */
+  facts: PublicFacts;
+  /**
+   * Foto e capa com opt-in (#327): versão opaca para a URL, ou `null`. Nunca
+   * a chave do objeto nem URL de provedor.
+   */
+  images: Record<PublicImageKind, string | null>;
   /** Presente apenas quando o candidato deu o segundo consentimento. */
   cv: string | null;
 };
@@ -123,6 +148,27 @@ export async function publicProfile(slug: string): Promise<PublicProfile | null>
       githubUrl: candidate.githubUrl,
       visibility: candidate.visibility,
       publicCv: candidate.publicCv,
+      // #327: valor e opt-in de cada fato, coluna a coluna. Lidos aqui, mas
+      // só saem pelo filtro de `publicFactsFrom()`.
+      workModel: candidate.workModel,
+      experienceLevel: candidate.experienceLevel,
+      availability: candidate.availability,
+      startTimeframe: candidate.startTimeframe,
+      openToRelocation: candidate.openToRelocation,
+      area: candidate.area,
+      languages: candidate.languages,
+      publicWorkModel: candidate.publicWorkModel,
+      publicExperienceLevel: candidate.publicExperienceLevel,
+      publicAvailability: candidate.publicAvailability,
+      publicStartTimeframe: candidate.publicStartTimeframe,
+      publicRelocation: candidate.publicRelocation,
+      publicArea: candidate.publicArea,
+      publicLanguages: candidate.publicLanguages,
+      // #327: chave e opt-in de cada imagem. A chave vira só uma versão opaca.
+      photoKey: candidate.photoKey,
+      coverKey: candidate.coverKey,
+      publicPhoto: candidate.publicPhoto,
+      publicCover: candidate.publicCover,
       // Lidos para serem RETIRADOS do que sai, nunca devolvidos. O da conta
       // importa porque o candidato criado pela CLI não tem `email` próprio.
       email: candidate.email,
@@ -192,6 +238,45 @@ export async function publicProfile(slug: string): Promise<PublicProfile | null>
     linkedinUrl: text(row.linkedinUrl),
     githubUrl: text(row.githubUrl),
     skills,
+    facts: publicFactsFrom(row, known),
+    images: {
+      photo: imageVersion(publicImageKeyFrom(row, "photo")),
+      cover: imageVersion(publicImageKeyFrom(row, "cover")),
+    },
     cv,
   };
+}
+
+/**
+ * Versão da imagem para a URL: muda quando a chave muda (cada envio tem chave
+ * nova), então o navegador não mostra a foto antiga depois da troca. Hash,
+ * para a chave — que carrega o id interno do candidato — não sair.
+ */
+export function imageVersion(key: string | null): string | null {
+  return key ? createHash("sha256").update(key).digest("hex").slice(0, 16) : null;
+}
+
+/**
+ * A chave que a rota pública pode servir, ou `null` — perfil inexistente,
+ * não público, com endereço trocado, sem opt-in ou sem imagem. Uma resposta
+ * só para todos os casos: a rota devolve o mesmo 404 (G22).
+ *
+ * Consulta própria e mínima, e não `publicProfile()`: a rota da imagem não
+ * precisa montar skills e currículo para decidir, e a decisão é a mesma —
+ * `public_slug` (nunca o `slug` interno), `visibility = public`, opt-in.
+ */
+export async function publicImageKeyForSlug(slug: string, kind: PublicImageKind): Promise<string | null> {
+  const [row] = await getDb()
+    .select({
+      visibility: candidate.visibility,
+      photoKey: candidate.photoKey,
+      coverKey: candidate.coverKey,
+      publicPhoto: candidate.publicPhoto,
+      publicCover: candidate.publicCover,
+    })
+    .from(candidate)
+    .where(eq(candidate.publicSlug, slug))
+    .limit(1);
+  if (!row || row.visibility !== "public") return null;
+  return publicImageKeyFrom(row, kind);
 }

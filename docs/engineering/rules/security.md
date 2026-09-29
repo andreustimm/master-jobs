@@ -82,9 +82,18 @@ instrumentado responde 200 a tudo e nenhum pedido sai),
 
 **Obrigação.** Nenhuma página nem API responde sem sessão válida — inclusive
 `/api/export`, que carrega o acervo inteiro. O modo aberto existe mas precisa
-ser pedido (`JHO_AUTH_MODE=open`) e só vale na máquina local: em deployment o
-código ignora o pedido (`src/contexts/auth/domain/open-mode.ts`). Produção,
-preview, staging, dev e valor desconhecido continuam exigindo login.
+ser pedido (`JHO_AUTH_MODE=open`) e só vale onde `isLocalProcess()`
+reconhece a máquina do dono: sem `VERCEL`, `VERCEL_ENV` nem `JHO_ENV`
+declarados (`src/contexts/auth/domain/open-mode.ts`). **Todo deployment
+precisa se declarar** para o código recusar o pedido — a Vercel já declara
+`VERCEL`/`VERCEL_ENV` por conta própria, mas qualquer outro destino não
+declara nada por padrão. O plano B no Fly.io (Fase 4 da contingência,
+`docs/engineering/deploy.md`) por isso fixa `JHO_ENV=production` no `fly.toml`
+**e** no `Dockerfile`: sem essa declaração explícita, o contêiner seria
+tratado como a máquina local — liberando o modo aberto, imprimindo o link de
+recuperação de senha no log (G18) e recusando a varredura. Produção, preview,
+staging, dev e valor desconhecido — todos declarados — continuam exigindo
+login.
 
 **Por quê.** "Só roda em loopback" protege contra a internet, não contra outro
 processo, outra conta da máquina, nem contra um bind errado — que já aconteceu
@@ -112,10 +121,12 @@ uniforme, token de uso único), `logoutAction` e `stopImpersonatingAction` (só
 revogam/restauram o próprio cookie), preferência de interface
 (`setLocaleAction`, `setAppearanceAction`), as telas pré-sessão `/login`,
 `/login/forgot`, `/login/reset` e `/login/callback`, o cron por segredo
-(`/api/cron/recheck`) e `/p/[slug]` (G21).
+(`/api/cron/recheck`), `/p/[slug]` (G21) e a foto e a capa dele,
+`/p/[slug]/image/[kind]` (#327), que reconfere a mesma lista de permissão a
+cada requisição.
 
 **Classes de superfície sem sessão** (resolve C02): conteúdo público
-(`/p/[slug]`, único), pré-sessão (login, recuperação, callback), shell e
+(`/p/[slug]` e as imagens dele, `/p/[slug]/image/[kind]`), pré-sessão (login, recuperação, callback), shell e
 assets (`/offline.html`, manifest, estáticos) e serviço com autenticação
 própria (cron). Rota desconhecida é privada.
 
@@ -190,8 +201,30 @@ Origem: AGENTS (mesma invariante). Detalhes: [security.md](../../security.md)
 texto, redigido como "se existir uma conta". Isso vale também para erro de
 envio e limite de tentativas.
 
+**A origem do link nunca vem do `Host` da requisição.** Atrás de qualquer
+proxy — Vercel, o plano B no Fly.io, o que vier depois —, quem manda a
+requisição controla o cabeçalho `Host`; montar o link de recuperação a partir
+dele é host poisoning (o e-mail sai do remetente certo, mas o link aponta
+para o domínio de quem atacou, e o token vaza para lá). `resolvePublicOrigin`
+(`src/contexts/auth/domain/public-origin.ts`) resolve, em ordem: 1)
+`JHO_PUBLIC_URL`, se cadastrada; 2) **na Vercel, sem cadastro nenhum**,
+`VERCEL_PROJECT_PRODUCTION_URL` (produção) ou, em preview,
+`VERCEL_BRANCH_URL` (estável por branch) antes de `VERCEL_URL` (único por
+deployment, muda a cada push) — todas variáveis de sistema que a própria
+plataforma escreve, não o cliente; 3) na máquina do dono, o `Host` da
+requisição, como sempre. Fora dessas três (o plano B no Fly.io sem
+`JHO_PUBLIC_URL`), falha fechado — devolve `null`, e a Server Action
+(`app/login/forgot/actions.ts`) não constrói link nenhum a partir da entrada
+do cliente. **Isto depende de a Vercel expor as variáveis de sistema no
+runtime da função** ("Automatically expose System Environment Variables",
+[deploy.md](../deploy.md#variáveis)); se ela não expuser nem `VERCEL`, o
+efeito não é falha fechada — é `isLocalProcess()` tratar o deployment como a
+máquina do dono, reabrindo o `Host` da requisição como origem (issue
+[#378](https://github.com/andreustimm/master-jobs/issues/378)).
+
 Origem: AGENTS (invariante "Recuperar senha"). Prova:
-`tests/password-reset.test.ts` e comparação no navegador no E2E.
+`tests/password-reset.test.ts`, `tests/public-origin.test.ts` e comparação no
+navegador no E2E.
 
 <a id="g18"></a>
 ## G18 — Token de recuperação: uso único, uma hora, sessões derrubadas
@@ -225,8 +258,9 @@ Origem: AGENTS (invariante "Hash de senha com tamanho errado"). Prova:
 <a id="g21"></a>
 ## G21 — `/p/[slug]` mostra só a lista de permissão
 
-**Obrigação.** `/p/[slug]` é a única rota de **conteúdo** sem sessão (as
-demais classes estão em G39). O que ela mostra é lista de permissão:
+**Obrigação.** `/p/[slug]` é a única página de **conteúdo** sem sessão (as
+demais classes estão em G39); a foto e a capa dela saem por
+`/p/[slug]/image/[kind]`, sob a mesma lista de permissão. O que ela mostra é lista de permissão:
 `publicProfile()` enumera os campos que saem, e a página não alcança o registro
 do candidato. Nunca saem e-mail, telefone, funil, candidaturas nem piso
 salarial — o piso é a posição de negociação, e publicá-lo é mostrar a carta
@@ -234,14 +268,49 @@ antes da mesa. Nome, headline, localização e links passam por
 `containsContact()` e são esvaziados quando trazem e-mail ou telefone. Skill
 confirmada (#326) leva `category` e `level` na lista de permissão — os dois
 passam pelo mesmo `containsContact()` do nome, e a skill inteira some se
-qualquer um dos três (`name`, `category`, `level`) trouxer contato.
+qualquer um dos três (`name`, `category`, `level`) trouxer contato. Os fatos
+opt-in (#327) — modelo de trabalho, nível, disponibilidade, prazo, aceita
+mudar, área, idiomas — saem numa chave só, `facts`, cada um com o próprio
+consentimento, desligado por padrão (nulo também é desligado);
+`publicFactsFrom()` descarta valor controlado desconhecido e esvazia área e
+idiomas acima do teto ou que não passem na regra estrutural dos campos
+curtos (`shortFieldProblem()`): contato primeiro (`containsContact()` com os
+e-mails cadastrados, mais oito dígitos ou mais com separador curto), depois
+rótulo de pretensão (`containsPay()`, mesmo sem número), depois **qualquer
+número** — toda sequência de dígitos (`\p{Nd}`, depois de NFKC: "３０ｋ",
+"³⁰", "٣٠" contam), exceto a de um ou dois dígitos colada a letras que não
+sejam código de moeda ou regime (USD, EUR, BRL, GBP, CHF, CAD, AUD, JPY, US,
+R, PJ, CLT) e não seguida de `k`, barra, decimal ou `mil`. Passam só
+palavras, identificador curto ("Web3", "K8s", "EC2", "B2B", "C1", "Java21",
+"JLPT N2") e número de norma em maiúscula ("ISO 27001", "ISO/IEC 42001", "RFC
+9110"), este só sem contexto de valor depois e sem palavra inteira de
+remuneração no campo. Espaço em volta de `@` é retirado antes de procurar
+e-mail. A gravação recusa o mesmo, com o motivo (contato, pretensão ou
+número). **Falso positivo aceito** (sem exceção): "Streaming 4K", "8K HDR",
+"Dados 2015-2020", "10 mil TPS", norma em minúscula ("Qualidade iso 9001"),
+identificador com três dígitos ou mais ("H100"), notas de proficiência
+("TOEFL 110", "IELTS 7.5", "HSK 4"), versões ("Python 3", "Next.js 15",
+"GPT-4", "Web 3.0", "Indústria 4.0"), "3D", "5G" e rankings ("Tier 1", "Top
+10", "Fortune 500", "Big 4"), "R" colado a dígito ("Cloudflare R2", lido
+como real) e norma ao lado de palavra de remuneração ("Rate limiting e ISO
+27001"). **Limite declarado:** número por extenso
+("vinte mil") e e-mail ofuscado por extenso ("pia at local dot test",
+"[at]") passam. Pretensão salarial não é fato nem opt-in. **Foto e capa**
+(#327) também têm opt-in próprio, desligado por padrão (nulo é desligado): o
+perfil recebe só uma versão opaca por imagem, nunca a chave do objeto nem URL
+de provedor, e a rota da imagem reconfere `public_slug`, `visibility =
+public` e o opt-in a cada requisição (`publicImageKeyForSlug()`), com o mesmo
+404 de G22 para qualquer recusa e `no-store`. O objeto é privado no provedor
+e a CSP não abre origem dele
+([ADR 0029](../../adr/0029-armazenamento-de-objetos-formato-s3.md)).
 
 **Endereço.** `/p/` lê `public_slug`, nunca o `slug` interno; trocar o endereço
 faz o antigo responder 404 sem redirecionar (ADR 0024).
 
 Origem: AGENTS (invariante "`/p/[slug]`"). Prova:
 `tests/public-profile.test.ts`, `tests/public-name.test.ts`,
-`tests/public-slug.test.ts`.
+`tests/public-slug.test.ts`, `tests/candidate-public-facts.test.ts`,
+`tests/candidate-images.test.ts`.
 
 <a id="g22"></a>
 ## G22 — Perfil não público responde 404, não 403
@@ -289,7 +358,9 @@ Origem: AGENTS (mesma invariante). Prova: `tests/public-cv.test.ts`,
 **Obrigação.** A ausência é a política. Só caches `static-` e `shell-`
 (`/offline.html`, gerado e sem credenciais). `/login` nunca entra no cache. Sem
 `pages-`, sem `api-`, e `/p/` também fora — público por escolha revogável, e
-cópia em disco não obedece a revogação.
+cópia em disco não obedece a revogação. Vale para a foto e a capa
+(`/p/<endereço>/image/<tipo>`, `/candidate/image/<tipo>`), que também saem
+com `no-store` para o cache HTTP.
 
 **Não é alternativa.** Limpar no logout não bastaria: `logoutAction` não roda
 em sessão vencida nem em aparelho perdido.
@@ -335,7 +406,22 @@ ameaça, descrito em [security.md](../../security.md) e
 [deploy.md](../deploy.md). O Achado 1 de `security.md` registra o incidente
 original em que `next dev` escutava em `0.0.0.0`.
 
-Origem: regra 12. Prova: `tests/security.test.ts`.
+**Exceção de contêiner (Fase 4 da #351, ADR 0030).** A imagem do plano B de
+deploy (`Dockerfile`, publicada no GHCR e implantada no Fly.io — região
+`gru`) roda `node server.js` do build `standalone` com `ENV HOSTNAME=0.0.0.0`
+declarado **dentro da própria imagem**, nunca em `package.json`. É a única
+forma de o proxy de borda do Fly alcançar o processo, que fica fora do
+namespace de rede do container — bind em `127.0.0.1` ali tornaria o serviço
+inatingível de fora, não mais seguro: G38 (sessão exigida por omissão) já é a
+barreira real nesse ambiente, o mesmo raciocínio que já vale para a Vercel.
+`dev` e `start` continuam presos a `127.0.0.1` e são a única coisa que o
+laptop do dono executa; `pnpm start:container` (ou script equivalente) **não
+existe** — a exceção mora só no `CMD`/`ENV` do `Dockerfile`, para que não
+exista um script local capaz de reabrir o bind amplo por engano.
+
+Origem: regra 12. Prova: `tests/security.test.ts`,
+`tests/deploy-fly.test.ts` (a exceção fica só no `Dockerfile`; `dev`/`start`
+continuam em `127.0.0.1`).
 
 <a id="g73"></a>
 ## G73 — Rede controlada nas operações que a pedem

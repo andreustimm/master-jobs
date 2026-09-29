@@ -26,7 +26,20 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 <!-- sem-nota-usuario: 1.28.2 - 2026-09-28T19:16:57.000Z -->
 
+<!-- sem-nota-usuario: 1.29.1 - 2026-09-29T04:59:42.000Z -->
+
+<!-- sem-nota-usuario: 1.30.0 - 2026-09-29T11:55:09.000Z -->
+
 ## [Unreleased]
+
+## [1.29.0] - 2026-09-29T04:43:43.000Z
+
+### Added
+
+- The candidate area has a new "Public profile photo and cover" card to upload a photo and a cover image (JPEG, PNG or WebP, up to 4 MB). The image is cropped and re-encoded on upload, without metadata such as the camera location. Each one only appears on the public profile when you tick "Show on public profile" — both start unticked — and you can replace or remove them at any time.
+- The public profile shows the cover above the name and the photo beside it. If the profile stops being public or the image stops being shown, the image link stops working right away, even for someone who saved it.
+- The candidate area has a new "Public profile details" card to fill in work model, experience level, availability, start date, openness to relocation, field and languages (field and languages take words only). Each detail only appears on the public profile when you tick "Show on public profile" — all start unticked. Salary expectation is not one of these fields and is never shown.
+- The public profile shows the chosen details: work model, level and availability at the top, and the rest in an "At a glance" card.
 
 ## [1.28.1] - 2026-09-28T18:45:55.000Z
 

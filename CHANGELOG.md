@@ -9,6 +9,70 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.30.0] - 2026-09-29
+
+### Adicionado
+
+- Plano B de deploy (Fase 4 da #351, ADR 0030, issue #369): `Dockerfile` multi-stage (`deps` → `builder` → `runner`) para o build `standalone` já declarado em `next.config.ts`, rodando como usuário não-root dedicado (`nextjs`, uid 1101), imagem base pinada por digest e `GIT_REVISION` recebido como build-arg (para o marcador de versão do PWA, `scripts/sw-version.mjs`, não cair sempre em "sem-revisao"); `.dockerignore` exclui `.env*` e todo diretório operacional do contexto de build, espelhando os padrões sensíveis do `.gitignore`. `fly.toml` e o `Dockerfile` declaram `JHO_ENV=production` e `fly.toml` fixa `JHO_PUBLIC_URL=https://jobs.mastertimm.com.br` — sem essas duas variáveis, `isLocalProcess()` (`src/contexts/auth/domain/open-mode.ts`) trataria o contêiner como a máquina do dono, liberando o modo aberto e recusando a varredura.
+- `fly.toml` fixa `primary_region = "gru"` (a mais próxima do Supabase de produção, `sa-east-1`) e um health check HTTP contra `/manifest.json` — rota pública sem sessão e sem dependência do banco.
+- `.github/workflows/publicar-imagem-fly.yml`, estritamente `workflow_dispatch` (nenhum push, PR ou agendamento aciona, e só a partir de `github.ref == 'refs/heads/main'`): builda a imagem localmente (`load: true`), inspeciona o sistema de arquivos dela com privilégio (`docker run --user 0 … find`/`grep` por segredo) **antes** de qualquer login ou push no GHCR, publica em `ghcr.io/andreustimm/master-jobs`, confere de novo nos metadados da imagem publicada (`docker history --no-trunc`) e, só quando o dono marca `deploy: true` no disparo, implanta no Fly (`environment: production`). `setup-flyctl` pinado pelo SHA da tag, `packages: write` só no job que publica, tag de entrada validada por allowlist de caracteres via variável de ambiente.
+- Exceção documentada de G36/regra 12 (`docs/engineering/rules/security.md#g36`, `AGENTS.md`): o contêiner escuta em todas as interfaces (`ENV HOSTNAME=0.0.0.0`) só dentro da imagem — nunca em `package.json` — porque o proxy de borda do Fly fica fora do namespace de rede do container; `dev`/`start` continuam presos a `127.0.0.1`, travado por `tests/deploy-fly.test.ts` (que também extrai a checagem de usuário não-root para uma função testada contra fixtures).
+- `src/core/rate-limit.ts`: `clientKey` prefere `Fly-Client-IP` (escrito pelo proxy de borda do próprio Fly, não pelo cliente) só com o sinal POSITIVO de estar no Fly (`FLY_APP_NAME` presente e `VERCEL` ausente — G27, nunca só a ausência de `VERCEL`) — o primeiro valor de `x-forwarded-for` é o que o cliente escreve, não o que um proxy confiável verificou.
+- `Dockerfile`/`fly.toml`/`.dockerignore` classificados como L2 em `.claude/skills/deep-review/scripts/review_level.py`.
+- `docs/engineering/deploy.md` ganha a seção "Plano B: Fly.io como destino alternativo", com o runbook de failover de DNS na Cloudflare (ida e volta), a lista de segredos a replicar manualmente (nome, nunca valor), pré-requisitos únicos (`fly apps create`, `FLY_API_TOKEN` no ambiente `production` do GitHub, `_acme-challenge` antecipado), a dependência de "Automatically expose System Environment Variables" na Vercel e o encaminhamento da varredura fatiada durante o failover (repontar o `pg_cron` ou aceitar a pausa e deixar `varredura.yml` cobrir por `workflow_dispatch`). Checklist "O que confirmar depois de subir" ganha a conferência do host do link de recuperação de senha.
+
+### Segurança
+
+- `src/contexts/auth/domain/public-origin.ts` (`resolvePublicOrigin`) substitui o cabeçalho `Host` da requisição, usado até aqui para montar o link de recuperação de senha (`app/login/forgot/actions.ts`, `app/login/reset/actions.ts`) — atrás de qualquer proxy isso é host poisoning (G17/G18). Ordem de resolução: `JHO_PUBLIC_URL`, se cadastrada; senão, **na Vercel, sem cadastro nenhum**, `VERCEL_PROJECT_PRODUCTION_URL` (produção) ou `VERCEL_BRANCH_URL`/`VERCEL_URL` (preview) — variáveis de sistema da própria plataforma, não controladas pelo cliente; senão, na máquina do dono, o `Host` como hoje; fora dessas três (o plano B no Fly sem `JHO_PUBLIC_URL`), falha fechado. Sem origem confiável, a Server Action grava `reset_send_failed` em `auth_event` sem consultar se a conta existe (mesma disciplina de G17), testado com um usuário cadastrado de verdade e um desconhecido. Vale para a Vercel de produção hoje, não só para o plano B — `docs/engineering/deploy.md` e `security.md` (G17) corrigidos: o efeito de faltar `VERCEL`/`VERCEL_ENV` no runtime não é "falha fechada", é `isLocalProcess()` tratar o deployment como a máquina do dono (modo aberto aceito, mailer imprime no log, `Host` volta a decidir a origem) — issue [#378](https://github.com/andreustimm/master-jobs/issues/378) aberta para corrigir `isLocalProcess()` a exigir sinal positivo de local, fora do escopo desta entrega. Mitigação recomendada, com valor por ambiente: Production cadastra `JHO_ENV=production` e `JHO_PUBLIC_URL`; Preview cadastra só `JHO_ENV=preview` (nunca `production`, que liberaria a guarda de ingestão ali) e nunca `JHO_PUBLIC_URL` (um valor fixo mandaria o token de qualquer branch de preview para o domínio de produção).
+
+## [1.29.1] - 2026-09-29
+
+### Alterado
+
+- `vercel.json` deploya só `main`; `dev` e `staging` deixam de gerar
+  deployment automático a cada push, cortando a causa do incidente de
+  22/09/2026 (limite de 100 deploys/dia da Vercel Hobby). Variável de
+  repositório `DEPLOY_PREVIEW_ENVS` documenta e religa um ambiente de preview
+  quando a fixture de banco dele existir, e `scripts/github/verify-deploy-preview-envs.ts`
+  recusa qualquer divergência entre a variável e o `vercel.json` publicado na
+  ponta de `main`, `dev` e `staging` (não só o checkout local — a Vercel
+  aplica o commit de cada branch). Em cada branch, confere só a chave que
+  decide o deploy dela mais `**` e a lista de permissão de chaves
+  `{"**", "main", "dev", "staging"}` — nunca o mapa inteiro, para não acusar
+  falso positivo durante o próprio runbook de religar (`dev` já em `true` e
+  `main` ainda não mesclado não afeta o deploy de `main`). Workflow dedicado
+  `verificar-deploy-preview-envs.yml` (dispara no push que toca `vercel.json`
+  em `main`/`dev`/`staging`, mais um agendamento diário como rede de
+  segurança; fora de "Governança em produção" — para não misturar essa
+  divergência com o sinal de disponibilidade da sonda `medir`) injeta a
+  variável pelo `vars.…` do env, porque `GITHUB_TOKEN` não lê a API de
+  variáveis (403); `gh api` para a variável fica restrito ao uso manual.
+  `docs/engineering/deploy.md` e `docs/engineering/promotion.md` deixam de
+  descrever deploy de `staging` como efeito automático da promoção e
+  documentam o runbook atual, de religar e de desligar de novo (os dois por
+  PR para `dev`, nunca commit direto — regra 18/G43). ADR 0030 passa de
+  Proposta para Aceita, com as decisões do dono para as Fases 2–4 registradas
+  (execução delas fica para issues próprias). Fase 1 da #351.
+
+## [1.29.0] - 2026-09-29
+
+### Adicionado
+
+- Porta `ObjectStorage` em `src/core/storage/` na semântica do S3 (bucket + key, `putObject`/`getObject`/`headObject`/`deleteObject`, `ContentType`, `ContentLength`, metadados, ETag), escolhida por `JHO_STORAGE_DRIVER=vercel-blob|s3` em `openStorage()`; ausente é "sem armazenamento", valor desconhecido falha fechado (ADR 0029, #327 parte B).
+- Adapter Vercel Blob (`@vercel/blob` 2.x) sempre privado, bucket/key → pathname `<bucket>/<key>`, metadados num objeto irmão `.metadata/…`, leitura sem cache de CDN; adapter S3 (`@aws-sdk/client-s3`) com `S3_ENDPOINT` e `S3_FORCE_PATH_STYLE`. Os dois apagam o valor da credencial de todo erro e entram no inventário de transporte de saída.
+- Suíte de contrato única (`tests/support/storage-contract.ts`) para os dois adapters: SDK do Blob dublado (recusa chamada não privada), `send` do S3 dublado e S3 contra MinIO real quando há Docker, com PULADO e motivo no nome quando não há.
+- MinIO no `docker-compose.local.yml` (`pgsty/minio`, fork comunitário fixado por tag e digest), portas só em `127.0.0.1` e bucket criado por um serviço de bootstrap idempotente.
+- Migração `0029_perfil_publico_foto_capa` (aditiva, veredito `[]`): `photo_key`, `cover_key` (nulas) e `public_photo`, `public_cover` (`boolean default false`, anuláveis; nulo é desligado). `postSnapshotColumns` declara nulo/`false`.
+- `savePublicImageAction` (`guardOwnCandidate` antes de ler o formulário): tipo pela assinatura (JPEG, PNG, WebP), 4 MiB (abaixo do limite de corpo de 4,5 MB da Vercel, para toda recusa chegar à action com a mensagem própria; o seletor de arquivo já avisa no navegador), lado máximo de 8000 px e 50 MP pelo cabeçalho (bomba de pixels) e mínimo por tipo; reencode em WebP com `sharp` (orientação aplicada, EXIF/XMP/IPTC/ICC fora), foto 512×512 e capa 1600×400; chave nova por envio e objeto antigo apagado na troca e na remoção, com a linha travada. `sharp` vira dependência direta na versão que o Next já resolvia.
+- `/p/[slug]/image/[kind]` sem sessão (exceção registrada no inventário de G39): reconfere `public_slug`, visibilidade e opt-in a cada requisição, mesmo 404 vazio para qualquer recusa, `no-store`, `Cross-Origin-Resource-Policy: same-origin`, balde próprio no limite por IP do proxy. `/candidate/image/[kind]` é a prévia do dono, com sessão. `PublicProfile.images` traz só versão opaca (hash da chave). CSP inalterada (`img-src 'self' data:`); o service worker não guarda nenhuma das rotas.
+- Migração `0028_candidate_public_facts` (aditiva, veredito `[]`): sete fatos em `candidate` — `work_model text[]`, `experience_level`, `availability`, `start_timeframe`, `open_to_relocation`, `area`, `languages`, todos anuláveis — e um opt-in por fato (`public_*`, `boolean default false`, anulável pelo contrato da importação do snapshot; nulo é desligado). Sem FK. `postSnapshotColumns` declara nulo/`false` para a importação legada (#327, parte A).
+- `src/core/candidate-public-facts.ts` (puro): listas controladas, `parsePublicFactsForm()` (recusa com código valor fora da lista, texto longo, contato — inclusive os e-mails cadastrados e telefone sem marca —, rótulo de pretensão e número em área/idiomas) e `publicFactsFrom()` (só publica com opt-in `=== true`, valor reconhecido e texto livre dentro do teto que passe na mesma regra).
+- Regra estrutural de área e idiomas (`shortFieldProblem()`): contato, depois rótulo de pretensão (`containsPay()` em `src/core/public-cv.ts`, sobre espaço colapsado — linear), depois qualquer número (NFKC, `\p{Nd}`); passam palavras, identificador curto colado a letra que não seja moeda nem regime ("Web3", "C1") e número de norma em maiúscula ("ISO 27001"). Falso positivo aceito ("Streaming 4K", "Dados 2015-2020", "10 mil TPS", "Python 3", "Top 10"); número e e-mail por extenso passam.
+- `PublicProfile.facts` na lista de permissão de `publicProfile()`, coluna a coluna.
+- `setPublicFactsAction` (`guardOwnCandidate` antes de ler o formulário, candidato da sessão) e o cartão "Dados do perfil público" em `/candidate` (`app/candidate/public-facts.tsx`), com o "Mostrar no perfil público" ao lado de cada campo.
+- `/p/[slug]`: faixa de fatos com modelo de trabalho, nível e disponibilidade; cartão "Em resumo" na lateral com área, idiomas, prazo e aceita mudar. Rótulos em `publicFacts.*` (pt-BR e en).
+- E2E: `checkPublicFacts` (ligado aparece, desligado ausente do HTML, 375px) sobre duas fixtures, e a área `public-facts` (edição, persistência, recusa de contato). O teste de duas colunas passa a medir a lateral inteira contra a coluna principal.
+
 ## [1.28.2] - 2026-09-28
 
 ### Corrigido

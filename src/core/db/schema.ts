@@ -590,6 +590,52 @@ export const candidate = production.table(
      * até a própria pessoa escolher um em `/candidate`.
      */
     publicSlug: text("public_slug"),
+    /*
+     * Fatos do perfil público (#327). Cada um com o PRÓPRIO opt-in, `false`
+     * por padrão — mesmo desenho de `publicCv`: o valor guardado aqui não sai
+     * em `/p/` até a pessoa marcar "mostrar", campo a campo. Os controlados
+     * são texto validado na aplicação (`candidate-public-facts.ts`), sem
+     * CHECK: acrescentar um valor não exige migração não aditiva, e o que a
+     * leitura não reconhece não sai. Pretensão salarial NUNCA é um destes
+     * campos (G21).
+     *
+     * Os opt-ins têm padrão `false` mas aceitam nulo, como `source.origin`:
+     * `candidate` atravessa a importação do snapshot legado, e coluna
+     * posterior a ele é opcional por contrato (`tests/postgres-schema.test.ts`).
+     * Nulo é DESLIGADO — `publicFactsFrom()` só publica com `=== true`.
+     */
+    /** `remote` | `hybrid` | `onsite` | `b2b` | `contractor` | `employee`, vários. */
+    workModel: text("work_model").array(),
+    experienceLevel: text("experience_level"),
+    availability: text("availability"),
+    startTimeframe: text("start_timeframe"),
+    /** Nulo é "não informado", diferente de `false` ("não aceita"). */
+    openToRelocation: boolean("open_to_relocation"),
+    /** Texto livre curto; passa por `containsContact()` e `containsPay()`. */
+    area: text("area"),
+    /** Texto livre curto; passa por `containsContact()` e `containsPay()`. */
+    languages: text("languages"),
+    publicWorkModel: boolean("public_work_model").default(false),
+    publicExperienceLevel: boolean("public_experience_level").default(false),
+    publicAvailability: boolean("public_availability").default(false),
+    publicStartTimeframe: boolean("public_start_timeframe").default(false),
+    publicRelocation: boolean("public_relocation").default(false),
+    publicArea: boolean("public_area").default(false),
+    publicLanguages: boolean("public_languages").default(false),
+    /*
+     * Foto e capa do perfil público (#327). O banco guarda só a CHAVE do
+     * objeto na porta de armazenamento (`src/core/storage/`) — nunca URL de
+     * provedor nem credencial (regra 16). Chave nova a cada envio, e o objeto
+     * antigo é apagado no provedor. A URL do app (`/p/<endereço>/image/<tipo>`)
+     * não muda com a troca e passa a servir a foto nova — o que a revoga é a
+     * visibilidade ou o opt-in, reconferidos a cada pedido.
+     * O opt-in segue o desenho dos fatos: `false` por padrão, nulo aceito
+     * pela importação do snapshot legado e tratado como DESLIGADO.
+     */
+    photoKey: text("photo_key"),
+    coverKey: text("cover_key"),
+    publicPhoto: boolean("public_photo").default(false),
+    publicCover: boolean("public_cover").default(false),
     createdAt: text("created_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
   },

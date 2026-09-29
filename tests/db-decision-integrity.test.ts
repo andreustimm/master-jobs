@@ -170,10 +170,12 @@ describe("descarte concorrente com candidatura", () => {
     });
     await afterDelete;
     const applying = setApplicationStatus(owner, jobId, "applied");
+    // Presa já: a recusa pode chegar antes de a asserção se prender.
+    const applied = applying.then(() => undefined, (error: unknown) => error);
     await untilSomeoneWaitsOnALock();
     finish();
     await expect(discarding).resolves.toEqual([{ id: jobId }]);
-    await expect(applying).rejects.toThrow();
+    expect(await applied).toBeInstanceOf(Error);
     await expect(db.select().from(application)).resolves.toHaveLength(0);
     await expect(db.select().from(applicationEvent)).resolves.toHaveLength(0);
   });

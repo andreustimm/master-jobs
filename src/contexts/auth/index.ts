@@ -42,6 +42,7 @@ export { IMPERSONATION_HOURS } from "./app/impersonation.ts";
 export { RESET_MINUTES, RESET_MAX_PER_HOUR } from "./app/password-reset.ts";
 export type { Mailer, OutgoingMail, MailResult } from "./ports-mailer.ts";
 export { configuredMailer, consoleMailer, resendMailer } from "./infra/resend-mailer.ts";
+export { resolvePublicOrigin, type RequestOrigin } from "./domain/public-origin.ts";
 
 import {
   createOwnCandidate as createOwnCandidateRow,
@@ -292,6 +293,21 @@ function resetDeps(baseUrl: string): ResetDeps {
  */
 export function askPasswordReset(email: string, baseUrl: string) {
   return requestPasswordReset(email, resetDeps(baseUrl));
+}
+
+/**
+ * Registra que o pedido de recuperação não pôde ser enviado por falta de
+ * origem confiável (`resolvePublicOrigin` devolveu `null` — deployment sem
+ * `JHO_PUBLIC_URL`). Nunca consulta se a conta existe: grava para todo
+ * pedido, endereço cadastrado ou não, exatamente como `requestPasswordReset`
+ * faz para as outras causas de falha — a mesma disciplina de G17.
+ */
+export async function recordResetSendFailure(email: string, detail: string): Promise<void> {
+  await drizzleAuthRepository.record({
+    kind: "reset_send_failed",
+    email: email.trim().toLowerCase(),
+    detail,
+  });
 }
 
 /** O link ainda serve? Consulta sem consumir, para a tela avisar antes. */

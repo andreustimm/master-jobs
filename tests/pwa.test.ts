@@ -296,6 +296,10 @@ describe("deny-by-default worker policy", () => {
     const paths = [
       "/login",
       "/p/slug",
+      // Foto e capa do perfil público (#327): revogáveis como a página.
+      "/p/slug/image/photo",
+      "/p/slug/image/cover",
+      "/candidate/image/photo",
       "/admin/users",
       "/candidate",
       "/pipeline",
@@ -310,6 +314,11 @@ describe("deny-by-default worker policy", () => {
     ];
     for (const path of paths) {
       expect(fixture.evaluate<boolean>(`isCacheableStatic(new URL(${JSON.stringify(path)}, self.location.origin))`)).toBe(false);
+    }
+    // As imagens do perfil (#327) caem no prefixo explícito, não só na regra
+    // geral: `?v=` muda a cada troca e nenhuma versão pode ir para disco.
+    for (const path of ["/p/slug/image/photo?v=abc", "/candidate/image/cover?v=abc"]) {
+      expect(fixture.evaluate<boolean>(`isNeverCached(new URL(${JSON.stringify(path)}, self.location.origin))`)).toBe(true);
     }
     const staticStart = template.indexOf("const PRECACHE_STATIC");
     const staticEnd = template.indexOf("];", staticStart) + 2;
