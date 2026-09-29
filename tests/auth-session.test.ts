@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fixedClock, resetClock, setClock } from "../src/core/clock.ts";
 import type { DB } from "../src/core/db/client.ts";
 import { authEvent, authLoginToken, authSession, authUser, candidate } from "../src/core/db/schema.ts";
@@ -10,7 +10,7 @@ import {
 } from "../src/contexts/auth/infra/drizzle-store.ts";
 import { drizzlePasswords } from "../src/contexts/auth/infra/password-login.ts";
 import { completeLogin, isSingleUser, logout, singleUserSession } from "../src/contexts/auth/app/session.ts";
-import { openModeActive, openModeAllowedIn } from "../src/contexts/auth/domain/open-mode.ts";
+import { openModeActive, openModeAllowedIn, openModeRefused } from "../src/contexts/auth/domain/open-mode.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 
 let db: DB;
@@ -244,7 +244,52 @@ describe("modo aberto", () => {
   });
 
   it("só abre quando pedido explicitamente", () => {
-    expect(isSingleUser({ JHO_AUTH_MODE: "open" })).toBe(true);
+    expect(isSingleUser({ JHO_AUTH_MODE: "open", JHO_ENV: "local" })).toBe(true);
+  });
+
+  it("#378 recusa o modo aberto quando o processo não se declara local", () => {
+    // Reprodução do defeito: sem `VERCEL`, `VERCEL_ENV` nem `JHO_ENV`, a
+    // ausência era lida como "máquina do dono" e `open` valia — um deployment
+    // que não declara nada servia `/api/export` sem sessão (G38). Lista de
+    // permissão (G27): só a declaração positiva `JHO_ENV=local` abre.
+    for (const env of [
+      { JHO_AUTH_MODE: "open" },
+      { JHO_AUTH_MODE: "open", JHO_ENV: "" },
+      { JHO_AUTH_MODE: "open", JHO_ENV: "   " },
+      { JHO_AUTH_MODE: "open", VERCEL: "", VERCEL_ENV: "" },
+      // `VERCEL_ENV` é variável de sistema da Vercel; ela nunca diz `local`,
+      // e aceitá-la como declaração abriria um segundo caminho sem dono.
+      { JHO_AUTH_MODE: "open", VERCEL_ENV: "local" },
+    ]) {
+      expect(isSingleUser(env), JSON.stringify(env)).toBe(false);
+      expect(openModeAllowedIn(env), JSON.stringify(env)).toBe(false);
+      expect(openModeRefused(env), JSON.stringify(env)).toBe(true);
+    }
+  });
+
+  it("#378 avisa a recusa uma vez por processo, dizendo o que declarar", async () => {
+    // Módulo novo: o aviso é uma vez por processo, e outro teste deste
+    // arquivo já pode tê-lo disparado no módulo compartilhado.
+    vi.resetModules();
+    const fresh = await import("../src/contexts/auth/app/session.ts");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(fresh.isOpenMode({ JHO_AUTH_MODE: "open", JHO_ENV: "local" })).toBe(true);
+      expect(warn).not.toHaveBeenCalled();
+      expect(fresh.isOpenMode({ JHO_AUTH_MODE: "open" })).toBe(false);
+      expect(fresh.isOpenMode({ JHO_AUTH_MODE: "open", VERCEL: "1" })).toBe(false);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]?.[0])).toContain("JHO_ENV=local");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("#378 só acusa recusa quando o modo aberto foi pedido", () => {
+    expect(openModeRefused({})).toBe(false);
+    expect(openModeRefused({ JHO_AUTH_MODE: "secure" })).toBe(false);
+    expect(openModeRefused({ JHO_AUTH_MODE: "open", JHO_ENV: "local" })).toBe(false);
+    expect(openModeRefused({ JHO_AUTH_MODE: "open", JHO_ENV: "production" })).toBe(true);
   });
 
   it("V03-04 recusa o pedido de modo aberto fora da máquina local", () => {
