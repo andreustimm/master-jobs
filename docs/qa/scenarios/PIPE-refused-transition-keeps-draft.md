@@ -32,6 +32,10 @@ O veredito exige as duas metades na mesma tentativa: a nota digitada ainda
 visível no campo depois do aviso, e o aviso citando o estágio gravado e o
 pretendido pelo nome traduzido.
 
+Reteste da #389: o aviso de recusa deve permanecer por sete segundos, salvo
+dispensa pela pessoa. Ler novamente aos seis segundos, conferir o rascunho e
+reenviar uma transição válida sem redigitar. Conferir também a 375px.
+
 Re-andado em 17/09 sobre o head final (`9bb7fc0`), porque o formulário mudou
 duas vezes depois do primeiro veredito — as correções que a revisão
 independente pediu. As três propriedades se sustentam: o aviso diz "The funnel
