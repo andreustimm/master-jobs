@@ -19,7 +19,8 @@
  * Ambiente que não diz o que é não é tratado como seguro.
  *
  * A conveniência local vem de declarar, não de omitir: `pnpm dev` declara
- * `JHO_ENV=local` no próprio script e a suíte declara em
+ * `JHO_ENV=local` (`scripts/dev.ts`) quando nem o shell nem os `.env*` do
+ * Next declaram outra coisa, e a suíte declara em
  * `tests/support/ingestion-env.ts`. `pnpm jho` e `pnpm start` locais leem o
  * `.env`, que precisa trazer `JHO_ENV=local` para o modo aberto e o mailer
  * de terminal.

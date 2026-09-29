@@ -191,19 +191,19 @@ describe("fly.toml — JHO_PUBLIC_URL fixada (MAJOR M1 da revisão)", () => {
 });
 
 describe("#378: a máquina do dono se declara local, e só o `dev` faz isso sozinho", () => {
-  it("`pnpm dev` declara JHO_ENV=local por padrão, sem sobrescrever uma declaração do shell", () => {
+  it("`pnpm dev` passa por scripts/dev.ts, que só declara local na ausência de declaração", () => {
     // `isLocalProcess()` exige o sinal positivo. `next dev` só roda na máquina
-    // de quem desenvolve, então é o único script que pode declará-lo sozinho.
-    // `${JHO_ENV:-local}` respeita quem rodar `JHO_ENV=preview pnpm dev`.
-    expect(PACKAGE_JSON.scripts.dev).toMatch(/^JHO_ENV=\$\{JHO_ENV:-local\}\s+next dev\b/);
+    // de quem desenvolve, então é o único script que pode declará-lo sozinho —
+    // e sem passar por cima do `.env` (tests/dev-env.test.ts).
+    expect(PACKAGE_JSON.scripts.dev).toMatch(/\bscripts\/dev\.ts\s+next dev\b/);
   });
 
-  it("nenhum outro script se declara local — `start`, build e CLI dependem do ambiente real", () => {
+  it("nenhum script embute JHO_ENV — `start`, build e CLI dependem do ambiente real", () => {
     // `pnpm start` e `pnpm jho` também rodam fora do laptop (varredura no
     // Actions com JHO_ENV=production): um `JHO_ENV=local` embutido ali
-    // transformaria deployment em máquina do dono.
+    // transformaria deployment em máquina do dono. Um `JHO_ENV=` no próprio
+    // `dev` passaria por cima do `.env`.
     for (const [name, command] of Object.entries(PACKAGE_JSON.scripts)) {
-      if (name === "dev") continue;
       expect(command, `scripts.${name}`).not.toMatch(/JHO_ENV=/);
     }
   });

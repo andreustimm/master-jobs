@@ -89,9 +89,10 @@ de permissão (G27): produção, preview, staging, dev, valor desconhecido **e a
 ausência de declaração** recusam — até a #378 a ausência contava como local,
 e um destino que não declarasse nada abria o modo aberto. A recusa é
 silenciosa na resposta (o login continua exigido) e avisada uma vez no log do
-servidor. Na máquina do dono, `pnpm dev` declara `JHO_ENV=local` no próprio
-script e a suíte em `tests/support/ingestion-env.ts`; nenhum outro script do
-`package.json` pode declará-lo (`tests/deploy-fly.test.ts`). O plano B no
+servidor. Na máquina do dono, `pnpm dev` declara `JHO_ENV=local` por
+`scripts/dev.ts` só quando nem o shell nem os `.env*` do Next a declaram, e a
+suíte declara em `tests/support/ingestion-env.ts`; nenhum script do
+`package.json` embute `JHO_ENV` (`tests/deploy-fly.test.ts`). O plano B no
 Fly.io continua fixando `JHO_ENV=production` no `fly.toml` **e** no
 `Dockerfile`, agora pela guarda de ingestão e como declaração explícita, não
 porque a ausência abriria o modo aberto.
