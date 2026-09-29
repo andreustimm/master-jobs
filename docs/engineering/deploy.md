@@ -262,27 +262,33 @@ lugar só" a editar em vez de abrir `vercel.json` à mão:
   [`scripts/github/verify-deploy-preview-envs.ts`](../../scripts/github/verify-deploy-preview-envs.ts)
   compara a variável ao `git.deploymentEnabled` publicado na **ponta de
   `main`, `dev` e `staging`** (API de conteúdo do GitHub, não o checkout
-  local — a Vercel aplica o arquivo do commit de cada branch, então só isso
-  prova que nenhuma delas divergiu em silêncio); diverge em qualquer uma, sai
-  com código 1. Também recusa qualquer chave fora de
-  `{"**", "main", "dev", "staging"}` (ex.: um padrão `"release/*"` esquecido
-  no arquivo). `GITHUB_TOKEN` não lê a API de variáveis de repositório (403,
-  mesmo com `actions: read`) — só a leitura do `vercel.json` de cada branch
-  usa `gh api`/`GITHUB_TOKEN` (via `contents: read`); a variável em si chega
-  pronta pelo `vars.…` do próprio workflow (job
-  `verificar-deploy-preview-envs` em `governanca.yml`, a cada corrida
-  agendada de `main`) ou por `gh api` no uso manual, com a credencial de quem
-  roda:
+  local — a Vercel aplica o arquivo do commit de cada branch). Em cada
+  branch, confere só o que decide o deploy **daquela** branch: a própria
+  chave (`dev` no arquivo de `dev`, `staging` no de `staging`…), `**`
+  (sempre `false`) e chave fora da lista de permissão
+  `{"**", "main", "dev", "staging"}` (ex.: um padrão `"release/*"`
+  esquecido no arquivo) — nunca o mapa inteiro: durante o runbook de religar,
+  o arquivo de `dev` pode já ter `dev: true` enquanto o de `main` ainda não
+  mesclou a mudança, e isso não afeta o deploy de `main` (a Vercel decide
+  pela própria entrada da branch, nunca pela entrada de outra). Diverge em
+  qualquer branch, sai com código 1. `GITHUB_TOKEN` não lê a API de
+  variáveis de repositório (403, mesmo com `actions: read`) — só a leitura
+  do `vercel.json` de cada branch usa `gh api`/`GITHUB_TOKEN` (via
+  `contents: read`); a variável em si chega pronta pelo `vars.…` do workflow
+  dedicado
+  ([`verificar-deploy-preview-envs.yml`](../../.github/workflows/verificar-deploy-preview-envs.yml),
+  a cada 15 min, fora de "Governança em produção" para não misturar uma
+  divergência de configuração com o sinal de disponibilidade da sonda
+  `medir`) ou por `gh api` no uso manual, com a credencial de quem roda:
 
   ```bash
   rtk node scripts/github/verify-deploy-preview-envs.ts
   ```
 - **Runbook de religar** um ambiente, quando a fixture existir: 1) confirmar a
-  fixture do ambiente provisionada; 2) `gh variable set DEPLOY_PREVIEW_ENVS
-  --body "dev"`; 3) editar `vercel.json` para `"dev": true`, na branch `dev`
-  (o commit que a Vercel de fato lê para decidir o deploy de `dev` — não
-  basta mudar em `main`); 4) rodar o verificador; 5) confirmar o primeiro
-  deploy de `dev` na Vercel.
+  fixture do ambiente provisionada; 2) abrir PR para `dev` com `vercel.json`
+  alterando `"dev": true` (regra 18/G43 — nunca commit direto em `dev`); 3)
+  ao mesclar, `gh variable set DEPLOY_PREVIEW_ENVS --body "dev"`; 4) rodar o
+  verificador; 5) confirmar o primeiro deploy de `dev` na Vercel.
 
 **Commit que não muda o site não gera deploy**, mesmo em `main`. O plano
 Hobby limita os deploys por dia; `ignoreCommand` roda

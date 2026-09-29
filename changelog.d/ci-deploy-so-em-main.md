@@ -9,15 +9,19 @@
   quando a fixture de banco dele existir, e `scripts/github/verify-deploy-preview-envs.ts`
   recusa qualquer divergência entre a variável e o `vercel.json` publicado na
   ponta de `main`, `dev` e `staging` (não só o checkout local — a Vercel
-  aplica o commit de cada branch), inclusive contra chave fora da lista de
-  permissão `{"**", "main", "dev", "staging"}`. Job novo em `governanca.yml`
-  roda o verificador a cada corrida agendada de `main`, com permissão própria
-  (`contents: read`) e sem `GITHUB_TOKEN` na API de variáveis — que devolve
-  403 para esse token; o valor chega pronto pelo `vars.…` do próprio
-  workflow, e `gh api` para a variável fica restrito ao uso manual.
-  `docs/engineering/deploy.md`, `docs/engineering/service-levels.md` e
+  aplica o commit de cada branch). Em cada branch, confere só a chave que
+  decide o deploy dela mais `**` e a lista de permissão de chaves
+  `{"**", "main", "dev", "staging"}` — nunca o mapa inteiro, para não acusar
+  falso positivo durante o próprio runbook de religar (`dev` já em `true` e
+  `main` ainda não mesclado não afeta o deploy de `main`). Workflow dedicado
+  `verificar-deploy-preview-envs.yml` (a cada 15 min, fora de "Governança em
+  produção" — para não misturar essa divergência com o sinal de
+  disponibilidade da sonda `medir`) injeta a variável pelo `vars.…` do env,
+  porque `GITHUB_TOKEN` não lê a API de variáveis (403); `gh api` para a
+  variável fica restrito ao uso manual. `docs/engineering/deploy.md` e
   `docs/engineering/promotion.md` deixam de descrever deploy de `staging`
-  como efeito automático da promoção e documentam o runbook atual. ADR 0030
+  como efeito automático da promoção e documentam o runbook atual (religar
+  um ambiente é PR para `dev`, nunca commit direto — regra 18/G43). ADR 0030
   passa de Proposta para Aceita, com as decisões do dono para as Fases 2–4
   registradas (execução delas fica para issues próprias). Fase 1 da #351.
 

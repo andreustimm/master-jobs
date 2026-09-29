@@ -73,10 +73,25 @@ export function expectedDeploymentEnabled(envs: PreviewBranch[]): DeploymentEnab
   return { "**": false, main: true, dev: enabled.has("dev"), staging: enabled.has("staging") };
 }
 
+function unexpectedKeyProblems(actual: Record<string, unknown>): string[] {
+  return Object.keys(actual)
+    .filter((key) => !(ALLOWED_DEPLOYMENT_KEYS as readonly string[]).includes(key))
+    .map(
+      (key) =>
+        `git.deploymentEnabled.${key}: chave fora da lista de permissão {${ALLOWED_DEPLOYMENT_KEYS.join(", ")}} — valor ${JSON.stringify(actual[key])}`,
+    );
+}
+
 /**
- * Lista cada diferença entre o mapa esperado e o `vercel.json` real —
- * inclusive uma chave fora da lista de permissão (ex.: `"release/*": true`),
- * que deployaria um padrão de branch sem que a variável documentada saiba.
+ * Lista cada diferença entre o mapa esperado inteiro e o `vercel.json` real —
+ * inclusive uma chave fora da lista de permissão (ex.: `"release/*": true`).
+ * Uso: conferir um único arquivo contra o mapa completo (ex.: `verifyDeployPreviewEnvs`).
+ * Não é o que `verifyDeployPreviewEnvsAcrossBranches` usa: exigir que o
+ * arquivo de `main` também tenha `dev`/`staging` no valor "certo" gera falso
+ * positivo durante o runbook de religar, quando `dev` já mudou e `main` ainda
+ * não mesclou — a Vercel nunca olha a chave `dev` do arquivo de `main` para
+ * decidir o deploy de `main`. Use `compareEffectiveDeploymentEnabled` para
+ * comparação por branch.
  */
 export function compareDeploymentEnabled(
   expected: DeploymentEnabledMap,
@@ -90,13 +105,34 @@ export function compareDeploymentEnabled(
       );
     }
   }
-  for (const key of Object.keys(actual)) {
-    if (!(ALLOWED_DEPLOYMENT_KEYS as readonly string[]).includes(key)) {
-      problems.push(
-        `git.deploymentEnabled.${key}: chave fora da lista de permissão {${ALLOWED_DEPLOYMENT_KEYS.join(", ")}} — valor ${JSON.stringify(actual[key])}`,
-      );
-    }
+  problems.push(...unexpectedKeyProblems(actual));
+  return problems;
+}
+
+/**
+ * Lista as diferenças que **de fato** decidem o deploy de push nessa branch:
+ * a própria chave (`actual[branch]`), `**` (sempre `false`, protege qualquer
+ * branch de tarefa) e chave fora da lista de permissão. Nunca compara a chave
+ * das outras branches — o arquivo de `main` pode ter `dev: false` enquanto o
+ * de `dev` já tem `dev: true` (religamento em andamento) sem que isso afete
+ * o deploy de `main`, porque a Vercel decide o deploy de cada branch só pela
+ * própria entrada dela (mais o fallback `**`).
+ */
+export function compareEffectiveDeploymentEnabled(
+  branch: RelevantBranch,
+  expected: DeploymentEnabledMap,
+  actual: Record<string, unknown>,
+): string[] {
+  const problems: string[] = [];
+  if (actual[branch] !== expected[branch]) {
+    problems.push(
+      `git.deploymentEnabled.${branch}: esperado ${expected[branch]}, encontrado ${JSON.stringify(actual[branch])}`,
+    );
   }
+  if (actual["**"] !== false) {
+    problems.push(`git.deploymentEnabled.**: esperado false, encontrado ${JSON.stringify(actual["**"])}`);
+  }
+  problems.push(...unexpectedKeyProblems(actual));
   return problems;
 }
 
@@ -131,11 +167,14 @@ export type MultiBranchResult = { raw: string | undefined; envs: PreviewBranch[]
  * `branches` (não o checkout local): a Vercel aplica o arquivo do commit de
  * cada branch, então só isso prova que nenhuma delas divergiu em silêncio
  * (ex.: alguém editou `vercel.json` direto em `dev`, sem passar por `main`).
- * Cada problema é prefixado com a branch em que apareceu.
+ * Compara só o que decide o deploy de cada uma (`compareEffectiveDeploymentEnabled`),
+ * nunca o mapa inteiro — durante o runbook de religar, `dev` pode já ter
+ * `dev: true` enquanto `main` ainda não mesclou, e isso não é uma
+ * divergência real. Cada problema é prefixado com a branch em que apareceu.
  */
 export function verifyDeployPreviewEnvsAcrossBranches(
   repo: string,
-  branches: readonly string[],
+  branches: readonly RelevantBranch[],
   readVariable: ReadVariable,
   readVercelConfigAt: ReadVercelConfigAt,
 ): MultiBranchResult {
@@ -145,7 +184,7 @@ export function verifyDeployPreviewEnvsAcrossBranches(
   const problems: string[] = [];
   for (const branch of branches) {
     const actual = readVercelConfigAt(repo, branch);
-    for (const problem of compareDeploymentEnabled(expected, actual)) {
+    for (const problem of compareEffectiveDeploymentEnabled(branch, expected, actual)) {
       problems.push(`${branch}: ${problem}`);
     }
   }

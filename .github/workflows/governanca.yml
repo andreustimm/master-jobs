@@ -43,32 +43,3 @@ jobs:
           # Cada artefato contém a janela móvel inteira. Retenção curta limita
           # armazenamento; arquivar o relatório mensal antes de expirar.
           retention-days: 3
-
-  # Fase 1 da contingência de CI e deploy (#351, ADR 0030): DEPLOY_PREVIEW_ENVS
-  # é só o registro documentado do que git.deploymentEnabled de vercel.json
-  # realmente aplica em main, dev e staging — esta corrida garante que os dois
-  # nunca divirjam em silêncio, sem esperar alguém lembrar de rodar o
-  # verificador à mão. GITHUB_TOKEN não lê a API de variáveis (403), então o
-  # valor chega pronto por `vars.…` no env, nunca por `gh api`; a leitura do
-  # vercel.json de cada branch usa a API de conteúdo, que só exige
-  # `contents: read` — por isso o job tem permissão própria, mais estreita que
-  # o padrão do workflow, e não precisa instalar dependência nenhuma (o script
-  # só usa módulos nativos do Node).
-  verificar-deploy-preview-envs:
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: package.json
-      - name: Confere DEPLOY_PREVIEW_ENVS contra vercel.json em main, dev e staging
-        env:
-          GH_TOKEN: ${{ github.token }}
-          DEPLOY_PREVIEW_ENVS: ${{ vars.DEPLOY_PREVIEW_ENVS }}
-        run: node scripts/github/verify-deploy-preview-envs.ts

@@ -12,6 +12,7 @@ import {
   RepositoryNotFound,
   assertRepositoryExists,
   compareDeploymentEnabled,
+  compareEffectiveDeploymentEnabled,
   expectedDeploymentEnabled,
   httpStatusOf,
   parseDeployPreviewEnvs,
@@ -176,7 +177,11 @@ describe("MAJOR 2 — verifyDeployPreviewEnvsAcrossBranches confere a ponta de c
     expect(problems).toEqual(["dev: git.deploymentEnabled.dev: esperado false, encontrado true"]);
   });
 
-  it("acusa as três branches quando todas estão erradas", () => {
+  it("MAJOR (re-revisão): não acusa main pela chave dev/staging erradas — só o que decide o deploy de main", () => {
+    // As três branches têm o mesmo mapa errado (dev/staging religados sem a
+    // variável). Antes da correção, comparar o mapa inteiro acusava main
+    // também, por causa de chaves que main nunca usa para decidir o próprio
+    // deploy — 6 problemas em vez de 2.
     const readVariable: ReadVariable = () => undefined;
     const readVercelConfigAt = () => ({ "**": false, main: true, dev: true, staging: true });
     const { problems } = verifyDeployPreviewEnvsAcrossBranches(
@@ -185,8 +190,65 @@ describe("MAJOR 2 — verifyDeployPreviewEnvsAcrossBranches confere a ponta de c
       readVariable,
       readVercelConfigAt,
     );
-    expect(problems).toHaveLength(6); // dev e staging, em cada uma das 3 branches
-    expect(problems.every((problem) => /^(main|dev|staging): /.test(problem))).toBe(true);
+    expect(problems).toEqual([
+      "dev: git.deploymentEnabled.dev: esperado false, encontrado true",
+      "staging: git.deploymentEnabled.staging: esperado false, encontrado true",
+    ]);
+  });
+
+  it("estado de transição do runbook de religar: dev/staging já com dev:true, main ainda não mesclou — sem falso positivo", () => {
+    // Cenário exato da re-revisão: DEPLOY_PREVIEW_ENVS já diz "dev"; a PR que
+    // religou dev já foi mesclada e promovida a staging; main ainda não. Isso
+    // não é uma divergência real — nada no deploy de main depende da chave
+    // dev do arquivo de main.
+    const readVariable: ReadVariable = () => "dev";
+    const perBranch: Record<string, Record<string, unknown>> = {
+      main: { "**": false, main: true, dev: false, staging: false },
+      dev: { "**": false, main: true, dev: true, staging: false },
+      staging: { "**": false, main: true, dev: true, staging: false },
+    };
+    const readVercelConfigAt = (_repo: string, ref: string) => perBranch[ref]!;
+    const { problems } = verifyDeployPreviewEnvsAcrossBranches(
+      "andreustimm/master-jobs",
+      RELEVANT_BRANCHES,
+      readVariable,
+      readVercelConfigAt,
+    );
+    expect(problems).toEqual([]);
+  });
+});
+
+describe("compareEffectiveDeploymentEnabled — só a chave própria da branch, ** e chaves extras (re-revisão)", () => {
+  it("não acusa a branch pela chave de outra branch", () => {
+    const expected = expectedDeploymentEnabled(["dev"]); // {**:false, main:true, dev:true, staging:false}
+    // O arquivo de main ainda não religou dev, mas main:true está certo — só
+    // isso importa para decidir o deploy de main.
+    const actual = { "**": false, main: true, dev: false, staging: false };
+    expect(compareEffectiveDeploymentEnabled("main", expected, actual)).toEqual([]);
+  });
+
+  it("acusa quando a própria chave da branch diverge", () => {
+    const expected = expectedDeploymentEnabled(["dev"]);
+    const actual = { "**": false, main: true, dev: false, staging: false };
+    expect(compareEffectiveDeploymentEnabled("dev", expected, actual)).toEqual([
+      "git.deploymentEnabled.dev: esperado true, encontrado false",
+    ]);
+  });
+
+  it("acusa ** true, em qualquer branch — protege contra deploy de branch de tarefa", () => {
+    const expected = expectedDeploymentEnabled([]);
+    const actual = { "**": true, main: true, dev: false, staging: false };
+    expect(compareEffectiveDeploymentEnabled("main", expected, actual)).toEqual([
+      "git.deploymentEnabled.**: esperado false, encontrado true",
+    ]);
+  });
+
+  it("acusa chave fora da lista de permissão, mesmo com a chave própria e ** corretas", () => {
+    const expected = expectedDeploymentEnabled([]);
+    const actual = { "**": false, main: true, dev: false, staging: false, "release/*": true };
+    expect(compareEffectiveDeploymentEnabled("main", expected, actual)).toEqual([
+      `git.deploymentEnabled.release/*: chave fora da lista de permissão {${ALLOWED_DEPLOYMENT_KEYS.join(", ")}} — valor true`,
+    ]);
   });
 });
 
