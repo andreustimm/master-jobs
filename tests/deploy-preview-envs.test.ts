@@ -5,6 +5,7 @@
 // variável nunca finge normalidade quando a API não responde o que se espera.
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
+import YAML from "yaml";
 import {
   ALLOWED_DEPLOYMENT_KEYS,
   InvalidDeployPreviewEnvs,
@@ -374,6 +375,32 @@ describe("runCli — código de saída do CLI, sem subprocesso nem rede real (MA
     });
     expect(code).toBe(0);
     expect(seenRepos).toEqual(new Set(["outra/org"]));
+  });
+});
+
+describe("workflow verificar-deploy-preview-envs.yml — dispara no push que toca vercel.json, sem depender de ref (re-revisão)", () => {
+  const workflow = YAML.parse(readFileSync(".github/workflows/verificar-deploy-preview-envs.yml", "utf8")) as {
+    on: {
+      push?: { branches: string[]; paths: string[] };
+      schedule?: Array<{ cron: string }>;
+      workflow_dispatch: null;
+    };
+    jobs: Record<string, { if?: string }>;
+  };
+
+  it("dispara no push de main, dev e staging que toca vercel.json", () => {
+    expect(workflow.on.push?.branches).toEqual(["main", "dev", "staging"]);
+    expect(workflow.on.push?.paths).toEqual(["vercel.json"]);
+  });
+
+  it("tem um agendamento diário como rede de segurança, e workflow_dispatch", () => {
+    expect(workflow.on.schedule).toHaveLength(1);
+    expect(workflow.on.schedule?.[0]?.cron).toMatch(/^\d+ \d+ \* \* \*$/);
+    expect(workflow.on.workflow_dispatch).toBeNull(); // presente, sem opções
+  });
+
+  it("o job não tem `if` de ref — o script lê as três pontas pela API, não importa qual disparou", () => {
+    expect(workflow.jobs.verificar?.if).toBeUndefined();
   });
 });
 

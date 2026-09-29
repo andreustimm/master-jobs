@@ -277,7 +277,9 @@ lugar só" a editar em vez de abrir `vercel.json` à mão:
   `contents: read`); a variável em si chega pronta pelo `vars.…` do workflow
   dedicado
   ([`verificar-deploy-preview-envs.yml`](../../.github/workflows/verificar-deploy-preview-envs.yml),
-  a cada 15 min, fora de "Governança em produção" para não misturar uma
+  disparado no push que toca `vercel.json` em `main`, `dev` ou `staging` —
+  detecção quase imediata — mais um agendamento diário como rede de
+  segurança; fora de "Governança em produção" para não misturar uma
   divergência de configuração com o sinal de disponibilidade da sonda
   `medir`) ou por `gh api` no uso manual, com a credencial de quem roda:
 
@@ -289,6 +291,12 @@ lugar só" a editar em vez de abrir `vercel.json` à mão:
   alterando `"dev": true` (regra 18/G43 — nunca commit direto em `dev`); 3)
   ao mesclar, `gh variable set DEPLOY_PREVIEW_ENVS --body "dev"`; 4) rodar o
   verificador; 5) confirmar o primeiro deploy de `dev` na Vercel.
+- **Runbook de desligar de novo:** 1) abrir PR para `dev` com `vercel.json`
+  voltando `"dev": false` (regra 18/G43 — nunca commit direto); 2) ao
+  mesclar, `gh variable delete DEPLOY_PREVIEW_ENVS` (ou, com mais de um
+  ambiente religado, `gh variable set DEPLOY_PREVIEW_ENVS --body "staging"`,
+  sem `dev` na lista); 3) rodar o verificador; 4) confirmar no painel da
+  Vercel que o próximo push em `dev` não gera deployment.
 
 **Commit que não muda o site não gera deploy**, mesmo em `main`. O plano
 Hobby limita os deploys por dia; `ignoreCommand` roda
