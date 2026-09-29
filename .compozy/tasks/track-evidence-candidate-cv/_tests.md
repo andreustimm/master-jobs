@@ -22,6 +22,8 @@ scorer ou o perfil persistido.
 - `pnpm typecheck`.
 - `pnpm vitest related --run src/contexts/matching/app/tracks.ts tests/target-tracks.test.ts`.
 - `node tests/e2e/run-isolated.mjs` por tocar a tela de trilha.
+- `term-search E2E-002` preserva a edição/recusa e confirma que `php`, ausente
+  do CV fixture, permanece em lacunas em vez de vir do perfil padrão.
 - QA vivo do cenário `SRCH-track-primary-archive`, com refresh e leitura
   independente; se o ambiente não permitir o rewalk, registrar a limitação na
   PR e no cenário.

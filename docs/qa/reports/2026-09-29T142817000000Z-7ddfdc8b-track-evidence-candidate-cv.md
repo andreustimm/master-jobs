@@ -2,8 +2,8 @@
 
 - **Scope:** Reteste targeted da evidência da trilha depois de corrigir o #393 na branch `fix/track-evidence-candidate-cv`.
 - **Cadence tier:** targeted
-- **Build:** `7916639` · **Environment:** ambiente isolado local via `tests/e2e/run-isolated.mjs --manual`; conta sintética de QA, sem dados de produção
-- **Started:** 2026-09-29T14:28:17Z · **Status:** in-progress
+- **Build:** `4181667` · **Environment:** ambiente isolado local via `tests/e2e/run-isolated.mjs --manual`; conta sintética de QA, sem dados de produção
+- **Started:** 2026-09-29T14:28:17Z · **Status:** closed
 
 ## Personas
 
@@ -19,7 +19,7 @@
 
 | # | Charter | Journey / Scenario | Persona | Tour | Status | Issue | Fix commit |
 |---|---|---|---|---|---|---|---|
-| 1 | CH-target-track-edit-archive | J-manage-target-tracks / SRCH-track-primary-archive | Andreus em triagem | Back-Button Tour | Fixed | BUG-20260929-track-evidence-ignores-candidate-cv | pendente |
+| 1 | CH-target-track-edit-archive | J-manage-target-tracks / SRCH-track-primary-archive | Andreus em triagem | Back-Button Tour | Fixed | BUG-20260929-track-evidence-ignores-candidate-cv | 4181667 |
 
 Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human verify) | Blocked (human decision)`
 
@@ -47,7 +47,7 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 
 - **Symptom:** o painel mostrava evidência herdada do perfil padrão mesmo com CV corrente salvo na conta.
 - **Root cause:** `trackSupport` não lia o documento CV corrente antes de aplicar a detecção de evidência herdada.
-- **Fix:** pendente do SHA do commit; a sessão manual confirmou o comportamento na interface.
+- **Fix:** `4181667`; a sessão manual confirmou o comportamento na interface.
 - **Regression test:** `tests/target-tracks.test.ts` — `IT-393-01`, falhou antes e passou depois.
 - **Retested:** jornada original, refresh, leitura independente em `/candidate` e retorno pelo botão voltar; cenário adjacente de currículo conferido.
 
@@ -55,11 +55,16 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 
 | Persona | Where (journey/step) | Felt | Sharpness | Outcome |
 |---|---|---|---|---|
-| Andreus em triagem | J-manage-target-tracks / evidência | pendente | pendente | pendente |
+| Andreus em triagem | J-manage-target-tracks / evidência | nenhum | n/a | encerrado |
 
 ## Runtime Errors Observed
 
 - Nenhum erro de página ou console foi observado na sessão manual.
+
+## Automated Gates
+
+- `rtk proxy env PATH=/Users/andreus/.nvm/versions/node/v24.19.0/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin node tests/e2e/run-isolated.mjs --areas searches` — exit 1; `79/80 verificações passaram`. O cenário alterado de #393 (`term-search E2E-002`) passou; a única falha foi `term-search E2E-009`, com `newBefore=2`, `markedNew=[]` e `newAfter=0`, fora do escopo desta correção.
+- `rtk proxy env PATH=/Users/andreus/.nvm/versions/node/v24.19.0/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin node tests/e2e/run-isolated.mjs` — exit 1; `429/430 verificações passaram` antes do ajuste da asserção de #393. A única falha era o `E2E-002` esperando `php` herdado do perfil padrão; a expectativa foi alinhada ao CV real no delta desta branch. A suíte completa não foi repetida após esse ajuste; o E2E direcionado confirmou o cenário corrigido.
 
 ## Human Verifications Needed
 
@@ -75,7 +80,7 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 
 ## Final Status
 
-- **Exit gate (full automated suite):** pendente — a fila de E2E será executada em máquina livre.
-- **Issues by user impact:** Blocks-Completion 0 · Data-Loss 0 · Trust-Damage 1 · Friction 0 · Cosmetic 0
-- **Coverage:** 0/1 jornadas caminhadas; sessão manual pendente
-- **Verdict:** in-progress — concluir a jornada manual, o E2E isolado e o write-back do tracker.
+- **Exit gate (full automated suite):** `run-isolated.mjs --areas searches` — exit 1, `79/80 verificações passaram`; #393 passou e a falha restante é `E2E-009`, fora do escopo. A execução completa anterior terminou em `429/430`, antes da atualização da expectativa de #393.
+- **Issues by user impact:** Blocks-Completion 0 · Data-Loss 0 · Trust-Damage 0 para #393 · Friction 0 · Cosmetic 0
+- **Coverage:** 1/1 jornadas caminhadas; o cenário geral continua bloqueado pela decisão do #391.
+- **Verdict:** not-ready — a correção de #393 está verificada, mas a execução E2E direcionada ainda tem a falha independente `E2E-009`, que deve ser tratada em sua própria issue.

@@ -1,6 +1,6 @@
 # BUG-20260929-track-evidence-ignores-candidate-cv: evidência da trilha principal ignora o CV real da candidata
 
-- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->
+- **Status:** verified <!-- open | fixed | verified | wont-fix | invalid -->
 - **Impact (user-side):** Trust-Damage
 - **Severity:** High · **Priority:** P1
 - **Persona Affected:** Andreus em triagem
@@ -37,11 +37,11 @@ contradiz o que a própria conta mostra em outra tela.
 
 <!-- filled when status moves to fixed -->
 - **Root cause:** `trackSupport` usava as linhas de evidência do perfil de matching persistido. Quando esse perfil herdava o perfil padrão, `evidenceInherited` descartava as linhas mesmo quando a conta tinha um CV corrente; uma conta sem perfil derivado também não lia o documento corrente.
-- **Fix commit:**
+- **Fix commit:** `4181667`
 - **Regression test:** `tests/target-tracks.test.ts` — `IT-393-01` reprova antes e passa depois.
 
 ## Verification
 
 <!-- filled when status moves to verified -->
-- **Retested:**
-- **Result:**
+- **Retested:** 2026-09-29, com `alex@local.test`, pela jornada pública `/candidate` → `/searches` → trilha principal → editor, refresh, leitura independente do CV e volta do navegador.
+- **Result:** o painel exibiu `Mentioned in your CV or confirmed skills: typescript`, a leitura persistiu após refresh e a conta continuou mostrando o mesmo CV em `/candidate`; evidência em `docs/qa/evidence/2026-09-29T142817000000Z-7ddfdc8b-track-evidence-candidate-cv/CH-target-track-edit-archive/`.
