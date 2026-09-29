@@ -32,6 +32,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.31.0] - 2026-09-29T14:04:44.000Z
+
+### Added
+
+- A watchdog can be turned on (owner's manual step, outside the code) to run hourly, outside both Vercel and GitHub, checking whether either is close to its usage limit. Near the limit, it opens a warning; very close (or with either provider down for three checks in a row), it recommends the fix and already spells out the exact command to undo it, without repeating the same warning twice in a row — but applying the change is still up to the owner. The goal is to never again go 24 hours unable to ship a fix, as happened on 2026-09-22.
+
 ## [1.29.0] - 2026-09-29T04:43:43.000Z
 
 ### Added

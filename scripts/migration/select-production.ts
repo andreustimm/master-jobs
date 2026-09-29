@@ -91,6 +91,9 @@ export const postSnapshotTables = new Set([
   "job_check_event",
   // Orçamento diário de requisições por rotina (#291): contador operacional.
   "request_budget",
+  // Checagem do vigia de cota (ADR 0030, Fase 3): estado operacional, nasce
+  // vazia — nenhuma checagem existiu antes deste agendador existir.
+  "quota_watch",
 ]);
 
 const selectedJobs = `SELECT id FROM job WHERE

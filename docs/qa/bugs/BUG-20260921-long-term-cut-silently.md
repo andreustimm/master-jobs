@@ -46,3 +46,11 @@ cria termo.
 <!-- filled when status moves to verified -->
 - **Retested:**
 - **Result:**
+
+## Re-found (2026-09-29)
+
+- **Charter:** CH-term-input-mistreated · **Report:** docs/qa/reports/2026-09-29T035351654581Z-97f37e1c-full-release-candidate-1.29-full.md (QA full do release candidate 1.29)
+- Mesmo sintoma reproduzido: colar 61 caracteres em Buscas corta para 60 e
+  salva sem a mensagem de termo longo. `maxlength=60` continua no campo.
+- **Evidence:** `docs/qa/evidence/2026-09-29T035351654581Z-97f37e1c-full/CH-term-input-mistreated/01-61-chars-cortado-salvo.png`
+- Ainda `open` — sem fix aplicado entre 2026-09-21 e esta rodada.

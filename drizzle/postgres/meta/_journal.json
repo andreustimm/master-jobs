@@ -211,6 +211,13 @@
       "when": 1790625702265,
       "tag": "0029_perfil_publico_foto_capa",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1790687180767,
+      "tag": "0030_quota_watch",
+      "breakpoints": true
     }
   ]
 }
