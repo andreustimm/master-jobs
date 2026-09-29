@@ -2,7 +2,7 @@
 
 ### Corrigido
 
-- `--warn` usado como cor de texto (G32: token de preenchimento, não de texto) media 4,06:1 em huly e graphy claros — abaixo do mínimo WCAG 1.4.3 AA de 4,5:1 (#383). Novo token `--warn-text` (`app/themes.css`, definido em todos os temas/modos) substitui os quatro usos como cor: `app/candidate/page.tsx`, `app/layout.tsx` (faixa de sessão emprestada, x2) e `app/admin/operacoes/page.tsx`. `tests/design.test.ts` reprova `text-[var(--warn)]` daqui em diante; `tests/e2e/ui/themes.mjs` mede o contraste do aviso de visibilidade nas seis combinações de tema/modo, lendo o estilo computado num Chromium real.
+- `--warn` usado como cor de texto (G32: token de preenchimento, não de texto) media 4,06:1 em huly e graphy claros — abaixo do mínimo WCAG 1.4.3 AA de 4,5:1 (#383). Novo token `--warn-text` (`app/themes.css`, definido em todos os temas/modos) substitui os quatro usos como cor: `app/candidate/page.tsx`, `app/layout.tsx` (faixa de sessão emprestada, x2) e `app/admin/operacoes/page.tsx`. `tests/design.test.ts` reprova `text-[var(--warn)]` daqui em diante; `tests/e2e/ui/themes.mjs` mede o contraste do aviso de visibilidade e da faixa de sessão emprestada nas seis combinações de tema/modo, lendo o estilo computado num Chromium real. `--warn-text` calibrado em `#7a5510` (claro) para passar não só contra `--card` sólido mas também contra o fundo REAL da faixa (`--warn` a 10% de opacidade composto sobre `--background`, que o Tailwind v4 resolve como `oklab(... / 0.1)` — o teste agora compõe as camadas por canvas em vez de assumir `rgba()`).
 
 ## pt-BR
 

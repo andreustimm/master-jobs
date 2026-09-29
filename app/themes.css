@@ -79,8 +79,16 @@
   /* `--warn` é feito para PREENCHIMENTO (faixa, borda), onde o mínimo é 3:1.
      Texto precisa de 4.5:1, e `--warn` sozinho não chega lá em todo tema
      (huly e graphy claros davam 4.06:1, medido). `--warn-text` é mais escuro
-     que `--warn` só onde precisa (#383). */
-  --warn-text: #8f640f;
+     que `--warn` só onde precisa (#383).
+
+     O valor claro não é o mínimo que passa contra `--card` sólido: a faixa
+     de sessão emprestada (`app/layout.tsx`) pinta o texto sobre
+     `bg-[var(--warn)]/10`, e o fundo REAL ali é `--warn` a 10% opacidade
+     composto sobre `--background` — mais escuro que branco puro, e o pior
+     caso é graphy claro (fundo composto ~rgb(235,231,226), 4,27:1 contra o
+     valor anterior #8f640f, medido em revisão). #7a5510 mede 5,45:1 no pior
+     caso composto e 6,70:1 contra `--card` sólido, nos três temas claros. */
+  --warn-text: #7a5510;
 
   --radius-action: 8px;
   --radius-surface: 12px;
@@ -133,7 +141,9 @@
 
   --good: #4ba585;
   --warn: #d9a441;
-  /* Já passa em 4.5:1 contra os três fundos escuros (~7.6–7.9:1, medido);
+  /* Já passa em 4.5:1 contra os três `--card` escuros (~7.6–7.9:1, medido) e
+     contra o fundo composto da faixa de sessão emprestada (`--warn` a 10%
+     sobre `--background`, mais escuro ainda que o card: ~7.2:1, medido);
      `--warn-text` reaproveita o mesmo valor em vez de duplicar sem motivo. */
   --warn-text: #d9a441;
   --bad: #e0655a;
@@ -188,8 +198,11 @@
   --good: #1f7a5c;
   --warn: #a8741a;
   /* #a8741a sozinho dava 4.06:1 contra branco (abaixo de 4.5:1, medido —
-     #383); `--warn-text` é mais escuro só para o texto. */
-  --warn-text: #8f640f;
+     #383); `--warn-text` é mais escuro só para o texto. Mesmo valor de
+     `[data-theme="hp"]` acima — ver o comentário lá para o porquê do fundo
+     composto da faixa de sessão emprestada exigir mais escuro que o card
+     sólido pediria sozinho. */
+  --warn-text: #7a5510;
   --bad: #c0453a;
 
   --radius-action: 9999px;
@@ -235,7 +248,9 @@
 
   --good: #4ba585;
   --warn: #d9a441;
-  /* Já passa em 4.5:1 contra os três fundos escuros (~7.6–7.9:1, medido);
+  /* Já passa em 4.5:1 contra os três `--card` escuros (~7.6–7.9:1, medido) e
+     contra o fundo composto da faixa de sessão emprestada (`--warn` a 10%
+     sobre `--background`, mais escuro ainda que o card: ~7.2:1, medido);
      `--warn-text` reaproveita o mesmo valor em vez de duplicar sem motivo. */
   --warn-text: #d9a441;
   --bad: #e0655a;
@@ -283,8 +298,11 @@
   --good: #1f7a5c;
   --warn: #a8741a;
   /* #a8741a sozinho dava 4.06:1 contra branco (abaixo de 4.5:1, medido —
-     #383); `--warn-text` é mais escuro só para o texto. */
-  --warn-text: #8f640f;
+     #383); `--warn-text` é mais escuro só para o texto. Mesmo valor de
+     `[data-theme="hp"]` acima — ver o comentário lá para o porquê do fundo
+     composto da faixa de sessão emprestada exigir mais escuro que o card
+     sólido pediria sozinho. */
+  --warn-text: #7a5510;
   --bad: #c0392b;
 
   --radius-action: 12px;
@@ -340,7 +358,9 @@
 
   --good: #4ba585;
   --warn: #d9a441;
-  /* Já passa em 4.5:1 contra os três fundos escuros (~7.6–7.9:1, medido);
+  /* Já passa em 4.5:1 contra os três `--card` escuros (~7.6–7.9:1, medido) e
+     contra o fundo composto da faixa de sessão emprestada (`--warn` a 10%
+     sobre `--background`, mais escuro ainda que o card: ~7.2:1, medido);
      `--warn-text` reaproveita o mesmo valor em vez de duplicar sem motivo. */
   --warn-text: #d9a441;
   --bad: #e0655a;

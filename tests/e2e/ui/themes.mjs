@@ -2,8 +2,70 @@
 // Fatiada de ui.mjs (#320); a ordem e o contexto compartilhado moram em ./index.mjs.
 import { contrast, toRgb } from "./shared.mjs";
 
+/**
+ * Cor de texto e FUNDO REAL de um elemento, resolvido por composição alfa —
+ * não só o primeiro ancestral opaco. A faixa de sessão emprestada pinta o
+ * texto sobre `bg-[var(--warn)]/10`: essa cor tem alfa 0.1, não é totalmente
+ * transparente, então o padrão usado no resto deste arquivo (subir até achar
+ * um fundo que não seja `rgba(0,0,0,0)`) para ali mesmo — e usaria `--warn`
+ * a alfa cheio como se fosse o fundo, o dobro do problema.
+ *
+ * Um regex de `rgba?\(...)` não basta: o Tailwind v4 resolve o modificador
+ * `/10` sobre uma variável CSS como `oklab(L a b / 0.1)`, não `rgba()` —
+ * medido nesta sessão (`getComputedStyle` devolvia literalmente essa string).
+ * Em vez de reimplementar a conversão oklab→sRGB à mão, um canvas de 1×1
+ * pinta cada camada com `fillStyle` (o parser de cor do Canvas 2D aceita
+ * qualquer sintaxe CSS válida, inclusive `oklab`/`oklch`/`color-mix`) e
+ * `getImageData` devolve o `{r,g,b,a}` já em sRGB, resolvido pelo próprio
+ * motor do navegador — a composição alfa entre as camadas continua manual,
+ * porque é a pilha real do DOM que importa, não o que cada camada pintaria
+ * sozinha num canvas. Serializado para dentro da página por `page.evaluate`;
+ * roda no navegador, sem closure sobre nada deste módulo.
+ */
+function readCompositedContrastSample(selector) {
+  const el = document.querySelector(selector);
+  if (!el) return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 1;
+  const ctx2d = canvas.getContext("2d", { willReadFrequently: true });
+  const toRgba = (cssColor) => {
+    ctx2d.clearRect(0, 0, 1, 1);
+    ctx2d.fillStyle = cssColor;
+    ctx2d.fillRect(0, 0, 1, 1);
+    const [r, g, b, a] = ctx2d.getImageData(0, 0, 1, 1).data;
+    return { r, g, b, a: a / 255 };
+  };
+  const layers = [];
+  for (let node = el; node; node = node.parentElement) {
+    const layer = toRgba(getComputedStyle(node).backgroundColor);
+    if (layer.a <= 0) continue;
+    layers.push(layer);
+    if (layer.a >= 1) break;
+  }
+  if (layers.length === 0 || layers.at(-1).a < 1) layers.push({ r: 255, g: 255, b: 255, a: 1 });
+  let composite = layers.at(-1);
+  for (let i = layers.length - 2; i >= 0; i -= 1) {
+    const layer = layers[i];
+    composite = {
+      r: layer.r * layer.a + composite.r * (1 - layer.a),
+      g: layer.g * layer.a + composite.g * (1 - layer.a),
+      b: layer.b * layer.a + composite.b * (1 - layer.a),
+    };
+  }
+  // `toRgb()` de `shared.mjs` extrai `\d+`: um decimal cru ("245.007...")
+  // vira dois números colados no ponto, e o contraste sai um valor absurdo
+  // sem nenhum `NaN` para denunciar — medido nesta sessão. Arredondar aqui é
+  // o suficiente; 1 unidade de 255 não move o veredito de 4.5:1.
+  const round = (v) => Math.round(v);
+  return {
+    fg: getComputedStyle(el).color,
+    bg: `rgb(${round(composite.r)}, ${round(composite.g)}, ${round(composite.b)})`,
+  };
+}
+
 export async function run(ctx) {
-  const { BASE, check, openChangelog, page } = ctx;
+  const { BASE, E2E_EMAIL, E2E_PASSWORD, browser, check, openChangelog, page } = ctx;
   /* ------------------------------- Aparência ------------------------------- */
 
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -215,4 +277,62 @@ export async function run(ctx) {
     cmColours.size >= 12,
     `${cmColours.size} tons distintos`,
   );
+
+  /* ------------------- Faixa de sessão emprestada, contraste --------------- */
+
+  // Contexto e login próprios: a faixa só existe numa sessão impersonada, e
+  // impersonar/sair na sessão COMPARTILHADA (`ctx.page`) quebraria toda área
+  // que roda depois desta assumindo que `page` continua sendo o dono. Isolado
+  // no seu próprio `try` (padrão do bloco WebKit em `design.mjs`): a falha
+  // reprova o check, não a suíte inteira.
+  try {
+    const bannerCtx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const bannerPage = await bannerCtx.newPage();
+    await bannerCtx.addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+    await bannerPage.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+    await bannerPage.fill('input[name="email"]', E2E_EMAIL);
+    await bannerPage.fill('input[name="password"]', E2E_PASSWORD);
+    await bannerPage.click('[data-testid="login-submit"]');
+    await bannerPage.waitForURL((url) => !url.pathname.startsWith("/login"));
+
+    // Mesma conta-alvo que a área `admin` assume — criada pelo setup.
+    await bannerPage.goto(`${BASE}/admin/users`, { waitUntil: "networkidle" });
+    const target = bannerPage.locator("li").filter({ hasText: "e2e-alvo@local.test" }).first();
+    await target.locator('[data-testid="impersonate-user"]').first().click();
+    await bannerPage.waitForSelector('[data-testid="stop-impersonating"]', { timeout: 15_000 });
+
+    const bannerLowContrast = [];
+    for (const theme of ["hp", "huly", "graphy"]) {
+      for (const mode of ["light", "dark"]) {
+        await bannerCtx.addCookies([
+          { name: "jho_theme", value: theme, url: BASE },
+          { name: "jho_mode", value: mode, url: BASE },
+        ]);
+        await bannerPage.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
+        const sample = await bannerPage.evaluate(
+          readCompositedContrastSample,
+          '[data-testid="impersonation-banner-text"]',
+        );
+        if (!sample) {
+          bannerLowContrast.push(`${theme}/${mode} faixa: elemento ausente`);
+          continue;
+        }
+        const ratio = contrast(toRgb(sample.fg), toRgb(sample.bg));
+        if (ratio < 4.5) bannerLowContrast.push(`${theme}/${mode} faixa ${ratio.toFixed(2)}:1 (bg=${sample.bg})`);
+      }
+    }
+    check(
+      "faixa de sessão emprestada passa em 4.5:1 contra o fundo composto (--warn a 10%) nos seis ambientes",
+      bannerLowContrast.length === 0,
+      bannerLowContrast.slice(0, 3).join(" · "),
+    );
+
+    await bannerCtx.close();
+  } catch (erro) {
+    check(
+      "faixa de sessão emprestada (#383): cenário concluiu sem exceção",
+      false,
+      (erro instanceof Error ? (erro.stack ?? erro.message) : String(erro)).replace(/\s+/g, " ").slice(0, 600),
+    );
+  }
 }
