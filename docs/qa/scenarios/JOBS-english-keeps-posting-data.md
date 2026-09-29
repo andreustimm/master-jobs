@@ -6,13 +6,13 @@ persona: Recrutadora convidada
 journey: J-trust-the-filtered-board
 expected: Com a interface em inglês, a localização e o nome da vaga continuam como o anúncio escreveu — inclusive com acento — e nada da interface aparece em português
 entry_points: /jobs; /jobs/<id>; /jobs/<id>/paises
-qa_status: pass
-bug_ids: BUG-20260921-job-detail-labels-untranslated
-fix_status: fixed
-retest_status: pass
+qa_status: fail
+bug_ids: BUG-20260921-job-detail-labels-untranslated; BUG-20260929-jobs-list-english-ui-shows-portuguese; BUG-20260929-jobs-row-title-missing-user-content-mark
+fix_status: pending
+retest_status:
 fix_commits: 23fa064; 52ba067
 evidence: docs/qa/reports/2026-09-21-execucao-ingles-detalhe.md
-last_report: docs/qa/reports/2026-09-21-execucao-ingles-detalhe.md
+last_report: docs/qa/reports/2026-09-29T035351654581Z-97f37e1c-full-release-candidate-1.29-full.md
 overlaps: JOBS-country-hub; JOBS-group-repeated-countries
 ---
 
@@ -64,3 +64,17 @@ O que este cenário passou a exigir, por isso:
 - A recíproca também: rota em que o dado do usuário não está marcado só pode
   entrar depois da marca, e pular esse passo troca um defeito por um falso
   positivo permanente.
+
+## O quarto lugar, achado em 2026-09-29
+
+QA full do release candidate 1.29 achou a mesma classe de defeito numa
+terceira tela: a lista de vagas (`/jobs`), fora do detalhe já corrigido.
+Com a interface em inglês, `aria-label="Fechar"` no modal de publicação e a
+paginação "51–100 de 5.273" continuam em português
+(`BUG-20260929-jobs-list-english-ui-shows-portuguese`). O título da linha
+também não tem `data-user-content`
+(`BUG-20260929-jobs-row-title-missing-user-content-mark`) — ainda sem falso
+positivo porque nenhum título de teste tem acento, mas é a mesma lacuna
+estrutural que já fez a tela de detalhe passar despercebida. `qa_status`
+volta de `pass` para `fail`: o cenário promete que nada da interface aparece
+em português, e a lista quebra essa promessa.

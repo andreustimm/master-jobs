@@ -8,11 +8,11 @@ expected: Em /p/<slug>, sem sessão, a capa aparece acima do nome e a foto ao la
 entry_points: /candidate; /p/[slug]
 qa_status: pass
 bug_ids: BUG-20260928-public-profile-broken-image-icon-storage-unconfigured
-fix_status: pending
-retest_status:
-fix_commits:
-evidence: docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/CH-photo-cover-visitor-mobile.png; docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/CH-photo-cover-visitor-desktop.png; docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/CH-photo-cover-visitor-cover-off.png; docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/CH-photo-cover-visitor-both-off.png; docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/CH-photo-cover-visitor-ptbr.png
-last_report: docs/qa/reports/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted.md
+fix_status: fixed
+retest_status: pending
+fix_commits: 21724ef
+evidence: docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/CH-photo-cover-visitor-mobile.png; docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/CH-photo-cover-visitor-desktop.png; docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/CH-photo-cover-visitor-cover-off.png; docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/CH-photo-cover-visitor-both-off.png; docs/qa/evidence/2026-09-28T205309000000Z-62fe85e4-perfil-publico-foto-capa-targeted/CH-photo-cover-visitor-ptbr.png; docs/qa/evidence/2026-09-29T035351654581Z-97f37e1c-full/CH-public-photo-cover-mobile-selfserve/public-profile-photo-only-post-cover-removal.png
+last_report: docs/qa/reports/2026-09-29T035351654581Z-97f37e1c-full-release-candidate-1.29-full.md
 overlaps: PUB-edit-public-photo-cover; PUB-public-profile-layout; PUB-public-facts-opt-in
 ---
 
@@ -42,3 +42,22 @@ de simplesmente não ver a imagem (que é o que acontece quando o candidato
 desliga "mostrar" manualmente). Registrado como
 `BUG-20260928-public-profile-broken-image-icon-storage-unconfigured`;
 reconfirmado nos commits `ef8d359` e `21724ef` (início e fim da sessão).
+
+**Full 1.29 (2026-09-29, HEAD `494aa37`):** foto e capa enviadas por
+`qa-full-candidate-e`, opt-in ligado/desligado independentemente confirmado de
+novo (desligar só a foto deixou `image/photo` em 404 e `image/cover` em 200;
+religar voltou a 200 na mesma URL); dimensões da imagem servida conferidas por
+download — foto 512×512 (1:1 exato), capa 1600×400 (4:1 exato);
+`Cache-Control: private, no-store, max-age=0` e
+`Cross-Origin-Resource-Policy: same-origin` confirmados por `curl` sem cookie.
+**Não repeti ao vivo** o caso "sem `JHO_STORAGE_DRIVER`" desta rodada — abrir
+um segundo `next dev` apontando pro mesmo `.next` da worktree compartilhada
+com as outras quatro sessões paralelas desta rodada era arriscado demais para
+o ganho. Em vez disso confirmei por `git merge-base --is-ancestor 21724ef
+HEAD` que o commit que corrigiu o ícone quebrado (a mesma sessão de ontem já
+reconfirmou ao vivo, com `rm -rf .next` e reinício limpo, contra esse exato
+commit) é ancestral do HEAD desta rodada (`494aa37`) — ou seja, nada mudou
+nesse caminho desde a última verificação ao vivo. `fix_status` passa para
+`fixed` (igual ao arquivo do bug) e `retest_status` fica `pending`: uma
+verificação ao vivo dedicada (com um ambiente isolado, não a worktree
+compartilhada) ainda é devida antes de fechar o bug como `verified`.
