@@ -1,5 +1,5 @@
 {
-  "id": "2581f86e-d7e2-4a6b-b138-60d7c16c4097",
+  "id": "21324f85-a5b7-493a-bf99-3e88b4f8765d",
   "prevId": "be59abd0-65ac-40f8-9ff2-913bd3321b5c",
   "version": "7",
   "dialect": "postgresql",
@@ -5542,15 +5542,9 @@
         }
       },
       "indexes": {
-        "target_account_candidate_url_idx": {
-          "name": "target_account_candidate_url_idx",
+        "target_account_url_idx": {
+          "name": "target_account_url_idx",
           "columns": [
-            {
-              "expression": "candidate_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
             {
               "expression": "linkedin_url",
               "isExpression": false,
@@ -5559,6 +5553,21 @@
             }
           ],
           "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "target_account_candidate_idx": {
+          "name": "target_account_candidate_idx",
+          "columns": [
+            {
+              "expression": "candidate_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}

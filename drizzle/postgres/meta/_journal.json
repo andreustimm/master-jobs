@@ -222,22 +222,8 @@
     {
       "idx": 31,
       "version": "7",
-      "when": 1790690078031,
+      "when": 1790690278407,
       "tag": "0031_contatos_por_candidato",
-      "breakpoints": true
-    },
-    {
-      "idx": 32,
-      "version": "7",
-      "when": 1790690081719,
-      "tag": "0032_backfill_contatos_do_dono",
-      "breakpoints": true
-    },
-    {
-      "idx": 33,
-      "version": "7",
-      "when": 1790690090090,
-      "tag": "0033_contatos_candidato_obrigatorio",
       "breakpoints": true
     }
   ]

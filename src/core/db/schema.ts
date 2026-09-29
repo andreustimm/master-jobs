@@ -478,14 +478,17 @@ export const engagement = production.table(
  * uma conta não aparece para outra (#379). Toda leitura e escrita filtra por
  * `candidate_id`, que nasce da sessão ou do candidato ativo da CLI. Apagar o
  * candidato apaga a rede dele — é dado dele, sem valor para mais ninguém.
+ *
+ * Ainda anulável: a migration aditiva (0031) não atribui as linhas antigas, e
+ * linha sem dono não aparece para ninguém (o filtro nega). O backfill para o
+ * candidato `default`, a URL única por candidato e o NOT NULL vêm num lote
+ * separado, com revisão humana da migration.
  */
 export const targetAccount = production.table(
   "target_account",
   {
     id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
-    candidateId: integer("candidate_id")
-      .notNull()
-      .references(() => candidate.id, { onDelete: "cascade" }),
+    candidateId: integer("candidate_id").references(() => candidate.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     linkedinUrl: text("linkedin_url"),
     category: text("category").notNull(), // recruiter | ai-leader | peer | company
@@ -497,9 +500,13 @@ export const targetAccount = production.table(
     notes: text("notes"),
     createdAt: text("created_at").notNull().default(now),
   },
-  // A URL do LinkedIn é chave natural DENTRO da rede de um candidato: duas
-  // contas podem conhecer a mesma pessoa, e cada uma guarda o próprio registro.
-  (t) => [uniqueIndex("target_account_candidate_url_idx").on(t.candidateId, t.linkedinUrl)],
+  // A URL ainda é única no banco inteiro: se duas contas cadastrarem a mesma
+  // pessoa, a segunda é recusada (nega em vez de vazar) até o índice passar a
+  // ser por candidato, no lote com revisão humana.
+  (t) => [
+    uniqueIndex("target_account_url_idx").on(t.linkedinUrl),
+    index("target_account_candidate_idx").on(t.candidateId),
+  ],
 );
 
 /** Manually recorded funnel metrics — SSI, search appearances, profile views. */

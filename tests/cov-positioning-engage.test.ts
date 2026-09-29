@@ -352,4 +352,14 @@ describe("coldTargets: a lacuna da §2.2", () => {
     });
     expect(await coldTargets(candidatoId)).toEqual([]);
   });
+
+  it("não lista conta-alvo sem dono (#379)", async () => {
+    await db.insert(targetAccount).values({
+      name: "Alvo sem dono",
+      category: "peer",
+      linkedinUrl: "https://www.linkedin.com/in/sem-dono",
+      status: "identified",
+    });
+    expect(await coldTargets(candidatoId)).toEqual([]);
+  });
 });

@@ -1293,6 +1293,8 @@ A rede é do candidato ativo da CLI (o de slug `default`): `contacts`,
 `referrals` e `engage targets` leem e gravam só nela, e sem esse candidato
 recusam com "Candidato padrão não cadastrado" (`jho db seed` o cria). No
 dashboard, `/referrals` mostra só a rede do candidato da sessão (#379).
+Contatos gravados antes dessa mudança ficam sem dono e ocultos até o backfill
+da #405.
 
 ### `jho contacts seed`
 
@@ -1311,7 +1313,7 @@ pnpm jho contacts add "Fulana de Tal" -c Braintrust -k ai-leader -r "Head of AI"
 | `-c, --company <name>` | sim | Onde a pessoa trabalha |
 | `-k, --category <name>` | não (`peer`) | `recruiter`, `ai-leader`, `peer`, `former`, `company` |
 | `-r, --role <title>` | não | Cargo |
-| `-u, --url <linkedin>` | não | Perfil — é a chave natural de deduplicação dentro da rede do candidato |
+| `-u, --url <linkedin>` | não | Perfil — é a chave natural de deduplicação |
 | `--country <code>` | não | País |
 | `-n, --notes <text>` | não | Como você conhece a pessoa |
 

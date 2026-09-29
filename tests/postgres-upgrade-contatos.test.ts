@@ -1,11 +1,12 @@
 /**
- * Suíte: upgrade de banco POPULADO pelas migrations da rede por candidato (#379).
+ * Suíte: upgrade de banco POPULADO pela migration aditiva da rede por
+ * candidato (#379).
  *
- * Par backfill → constraint: a 0031 cria `target_account.candidate_id`
- * anulável, a 0032 atribui os contatos existentes ao candidato `default` (o da
- * CLI, que gravou todos eles) e a 0033 torna a coluna obrigatória. Banco vazio
- * não prova nada disso; aqui o banco chega na forma da 0030 com a rede do dono
- * e um convidado marcado `is_default` pelo defeito antigo de `ensureCandidate`.
+ * A 0031 só acrescenta: `target_account.candidate_id` anulável, FK
+ * `ON DELETE CASCADE` e índice não único. Não atribui as linhas antigas —
+ * isso é reescrita de dado e fica para um lote com revisão humana. Banco vazio
+ * não prova que as linhas antigas sobrevivem intactas e sem dono; aqui o banco
+ * chega na forma da 0030 com uma rede gravada.
  *
  * Fronteira DENTRO: o migrator real do Drizzle sobre `drizzle/postgres/`, num
  * PostgreSQL descartável; SQL bruto na forma da 0030.
@@ -56,86 +57,49 @@ afterEach(async () => {
   rmSync(partial, { recursive: true, force: true });
 });
 
-/** A rede como a 0030 a guarda: sem dono. */
-async function seedNetwork(): Promise<void> {
-  await client.unsafe(`
-    insert into production.target_account (name, company, category, linkedin_url) values
-      ('Marina', 'Nubank', 'ai-leader', 'https://www.linkedin.com/in/marina'),
-      ('Regal Rexnord', 'Regal Rexnord', 'former', null),
-      ('Rafael', 'Acme', 'peer', null);
-  `);
-}
-
-async function appliedMigrations(): Promise<number> {
-  const [row] = await client.unsafe(`select count(*)::int as n from drizzle.__drizzle_migrations`);
-  return row!.n as number;
-}
-
 describe("upgrade da rede de contatos (#379)", () => {
-  it("atribui a rede ao candidato `default` e passa a recusar contato sem dono", async () => {
-    // O convidado 11 carrega `is_default = true` do defeito antigo: o backfill
-    // decide pelo slug, único, e não por essa flag.
+  it("acrescenta o dono sem reescrever a rede, e passa a apagá-la junto com o candidato", async () => {
     await client.unsafe(`
       insert into production.candidate (id, slug, name, is_default) values
         (10, 'default', 'Dono', true),
         (11, 'user-convidado', 'Convidado', true);
+      insert into production.target_account (name, company, category, linkedin_url) values
+        ('Marina', 'Nubank', 'ai-leader', 'https://www.linkedin.com/in/marina'),
+        ('Regal Rexnord', 'Regal Rexnord', 'former', null);
     `);
-    await seedNetwork();
+    const before = await client.unsafe(
+      `select id, name, company, category, linkedin_url, status, notes, created_at
+       from production.target_account order by id`,
+    );
 
     await migrate(db, { migrationsFolder: FOLDER });
 
-    const rows = await client.unsafe(
-      `select name, candidate_id from production.target_account order by name`,
+    // Nenhuma coluna antiga muda, e nenhuma linha ganha dono por adivinhação:
+    // sem dono, o filtro por candidato a esconde de todas as contas.
+    const after = await client.unsafe(
+      `select id, name, company, category, linkedin_url, status, notes, created_at, candidate_id
+       from production.target_account order by id`,
     );
-    expect(rows.map((r) => [r.name, r.candidate_id])).toEqual([
-      ["Marina", 10],
-      ["Rafael", 10],
-      ["Regal Rexnord", 10],
-    ]);
+    expect(after.map(({ candidate_id: _dono, ...resto }) => resto)).toEqual([...before]);
+    expect(after.every((r) => r.candidate_id === null)).toBe(true);
 
-    // Contato sem dono deixa de existir.
-    await expect(
-      client.unsafe(`insert into production.target_account (name, category) values ('Órfão', 'peer')`),
-    ).rejects.toMatchObject({ code: "23502" });
-
-    // A URL é única dentro da rede, não no banco inteiro: o convidado pode
-    // conhecer a mesma pessoa; o dono não pode cadastrá-la duas vezes.
-    await client.unsafe(`
-      insert into production.target_account (candidate_id, name, category, linkedin_url)
-      values (11, 'Marina', 'peer', 'https://www.linkedin.com/in/marina');
-    `);
+    // A URL continua única no banco inteiro: a segunda conta é recusada.
     await expect(
       client.unsafe(`
         insert into production.target_account (candidate_id, name, category, linkedin_url)
-        values (10, 'Marina de novo', 'peer', 'https://www.linkedin.com/in/marina');
+        values (11, 'Marina', 'peer', 'https://www.linkedin.com/in/marina');
       `),
     ).rejects.toMatchObject({ code: "23505" });
 
-    // Apagar o convidado leva a rede dele e deixa a do dono.
-    await client.unsafe(`delete from production.candidate where id = 11`);
-    const left = await client.unsafe(`select candidate_id from production.target_account`);
-    expect(left.every((r) => r.candidate_id === 10)).toBe(true);
-    expect(left).toHaveLength(3);
-  });
-
-  it("sem candidato `default`, recusa o lote inteiro em vez de adivinhar o dono", async () => {
-    // Contato órfão não é apagado nem entregue a um candidato qualquer: a
-    // 0033 falha, e a transação desfaz a 0031 e a 0032 junto.
+    // Linha nova com dono inexistente é recusada pela FK; com dono, some junto.
+    await expect(
+      client.unsafe(`insert into production.target_account (candidate_id, name, category) values (999, 'X', 'peer')`),
+    ).rejects.toMatchObject({ code: "23503" });
     await client.unsafe(`
-      insert into production.candidate (id, slug, name, is_default) values
-        (11, 'user-convidado', 'Convidado', true);
+      insert into production.target_account (candidate_id, name, category) values (11, 'Rafael', 'peer');
     `);
-    await seedNetwork();
-    const before = await appliedMigrations();
-
-    await expect(migrate(db, { migrationsFolder: FOLDER })).rejects.toThrow();
-
-    expect(await appliedMigrations()).toBe(before);
-    const columns = await client.unsafe(`
-      select column_name from information_schema.columns
-      where table_schema = 'production' and table_name = 'target_account' and column_name = 'candidate_id'
-    `);
-    expect(columns).toHaveLength(0);
-    expect(await client.unsafe(`select id from production.target_account`)).toHaveLength(3);
+    await client.unsafe(`delete from production.candidate where id = 11`);
+    const left = await client.unsafe(`select name from production.target_account order by id`);
+    expect(left.map((r) => r.name)).toEqual(["Marina", "Regal Rexnord"]);
   });
 });

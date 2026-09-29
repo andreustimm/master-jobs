@@ -1,1 +1,0 @@
-ALTER TABLE "production"."target_account" ALTER COLUMN "candidate_id" SET NOT NULL;

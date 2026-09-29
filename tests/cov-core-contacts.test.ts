@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ensureCandidate } from "../src/core/candidate.ts";
 import {
@@ -420,9 +420,11 @@ describe("a rede é de um candidato só (#379)", () => {
     expect((await listContacts(outra)).map((c) => c.name)).toEqual(["Rafael"]);
   });
 
-  it("a mesma URL do LinkedIn em outra conta cria outro registro, sem tocar no do dono", async () => {
-    // A URL é chave natural dentro de uma rede. Casar pela URL global faria a
-    // outra conta sobrescrever nome, cargo e nota do contato do dono.
+  it("a mesma URL do LinkedIn em outra conta é recusada, sem tocar no contato do dono", async () => {
+    // O índice único da URL ainda é global (a troca por um índice por
+    // candidato exige migration com revisão humana). Até lá, a segunda conta
+    // é recusada: negar é o lado seguro. O que não pode é casar pela URL
+    // global e sobrescrever nome, cargo e nota do contato do dono.
     const url = "https://www.linkedin.com/in/marina";
     const doDono = await addContact(candidatoId, {
       name: "Marina Alves",
@@ -431,17 +433,50 @@ describe("a rede é de um candidato só (#379)", () => {
       linkedinUrl: url,
       notes: "nota do dono",
     });
-    const daOutra = await addContact(outra, {
-      name: "Marina",
-      company: "Outra Empresa",
-      category: "peer",
-      linkedinUrl: url,
-    });
 
-    expect(daOutra.created).toBe(true);
-    expect(daOutra.id).not.toBe(doDono.id);
-    const [linha] = await db.select().from(targetAccount).where(eq(targetAccount.id, doDono.id));
-    expect(linha).toMatchObject({ candidateId: candidatoId, name: "Marina Alves", notes: "nota do dono" });
+    await expect(
+      addContact(outra, { name: "Marina", company: "Outra Empresa", category: "peer", linkedinUrl: url }),
+    ).rejects.toThrow();
+
+    const linhas = await db.select().from(targetAccount);
+    expect(linhas).toHaveLength(1);
+    expect(linhas[0]).toMatchObject({
+      id: doDono.id,
+      candidateId: candidatoId,
+      name: "Marina Alves",
+      notes: "nota do dono",
+    });
+    expect(await listContacts(outra)).toEqual([]);
+  });
+
+  it("contato sem dono não aparece para ninguém", async () => {
+    // A migration aditiva deixa as linhas antigas com `candidate_id` nulo até
+    // o backfill com revisão humana. Nenhuma leitura pode tratá-las como de
+    // alguém: o filtro por candidato as esconde de todas as contas.
+    await db.insert(targetAccount).values({
+      name: "Contato antigo",
+      company: "Nubank",
+      category: "former",
+      linkedinUrl: "https://www.linkedin.com/in/antigo",
+    });
+    await criarVaga({ empresa: "Nubank", fit: 90 });
+    await criarVaga({ empresa: "Nubank", titulo: "Staff", fit: 90, para: outra });
+
+    for (const conta of [candidatoId, outra]) {
+      expect(await companiesWithContacts(conta)).toEqual(new Map());
+      expect(await listContacts(conta)).toEqual([]);
+      expect(await referralOpportunities(conta, 45)).toEqual([]);
+    }
+  });
+
+  it("escrita nova grava o dono", async () => {
+    const r = await addContact(outra, { name: "Rafael", company: "Acme", category: "peer" });
+    await seedWorkHistory(outra);
+
+    const [linha] = await db.select().from(targetAccount).where(eq(targetAccount.id, r.id));
+    expect(linha?.candidateId).toBe(outra);
+    const semDono = await db.select().from(targetAccount).where(isNull(targetAccount.candidateId));
+    expect(semDono).toEqual([]);
   });
 
   it("o seed de uma conta não atualiza a linha homônima de outra", async () => {
