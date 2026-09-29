@@ -677,6 +677,182 @@ no pooler de sessão da mesma região (`aws-0-sa-east-1.pooler.supabase.com:5432
 usuário `postgres.<ref>`, mesma senha) por `reachableMigrationTarget()` e mascara
 o resultado no log. A porta 6543 (transação) continua recusada.
 
+### Runner self-hosted opt-in (`CI_RUNS_ON`)
+
+Fase 2 da contingência de CI/deploy ([issue #367](https://github.com/andreustimm/master-jobs/issues/367),
+[ADR 0030](../adr/0030-contingencia-de-ci-e-deploy.md)). O `runs-on:` de todo
+job de `ci.yml` é uma única expressão, nunca um literal
+(`tests/ci-runner-selection.test.ts` reprova quem adicionar `runs-on:
+ubuntu-latest` de novo):
+
+```yaml
+runs-on: ${{ github.event_name == 'pull_request' &&
+  github.event.pull_request.head.repo.full_name != github.repository &&
+  'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+```
+
+- **Ausente ou vazia** (padrão): `ubuntu-latest`, o runner hospedado de hoje —
+  nada muda sem ação do dono (princípio 1/2 da ADR).
+- **Setada** com **JSON válido** (`gh variable set CI_RUNS_ON --body
+  '["self-hosted","linux","master-jobs"]'`): todo job passa a rodar no runner
+  próprio, sem editar `ci.yml`. **Cuidado com a citação:** o valor precisa ser
+  JSON — uma string entre aspas duplas ou um array — nunca texto cru. `gh
+  variable set CI_RUNS_ON --body 'self-hosted'` (sem aspas internas) faz
+  `fromJSON` falhar e derruba o CI inteiro no próximo push; os dois comandos
+  acima, com as aspas simples e duplas exatamente como estão, são os únicos
+  valores testados.
+
+#### Pré-requisito do dono: aprovação de workflow de fork (aplicado em 29/09/2026)
+
+**A metade da expressão antes de `||` (a guarda de fork embutida no
+`runs-on:`) é defesa em profundidade, NÃO a barreira real** (achado da
+revisão L2 da PR #376, C1). Num evento `pull_request`, o GitHub executa a
+versão de `ci.yml` que está na `head` da PRÓPRIA PR — uma PR de fork pode
+editar o arquivo e substituir a expressão inteira por `runs-on:
+[self-hosted, ...]` literal, sem esbarrar em nada que esteja dentro do
+workflow, porque é o próprio workflow que está sendo reescrito. Nenhuma
+guarda embutida no YAML resolve isso sozinha.
+
+A barreira que de fato impede a execução é externa ao arquivo: a política de
+aprovação de workflow de colaborador externo do repositório
+(`fork-pr-contributor-approval`). **O dono já mudou essa política para
+`all_external_contributors` em 29/09/2026** (todo PR de colaborador externo,
+não só o primeiro, exige "Approve and run" de alguém com escrita no
+repositório) — confira o valor efetivo antes de qualquer mudança em
+`CI_RUNS_ON`:
+
+```bash
+gh api repos/andreustimm/master-jobs/actions/permissions/fork-pr-contributor-approval
+```
+
+Comando usado pelo dono, registrado aqui para repetir se algum dia a política
+regredir ao padrão (nunca rodado por um agente):
+
+```bash
+gh api -X PUT repos/andreustimm/master-jobs/actions/permissions/fork-pr-contributor-approval \
+  -f approval_policy=all_external_contributors
+```
+
+O padrão de fábrica, `first_time_contributors`, dispensa aprovação para quem
+já teve uma contribuição aceita antes — insuficiente aqui, porque uma conta
+comprometida ou um colaborador que vira malicioso depois de aprovado uma vez
+não passaria por aprovação nenhuma na PR seguinte. **Nenhum agente muda essa
+política sozinho** — é decisão e ação do dono, assim como contratar a VPS. A
+exigência de aprovação em si ("Approve and run", em *Settings → Actions →
+General*) já está ativa; o que mudou aqui foi o alcance dela.
+
+#### Provisionamento: contêiner descartável, sem credencial de longa duração no job
+
+Revisão L2 da PR #376 (C2) trocou o desenho original (runner instalado direto
+no host, registrado por token reutilizável) por um mais estreito; a
+re-revisão de 29/09/2026 (C1) fechou um furo do primeiro desenho do
+contêiner:
+
+- **`scripts/runner/Dockerfile`** builda uma imagem IMUTÁVEL com Node/pnpm na
+  versão de `package.json`, a versão EXATA de Playwright do
+  `pnpm-lock.yaml`, o binário do runner do GitHub (checksum verificado, M5) e
+  um Docker Engine para um dockerd **isolado dentro do próprio contêiner** —
+  o job nunca recebe o socket Docker do host, só o seu próprio, descartado
+  com o contêiner.
+- **Cada job roda num CONTÊINER DESCARTÁVEL** (`docker run --rm`) criado
+  dessa imagem, com o runtime **`sysbox-runc`, NUNCA `--privileged`**
+  (re-revisão C1: `--privileged` daria ao contêiner do job acesso aos
+  dispositivos de bloco do PRÓPRIO HOST — montar `/dev/sda`, ler
+  `/etc/master-jobs-runner/env`, o arquivo com o PAT que controla até a
+  política de fork acima. `sysbox-runc`, instalado por `provision-vps.sh`
+  com checksum verificado, dá ao contêiner o suficiente para um dockerd
+  interno de verdade sem essas capacidades amplas). `scripts/runner/
+  entrypoint.sh`, root-owned e só leitura dentro da imagem, limpa qualquer
+  resquício de execução anterior, sobe o dockerd isolado e roda o runner como
+  o usuário não-root `runner` sobre uma CÓPIA gravável e descartável do
+  binário, com o bit de escrita restaurado para o novo dono (M1 — a origem
+  em `/opt/actions-runner` continua sem bit de escrita para ninguém depois
+  do build da imagem).
+- **`scripts/runner/runner-controller.sh`** roda no HOST, como o serviço
+  systemd `master-jobs-runner-controller.service` (instalado por
+  `provision-vps.sh`, com `Requires=docker.service`). Para cada job, ele pede
+  à API do GitHub uma **configuração JIT de uso único** (`POST .../actions/
+  runners/generate-jitconfig`, cabeçalho `Authorization` passado ao `curl`
+  por `-H @-`/stdin — nunca como argumento visível em `ps`) e passa só essa
+  configuração (`JIT_CONFIG`, variável de ambiente daquele contêiner
+  específico) para `docker run` — o PAT de longa duração nunca sai do
+  processo do controller, e nunca entra no contêiner do job. Um `docker run`
+  que falha (status ≠ 0), ou um contêiner que sinaliza "nunca peguei um job"
+  (`entrypoint.sh` sai com o código 75 quando `run.sh` termina sem o log
+  `_diag/Worker_*.log`) faz o controller desregistrar o runner órfão e
+  esperar com backoff exponencial (30s a 10min) antes de tentar de novo —
+  NUNCA por duração de parede (3ª revisão L2 de 29/09/2026, minor 2): um job
+  curto e legítimo, como uma PR só de documentação, não pode ser tratado como
+  falha só por ser rápido.
+- **Escopo do PAT.** Fine-grained, com a permissão de repositório
+  **"Administration: write"** — é a permissão mínima que a API de
+  configuração JIT aceita hoje; não existe uma mais estreita para esta
+  capacidade específica (o próprio endpoint de registro de runner exige
+  administração do repositório). **Nunca** um PAT clássico com escopo `repo`:
+  esse escopo clássico dá leitura/escrita de código, issues e muito mais,
+  bem além do que registrar um runner precisa — a diferença importa porque o
+  PAT fica na VPS, fora do controle de acesso do GitHub.
+
+**Passo do dono, antes de ligar a chave:**
+
+1. Confirmar `fork-pr-contributor-approval=all_external_contributors`
+   (seção acima — já aplicada em 29/09/2026).
+2. Contratar a VPS (Hetzner CPX22 ou DigitalOcean 4 GB — Decisão 2 do PRD da
+   issue #367), Ubuntu 24.04 LTS.
+3. Antes de rodar o script, confirmar o checksum ainda placeholder do runner
+   do GitHub (`RUNNER_SHA256` em `scripts/runner/Dockerfile`, publicado em
+   <https://github.com/actions/runner/releases> para a versão fixada) — o
+   build da imagem falha de propósito enquanto o valor for o placeholder. O
+   checksum do `sysbox-ce` (`SYSBOX_SHA256` em
+   `scripts/runner/provision-vps.sh`) já foi conferido pelo agente com `gh
+   api repos/nestybox/sysbox/releases/tags/v0.7.1` em 29/09/2026 — só
+   reconfira se `SYSBOX_VERSION` mudar.
+4. Copiar o repositório para a VPS e rodar como root:
+   `sudo bash scripts/runner/provision-vps.sh`. O script instala Docker,
+   depois `sysbox-runc` (registrando o runtime no Docker do host) e só então
+   builda a imagem do runner.
+5. Criar um PAT fine-grained com "Administration: write" só neste
+   repositório, e colar em `/etc/master-jobs-runner/env` (o script cria o
+   arquivo vazio com o `chmod 600` certo, se ainda não existir):
+   `GH_RUNNER_REGISTRATION_PAT=<valor>`. Depois: `systemctl start
+   master-jobs-runner-controller`.
+6. Confirmar, no log do serviço (`journalctl -u
+   master-jobs-runner-controller -f`), um contêiner subindo e um runner
+   aparecendo em *Settings → Actions → Runners* com os labels `self-hosted`,
+   `linux`, `master-jobs`, e desaparecendo de novo ao fim de cada job (é
+   efêmero — "sumir" entre jobs é o comportamento esperado, não uma falha).
+7. Só então: `gh variable set CI_RUNS_ON --body
+   '["self-hosted","linux","master-jobs"]'` e um push real em `dev` para
+   confirmar o CI inteiro verde no runner próprio (checklist F2-M01–F2-M03 em
+   `_tests.md`).
+
+**Voltar ao hospedado**, a qualquer momento e sem tocar na VPS:
+
+```bash
+gh variable set CI_RUNS_ON --body '"ubuntu-latest"'   # ou: gh variable delete CI_RUNS_ON
+```
+
+O próximo push já roda em `ubuntu-latest`. **Se havia execução do CI em fila
+ou em andamento esperando o runner próprio** no momento da troca, ela fica
+presa (nenhum runner com aquele label vai aparecer para pegá-la). Restrinja a
+`--workflow ci.yml` — cancelar um workflow alheio (`varredura.yml`,
+`migrate.yml` etc.) por engano é um efeito colateral desnecessário — e
+redispare o MESMO run com `gh run rerun`, sem criar commit nenhum (regra 18:
+nada de commit avulso fora do fluxo de PR só para forçar um re-run):
+
+```bash
+# Guarda os IDs antes de cancelar, para redisparar exatamente esses runs.
+presos=$(gh run list --workflow ci.yml --status queued --json databaseId -q '.[].databaseId'; \
+         gh run list --workflow ci.yml --status in_progress --json databaseId -q '.[].databaseId')
+for id in $presos; do gh run cancel "$id"; done
+# `gh run cancel` é assíncrono — sem esperar o cancelamento terminar de
+# verdade, `gh run rerun` num run ainda "cancelling" falha ou não faz nada
+# (minor 3, 3ª revisão L2 de 29/09/2026). `gh run watch` bloqueia até o run
+# concluir (`--exit-status` não importa aqui, só queremos o estado final).
+for id in $presos; do gh run watch "$id" --exit-status || true; done
+for id in $presos; do gh run rerun "$id"; done
+```
+
 ## Migrar o banco
 
 ```bash
