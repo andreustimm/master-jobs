@@ -1227,6 +1227,40 @@ export const sweepRun = production.table(
 );
 
 /**
+ * Uma checagem do vigia de cota (ADR 0030, Fase 3): números lidos da Vercel e
+ * do GitHub Actions, e a decisão que a lógica pura (`decideQuotaWatch`)
+ * tirou deles. Nunca um segredo — só contagem, texto operacional e o comando
+ * exato de reversão quando a decisão foi `acao-recomendada` (regra 16,
+ * F3-05). O vigia nunca aplica a mudança sozinho: `action_recommended` é
+ * sempre texto de recomendação, nunca uma ação de fato tomada (M6).
+ *
+ * Amostra que falhou ao coletar grava `null` na métrica que faltou — nunca
+ * confunde ausência com "zero" nem com "ok" (regra 8, adaptada a
+ * infraestrutura, F3-02). `trigger` e `issue_number` sustentam o dedupe de
+ * alerta (M1) e o alerta por amostra indisponível persistente (M4): duas
+ * checagens seguidas na mesma decisão/gatilho comentam na issue já aberta em
+ * vez de abrir outra.
+ */
+export const quotaWatch = production.table(
+  "quota_watch",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    checkedAt: text("checked_at").notNull().default(now),
+    vercelDeploys24h: integer("vercel_deploys_24h"),
+    actionsQueueMaxWaitS: integer("actions_queue_max_wait_s"),
+    actionsStatus: text("actions_status"),
+    decision: text("decision").notNull(),
+    /** `vercel` | `actions` | nulo (sem gatilho único, ex.: amostra indisponível). */
+    trigger: text("trigger"),
+    actionRecommended: text("action_recommended"),
+    reversalCommand: text("reversal_command"),
+    note: text("note"),
+    issueNumber: integer("issue_number"),
+  },
+  (t) => [index("quota_watch_checked_at_idx").on(t.checkedAt)],
+);
+
+/**
  * Uma execução de captura ou de verificação (#223): escopo, quem pediu, o
  * retrato da configuração, contagens e erro limitado.
  *

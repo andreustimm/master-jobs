@@ -288,6 +288,7 @@ As exceções, e o que substitui a sessão em cada uma:
 | `/login`, `/login/forgot`, `/login/reset` | pré-sessão; `/login` só pergunta se existe alguma conta |
 | `/login/callback` | link mágico de uso único |
 | `/api/cron/recheck` | `CRON_SECRET` em tempo constante; 503 sem ele |
+| `/api/cron/watchdog` | `CRON_SECRET` em tempo constante; 503 sem ele — checagem manual/de teste do vigia de cota (ADR 0030); o agendador de produção é `supabase/cron/watchdog.sql`, que nunca chama esta rota |
 | `/p/[slug]` | lista de permissão de `publicProfile()`, 404 para não público, limite por IP |
 
 `tests/entry-denial.test.ts` prova a NEGAÇÃO, não só a presença: chama cada
