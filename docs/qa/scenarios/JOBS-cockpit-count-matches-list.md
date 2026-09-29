@@ -6,13 +6,13 @@ persona: Andreus em triagem
 journey: J-trust-the-filtered-board
 expected: O "N vagas" do cockpit reflete os filtros aplicados e concorda com /jobs na mesma URL; cada card de contagem abre a lista que ele conta, com o mesmo número
 entry_points: /; /?company=Acme; /?notApplied=1; /?fitMax=70; /?fit=60&workMode=remote
-qa_status: untested
-bug_ids:
-fix_status:
+qa_status: fail
+bug_ids: BUG-20260929-jobs-chips-ignore-employer-filter; BUG-20260929-jobs-cockpit-ignores-salary-filter; BUG-20260929-jobs-grouped-pay-banner-off-by-one
+fix_status: pending
 retest_status:
 fix_commits:
-evidence: docs/qa/evidence/2026-09-21-docs-qa-jornada-do-quadro-filtrado/numbers-agree-empty-employer.png
-last_report: 2026-09-21-docs-qa-jornada-do-quadro-filtrado
+evidence: docs/qa/evidence/2026-09-21-docs-qa-jornada-do-quadro-filtrado/numbers-agree-empty-employer.png; docs/qa/evidence/2026-09-29T035351654581Z-97f37e1c-full/CH-filtered-board-numbers-agree/company-turing-chips-5545-vs-19.png
+last_report: docs/qa/reports/2026-09-29T035351654581Z-97f37e1c-full-release-candidate-1.29-full.md
 overlaps: JOBS-employer-filter; JOBS-score-range; JOBS-hide-already-sent
 ---
 
@@ -55,3 +55,10 @@ padrão e com `/?fit=60&workMode=remote`:
 - "Empresas" não tem hover, seta nem link.
 - Teclado: Tab alcança cada card com foco visível e Enter navega; em 375px a
   faixa não estoura; passar o mouse mostra de que conjunto o número fala.
+
+QA full do release candidate 1.29 (29/09): primeiro walk real deste
+cenário. Três invariantes quebradas: `company=Turing` lista 19 vagas mas o
+chip "sem bloqueio" mostra "5545" (total sem filtro); com faixa salarial
+aplicada, `/` mostra 5.545 e `/jobs` mostra 5.143 para a mesma faixa; e com
+"agrupar repetidas" ligado, a soma do aviso de faixa (5.143 + 403) dá 5.546
+contra os 5.545 mostrados. `qa_status` passa de `untested` para `fail`.
