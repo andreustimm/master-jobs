@@ -86,8 +86,8 @@ da varredura fatiada não depende da sorte: `next.config.ts` inclui
 | `BLOB_READ_WRITE_TOKEN` | Vercel (Preview **e** Production), criada pela integração do Blob | credencial do Vercel Blob; o adapter grava sempre privado e apaga o valor de todo erro. Nunca em banco, log ou `.env.example` |
 | `JHO_STORAGE_BUCKET` | Vercel (opcional) | prefixo dos objetos no Blob (bucket no S3); padrão `master-jobs` |
 | `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE` | local (MinIO) ou futuro AWS S3 | só com `JHO_STORAGE_DRIVER=s3`; `S3_ENDPOINT` ausente é a AWS ([local-storage.md](local-storage.md)) |
-| `JHO_ENV` | qualquer deployment que não seja a Vercel (o plano B no Fly, `fly.toml` **e** `Dockerfile`) | declara o ambiente para `isLocalProcess()` (`src/contexts/auth/domain/open-mode.ts`); sem ela, fora da Vercel, o processo seria tratado como a máquina do dono — libera o modo aberto, imprime link de recuperação no log (G18) e recusa a varredura |
-| `JHO_PUBLIC_URL` | opcional na Vercel; obrigatória no plano B no Fly (já fixada em `fly.toml`) | origem confiável (`https://host`) para o link de recuperação de senha (`src/contexts/auth/domain/public-origin.ts`), nunca o `Host` da requisição (G17/G18, host poisoning). **Na Vercel não precisa ser cadastrada**: sem ela, a função usa `VERCEL_PROJECT_PRODUCTION_URL` (produção) ou `VERCEL_BRANCH_URL`/`VERCEL_URL` (preview) — variáveis de sistema da própria plataforma, não controladas pelo cliente. `VERCEL_PROJECT_PRODUCTION_URL` deve resolver para `jobs.mastertimm.com.br` (o domínio próprio tem precedência sobre o `*.vercel.app` gerado, quando o projeto tem um domínio de produção configurado) — confirmar isso é o item novo do checklist pós-deploy, abaixo. Cadastrar `JHO_PUBLIC_URL=https://jobs.mastertimm.com.br` em Production elimina a dúvida por completo, sem depender de nenhuma variável de sistema. Fora da Vercel e da máquina do dono (o plano B no Fly), a ausência falha fechado |
+| `JHO_ENV` | qualquer deployment que não seja a Vercel (o plano B no Fly, `fly.toml` **e** `Dockerfile`); recomendado também na Vercel, ver abaixo | declara o ambiente para `isLocalProcess()` (`src/contexts/auth/domain/open-mode.ts`) e para a guarda de ingestão (`src/core/ingest/guard.ts`); sem ela, fora da Vercel, o processo seria tratado como a máquina do dono — libera o modo aberto, imprime link de recuperação no log (G18) e recusa a varredura |
+| `JHO_PUBLIC_URL` | **só em Production** na Vercel; obrigatória no plano B no Fly (já fixada em `fly.toml`) | origem confiável (`https://host`) para o link de recuperação de senha (`src/contexts/auth/domain/public-origin.ts`), nunca o `Host` da requisição (G17/G18, host poisoning). **Na Vercel Production não precisa ser cadastrada**: sem ela, a função usa `VERCEL_PROJECT_PRODUCTION_URL` — variável de sistema da própria plataforma, não controlada pelo cliente. `VERCEL_PROJECT_PRODUCTION_URL` deve resolver para `jobs.mastertimm.com.br` (o domínio próprio tem precedência sobre o `*.vercel.app` gerado, quando o projeto tem um domínio de produção configurado) — confirmar isso é o item novo do checklist pós-deploy, abaixo. Cadastrar `JHO_PUBLIC_URL=https://jobs.mastertimm.com.br` em Production elimina a dúvida por completo, sem depender de nenhuma variável de sistema. **Nunca cadastrar em Preview**: um valor fixo enviaria o token de recuperação de qualquer branch de preview para o domínio de produção — Preview precisa continuar resolvendo por `VERCEL_BRANCH_URL`/`VERCEL_URL` (variáveis por branch/deployment). Fora da Vercel e da máquina do dono (o plano B no Fly), a ausência falha fechado |
 
 **Dependência silenciosa: "Automatically expose System Environment
 Variables".** A documentação da Vercel condiciona o acesso, em runtime de
@@ -110,19 +110,25 @@ aberta por esta revisão, não corrigida aqui). Nesse cenário: `resolvePublicOr
 cairia no ramo do `Host` da requisição — reabrindo o host poisoning que ela
 existe para impedir (G17) —, `JHO_AUTH_MODE=open` seria aceito (G38), e o
 mailer de recuperação imprimiria o link no log em vez de omiti-lo (G18). A
-mitigação, disponível hoje: cadastrar explicitamente, na Vercel, em
-**Production e em Preview**, `JHO_ENV=production` e
-`JHO_PUBLIC_URL=https://jobs.mastertimm.com.br` — elimina por completo a
-dependência da opção, nos dois ambientes, sem esperar a correção estrutural
-da issue #378.
+mitigação, disponível hoje, cadastrada explicitamente na Vercel, **com
+valores diferentes por ambiente**:
 
-**Ressalva sobre `JHO_ENV` em Preview.** A mesma variável também é lida pela
-guarda de ingestão (`src/core/ingest/guard.ts`); cadastrar
-`JHO_ENV=production` em Preview só continua seguro (nenhuma varredura real
-ali) enquanto `JHO_SOURCE_ALLOWLIST` **não** estiver cadastrada nesse
-ambiente — ela hoje só existe em "Vercel produção e Actions" (tabela acima),
-e é essa ausência, não o valor de `JHO_ENV`, que impede Preview de gastar
-cota de fonte externa (ADR 0021).
+- **Production:** `JHO_ENV=production` e
+  `JHO_PUBLIC_URL=https://jobs.mastertimm.com.br`.
+- **Preview:** `JHO_ENV=preview` — nunca `production`, porque a mesma
+  variável também é lida pela guarda de ingestão
+  (`src/core/ingest/guard.ts`), e `production` ali liberaria a varredura real
+  contra fontes externas num ambiente que só deveria exercitar fixtures
+  (ADR 0021); `preview` nega ingestão do mesmo jeito que `dev`/`staging`, sem
+  depender de `JHO_SOURCE_ALLOWLIST` estar ausente por acaso. **Nunca**
+  `JHO_PUBLIC_URL` em Preview — ver a tabela acima.
+
+Isso elimina a dependência da opção em Production por completo. Em Preview
+reduz ao mínimo: `JHO_ENV=preview` corrige o modo aberto e o mailer, mas
+`resolvePublicOrigin` continua dependendo de `VERCEL_BRANCH_URL`/`VERCEL_URL`
+chegarem ao runtime — um `JHO_PUBLIC_URL` fixo ali seria pior, não melhor
+(ver a tabela acima). A correção
+completa é a estrutural da issue #378, não esta mitigação.
 
 **A URL pode vir de mais de um nome, e a ordem é declarada.** A integração do
 Supabase com a Vercel cadastra `POSTGRES_URL` e `POSTGRES_URL_NON_POOLING` e as
