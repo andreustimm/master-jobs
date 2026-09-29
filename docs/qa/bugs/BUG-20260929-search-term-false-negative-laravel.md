@@ -1,6 +1,6 @@
 # BUG-20260929-search-term-false-negative-laravel: busca diz "nenhuma vaga menciona" quando existem 43
 
-- **Status:** open
+- **Status:** verified
 - **Impact (user-side):** Trust-Damage
 - **Severity:** Medium · **Priority:** P2
 - **Persona Affected:** Andreus em triagem
@@ -48,4 +48,4 @@ mencionam o termo sem o filtro de modalidade.
 - **Retested:**
 - **Result:**
 
-Correção em implementação com teste vermelho/verde registrado; reteste de jornada pendente.
+Correção 7f69ab7: o texto descreve ausência nos filtros atuais. Dois testes falharam antes; 16 testes relacionados, typecheck e E2E searches 86/86 passaram. Reteste manual em conta Alex, PT/EN e 375px: TypeScript retorna duas vagas, presencial zera com orientação correta após refresh, e remover modalidade recupera ambas; detalhe confirma o termo e modalidade. Pass no escopo da #402. Relatório: `docs/qa/reports/2026-09-29T144500Z-codex402-busca-filtrada.md`.

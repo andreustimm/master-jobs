@@ -24,4 +24,4 @@ Full 1.22.0 (2026-09-22): typescript e observabilidade acham vagas só pela desc
 
 **Reset 2026-09-23 (#223, tarefa 05):** a busca passou a olhar também a localização, e texto entre aspas virou frase exata. Conferir de novo que um termo que não aparece em nenhuma localização devolve o mesmo conjunto de antes, e que "go" continua sem trazer "Google".
 
-Reteste #402: termo existente com modalidade incompatível deve produzir vazio dos filtros atuais; remover modalidade recupera a vaga. O vazio não pode afirmar ausência em todo o acervo.
+Reteste #402: Pass no escopo do vazio com filtros, commit 7f69ab7. TypeScript encontrou duas vagas; presencial zerou a lista com orientação correta PT/EN após refresh; remover modalidade recuperou ambas. Leitura independente do detalhe confirmou o termo e o trabalho remoto. E2E searches 86/86 passou, incluindo Laravel. Relatório: `docs/qa/reports/2026-09-29T144500Z-codex402-busca-filtrada.md`. O estado global permanece untested porque a sintaxe completa deste cenário não foi reexecutada manualmente.
