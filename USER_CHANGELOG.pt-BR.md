@@ -34,6 +34,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.2] - 2026-09-30T08:16:50.000Z
+
+### Corrigido
+
+- O aviso "legível por qualquer um" do perfil público (e três outros avisos) ficava difícil de ler nos temas Huly e Graphy claros. Agora o contraste passa no mínimo de acessibilidade em todos os temas.
+
 ## [1.32.1] - 2026-09-29T15:47:51.000Z
 
 ### Adicionado

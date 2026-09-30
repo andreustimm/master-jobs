@@ -34,6 +34,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.2] - 2026-09-30T08:16:50.000Z
+
+### Fixed
+
+- The "readable by anyone" public-profile warning (and three other warnings) was hard to read in the light Huly and Graphy themes. Contrast now meets the accessibility minimum in every theme.
+
 ## [1.32.1] - 2026-09-29T15:47:51.000Z
 
 ### Added
