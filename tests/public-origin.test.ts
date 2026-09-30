@@ -10,7 +10,8 @@ import { describe, expect, it } from "vitest";
 import { resolvePublicOrigin } from "../src/contexts/auth/domain/public-origin.ts";
 
 const DEPLOYMENT = { VERCEL: "1" };
-const LOCAL = {};
+// A máquina do dono se declara (#378): ausência de variáveis não é prova de nada.
+const LOCAL = { JHO_ENV: "local" };
 
 describe("resolvePublicOrigin", () => {
   it("usa JHO_PUBLIC_URL quando configurada, ignorando qualquer Host", () => {
@@ -61,6 +62,19 @@ describe("resolvePublicOrigin", () => {
       { host: "atacante.example", proto: "https" },
     );
     expect(origin).toBeNull();
+  });
+
+  it("#378: processo que não declara ambiente nenhum falha fechado — não é tratado como a máquina do dono", () => {
+    // Reprodução do defeito: sem `VERCEL`, `VERCEL_ENV` nem `JHO_ENV` (a
+    // Vercel com a exposição de variáveis de sistema desligada, ou um destino
+    // novo que ainda não declara nada), a ausência era lida como "local" e o
+    // `Host` do cliente decidia o link — host poisoning (G17).
+    for (const env of [{}, { JHO_ENV: "" }, { JHO_ENV: "  " }, { VERCEL: "" }]) {
+      expect(
+        resolvePublicOrigin(env, { host: "atacante.example", proto: "https" }),
+        JSON.stringify(env),
+      ).toBeNull();
+    }
   });
 
   describe("na Vercel, sem JHO_PUBLIC_URL cadastrada — funciona sem cadastro manual", () => {

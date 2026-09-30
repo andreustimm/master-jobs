@@ -471,11 +471,24 @@ export const engagement = production.table(
   (t) => [index("engagement_status_idx").on(t.status, t.queuedFor)],
 );
 
-/** The 30 target accounts from section 2.2 of the audit. */
+/**
+ * A rede de contatos de um candidato (a auditoria chamava de "30 contas-alvo").
+ *
+ * Contato pertence a um candidato: são nomes de pessoas de fora, e a rede de
+ * uma conta não aparece para outra (#379). Toda leitura e escrita filtra por
+ * `candidate_id`, que nasce da sessão ou do candidato ativo da CLI. Apagar o
+ * candidato apaga a rede dele — é dado dele, sem valor para mais ninguém.
+ *
+ * Ainda anulável: a migration aditiva (0031) não atribui as linhas antigas, e
+ * linha sem dono não aparece para ninguém (o filtro nega). O backfill para o
+ * candidato `default`, a URL única por candidato e o NOT NULL vêm num lote
+ * separado, com revisão humana da migration.
+ */
 export const targetAccount = production.table(
   "target_account",
   {
     id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    candidateId: integer("candidate_id").references(() => candidate.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     linkedinUrl: text("linkedin_url"),
     category: text("category").notNull(), // recruiter | ai-leader | peer | company
@@ -487,7 +500,13 @@ export const targetAccount = production.table(
     notes: text("notes"),
     createdAt: text("created_at").notNull().default(now),
   },
-  (t) => [uniqueIndex("target_account_url_idx").on(t.linkedinUrl)],
+  // A URL ainda é única no banco inteiro: se duas contas cadastrarem a mesma
+  // pessoa, a segunda é recusada (nega em vez de vazar) até o índice passar a
+  // ser por candidato, no lote com revisão humana.
+  (t) => [
+    uniqueIndex("target_account_url_idx").on(t.linkedinUrl),
+    index("target_account_candidate_idx").on(t.candidateId),
+  ],
 );
 
 /** Manually recorded funnel metrics — SSI, search appearances, profile views. */
