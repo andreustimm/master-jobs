@@ -40,12 +40,21 @@ inglês.
 ## Fix
 
 <!-- filled when status moves to fixed -->
-- **Root cause:**
-- **Fix commit:**
-- **Regression test:**
+- **Root cause:** `NextRequest.url` normaliza o loopback `127.0.0.1` para
+  `localhost`; construir o 303 com `new URL(..., request.url)` vazava essa
+  origem normalizada para o navegador.
+- **Fix commit:** `0276c6e`, com o contrato E2E ajustado em `05a4102`.
+- **Regression test:** `tests/login-callback-route.test.ts` verifica o
+  `NextRequest` real e o `Location` relativo; `tests/e2e/ui/canonical-flows.mjs`
+  verifica origem canônica e mensagem pt-BR no build standalone.
 
 ## Verification
 
 <!-- filled when status moves to verified -->
-- **Retested:**
-- **Result:**
+- **Retested:** 2026-09-29, `pnpm test:e2e --manual --areas canonical-flows`
+  em build standalone, com navegador público em `127.0.0.1:51401`, locale
+  pt-BR e viewport 375 × 812.
+- **Result:** PASS no percurso do token inválido: a URL permaneceu em
+  `127.0.0.1:51401/login?error=invalid`, a mensagem foi lida em português
+  antes e depois de um reload independente. Evidência visual ignorada em
+  `docs/qa/evidence/2026-09-29T-login-callback-ptbr/`.
