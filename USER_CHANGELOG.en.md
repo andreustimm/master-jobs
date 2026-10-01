@@ -34,6 +34,24 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.12] - 2026-10-01T22:02:16.000Z
+
+### Fixed
+
+- The vocabulary gap analysis in the Candidate area now compares your CV with the terms of your primary search, no longer with the system owner's. Editing or switching your primary search changes the comparison; while your primary search is still the one the system built from your CV, the list of missing terms tends to stay empty, and it only points out gaps once you define what you are looking for. If you do not have a search profile yet, the section says there are no jobs to compare.
+
+## [1.32.11] - 2026-10-01T21:02:30.000Z
+
+### Fixed
+
+- When a term search finds nothing, the message now tells the two cases apart: if the term exists in the corpus and a filter (including the minimum score or the default status) hides the jobs, it mentions the current filters and how to broaden the search; if no open job has the term, it says the term is absent from the corpus.
+
+## [1.32.10] - 2026-10-01T20:27:30.000Z
+
+### Fixed
+
+- The pay line in a job's score explanation now follows the interface language: fixed-price projects read "total (2 months)" in English instead of "total (2 meses)".
+
 ## [1.32.9] - 2026-10-01T18:45:17.000Z
 
 ### Fixed

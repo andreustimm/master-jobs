@@ -142,7 +142,12 @@ export const en: Dictionary = {
     countryUnknown: "no location",
     offerSearch: "Search the platforms for “{term}”",
     offerSearchLead: "Saving the term searches the registered platforms for new jobs with it, every day.",
-    emptyTerm: "No job in the corpus mentions “{term}”.",
+    // Two sentences, not one: with a filter beyond the term, "absent from
+    // the corpus" would be false (#402, BUG-20260929-search-term-false-negative-laravel
+    // — "laravel" exists, the work-mode filter is what zeroes it). Without a
+    // filter, "remove filters" alone does not help someone who chose none.
+    emptyTermFiltered: "No jobs match “{term}” with the current filters. Remove filters or try another term.",
+    emptyTermAbsent: "No job in the corpus has “{term}”. Searching the platforms brings new jobs with that term.",
     broughtByEmpty: "The term “{term}” has not brought any jobs yet. Last search: {state}.",
     notInterested: "not interested",
     notInterestedHint: "Takes the job off your lists. It stays under “Archived”, and you can restore it while you have not applied.",

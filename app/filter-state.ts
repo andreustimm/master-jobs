@@ -102,6 +102,9 @@ export { FIT_MAX, FIT_SLIDER_STEP, PAY_FILTER_MAX, PAY_SLIDER_CEILING, PAY_SLIDE
 
 const SORTS = ["fit", "recent", "comp", "relevance"] as const;
 
+/** O corte de fit sem `?fit=` na URL — não é uma escolha da pessoa (#402). */
+const DEFAULT_FIT = 45;
+
 /**
  * A score read from the URL, held between zero and the scorer's ceiling.
  *
@@ -138,7 +141,7 @@ export function readFilters(params: Record<string, string | string[] | undefined
   };
   const notices: FilterNotice[] = [];
   const state: FilterState = {
-    fit: boundedFit(one("fit"), 45),
+    fit: boundedFit(one("fit"), DEFAULT_FIT),
     cluster: one("cluster"),
     sources: many("source"),
     workMode: readWorkMode(one("workMode")),

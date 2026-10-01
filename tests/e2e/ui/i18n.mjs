@@ -80,6 +80,28 @@ export async function run(ctx) {
       (await pay.innerText()).includes("/mês"),
       await pay.innerText(),
     );
+
+    // O motivo de remuneração é gravado pelo scorer com o rótulo pronto e sem
+    // idioma ("$4,000/month"); quem exibe é que troca o período (#426).
+    const payReasons = async (locale) => {
+      await jobsContext.addCookies([{ name: "jho_locale", value: locale, url: BASE }]);
+      await jobsPage.goto(`${BASE}/jobs/904000004`, { waitUntil: "networkidle" });
+      const reasons = jobsPage.locator('[data-testid="score-reasons"]');
+      await reasons.waitFor({ state: "visible" });
+      return reasons.innerText();
+    };
+    const reasonsPt = await payReasons("pt-BR");
+    check(
+      "motivo de remuneração do score em pt-BR localiza o período",
+      reasonsPt.includes("$4,000/mês") && !reasonsPt.includes("/month"),
+      reasonsPt,
+    );
+    const reasonsEn = await payReasons("en");
+    check(
+      "motivo de remuneração do score em inglês mantém o período em inglês",
+      reasonsEn.includes("$4,000/month") && !reasonsEn.includes("/mês"),
+      reasonsEn,
+    );
   } finally {
     await jobsContext.close();
   }

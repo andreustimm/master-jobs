@@ -131,6 +131,7 @@ export {
   listBoard,
   listBoardPage,
   nearMatches,
+  termExistsInOpenCorpus,
   type BoardFilters,
   type BoardRow,
   type GroupPosting,

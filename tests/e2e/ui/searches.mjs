@@ -1,7 +1,7 @@
 // Área `searches` do E2E de navegador: Buscas: trilha, termo e salário na tela Vagas, saúde das capturas, papéis e arquivamento.
 // Fatiada de ui.mjs (#320); a ordem e o contexto compartilhado moram em ./index.mjs.
 import { ENGLISH_SEARCHES_SWEEP, OVERFLOW_SEARCHES_SWEEP } from "../routes.mjs";
-import { makePortugueseLeaks, ptBR } from "./shared.mjs";
+import { en, makePortugueseLeaks, ptBR } from "./shared.mjs";
 
 export async function run(ctx) {
   const { BASE, E2E_EMAIL, E2E_PASSWORD, browser, check, gotoMeasured, page } = ctx;
@@ -343,14 +343,58 @@ export async function run(ctx) {
     emphasized: document.querySelector('[data-testid="jobs-offer-search"]')?.getAttribute("data-emphasized"),
   }));
   check(
-    "term-search E2E-020 termo sem vaga: o vazio nomeia o termo e oferece buscar nas plataformas",
-    emptyTerm.empty.includes("zzqxunmatched")
+    // Sem filtro nenhum escolhido (só `q=`), a frase certa é "ausente no
+    // acervo" — não "remova filtros", que não ajuda quem não tinha filtro
+    // pra remover (#402). A oferta leva à Buscas preenchida (#392/PR #422),
+    // não mais direto à sugestão de trilha.
+    "term-search E2E-020 termo sem vaga e sem filtro: o vazio afirma a ausência no acervo e oferece buscar nas plataformas",
+    emptyTerm.empty === ptBR.jobs.emptyTermAbsent.replace("{term}", "zzqxunmatched")
       && emptyTerm.offer === "/searches?term=zzqxunmatched"
       && emptyTerm.emphasized === "true",
     JSON.stringify(emptyTerm),
   );
 
+  // Termo real no acervo, mas só numa vaga pontuada abaixo do corte padrão
+  // (45): sem filtro nenhum escolhido na URL, o corte implícito é o recorte. A
+  // tela tem de distinguir isso de ausência de verdade (EXISTS sem os demais
+  // filtros, #402, achado da revisão da PR #419).
+  await page.goto(`${BASE}/jobs?q=zyxquantumcut`, { waitUntil: "networkidle" });
+  const belowDefaultCut = await page.evaluate(() => ({
+    empty: document.querySelector('[data-testid="jobs-empty"]')?.textContent ?? "",
+    total: document.querySelector('[data-testid="jobs-total"]')?.getAttribute("data-total") ?? "",
+  }));
+  check(
+    "term-search E2E-022 termo existente só abaixo do corte padrão de fit: o vazio explica o recorte, não a ausência",
+    belowDefaultCut.total === "0"
+      && belowDefaultCut.empty === ptBR.jobs.emptyTermFiltered.replace("{term}", "zyxquantumcut"),
+    JSON.stringify(belowDefaultCut),
+  );
+
   /* ------ term-search task_05: Buscas, trilhas, saúde das capturas e papéis ------ */
+  await page.setViewportSize({ width: 375, height: 812 });
+  for (const [locale, dictionary] of [["pt-BR", ptBR], ["en", en]]) {
+    await page.context().addCookies([{ name: "jho_locale", value: locale, url: BASE }]);
+    await page.goto(`${BASE}/jobs?q=Laravel&fit=0`, { waitUntil: "networkidle" });
+    const beforeFilter = await page.locator('[data-testid="job-link-905000001"]').count();
+    await page.goto(`${BASE}/jobs?q=Laravel&fit=0&workMode=onsite`, { waitUntil: "networkidle" });
+    await page.reload({ waitUntil: "networkidle" });
+    const emptyText = (await page.locator('[data-testid="jobs-empty"]').textContent()) ?? "";
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    // A frase do recorte, não a de ausência: "laravel" existe (a vaga some só
+    // com `workMode=onsite`) — afirmar ausência aqui é exatamente o falso
+    // negativo do BUG-20260929-search-term-false-negative-laravel. A frase
+    // antiga ("Nenhuma vaga do acervo menciona…") não bateria mais aqui.
+    check(
+      `termo existente com filtro sem resultado explica o recorte, não a ausência, em ${locale}`,
+      beforeFilter === 1 && emptyText === dictionary.jobs.emptyTermFiltered.replace("{term}", "Laravel"),
+      emptyText,
+    );
+    check(`vazio contextualizado cabe em 375px em ${locale}`, overflow <= 1, `${overflow}px`);
+    await page.goto(`${BASE}/jobs?q=Laravel&fit=0`, { waitUntil: "networkidle" });
+    check(`remover modalidade recupera a vaga que menciona o termo em ${locale}`, await page.locator('[data-testid="job-link-905000001"]').count() === 1);
+  }
+  await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
+  await page.setViewportSize({ width: 1280, height: 900 });
   const notice = page.locator('[data-testid="mutation-feedback"]');
   /**
    * Runs an action and reads the notice it leaves, then clears it for the next one.
@@ -857,6 +901,35 @@ export async function run(ctx) {
   const hiddenAfterClick = await eventually(rowGone, dismissRow);
   await page.reload({ waitUntil: "networkidle" });
   const hiddenAfterReload = (await page.locator(dismissRow).count()) === 0;
+  // Termo que só existe numa vaga arquivada (status padrão a esconde): o vazio
+  // diz recorte, não ausência — e continua dizendo depois de recarregar (#402,
+  // achado da revisão da PR #419). Ver também o EXISTS em `loadJobsView`.
+  const archivedOnlyEmpty = await page.evaluate(() => ({
+    empty: document.querySelector('[data-testid="jobs-empty"]')?.textContent ?? "",
+    total: document.querySelector('[data-testid="jobs-total"]')?.getAttribute("data-total") ?? "",
+  }));
+  await page.reload({ waitUntil: "networkidle" });
+  const archivedOnlyEmptyAfterReload = await page.evaluate(() => ({
+    empty: document.querySelector('[data-testid="jobs-empty"]')?.textContent ?? "",
+    total: document.querySelector('[data-testid="jobs-total"]')?.getAttribute("data-total") ?? "",
+  }));
+  const archivedOnlyPhrase = ptBR.jobs.emptyTermFiltered.replace("{term}", "Quokkaverse");
+  check(
+    "term-search E2E-023 termo só em vaga arquivada: o vazio explica o recorte, não a ausência, e a frase sobrevive à recarga",
+    archivedOnlyEmpty.total === "0" && archivedOnlyEmpty.empty === archivedOnlyPhrase
+      && archivedOnlyEmptyAfterReload.total === "0" && archivedOnlyEmptyAfterReload.empty === archivedOnlyPhrase,
+    JSON.stringify({ archivedOnlyEmpty, archivedOnlyEmptyAfterReload }),
+  );
+  // O card "vagas abertas" do cockpit leva ao acervo inteiro (`fit=0&status=any
+  // &ungrouped=1`): lá, um termo ausente é ausência de verdade — "remova
+  // filtros" não tem o que remover.
+  await page.goto(`${BASE}/jobs?q=zzqxunmatched&fit=0&status=any&ungrouped=1`, { waitUntil: "networkidle" });
+  const wholeCorpusAbsent = await page.evaluate(() => document.querySelector('[data-testid="jobs-empty"]')?.textContent ?? "");
+  check(
+    "term-search E2E-024 acervo inteiro (vagas abertas do cockpit) com termo ausente: o vazio afirma a ausência, não manda remover filtros",
+    wholeCorpusAbsent === ptBR.jobs.emptyTermAbsent.replace("{term}", "zzqxunmatched"),
+    JSON.stringify({ wholeCorpusAbsent }),
+  );
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
   await page.locator('[data-testid="preset-archived"]').click();
   await settle(/status=archived/);

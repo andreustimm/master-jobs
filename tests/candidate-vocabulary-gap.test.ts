@@ -72,4 +72,19 @@ describe("VocabularyGapSection: sem vaga pontuada, sem afirmação de mercado", 
     expect(html).toContain(t("copy.vocabularyRareTitle"));
     expect(html).toContain("laravel");
   });
+
+  it("marca cada termo como dado do usuário: vem da busca da própria pessoa (#427)", () => {
+    const gap = gapFixture({
+      jobsAnalysed: 2,
+      missing: [{ term: "elixir", weight: 8, inJobs: 2, coverage: 1, inCv: false }],
+      confirmed: [{ term: "kubernetes", weight: 5, inJobs: 2, coverage: 1, inCv: true }],
+      unused: [{ term: "laravel", weight: 2, inJobs: 0, coverage: 0, inCv: true }],
+    });
+
+    const html = renderToStaticMarkup(createElement(VocabularyGapSection, { gap, t }));
+
+    for (const termo of ["elixir", "kubernetes", "laravel"]) {
+      expect(html).toMatch(new RegExp(`<span data-user-content="true" data-testid="[a-z-]+"[^>]*>${termo}</span>`));
+    }
+  });
 });

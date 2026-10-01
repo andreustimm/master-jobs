@@ -202,14 +202,15 @@ export type MoneyLabels = { period: MoneyPeriodLabels; project: MoneyProjectLabe
  * (sourced from the dictionary, see `src/core/i18n/`) — this module is pure
  * domain and carries no UI copy of its own (regra 9).
  *
- * `labels` is optional only because the scorer's blocker messages
- * (`src/core/scoring/score.ts`) call this without the viewer's locale yet
- * (issue #426). The fallback below is byte-for-byte the behaviour this
- * module had before labels existed — including the Portuguese "meses" — on
- * purpose: `tests/scorer-version.test.ts` hashes the scorer's output text,
- * and changing this fallback would move that hash with no change to any
- * score or verdict, forcing an unrelated `SCORER_VERSION` bump. Issue #426
- * is where that text actually gets fixed, once the scorer can pass labels.
+ * `labels` is optional because the scorer (`src/core/scoring/score.ts`) calls
+ * this without them: it is pure domain and cannot know who reads the score
+ * later. The fallback below is byte-for-byte the behaviour this module had
+ * before labels existed — including the Portuguese "meses" — and it is a
+ * stored format, not UI copy: `renderScoreMessage` (`src/core/i18n/`) parses
+ * these exact suffixes to show them in the reader's language (issue #426),
+ * and `tests/scorer-version.test.ts` hashes the scorer's output text.
+ * Changing the fallback means changing that parser, bumping `SCORER_VERSION`
+ * and rescoring (G08).
  */
 export function formatMoney(m: Money, locale = "en-US", labels?: MoneyLabels): string {
   const periodLabel = (period: Exclude<Period, "year" | "project">): string =>
