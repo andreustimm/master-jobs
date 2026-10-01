@@ -166,6 +166,7 @@ export const ptBR = {
     capturesOff: "Capturas desligadas neste ambiente: os termos ficam salvos e nada é buscado.",
     dailyRepeatPaused: "A repetição diária está parada: nenhuma busca da varredura nas últimas 36 horas.",
     pendingPrimary: "Você ainda não tem perfil próprio. Salve o currículo para criar a trilha principal; até lá, nada recebe nota.",
+    pendingTermDiscarded: "O termo abaixo não foi salvo — complete o perfil acima e cole-o de novo:",
     saveTitle: "Salvar um termo",
     term: "Termo",
     track: "Trilha",
@@ -572,6 +573,9 @@ export const ptBR = {
     current: "atual",
     chars: "caracteres",
     savedOn: "salvo em",
+    noJobsForGap: "Não há vagas pontuadas neste recorte para comparar. Ainda não é possível avaliar a cobertura do CV. Revise suas trilhas e o ranking.",
+    queueNoUpdatesLabel: "Nenhuma vaga recalculada",
+    queueNoUpdates: "Seu perfil de busca foi mantido: o CV novo não altera as notas até você editar a trilha. Esse resultado não confirma a cobertura do CV. Revise suas trilhas e o ranking.",
     noRelevantGap:
       "Nenhuma lacuna relevante. O vocabulário do CV cobre o que as vagas do seu alvo pedem.",
     gapEmpty: "A análise de lacunas aparece assim que houver um currículo salvo.",

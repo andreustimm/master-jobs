@@ -9,6 +9,35 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.32.8] - 2026-10-01
+
+### Corrigido
+
+- O campo de termo em `/searches` deixa o domínio receber entradas acima de 60 caracteres, para que a validação `term_too_long` recuse o valor completo sem criar um termo truncado. A regressão cobre o contrato do campo e a jornada E2E após recarregar.
+- A recusa de termo (longo, curto, duplicado) não apaga mais o que a pessoa digitou — só o envio aceito limpa o campo (`MutationFeedbackForm` ganha `clearOnSuccess`, usado junto de `keepFields` em `/searches`).
+
+## [1.32.7] - 2026-10-01
+
+### Corrigido
+
+- O cartão de repontuação distingue conclusão sem vagas recalculadas com `data-reason=noJobsUpdated`, nomeando a causa (perfil de busca mantido) e preservando motivos de recusa conhecidos.
+- Análise de lacunas com zero vagas mostra ausência de base de comparação e não lista mais termos do CV como "confirmado" ou "raro no mercado" sem nenhuma vaga para sustentar a afirmação.
+
+## [1.32.6] - 2026-10-01
+
+### Corrigido
+
+- Ordem e agrupamento expõem o estado ativo por aria-current; cockpit e lista oferecem atalho de teclado ao cabeçalho.
+- #396: cockpit, facetas e lista compartilham empresa, faixa salarial, câmbio e agrupamento ao contar vagas.
+- Preserva transições suaves na mesma tela após o limiar de espera prolongada e anuncia a demora na região de status.
+- `@media (pointer: coarse)` em `app/globals.css` fixava `min-height: 40px`, fora de `@layer` — vencia `min-h-11` (44px) do Tailwind v4 e derrubava para 40px todo botão, `summary` e link `inline-flex` num aparelho de toque real, inclusive botões `size="sm"` sem altura explícita (`save-public-facts`, `save-visibility`). DESIGN.md pede 44×44px ("Touch Targets"); a regra agora bate com o número (#403). `tests/e2e/ui/mobile.mjs` ganhou um bloco com contexto `hasTouch: true, isMobile: true` (o resto da suíte não emula toque real, então `pointer: coarse` nunca casava) medindo `save-public-facts`, `save-visibility`, `public-profile-linkedin`, `public-profile-github`, `public-profile-copy-link` e `public-skill-more`, mais uma varredura de `OVERFLOW_SWEEP` inteiro (dez rotas, inclusive `/jobs` com chips e barra de filtro, e o cabeçalho com idioma/aparência/sessão) em 375px de toque real — nada quebrou com o piso mais alto.
+- A importação de CV devolve recusas tipadas para arquivo ausente, inválido, grande ou sem texto; a tela traduz o motivo e mantém o documento atual.
+- Remove o aviso obsoleto de que upload de PDF ainda não existe.
+- A tela de login libera somente a geração de transição capturada após um redirecionamento efetivo, evitando splash inerte em abas antigas.
+- O painel de evidência das trilhas lê as linhas do CV corrente da candidata e preserva o fallback de perfil quando não existe documento próprio.
+- O filtro de lacuna assumida (`growth`) deixou de bloquear termo já citado em `evidence:` própria e de repassar o `growth` do perfil padrão a quem herdou o perfil sem revisar.
+- A lista de vagas usa o locale da tela para a paginação, o modal e os valores de remuneração, e identifica títulos vindos do acervo para a varredura de idioma.
+
 ## [1.32.5] - 2026-10-01
 
 ### Corrigido

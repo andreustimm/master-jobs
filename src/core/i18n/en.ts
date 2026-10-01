@@ -168,6 +168,7 @@ export const en: Dictionary = {
     capturesOff: "Captures are off in this environment: terms are saved and nothing is fetched.",
     dailyRepeatPaused: "The daily repeat is paused: no sweep search in the last 36 hours.",
     pendingPrimary: "You have no own profile yet. Save your CV to create the primary track; until then nothing is scored.",
+    pendingTermDiscarded: "The term below was not saved — complete the profile above and paste it again:",
     saveTitle: "Save a term",
     term: "Term",
     track: "Track",
@@ -561,6 +562,9 @@ export const en: Dictionary = {
     current: "current",
     chars: "characters",
     savedOn: "saved on",
+    noJobsForGap: "There are no scored jobs in this comparison. CV coverage cannot be assessed yet. Review your target tracks and ranking.",
+    queueNoUpdatesLabel: "No jobs recalculated",
+    queueNoUpdates: "Your search profile was kept: the new CV does not change scores until you edit the track. This result does not confirm CV coverage. Review your target tracks and ranking.",
     noRelevantGap:
       "No relevant gaps. The CV vocabulary covers what your target jobs ask for.",
     gapEmpty: "The gap analysis appears as soon as a CV is saved.",

@@ -477,7 +477,6 @@ describe("V10-05 leque de consultas: toda composição de tela está no inventá
     "app/cockpit-data.ts": { measuredBy: "loadCockpit" },
     "app/jobs/jobs-data.ts": { measuredBy: "loadJobsView" },
     "app/candidate/page.tsx": { declared: "pessoa e fila de pontuação: uma consulta cada, o resto em série" },
-    "app/searches/tracks/[id]/page.tsx": { declared: "suporte da trilha e fila de pontuação, depois de a trilha ser achada" },
     "app/referrals/page.tsx": { declared: "oportunidades de indicação e empresas da rede, uma consulta cada" },
     "app/recruiter/[candidateId]/page.tsx": { declared: "contagem e página do funil de um candidato, uma consulta cada" },
     "app/compare/page.tsx": { declared: "tradutor com sessão, depois currículo e detalhe da comparação" },

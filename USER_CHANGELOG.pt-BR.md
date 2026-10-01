@@ -34,6 +34,34 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.8] - 2026-10-01T18:11:47.000Z
+
+### Corrigido
+
+- Colar um termo longo em Buscas agora mostra o aviso de limite e não salva uma versão cortada.
+- Quando o termo é recusado, o texto digitado continua no campo para corrigir — antes, era preciso colar tudo de novo.
+
+## [1.32.7] - 2026-10-01T17:39:17.000Z
+
+### Corrigido
+
+- Uma atualização sem vagas recalculadas explica seu resultado (perfil de busca mantido); a análise de lacunas não afirma cobertura do CV nem destaca termos como raros no mercado sem vagas para comparar.
+
+## [1.32.6] - 2026-10-01T16:32:46.000Z
+
+### Corrigido
+
+- Leitores de tela identificam a ordem e o agrupamento ativos. Um atalho permite voltar ao cabeçalho pelo teclado após entrar.
+- Corrige números divergentes entre o cockpit e a lista quando há filtro de empresa ou faixa salarial.
+- Ajusta o aviso de vagas fora da faixa para não contar a mesma vaga agrupada duas vezes.
+- Filtros demorados em Vagas mantêm a lista visível e operável, sem cobri-la com a tela de carregamento.
+- Botões e links em aparelhos de toque (celular, tablet) agora têm pelo menos 44px de altura, o mínimo recomendado para acertar com o dedo — antes alguns caíam para 40px mesmo parecendo maiores na tela.
+- A importação de currículo em PDF explica por que um arquivo foi recusado, sem substituir seu CV atual.
+- Corrigido o login em uma aba depois de sair em outra, com novo acesso operável em telas estreitas.
+- Ao abrir ou tornar principal uma trilha, o apoio no currículo passa a refletir o CV salvo na conta, sem atribuir a ela a evidência do perfil padrão.
+- Um termo já citado na sua própria evidência continua marcado como apoio, mesmo quando o mesmo termo aparece numa lacuna assumida; e quem ainda não revisou o próprio perfil não herda mais a lacuna assumida de outra pessoa.
+- A tela de vagas mostra paginação, fechamento do anúncio e períodos de salário no idioma escolhido, mantendo o título da vaga como dado do anúncio.
+
 ## [1.32.5] - 2026-10-01T15:18:50.000Z
 
 ### Corrigido

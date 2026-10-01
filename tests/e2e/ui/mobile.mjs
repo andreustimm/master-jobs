@@ -1,9 +1,10 @@
 // Área `mobile` do E2E de navegador: Largura, zoom e menu móvel.
 // Fatiada de ui.mjs (#320); a ordem e o contexto compartilhado moram em ./index.mjs.
 import { OVERFLOW_SWEEP } from "../routes.mjs";
+import { PUBLIC_CV_FIXTURE } from "../public-cv-format.mjs";
 
 export async function run(ctx) {
-  const { BASE, check, gotoMeasured, page } = ctx;
+  const { BASE, browser, check, gotoMeasured, page } = ctx;
   /* --------------------------------- Mobile -------------------------------- */
 
   // Rolagem horizontal é a falha que passa despercebida no desktop, porque só
@@ -341,4 +342,116 @@ export async function run(ctx) {
   await page.keyboard.press("Escape");
 
   await page.setViewportSize({ width: 1280, height: 900 });
+
+  /* ----------------------------- Alvo de toque (#403) ---------------------------- */
+
+  // `pointer: coarse` só casa em Chromium com toque REAL emulado
+  // (`hasTouch` + `isMobile`); o resto da suíte roda sem isso, e foi assim que
+  // a regra de `globals.css` ficou anos em 40px sem nenhum teste reprovar —
+  // `min-h-11` (44px) media 44 sem toque e 40 com toque real, no mesmo botão.
+  // Contexto e navegador próprios: isolado no seu próprio `try`, como manda
+  // `docs/qa/README.md`, porque é o único cenário que emula toque de verdade.
+  try {
+    const touchCtx = await browser.newContext({
+      hasTouch: true,
+      isMobile: true,
+      viewport: { width: 375, height: 812 },
+      storageState: await page.context().storageState(),
+    });
+    const touchPage = await touchCtx.newPage();
+
+    // O bump de 40 para 44px vale para TODO `button`, `[role="button"]`,
+    // `summary` e link `inline-flex` em toque — não só os seis controles
+    // medidos abaixo. Reaproveita `OVERFLOW_SWEEP` (revisão L1): mesma
+    // varredura de `scrollWidth` e "elemento além da borda" do topo deste
+    // arquivo, mas em `hasTouch`/`isMobile` reais, o único contexto em que a
+    // regra de `pointer: coarse` chega a valer. Cobre `/jobs` (chips de
+    // filtro, barra de filtros) e o cabeçalho (idioma, aparência, sessão),
+    // que aparece em toda rota da lista.
+    const touchOverflows = [];
+    const touchClipped = [];
+    for (const path of OVERFLOW_SWEEP) {
+      if (!(await gotoMeasured(touchPage, path, touchOverflows, "toque 375px "))) continue;
+      const overflow = await touchPage.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      if (overflow > 1) touchOverflows.push(`${path}: ${overflow}px`);
+      const beyond = await touchPage.evaluate(() => {
+        const viewport = document.documentElement.clientWidth;
+        const scrollsSideways = (node) => {
+          for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+            const overflowX = getComputedStyle(parent).overflowX;
+            if (overflowX === "auto" || overflowX === "scroll") return true;
+          }
+          return false;
+        };
+        return [...document.querySelectorAll("main *, header *")]
+          .filter((node) => {
+            const box = node.getBoundingClientRect();
+            return box.width > 1 && box.right > viewport + 1 && !scrollsSideways(node);
+          })
+          .slice(0, 2)
+          .map((node) => node.getAttribute("data-testid") || node.tagName.toLowerCase());
+      });
+      if (beyond.length > 0) touchClipped.push(`${path}: ${beyond.join(", ")}`);
+    }
+    check(
+      "sem rolagem horizontal em 375px de toque real, nas rotas de OVERFLOW_SWEEP (#403)",
+      touchOverflows.length === 0,
+      touchOverflows.slice(0, 3).join(" · "),
+    );
+    check(
+      "nenhum elemento (inclusive cabeçalho e filtros) passa da borda em 375px de toque real (#403)",
+      touchClipped.length === 0,
+      touchClipped.slice(0, 3).join(" · "),
+    );
+
+    const targets = [];
+    const measure = async (testid) => {
+      const box = await touchPage.locator(`[data-testid="${testid}"]`).first().boundingBox();
+      targets.push({ testid, height: box?.height ?? null, width: box?.width ?? null });
+    };
+
+    // Autenticado: os dois botões que o achado original mediu (`save-public-facts`
+    // no cartão de fatos públicos, `save-visibility` no de visibilidade).
+    await touchPage.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+    await measure("save-public-facts");
+    await measure("save-visibility");
+    const candidateOverflow = await touchPage.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+
+    // Público: os CTAs que o achado citou por nome — LinkedIn, GitHub, copiar
+    // link — e o "+N" de skills, todos com a mesma classe `min-h-11 xl:h-7`.
+    await touchPage.goto(`${BASE}/p/${PUBLIC_CV_FIXTURE.slug}`, { waitUntil: "networkidle" });
+    await measure("public-profile-linkedin");
+    await measure("public-profile-github");
+    await measure("public-profile-copy-link");
+    await measure("public-skill-more");
+    const publicOverflow = await touchPage.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+
+    const below44 = targets.filter((t) => (t.height ?? 0) < 44);
+    check(
+      "alvo de toque mede pelo menos 44px em pointer:coarse real (#403)",
+      targets.length === 6 && below44.length === 0,
+      JSON.stringify({ targets, below44 }),
+    );
+    check(
+      "44px não estoura a largura de 375px em nenhuma das duas telas medidas",
+      candidateOverflow <= 1 && publicOverflow <= 1,
+      `candidate=${candidateOverflow}px público=${publicOverflow}px`,
+    );
+
+    await touchCtx.close();
+  } catch (erro) {
+    // Isolado de propósito: falha aqui reprova o check, não a suíte inteira —
+    // ver o comentário equivalente no bloco WebKit de `design.mjs`.
+    check(
+      "alvo de toque (#403): cenário concluiu sem exceção",
+      false,
+      (erro instanceof Error ? (erro.stack ?? erro.message) : String(erro)).replace(/\s+/g, " ").slice(0, 600),
+    );
+  }
 }

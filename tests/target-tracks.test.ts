@@ -349,4 +349,94 @@ describe("evidence support from the stored profile", () => {
     expect(support.gaps).toContain("kubernetes");
     expect(support.supported).not.toContain("kubernetes");
   });
+
+  it("UT-038b growth stays a gap even when the CV mentions the term (#393 Major 2)", async () => {
+    const profile = structuredClone(base);
+    profile.growth = [...profile.growth, "kubernetes"];
+    for (const key of Object.keys(profile.evidence)) {
+      profile.evidence[key] = profile.evidence[key]!.filter((line) => !/kubernetes/i.test(line));
+    }
+    const [row] = await db.insert(candidate).values({ slug: "renata-growth-cv", name: "Renata" }).returning({ id: candidate.id });
+    await setMatchingProfile(row!.id, profile);
+    await saveDocument({
+      candidateId: row!.id,
+      kind: "cv",
+      label: "CV",
+      content: "Infraestrutura com Kubernetes em produção.",
+    });
+    const target: TrackTarget = {
+      ...targetOf(profile),
+      keywords: { critical: [{ term: "kubernetes", weight: 8 }], strong: [], stack: [], negative: [] },
+    };
+
+    const support = await trackSupport(row!.id, target);
+
+    expect(support.gaps).toContain("kubernetes");
+    expect(support.supported).not.toContain("kubernetes");
+  });
+
+  it("IT-393-02 the owner's CV adds to the profile.yaml evidence instead of replacing it (#393 Major 1)", async () => {
+    const { id } = await owner();
+    await saveDocument({
+      candidateId: id,
+      kind: "cv",
+      label: "CV",
+      content: "Experiência comprovada com Rust e sistemas distribuídos.",
+    });
+    const target: TrackTarget = {
+      ...targetOf(base),
+      // "php" só está em `evidence:` (profile.yaml); "rust" só está no CV; a
+      // dona do perfil padrão não herda nada (`evidenceInherited` é falso por
+      // definição), então as duas evidências somam.
+      keywords: { critical: [{ term: "php", weight: 8 }, { term: "rust", weight: 8 }], strong: [], stack: [], negative: [] },
+    };
+
+    const support = await trackSupport(id, target);
+
+    expect(support).toEqual({ supported: ["php", "rust"], gaps: [], inherited: false });
+  });
+
+  it("IT-393-01 uses the candidate's current CV instead of inherited profile evidence", async () => {
+    const [row] = await db.insert(candidate).values({ slug: "renata-cv", name: "Renata" }).returning({ id: candidate.id });
+    await setMatchingProfile(row!.id, base);
+    await saveDocument({
+      candidateId: row!.id,
+      kind: "cv",
+      label: "CV",
+      content: "Experiência comprovada com Rust e sistemas distribuídos.",
+    });
+    const target = targetOf(base);
+    target.keywords = { critical: [{ term: "rust", weight: 8 }], strong: [], stack: [], negative: [] };
+
+    const support = await trackSupport(row!.id, target);
+
+    expect(support).toEqual({ supported: ["rust"], gaps: [], inherited: false });
+  });
+
+  it("IT-393-03 an inherited profile with a CV citing the default's growth term still gets support (#423 review)", async () => {
+    // Evidência igual ao padrão (perfil herdado, `evidenceInherited` só olha
+    // `.evidence`), e `growth` com um termo que o CV também cita. Quem herda
+    // o perfil sem revisá-lo não deve herdar junto a lacuna assumida de outra
+    // pessoa: o achado da revisão foi `tracks.ts` repassar
+    // `person.profile.growth` mesmo quando o perfil é herdado, reintroduzindo
+    // pelo `growth` a mesma contradição que a #393 fechou pelo CV.
+    const profile = structuredClone(base);
+    profile.growth = [...profile.growth, "Kubernetes appears in delivery work but is not a headline strength."];
+    const [row] = await db.insert(candidate).values({ slug: "renata-herdada", name: "Renata" }).returning({ id: candidate.id });
+    await setMatchingProfile(row!.id, profile);
+    await saveDocument({
+      candidateId: row!.id,
+      kind: "cv",
+      label: "CV",
+      content: "Infraestrutura com Kubernetes em produção.",
+    });
+    const target: TrackTarget = {
+      ...targetOf(profile),
+      keywords: { critical: [{ term: "kubernetes", weight: 8 }], strong: [], stack: [], negative: [] },
+    };
+
+    const support = await trackSupport(row!.id, target);
+
+    expect(support).toEqual({ supported: ["kubernetes"], gaps: [], inherited: false });
+  });
 });

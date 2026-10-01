@@ -345,10 +345,11 @@ export async function run(ctx) {
   check(
     // Sem filtro nenhum escolhido (só `q=`), a frase certa é "ausente no
     // acervo" — não "remova filtros", que não ajuda quem não tinha filtro
-    // pra remover (#402).
+    // pra remover (#402). A oferta leva à Buscas preenchida (#392/PR #422),
+    // não mais direto à sugestão de trilha.
     "term-search E2E-020 termo sem vaga e sem filtro: o vazio afirma a ausência no acervo e oferece buscar nas plataformas",
     emptyTerm.empty === ptBR.jobs.emptyTermAbsent.replace("{term}", "zzqxunmatched")
-      && emptyTerm.offer === "/searches/tracks/new?term=zzqxunmatched"
+      && emptyTerm.offer === "/searches?term=zzqxunmatched"
       && emptyTerm.emphasized === "true",
     JSON.stringify(emptyTerm),
   );
@@ -469,35 +470,55 @@ export async function run(ctx) {
     offer: document.querySelector('[data-testid="jobs-offer-search-link"]')?.getAttribute("href") ?? "",
   }));
   await page.locator('[data-testid="jobs-offer-search-link"]').click();
+  await settle(/\/searches\?term=Laravel/);
+  const prefilled = await page.locator('[data-testid="searches-term-input"]').inputValue();
+
+  // A oferta leva à tela de Buscas preenchida; dali, "Nova trilha" é o caminho
+  // explícito que carrega o termo até a sugestão (US-002) — sem ele a
+  // sugestão só seria alcançável digitando a URL à mão.
+  const newTrackHref = await page.locator('[data-testid="searches-new-track"]').getAttribute("href");
+  await page.locator('[data-testid="searches-new-track"]').click();
   await settle(/\/searches\/tracks\/new\?term=Laravel/);
   const suggested = await page.evaluate(() => ({
     titles: document.querySelector('[data-testid="track-titles"]')?.value ?? "",
     evidence: document.querySelector('[data-testid="track-suggestion-evidence"]')?.textContent?.trim() ?? "",
   }));
+  // O envio cria a trilha sugerida E salva o termo nela (campo escondido em
+  // tracks/new/page.tsx) — ponta a ponta pela interface, não por `page.goto`.
   const laravelCreated = await feedbackOf(async () => {
     await page.locator('[data-testid="track-create"]').click();
     await settle(/\/searches$/);
   });
   const laravelTrack = (await trackCards()).find((card) => card.name === "Laravel");
   const laravelTermId = await termIdOf("Laravel");
+  await page.reload({ waitUntil: "networkidle" });
+  const laravelOccurrences = await page.evaluate((wanted) =>
+    [...document.querySelectorAll('div[data-state][data-testid^="term-"]')]
+      .filter((node) => node.querySelector("span[data-user-content]")?.textContent?.trim() === wanted).length,
+    "Laravel",
+  );
   const laravelTerm = {
     inTrack: await page.locator(`[data-testid="track-${laravelTrack?.id}"] [data-testid="term-${laravelTermId}"]`).count(),
     platforms: await page.locator(`[data-testid="term-platforms-${laravelTermId}"] li`).allTextContents(),
     coverage: ((await page.locator('[data-testid="searches-coverage"]').textContent()) ?? "").trim(),
   };
   check(
-    "term-search E2E-001 Laravel só na descrição aparece, a oferta sugere a trilha e o termo salvo mostra capturas desligadas por plataforma",
+    "term-search E2E-001 Laravel só na descrição aparece, a oferta preenche Buscas, Nova trilha leva o termo e cria a trilha sugerida com o termo salvo nela",
     laravelBoard.descriptionOnly
       && laravelBoard.hint === ptBR.filters.searchHint
-      && laravelBoard.offer === "/searches/tracks/new?term=Laravel"
+      && laravelBoard.offer === "/searches?term=Laravel"
+      && prefilled === "Laravel"
+      && newTrackHref === "/searches/tracks/new?term=Laravel"
       && suggested.titles.length > 0
       && suggested.evidence.length > 0
       && laravelCreated.role === "status"
+      && laravelTrack?.primary === false
       && laravelTerm.inTrack === 1
+      && laravelOccurrences === 1
       && laravelTerm.platforms.length > 0
       && laravelTerm.platforms.every((line) => line.includes(ptBR.captureState.captures_off))
       && laravelTerm.coverage === ptBR.searches.coverage,
-    JSON.stringify({ laravelBoard, suggested, laravelCreated, laravelTrack, laravelTerm }),
+    JSON.stringify({ laravelBoard, prefilled, newTrackHref, suggested, laravelCreated, laravelTrack, laravelTerm, laravelOccurrences }),
   );
 
   const tooShort = await saveTermOnPage("a");
@@ -517,6 +538,25 @@ export async function run(ctx) {
     JSON.stringify({ tooShort, techleadSaved, duplicate, techleadId }),
   );
 
+  const longTermInput = "LongTermInput".repeat(5);
+  const longTermFieldBefore = await page.locator('[data-testid="searches-term-input"]').inputValue();
+  const longTermNotice = await saveTermOnPage(longTermInput);
+  const longTermFieldAfterRefusal = await page.locator('[data-testid="searches-term-input"]').inputValue();
+  await page.reload({ waitUntil: "networkidle" });
+  check(
+    // Antes do defeito, o prefixo de 60 caracteres era gravado em silêncio;
+    // checar só o termo de 65 não distinguiria "nada criado" de "criado
+    // cortado". A #390 pede que nenhum dos dois exista.
+    "term-search E2E-021 termo acima de 60 caracteres chega à validação, mostra o aviso próprio, mantém o texto no campo para corrigir e não é criado (nem cortado) após recarregar",
+    longTermInput.length > 60
+      && longTermNotice.role === "alert"
+      && longTermNotice.text.includes(ptBR.searchFeedback.term_too_long)
+      && longTermFieldAfterRefusal === longTermInput
+      && (await page.evaluate(findTerm, longTermInput)) === null
+      && (await page.evaluate(findTerm, longTermInput.slice(0, 60))) === null,
+    JSON.stringify({ length: longTermInput.length, longTermNotice, longTermFieldBefore, longTermFieldAfterRefusal }),
+  );
+
   const pausedResult = await feedbackOf(() => page.locator(`[data-testid="term-toggle-${techleadId}"]`).click());
   const paused = {
     state: await eventually(termStateIs, [techleadId, "paused"]),
@@ -524,11 +564,20 @@ export async function run(ctx) {
   };
   await feedbackOf(() => page.locator(`[data-testid="term-toggle-${techleadId}"]`).click());
   const resumed = await eventually(termStateIs, [techleadId, "active"]);
+  // techlead nasce na principal (o select de salvar não tem valor padrão, e
+  // listTracks ordena isPrimary desc); mover para a Laravel, não-principal,
+  // prova o movimento de verdade — mover para a própria trilha de origem
+  // devolveria `ok: true` sem mudar nada e o teste passaria sem testar nada.
+  const techleadOrigin = (await trackCards()).find((card) => card.primary);
   await page.locator(`[data-testid="term-move-track-${techleadId}"]`).selectOption(String(laravelTrack?.id));
   const moved = await feedbackOf(() => page.locator(`[data-testid="term-move-${techleadId}"]`).click());
   const movedInto = await eventually(
     ([track, term]) => Boolean(document.querySelector(`[data-testid="track-${track}"] [data-testid="term-${term}"]`)),
     [laravelTrack?.id, techleadId],
+  );
+  const leftOrigin = await eventually(
+    ([track, term]) => !document.querySelector(`[data-testid="track-${track}"] [data-testid="term-${term}"]`),
+    [techleadOrigin?.id, techleadId],
   );
   // Same session, second window: the page created by `browser.newPage()`
   // owns its context and cannot open another page in it.
@@ -543,17 +592,19 @@ export async function run(ctx) {
   const staleRole = await staleNotice.getAttribute("role");
   await staleCtx.close();
   check(
-    "term-search E2E-006 pausar, retomar, mover e excluir um termo; excluir de novo numa página velha não é erro",
+    "term-search E2E-006 pausar, retomar, mover (saindo de verdade da origem) e excluir um termo; excluir de novo numa página velha não é erro",
     pausedResult.role === "status"
       && paused.state
       && paused.badge === 1
       && resumed
+      && techleadOrigin?.id !== laravelTrack?.id
       && moved.role === "status"
       && movedInto
+      && leftOrigin
       && deleted.role === "status"
       && gone
       && staleRole === "status",
-    JSON.stringify({ pausedResult, paused, resumed, moved, movedInto, deleted, gone, staleRole }),
+    JSON.stringify({ pausedResult, paused, resumed, techleadOrigin, moved, movedInto, leftOrigin, deleted, gone, staleRole }),
   );
 
   const seededId = await termIdOf("E2E Seeded Stack");
@@ -604,6 +655,9 @@ export async function run(ctx) {
   check(
     "term-search E2E-002 principal primeiro; a trilha aceita salva a palavra nova, a recusa mantém o digitado e Vagas avisa o recálculo com as notas anteriores",
     tracksBefore[0]?.primary === true
+      // O CV da fixture tem TypeScript e Python, mas não PHP: quem roda a
+      // suíte é o dono, cuja evidência própria (`profile.yaml`) cita PHP —
+      // o CV soma à evidência dele, não a substitui (#393, Major 1).
       && /php/i.test(evidence.supported)
       && /symfony/i.test(gapsAfterSave)
       && refusedEdit.role === "alert"

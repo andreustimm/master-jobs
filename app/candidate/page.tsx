@@ -1,5 +1,4 @@
 import { TransitionLink } from "../transition-link";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -29,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { MutationFeedbackForm } from "../mutation-feedback";
 import { candidateScoreQueueStatus } from "../../src/core/scoring/queue.ts";
 import { ScoreQueueCard } from "../score-queue-card";
+import { VocabularyGapSection } from "../candidate-vocabulary-gap";
 import type { CvPdfError } from "../../src/core/pdf.ts";
 
 export const dynamic = "force-dynamic";
@@ -382,75 +382,7 @@ export default async function CandidateArea() {
         </div>
       </MutationFeedbackForm>
 
-      {gap && (
-        <>
-          <Separator className="my-8" />
-          <section>
-            <h2 className="type-display-sm mb-2">
-              {t("copy.vocabularyGapTitle")}
-            </h2>
-            <p className="mb-5 text-sm text-muted-foreground">
-              {t("copy.vocabularyCompared", { jobs: gap.jobsAnalysed, cut: gap.minFit })}</p>
-
-            {gap.missing.length === 0 ? (
-              <Card className="p-5 text-sm text-muted-foreground">
-                {t("candidate.noRelevantGap")}
-              </Card>
-            ) : (
-              <div className="mb-8 grid gap-2">
-                {gap.missing.slice(0, 18).map((term) => (
-                  <div
-                    key={term.term}
-                    className="flex items-center gap-3 rounded-lg border bg-card px-4 py-2.5"
-                  >
-                    <span className="min-w-0 flex-1 truncate sm:min-w-[190px] sm:flex-none font-mono text-sm">{term.term}</span>
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-sm bg-border">
-                      <span
-                        className="block h-full rounded-sm bg-[var(--color-mid)]"
-                        style={{ width: `${Math.round(term.coverage * 100)}%` }}
-                      />
-                    </div>
-                    <span className="shrink-0 text-right font-mono text-xs whitespace-nowrap text-muted-foreground">
-                      {Math.round(term.coverage * 100)}%
-                      <span className="hidden sm:inline"> {t("candidate.ofJobs")}</span>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <details className="mb-6">
-              <summary className="cursor-pointer text-sm font-medium">
-                {t("copy.vocabularyWorking")} ({gap.confirmed.length})
-              </summary>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {gap.confirmed.map((term) => (
-                  <Badge key={term.term} variant="secondary" className="font-mono type-meta">
-                    {term.term} · {Math.round(term.coverage * 100)}%
-                  </Badge>
-                ))}
-              </div>
-            </details>
-
-            {gap.unused.length > 0 && (
-              <details>
-                <summary className="cursor-pointer text-sm font-medium">
-                  {t("copy.vocabularyRareTitle")} ({gap.unused.length})
-                </summary>
-                <p className="mt-2 mb-3 max-w-[62ch] text-xs text-muted-foreground">
-                  {t("copy.vocabularyRareNote")}</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {gap.unused.map((term) => (
-                    <Badge key={term.term} variant="outline" className="font-mono type-meta">
-                      {term.term}
-                    </Badge>
-                  ))}
-                </div>
-              </details>
-            )}
-          </section>
-        </>
-      )}
+      {gap && <VocabularyGapSection gap={gap} t={t} />}
 
       {!gap && (
         <Card className="p-5 text-sm text-muted-foreground">

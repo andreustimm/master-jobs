@@ -5,6 +5,7 @@
  * O candidato vem sempre de quem chama — a sessão, nunca a entrada do usuário.
  */
 import { and, eq } from "drizzle-orm";
+import { currentDocument } from "../../../core/candidate.ts";
 import { clock } from "../../../core/clock.ts";
 import { getDb } from "../../../core/db/client.ts";
 import { isDuplicateKey } from "../../../core/db/retry.ts";
@@ -331,14 +332,33 @@ async function ownEvidence(candidateId: number): Promise<OwnEvidence> {
   // que pede as três exatas deixa a requisição do lado esperando até os 30s da
   // Vercel. `loadProfile` lê arquivo e não gasta conexão, por isso viaja junto.
   const [person, owner] = await Promise.all([personProfile(candidateId), isOwner(candidateId)]);
-  const [confirmed, defaultProfile] = await Promise.all([
+  const [confirmed, defaultProfile, document] = await Promise.all([
     candidateSkills(candidateId, "confirmed"),
     loadProfile(true),
+    currentDocument(candidateId, "cv"),
   ]);
+  const cvContent = document?.content ?? null;
+  const cvLines = cvContent?.trim()
+    ? cvContent.split(/\r?\n/).filter((line) => line.trim().length > 0)
+    : null;
+  const ownLines = person ? Object.values(person.profile.evidence).flat() : [];
+  const inherited = person ? evidenceInherited(person.profile, defaultProfile, { isOwner: owner }) : false;
+  // Evidência herdada do perfil padrão nunca entra como `ownLines`, com ou
+  // sem CV: ela é do padrão, não da pessoa que ainda não revisou a sua — o
+  // CV soma, não ressuscita, a evidência copiada (#393, #423 achado Major da
+  // revisão). Evidência própria (do dono, ou de quem já revisou a sua) soma
+  // com o CV em vez de ser descartada: o dono com CV continua sustentado
+  // pelo `profile.yaml` (#393, achado Major 1 da revisão).
   return {
-    lines: person ? Object.values(person.profile.evidence).flat() : [],
+    ownLines: inherited ? [] : ownLines,
+    cvLines: cvLines ?? [],
     confirmedSkills: confirmed.map((skill) => skill.name),
-    inherited: person ? evidenceInherited(person.profile, defaultProfile, { isOwner: owner }) : false,
+    // `growth` é lacuna de quem é dono do perfil padrão. Quem herdou o
+    // perfil sem revisá-lo não carrega essa lacuna junto — repassá-la
+    // reintroduz pelo `growth` a mesma contradição que a #393 fechou pelo
+    // CV (#423, achado Major da revisão).
+    growth: person && !inherited ? person.profile.growth : [],
+    inherited: inherited && cvLines === null,
   };
 }
 
