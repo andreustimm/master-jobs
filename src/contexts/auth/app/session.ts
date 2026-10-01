@@ -12,7 +12,7 @@ import type {
   SessionStore,
 } from "../ports.ts";
 import type { Role, Session } from "../domain/types.ts";
-import { openModeActive } from "../domain/open-mode.ts";
+import { OPEN_MODE_REFUSED_WARNING, openModeActive, openModeRefused } from "../domain/open-mode.ts";
 
 export type AuthDeps = {
   sessions: SessionStore;
@@ -129,6 +129,8 @@ export async function revokeAllSessionsForEmail(
 
 /* ------------------------------ Single user ------------------------------- */
 
+let openModeRefusalWarned = false;
+
 /**
  * Autenticação é exigida por padrão.
  *
@@ -148,6 +150,13 @@ export async function revokeAllSessionsForEmail(
 export function isOpenMode(env: Record<string, string | undefined> = process.env): boolean {
   // Pedir o modo aberto não basta: o ambiente também precisa se
   // declarar local. Ver `domain/open-mode.ts`.
+  if (!openModeRefusalWarned && openModeRefused(env)) {
+    // Uma vez por processo: esta função roda a cada requisição, e o aviso
+    // repetido esconderia o resto do log. Diz o que fazer, sem ecoar valor
+    // nenhum do ambiente.
+    openModeRefusalWarned = true;
+    console.warn(OPEN_MODE_REFUSED_WARNING);
+  }
   return openModeActive(env);
 }
 
