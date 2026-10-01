@@ -289,3 +289,15 @@ describe("links dos cards do cockpit (#314)", () => {
     expect(openJobsHref().startsWith("/jobs?")).toBe(true);
   });
 });
+
+
+describe("densidade da lista (#397)", () => {
+  it("preserva dense ao ordenar, paginar e filtrar, permitindo desligar", () => {
+    const state = readFilters({ dense: "1" });
+    for (const patch of [{ sort: "recent" }, { page: "2" }, { company: "Vercel" }]) {
+      expect(parse(href("/jobs", state, patch)).dense).toBe("1");
+    }
+    expect(parse(href("/jobs", state, { dense: undefined })).dense).toBeUndefined();
+    expect(parse(href("/jobs", readFilters({ dense: "false" }), {})).dense).toBeUndefined();
+  });
+});

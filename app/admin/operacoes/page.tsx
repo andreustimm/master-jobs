@@ -96,7 +96,7 @@ export default async function AdminOperationsPage() {
       <Card className="mb-4">
         <CardContent className="grid grid-cols-1 gap-3 pt-6">
           {!configured && (
-            <p className="type-body-md text-[var(--warn)]" role="status" data-testid="operations-not-configured">
+            <p className="type-body-md text-[var(--warn-text)]" role="status" data-testid="operations-not-configured">
               {t("operations.notConfigured")}
             </p>
           )}

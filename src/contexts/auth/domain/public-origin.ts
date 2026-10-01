@@ -22,12 +22,13 @@
  *    `VERCEL_URL` (único por deployment, muda a cada push). Isso é o que faz
  *    a recuperação de senha continuar funcionando em produção e preview sem
  *    exigir cadastro manual antes desta função existir.
- * 3. **Na máquina do dono** (`isLocalProcess`), sem nenhuma das duas acima: o
- *    `Host` da requisição, como sempre — é loopback, e só o próprio dono
- *    alcança o processo.
+ * 3. **Na máquina do dono** (`isLocalProcess`: `JHO_ENV=local` declarado),
+ *    sem nenhuma das duas acima: o `Host` da requisição, como sempre — é
+ *    loopback, e só o próprio dono alcança o processo.
  * 4. Nenhuma das três: falha fechada. É o caso do plano B no Fly.io sem
  *    `JHO_PUBLIC_URL` cadastrada — o Fly não declara `VERCEL*`, e o runbook
- *    exige a variável antes do primeiro failover.
+ *    exige a variável antes do primeiro failover — e o de qualquer processo
+ *    que não declara ambiente nenhum (#378): ausência não é prova de local.
  */
 import { isLocalProcess, type AuthEnvironment } from "./open-mode.ts";
 

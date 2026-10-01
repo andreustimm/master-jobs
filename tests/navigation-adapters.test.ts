@@ -327,7 +327,9 @@ describe("stable navigation adapters", () => {
     expect(auth).toContain("if (error instanceof AuthorizationError) forbidden()");
     expect(reset).toContain('redirect("/login?reset=1")');
     expect(reset).toContain("encodeURIComponent(token)");
-    expect(callback).toContain('new URL("/login?error=invalid", request.url)');
+    expect(callback).toContain('redirect303(request, "/login?error=invalid")');
+    expect(callback).toContain('request.headers.get("RSC")');
+    expect(callback).toContain('headers: { Location: location }');
     expect(impersonation).toContain('if (adminToken) redirect("/admin/users")');
     expect(impersonation).toContain('redirect("/login")');
     expect(overlay).not.toMatch(/email|candidateName|token|protectedDestination/);

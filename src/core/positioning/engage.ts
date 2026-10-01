@@ -216,11 +216,17 @@ export async function metricTrend() {
 }
 
 /** Target accounts that have never been engaged — the audit's §2.2 gap. */
-export async function coldTargets(limit = 20) {
+export async function coldTargets(candidateId: number, limit = 20) {
   const db = getDb();
   return db
     .select()
     .from(targetAccount)
-    .where(and(eq(targetAccount.status, "identified"), sql`${targetAccount.linkedinUrl} is not null`))
+    .where(
+      and(
+        eq(targetAccount.candidateId, candidateId),
+        eq(targetAccount.status, "identified"),
+        sql`${targetAccount.linkedinUrl} is not null`,
+      ),
+    )
     .limit(limit);
 }

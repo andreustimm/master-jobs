@@ -9,6 +9,7 @@ import { and, asc, desc, eq, gte, inArray, isNull, lte, ne, or, sql, type SQL } 
 import { alias } from "drizzle-orm/pg-core";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import {
+  DIRECT_EMPLOYER_SOURCE_KIND,
   candidatePrimaryScoreFilter,
   primaryScoreFilter,
   scoreTrackFilter,
@@ -343,6 +344,11 @@ function payCondition(pay: PayFilter | undefined, amount: SQL | undefined): SQL 
   return pay.disclosedOnly ? inRange : sql`(${inRange} or ${amount} is null)`;
 }
 
+function namedEmployerSql(row: { sourceId: PgColumn; companyName: PgColumn }, sourceLabel: PgColumn | SQL): SQL {
+  return sql`(split_part(${row.sourceId}, ':', 1) = ${DIRECT_EMPLOYER_SOURCE_KIND}
+    or lower(btrim(${row.companyName})) <> lower(btrim(coalesce(${sourceLabel}, ''))))`;
+}
+
 /**
  * The key that says two postings are the same job in another country.
  *
@@ -381,7 +387,7 @@ function groupKey(
     // `''` e não `null` de propósito: `null = null` não é verdade em SQL, então
     // com `null` nem as vagas de empregador nomeado casariam entre si.
     sql`(case
-      when lower(btrim(${row.companyName})) = lower(btrim(coalesce(${sourceLabel}, '')))
+      when not ${namedEmployerSql(row, sourceLabel)}
       then ${row.id}::text
       else ''
     end)`,
@@ -727,7 +733,7 @@ function boardConditions(opts: BoardFilters, candidateId: number | null, pay?: P
   if (opts.hasComp) conditions.push(sql`coalesce(${job.compMax}, ${job.compMin}, 0) > 0`);
   if (opts.hasDescription) conditions.push(fullDescriptionSql());
   if (opts.namedEmployer) {
-    conditions.push(sql`lower(${job.companyName}) <> lower(coalesce(${source.label}, ''))`);
+    conditions.push(namedEmployerSql(job, source.label));
   }
   const payFilter = payCondition(opts.pay, pay?.amount);
   if (payFilter) conditions.push(payFilter);
@@ -1127,7 +1133,7 @@ export async function boardFacets(candidateId: number | null, base: BoardFilters
       unblocked: sql`coalesce(${jobScore.blockers}::jsonb, '[]'::jsonb) = '[]'::jsonb`.as("unblocked"),
       fresh: sql`coalesce(${job.postedAt}, ${job.firstSeenAt}) >= ${freshCutoff}`.as("fresh"),
       withComp: sql`coalesce(${job.compMax}, ${job.compMin}, 0) > 0`.as("with_comp"),
-      named: sql`lower(${job.companyName}) <> lower(coalesce(${source.label}, ''))`.as("named"),
+      named: namedEmployerSql(job, source.label).as("named"),
       described: sql`${job.id} in (${describedOpenJobIds()})`.as("described"),
       notApplied: sql`${application.appliedAt} is null`.as("not_applied"),
     })

@@ -30,7 +30,47 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 <!-- sem-nota-usuario: 1.30.0 - 2026-09-29T11:55:09.000Z -->
 
+<!-- sem-nota-usuario: 1.32.0 - 2026-09-29T15:11:03.000Z -->
+
 ## [Unreleased]
+
+## [1.32.5] - 2026-10-01T15:18:50.000Z
+
+### Fixed
+
+- Direct career sources show named employers and group their postings. Compact density survives sorting, filtering and pagination.
+
+## [1.32.4] - 2026-10-01T14:58:19.000Z
+
+### Fixed
+
+- The Jobs track selector distinguishes a track named “Principal” from the current primary track.
+
+## [1.32.3] - 2026-10-01T01:39:55.000Z
+
+### Fixed
+
+- Invalid login links now return to the canonical local address while preserving the selected language.
+
+## [1.32.2] - 2026-09-30T08:16:50.000Z
+
+### Fixed
+
+- The "readable by anyone" public-profile warning (and three other warnings) was hard to read in the light Huly and Graphy themes. Contrast now meets the accessibility minimum in every theme.
+
+## [1.32.1] - 2026-09-29T15:47:51.000Z
+
+### Added
+
+- Agents working in the repository are now prevented from sending several terminal commands in a single call, which used to stall the terminal waiting for manual approval of simple commands.
+
+### Fixed
+
+- Fixed the misleading failure shown when a manual comparison is saved before
+  a candidate has a scoring profile. The job record now opens with an honest
+  no-score state, and retrying the same comparison reuses the existing job.
+- Referrals now show only your own network of contacts. A new account used to see another person's companies and contact names. Contacts added before this version stay hidden until an upcoming update.
+- Messages explaining a refused pipeline transition stay visible longer.
 
 ## [1.31.0] - 2026-09-29T14:04:44.000Z
 

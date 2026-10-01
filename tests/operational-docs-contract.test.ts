@@ -45,7 +45,9 @@ describe("operational environment contract", () => {
   it("UT-003: absent or blank values never send and never print the key", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-    expect(configuredMailer(fakeEnv()).name).toBe("console");
+    // Terminal só num processo que se declara local (#378); sem declaração, omite.
+    expect(configuredMailer(fakeEnv({ JHO_ENV: "local" })).name).toBe("console");
+    expect(configuredMailer(fakeEnv()).name).toBe("withheld");
     expect(
       configuredMailer(fakeEnv({ RESEND_API_KEY: "re_fake_secret", RESEND_FROM: "  " })).name,
     ).toBe("withheld");
