@@ -67,9 +67,9 @@ export async function loadCockpit(
     countBoard(candidateId, boardFilters),
   ]);
   const top = await listBoard(candidateId, { ...boardFilters, limit: 12 });
-  // `sort=comp` sozinho normaliza o valor exibido, não filtra nada
-  // (`payCondition` em `src/core/db/repo.ts`), então não entra na faceta —
-  // mesmo critério de `/jobs`, ver `payFilterActive`.
+  // `sort=comp` sozinho normaliza o valor exibido, não filtra nada (ver
+  // `payFilterActive`, em `app/filter-state.ts`), então não entra na
+  // faceta — mesmo critério de `/jobs`.
   const payFacet = payFilterActive(boardFilters.pay);
   const facets = await cachedBoardFacets(candidateId, {
     minFit: state.fit,

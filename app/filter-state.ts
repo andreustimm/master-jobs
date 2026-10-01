@@ -381,9 +381,9 @@ export function resolvePayFilter(state: FilterState, tracks: Track[], fx: FxTabl
 /**
  * A faixa realmente filtra o universo contado — mínimo, máximo ou só
  * divulgados. `sort=comp` por si só normaliza o valor exibido e a ordenação
- * mas não corta vaga nenhuma (`payCondition`, em `src/core/db/repo.ts`,
- * devolve `undefined` sem limites), então não merece entrada própria no
- * cache de facetas nem o join lateral de pagamento na consulta.
+ * mas não corta vaga nenhuma (a condição de pagamento do repositório devolve
+ * "sem filtro" sem limites), então não merece entrada própria no cache de
+ * facetas nem o join lateral de pagamento na consulta.
  */
 export function payFilterActive(pay: PayFilter | undefined): boolean {
   return pay !== undefined && (pay.min !== undefined || pay.max !== undefined || pay.disclosedOnly === true);
