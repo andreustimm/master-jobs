@@ -238,14 +238,25 @@ try {
     : { E2E_STORAGE: "off", JHO_STORAGE_DRIVER: "" };
 
   const port = await availablePort();
+  const base = `http://127.0.0.1:${port}`;
   const env = {
     ...process.env,
     JHO_OUTPUT_TRACING_ROOT: tracingRoot,
     JHO_AUTH_MODE: "secure",
+    // Origem confiável declarada (#378): sem ela, `resolvePublicOrigin` falha
+    // fechado fora de `JHO_ENV=local`, a recuperação cai em
+    // `recordResetSendFailure` para qualquer endereço e o E2E de G17 compara
+    // dois caminhos idênticos, sem exercitar `requestPasswordReset`.
+    JHO_PUBLIC_URL: base,
+    // No `--manual`, quem opera precisa do link de recuperação no terminal
+    // (AUTH-recovery-same-answer): só o mailer de console o imprime, e ele só
+    // vale num processo que se declara local. A suíte automática fica sem,
+    // como um deployment: o link nunca vai para o log do CI.
+    ...(manual ? { JHO_ENV: "local" } : {}),
     DATABASE_URL: testDatabase.url,
     DATABASE_MIGRATION_URL: testDatabase.url,
     JHO_TEST_DATABASE_URL: testDatabase.url,
-    E2E_BASE: `http://127.0.0.1:${port}`,
+    E2E_BASE: base,
     E2E_RESET_EXPIRED_TOKEN: TASK04_FIXTURES.resetExpiredToken,
     E2E_RESET_CONSUMED_TOKEN: TASK04_FIXTURES.resetConsumedToken,
     E2E_RESET_RACE_TOKEN: TASK04_FIXTURES.resetRaceToken,

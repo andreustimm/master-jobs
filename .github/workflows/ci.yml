@@ -10,6 +10,34 @@
 # (`scripts/release/promotion-ci.ts`) e a proteção de branch exigem, então um
 # job novo neste arquivo precisa entrar em `qualidade.needs` — o teste
 # `tests/ci-pipeline.test.ts` reprova quem esquecer.
+#
+# `runs-on:` de todo job é a mesma expressão, nunca um literal (issue #367,
+# ADR 0030 decisão 1/4): `vars.CI_RUNS_ON` ausente ou vazia mantém o runner
+# hospedado de hoje (`fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"')`); setada
+# com JSON válido, troca o runner de todo job sem editar este arquivo. Um
+# valor SEM aspas (`self-hosted`, em vez de `'"self-hosted"'` ou
+# `'["self-hosted","linux","master-jobs"]'`) não é JSON válido: `fromJSON`
+# falha e derruba o CI inteiro — a seção "Runner self-hosted opt-in" de
+# docs/engineering/deploy.md mostra o `gh variable set` com a citação certa.
+#
+# A primeira metade da expressão (antes do `||`) é uma guarda de fork
+# embutida no próprio `runs-on:` — DEFESA EM PROFUNDIDADE, NÃO a barreira
+# real (revisão L2 da PR #376, C1): num evento `pull_request`, o GitHub
+# executa a versão de ci.yml que está na `head` da PRÓPRIA PR, então uma PR
+# de fork pode simplesmente editar este arquivo e trocar a expressão inteira
+# por `runs-on: [self-hosted, ...]` literal, sem esbarrar nesta guarda. A
+# barreira que de fato impede a execução é a política de aprovação de
+# workflow de colaborador externo do repositório
+# (`fork-pr-contributor-approval` = `all_external_contributors`), pré-requisito
+# do dono documentado em docs/engineering/deploy.md ANTES de qualquer `gh
+# variable set CI_RUNS_ON` — nenhum agente a muda sozinho. A guarda aqui só
+# cobre o caso em que essa política aprovou o run mas a PR ainda assim tenta
+# resolver para o runner próprio (ex.: um colaborador de confiança com PR
+# aprovada, mas cuja branch não é deste repositório). A mesma comparação é
+# testada isolada, sem o motor de expressões do Actions, em
+# `scripts/github/fork-guard.ts` (`isForkPullRequest`), e
+# `tests/ci-runner-selection.test.ts` confere que as duas nunca divergem
+# (F2-01–F2-04 em `.compozy/tasks/contingencia-ci-deploy/_tests.md`).
 name: CI
 
 on:
@@ -43,7 +71,7 @@ jobs:
     # Os gates curtos que não dependem de teste: changelogs, tracker de QA,
     # tipos e os contratos das skills de QA. Juntos custam menos que a
     # preparação de um runner, por isso dividem um.
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
     timeout-minutes: 10
 
     steps:
@@ -111,7 +139,7 @@ jobs:
     #
     # A cobertura de uma fatia é parcial e não diz nada sozinha: os limiares
     # ficam zerados aqui e são aplicados sobre o total, no job `cobertura`.
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
     timeout-minutes: 15
     strategy:
       # Uma fatia vermelha não cancela as outras: a lista completa de falhas
@@ -198,7 +226,7 @@ jobs:
     # `qualidade` reprova pela fatia vermelha de qualquer jeito.
     if: ${{ !cancelled() }}
     needs: testes
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
     timeout-minutes: 10
 
     steps:
@@ -231,7 +259,7 @@ jobs:
     # O contrato de privacidade abre um Chromium real. Ele fica separado da
     # cobertura para não concorrer com os testes curtos, mas continua sendo
     # obrigatório no mesmo portão que autoriza a promoção.
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
     timeout-minutes: 10
 
     steps:
@@ -263,19 +291,28 @@ jobs:
       - uses: actions/cache@v6
         # O Chromium pinado só muda quando o Playwright muda; baixá-lo em toda
         # execução custava mais que o próprio teste. As dependências do sistema
-        # continuam vindo do `--with-deps`, que não fica em cache.
+        # continuam vindo do `--with-deps`, que não fica em cache. Sem efeito
+        # no runner próprio (ver o passo seguinte): não há cache a restaurar
+        # nem a gravar ali, e a ação simplesmente não encontra a chave.
+        if: runner.environment != 'self-hosted'
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.versao }}
 
       - name: Instalar Chromium do gate PWA
+        # `--with-deps` pede apt/sudo, que o job do runner próprio não tem —
+        # e não precisa: a imagem do runner (scripts/runner/Dockerfile) já
+        # traz Chromium/WebKit instalados (revisão L2 da PR #376, M2).
+        # `runner.environment` é `github-hosted` ou `self-hosted`, contexto do
+        # próprio GitHub Actions — não depende de `vars.CI_RUNS_ON` aqui.
+        if: runner.environment != 'self-hosted'
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Fronteira PWA em navegador real
         run: pnpm test:pwa-browser
 
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
     timeout-minutes: 15
 
     steps:
@@ -312,7 +349,7 @@ jobs:
     # código funciona", é "o banco acompanha o código". Um schema.ts alterado
     # sem migração correspondente passa em todos os testes — eles rodam sobre um
     # banco recriado do zero — e quebra só no ambiente que já tem dado.
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
     timeout-minutes: 10
 
     steps:
@@ -368,7 +405,7 @@ jobs:
     # de `main` exige, e 15 minutos de navegador só atrasam a PR de produção
     # (#303). `staging` recebe exatamente o SHA cujo push em `dev` já rodou o E2E.
     if: github.event_name != 'workflow_dispatch' && inputs.target-sha == ''
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
     timeout-minutes: 40
     permissions:
       contents: read
@@ -398,7 +435,10 @@ jobs:
         id: cache-navegadores
         # Restauração e gravação separadas: o `actions/cache` inteiro só grava
         # quando o job termina verde, e enquanto a suíte reprovar cada execução
-        # baixaria os navegadores de novo.
+        # baixaria os navegadores de novo. Sem efeito no runner próprio: a
+        # imagem já traz Chromium/WebKit (scripts/runner/Dockerfile), e os
+        # dois passos de instalação abaixo ficam pulados ali.
+        if: runner.environment != 'self-hosted'
         uses: actions/cache/restore@v6
         with:
           path: ~/.cache/ms-playwright
@@ -406,19 +446,23 @@ jobs:
 
       - name: Instalar Chromium e WebKit
         # `ui.mjs` abre o WebKit para o histórico de novidades no Safari.
-        if: steps.cache-navegadores.outputs.cache-hit != 'true'
+        # `--with-deps` pede apt/sudo, que o runner próprio não tem — e não
+        # precisa, com os navegadores já na imagem (revisão L2 da PR #376, M2).
+        if: runner.environment != 'self-hosted' && steps.cache-navegadores.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium webkit
 
       - name: Guardar os navegadores no cache
-        if: steps.cache-navegadores.outputs.cache-hit != 'true'
+        if: runner.environment != 'self-hosted' && steps.cache-navegadores.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: ~/.cache/ms-playwright
           key: ${{ steps.cache-navegadores.outputs.cache-primary-key }}
 
       - name: Dependências de sistema dos navegadores
-        # O cache guarda os binários, não as bibliotecas do apt.
-        if: steps.cache-navegadores.outputs.cache-hit == 'true'
+        # O cache guarda os binários, não as bibliotecas do apt. Mesmo motivo
+        # do passo acima para pular no runner próprio: sem sudo, e sem
+        # necessidade — a imagem já tem as bibliotecas do sistema.
+        if: runner.environment != 'self-hosted' && steps.cache-navegadores.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps chromium webkit
 
       - name: E2E hermético (UI + axe)
@@ -432,7 +476,7 @@ jobs:
     # falha, pulo ou cancelamento.
     if: ${{ always() }}
     needs: [contratos, testes, cobertura, pwa-browser, build, schema-e-migracao]
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
     timeout-minutes: 5
 
     steps:
@@ -446,7 +490,7 @@ jobs:
   validacao:
     if: inputs.target-sha != ''
     needs: [qualidade, schema-e-migracao]
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
     outputs:
       sha: ${{ steps.alvo.outputs.sha }}
     steps:

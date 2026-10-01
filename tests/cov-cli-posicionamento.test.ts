@@ -187,8 +187,8 @@ describe("jho tasks done <id>", () => {
  * porque é a primeira coisa que confunde quem for escrever a próxima consulta.
  */
 describe("jho contacts add <name>", () => {
-  it("grava o contato com a categoria padrão `peer`", async () => {
-    await syncCandidateFromProfile();
+  it("grava o contato com a categoria padrão `peer`, na rede do candidato ativo", async () => {
+    const ativo = await syncCandidateFromProfile();
 
     const r = await rodar("contacts", "add", "Rafael Souza", "-c", "Acme");
 
@@ -196,6 +196,37 @@ describe("jho contacts add <name>", () => {
     const [linha] = await banco().select().from(targetAccount);
     expect(linha?.name).toBe("Rafael Souza");
     expect(linha?.category).toBe("peer");
+    // #379: o contato é da rede de quem a CLI opera, nunca sem dono.
+    expect(linha?.candidateId).toBe(ativo);
+  });
+
+  it("URL de contato antigo sem dono é recusada com explicação, não com erro do banco", async () => {
+    // Contato gravado antes da 0031 fica sem dono e ainda ocupa a URL no índice
+    // global. O dono que o recadastra recebe a recusa legível apontando a #405.
+    await syncCandidateFromProfile();
+    await banco().insert(targetAccount).values({
+      name: "Rafael Souza",
+      category: "peer",
+      linkedinUrl: "https://www.linkedin.com/in/rafael",
+    });
+
+    const r = await rodar(
+      "contacts", "add", "Rafael Souza", "-c", "Acme", "-u", "https://www.linkedin.com/in/rafael",
+    );
+
+    expect(r.erro).toBeUndefined();
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("Recusado");
+    expect(r.out).toContain("#405");
+    expect(`${r.err}\n${r.out}`).not.toContain("23505");
+    expect(await banco().select().from(targetAccount)).toHaveLength(1);
+  });
+
+  it("sem candidato ativo, recusa em vez de gravar contato sem dono", async () => {
+    const r = await rodar("contacts", "add", "Rafael Souza", "-c", "Acme");
+
+    expect(String(r.erro)).toContain("Candidato padrão não cadastrado");
+    expect(await banco().select().from(targetAccount)).toHaveLength(0);
   });
 
   it("`-k former` grava a categoria mais valiosa da rede", async () => {
@@ -518,6 +549,7 @@ describe("jho skills seed", () => {
 
 describe("jho engage targets", () => {
   it("não inventa alvo quando ninguém foi cadastrado", async () => {
+    await syncCandidateFromProfile();
     const r = await rodar("engage", "targets");
 
     expect(r.out).toContain("Nenhuma conta-alvo");

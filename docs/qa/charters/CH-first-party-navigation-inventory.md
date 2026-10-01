@@ -11,7 +11,7 @@ charter:
     network: wifi-fast
     locale: pt-BR
   journey: J-switch-workspace-screen
-  scenarios: [NAV-first-party-navigation-contract, NAV-switch-screen-ready, AUTH-canonical-transition-boundaries]
+  scenarios: [NAV-first-party-navigation-contract, NAV-switch-screen-ready, AUTH-canonical-transition-boundaries, COMPARE-manual-cadastro-idempotente]
   tour: Feature Tour
   time_box_minutes: 60
   guidance:
