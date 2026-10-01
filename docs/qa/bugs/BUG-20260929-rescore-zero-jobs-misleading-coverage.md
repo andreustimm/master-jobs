@@ -47,14 +47,12 @@ lacunas diz "cobre o que as vagas pedem" comparando com 0 vagas.
 ## Fix
 
 <!-- filled when status moves to fixed -->
-- **Root cause:**
-- **Fix commit:**
-- **Regression test:**
+- **Root cause:** `ScoreQueueCard` não nomeava `data-reason` quando `scored === 0` com `state === "done"`, então "0 vagas" e "atualizado" apareciam juntos sem causa — commit `43ecd2d`. Revisão L1 da PR #418 achou dois resíduos do mesmo defeito: (1) `analyseGap` zera `coverage` de todo termo quando `jobsAnalysed === 0` (por design, ver `tests/cov-core-candidate-gap.test.ts`), mas a tela ainda renderizava os blocos "confirmado"/"raro no mercado" nesse caso — uma afirmação de mercado sem nenhuma vaga para sustentá-la; (2) o motivo `noJobsUpdated` repetia o sintoma ("pode terminar sem mudanças") em vez da causa real (perfil de busca mantido, CV novo não deriva nota nova).
+- **Fix commit:** `43ecd2d` (PR original) e o commit desta correção, referenciado no PR #418.
+- **Regression test:** `tests/score-queue-card.test.ts` (`data-reason=noJobsUpdated`); `tests/candidate-vocabulary-gap.test.ts` (blocos "confirmado"/"raro" ocultos sem vaga analisada, adicionado nesta rodada); `tests/cov-core-candidate-gap.test.ts` (o domínio continua devolvendo `coverage=0` por design). E2E `candidate-rescore` (33/33), incluindo a verificação nova de que o CV do dono volta ao conteúdo original depois do cenário de CV fraco.
 
 ## Verification
 
 <!-- filled when status moves to verified -->
-- **Retested:**
-- **Result:**
-
-Correção43ecd2d, PR418 draft. Reteste Pass: weakCv distinto de noJobsUpdated; zero vagas não afirma cobertura; recuperação pontuou6 vagas. Evidências e limitações: docs/qa/reports/2026-09-29T144500Z-codex387-zero-vagas.md
+- **Retested:** E2E isolado `node tests/e2e/run-isolated.mjs --areas candidate-rescore` (33/33) e `--areas cv-versions` (65/65, confirma que a área dependente não regride); `pnpm typecheck` e os testes de unidade acima.
+- **Result:** Pass. `weakCv` continua distinto de `noJobsUpdated`; zero vagas não afirma cobertura nem destaca termo como raro no mercado; recuperação com CV forte volta a mostrar os blocos normalmente. Evidências e limitações da rodada original: `docs/qa/reports/2026-09-29T144500Z-codex387-zero-vagas.md`.

@@ -186,15 +186,38 @@ export async function run(ctx) {
     }
   }
   await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+  // `textContent` junta as divs do CodeMirror sem quebra de linha (mesmo
+  // problema do comentário acima); `innerText` é o que preserva o documento
+  // do dono para a restauração logo depois.
+  const originalOwnerCv = await page.locator(".cm-content").innerText();
   await saveAndRead(page, weakCv, "Atualização administrativa");
   const zeroReason = await queuedStatus.getAttribute("data-reason");
   check("execução sem recalcular vagas explica o resultado sem prometer cobertura", zeroReason === "noJobsUpdated" && (await queuedStatus.textContent()).includes(en.candidate.queueNoUpdatesLabel), `${zeroReason}: ${await queuedStatus.textContent()}`);
+  // Devolve o CV do dono: o resto da suíte lê este currículo para pontuar e
+  // medir lacuna (setup.mjs), e este bloco só o usou para forçar `noJobsUpdated`
+  // (achado 3 da revisão da PR #418, issue #387).
+  await saveAndRead(page, originalOwnerCv, "E2E CV (restaurado após candidate-rescore)");
+  await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+  const restoredOwnerCv = await page.locator(".cm-content").innerText();
+  // Normaliza espaço em branco: o CodeMirror duplica quebra de linha em volta
+  // de linha vazia no roundtrip leitura→digitação→leitura (mesma classe de
+  // divergência `innerText`/`textContent` do comentário da task 03). O que
+  // importa para o resto da suíte é a palavra, não a contagem de linha vazia.
+  const normalizeWhitespace = (text) => text.replace(/\s+/g, " ").trim();
+  check(
+    "CV do dono volta ao conteúdo original depois do teste de CV fraco",
+    normalizeWhitespace(restoredOwnerCv) === normalizeWhitespace(originalOwnerCv),
+    `esperado: ${originalOwnerCv} · obtido: ${restoredOwnerCv}`,
+  );
 
   const weakContext = await browser.newContext({ viewport: { width: 375, height: 812 } });
   const weakPage = await weakContext.newPage();
   trackConsole(weakPage);
   await weakPage.goto(`${BASE}/login`, { waitUntil: "networkidle" });
-  await weakPage.fill('input[name="email"]', "e2e-sem-cv@local.test");
+  // Conta dedicada (`E2E_ROLES.weakCv` em setup.mjs): reaproveitar `noCv`
+  // deixava essa conta COM currículo depois da execução, e o `E2E-003` (que
+  // exige `noCv` sem CV) reprovava numa segunda rodada contra a mesma base.
+  await weakPage.fill('input[name="email"]', "e2e-cv-fraco@local.test");
   await weakPage.fill('input[name="password"]', E2E_PASSWORD);
   await weakPage.locator('[data-testid="login-submit"]').click();
   await weakPage.waitForTimeout(1_000);

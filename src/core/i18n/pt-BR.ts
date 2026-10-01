@@ -561,7 +561,7 @@ export const ptBR = {
     savedOn: "salvo em",
     noJobsForGap: "Não há vagas pontuadas neste recorte para comparar. Ainda não é possível avaliar a cobertura do CV. Revise suas trilhas e o ranking.",
     queueNoUpdatesLabel: "Nenhuma vaga recalculada",
-    queueNoUpdates: "Esta execução não recalculou vagas. Uma atualização incremental pode terminar sem mudanças; esse resultado não confirma a cobertura do CV. Revise suas trilhas e o ranking.",
+    queueNoUpdates: "Seu perfil de busca foi mantido: o CV novo não altera as notas até você editar a trilha. Esse resultado não confirma a cobertura do CV. Revise suas trilhas e o ranking.",
     noRelevantGap:
       "Nenhuma lacuna relevante. O vocabulário do CV cobre o que as vagas do seu alvo pedem.",
     gapEmpty: "A análise de lacunas aparece assim que houver um currículo salvo.",
