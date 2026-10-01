@@ -180,7 +180,7 @@ export function reduceTransition(
       return { ...state, committed: true };
     case "prolonged":
       if (state.phase !== "loading") return state;
-      return { ...state, phase: "prolonged", soft: false };
+      return { ...state, phase: "prolonged" };
     case "offline":
       if (!isPending(state.phase) || event.target !== state.target) return state;
       return { ...state, phase: "offline", soft: false };

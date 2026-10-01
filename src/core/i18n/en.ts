@@ -147,6 +147,13 @@ export const en: Dictionary = {
     notInterestedHint: "Takes the job off your lists. It stays under “Archived”, and you can restore it while you have not applied.",
     restore: "restore",
     restoreHint: "Puts the job back on your lists, at the start of the pipeline.",
+    /** Pay period shown per job (see `src/core/money.ts`). */
+    moneyPeriodMonth: "month",
+    moneyPeriodWeek: "week",
+    moneyPeriodDay: "day",
+    moneyPeriodHour: "hour",
+    moneyProjectTotal: "total",
+    moneyProjectTotalWithDuration: "total ({count} months)",
   },
   searches: {
     title: "Searches",
@@ -1256,8 +1263,6 @@ export const en: Dictionary = {
     pdfReviewFirst: "review before trusting it",
     pdfCaveat:
       "PDF extraction gets column layouts wrong, and a scanned CV has no text to read at all.",
-    pdfUploadTodo:
-      "PDF upload does not exist yet. When it does, the extracted text lands here and the original file stays recoverable — the schema already allows for it ({fields}).",
     vocabularyWorking: "Vocabulary that is already working",
     skillsLead:
       "Detected automatically in your CV, against a global catalogue of 100 technologies and practices.",
