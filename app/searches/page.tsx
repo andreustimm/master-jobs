@@ -136,12 +136,14 @@ export default async function SearchesPage() {
               action={saveTermAction}
               {...feedback}
               resultLinkLabel={t("searchFeedback.viewExisting")}
+              keepFields
+              clearOnSuccess
               className="grid gap-2 sm:flex sm:flex-wrap sm:items-end"
               data-testid="searches-save-form"
             >
               <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1 type-caption-sm text-muted-foreground">
                 {t("searches.term")}
-                <Input name="term" required maxLength={60} data-testid="searches-term-input" />
+                <Input name="term" required data-testid="searches-term-input" />
               </label>
               <label className="flex flex-col gap-1 type-caption-sm text-muted-foreground">
                 {t("searches.track")}
