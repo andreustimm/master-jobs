@@ -64,8 +64,55 @@ const ELIGIBILITY_KEYS: Record<EligibilityReason, TranslationKey> = {
   "data-unavailable": "scoreReason.eligibilityDataUnavailable",
 };
 
+/** Messages whose `label` is a `formatMoney` string written by the scorer. */
+const MONEY_LABEL_CODES: ReadonlySet<ScoreMessageCode> = new Set([
+  "comp.projectNoDuration",
+  "comp.ideal",
+  "comp.target",
+  "comp.range",
+  "comp.below",
+  "comp.noBasis",
+]);
+
+const PERIOD_KEYS: Record<string, TranslationKey> = {
+  month: "jobs.moneyPeriodMonth",
+  week: "jobs.moneyPeriodWeek",
+  day: "jobs.moneyPeriodDay",
+  hour: "jobs.moneyPeriodHour",
+};
+
+/**
+ * The three suffixes `formatMoney` writes when called without labels, which
+ * is how the scorer calls it: `/month` (week, day, hour), ` total (N meses)`
+ * and ` total`. A converted label carries the suffix mid-string
+ * (`CA$5,000/month ≈ $43,800`), hence the global match.
+ */
+const MONEY_SUFFIX = /\/(month|week|day|hour)\b| total \((\d+) meses\)| total(?=$| ≈)/g;
+
+/**
+ * The scorer stores the pay label already formatted, with no locale: it is
+ * pure domain and cannot know who will read the score later (issue #426).
+ * The stored text is closed-form, so the suffix is swapped here, at the edge
+ * that knows the reader's language. The amount itself stays as stored.
+ *
+ * Doing it at render time, rather than in the scorer, keeps the stored output
+ * byte-identical: no `SCORER_VERSION` bump and no rescore of what is already
+ * in the database (G08).
+ */
+function localizeMoneyLabel(label: string, t: Translator["t"]): string {
+  return label.replace(MONEY_SUFFIX, (_match, period?: string, months?: string) => {
+    const periodKey = period ? PERIOD_KEYS[period] : undefined;
+    if (periodKey) return `/${t(periodKey)}`;
+    if (months) return ` ${t("jobs.moneyProjectTotalWithDuration", { count: Number(months) })}`;
+    return ` ${t("jobs.moneyProjectTotal")}`;
+  });
+}
+
 export function renderScoreMessage(message: ScoreMessage, t: Translator["t"]): string {
   const params = { ...message.params };
+  if (MONEY_LABEL_CODES.has(message.code) && typeof params.label === "string") {
+    params.label = localizeMoneyLabel(params.label, t);
+  }
   if (message.code === "blocker.eligibility" && typeof params.reason === "string") {
     const key = ELIGIBILITY_KEYS[params.reason as EligibilityReason];
     if (key) params.reason = t(key);
