@@ -42,17 +42,12 @@ visível ao lado do controle funcional.
 ## Fix
 
 <!-- filled when status moves to fixed -->
-- **Root cause:**
-- **Fix commit:**
-- **Regression test:**
+- **Root cause:** O texto `copy.pdfUploadTodo` ("Upload de PDF ainda não existe" / "PDF upload does not exist yet") ficou na tela desde antes da #278 implementar o upload de verdade; ninguém removeu o aviso quando a funcionalidade passou a existir.
+- **Fix commit:** `053a5d8`
+- **Regression test:** E2E `onboarding` (`tests/e2e/ui/onboarding.mjs`, "perfil não anuncia upload inexistente em en/pt-BR") — reprovava antes da remoção do texto, porque a tela ainda continha a frase obsoleta ao lado do controle funcional.
 
 ## Verification
 
 <!-- filled when status moves to verified -->
-- **Retested:**
-- **Result:**
-
-
-Correção #388: recusa tipada traduzida pela tela e remoção do aviso obsoleto.
-37 testes relacionados, typecheck e E2E onboarding 44/44 passaram.
-Reteste manual Pass em 053a5d8, relatório docs/qa/reports/2026-09-29T143500Z-codex388-importacao-pdf.md. Razão localizada, CV preservado e recuperação com PDF válido confirmadas após refresh e no histórico.
+- **Retested:** Manual Pass em `053a5d8`, relatório `docs/qa/reports/2026-09-29T143500Z-codex388-importacao-pdf.md` (importação em perfil existente, pt-BR/en); E2E `onboarding` 44/44, incluindo a criação inicial de perfil via PDF, cobertura confirmada no retest de `PROF-create-own-profile-pdf` (`docs/qa/reports/2026-10-01-pr414-prof-create-own-profile-pdf-retest.md`, achado 1 da revisão L1 da PR #414).
+- **Result:** Pass. O aviso obsoleto não aparece mais em nenhum idioma, ao lado do controle de importação que funciona.
