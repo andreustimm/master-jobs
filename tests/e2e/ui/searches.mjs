@@ -345,7 +345,7 @@ export async function run(ctx) {
   check(
     "term-search E2E-020 termo sem vaga: o vazio nomeia o termo e oferece buscar nas plataformas",
     emptyTerm.empty.includes("zzqxunmatched")
-      && emptyTerm.offer === "/searches/tracks/new?term=zzqxunmatched"
+      && emptyTerm.offer === "/searches?term=zzqxunmatched"
       && emptyTerm.emphasized === "true",
     JSON.stringify(emptyTerm),
   );
@@ -442,35 +442,55 @@ export async function run(ctx) {
     offer: document.querySelector('[data-testid="jobs-offer-search-link"]')?.getAttribute("href") ?? "",
   }));
   await page.locator('[data-testid="jobs-offer-search-link"]').click();
+  await settle(/\/searches\?term=Laravel/);
+  const prefilled = await page.locator('[data-testid="searches-term-input"]').inputValue();
+
+  // A oferta leva à tela de Buscas preenchida; dali, "Nova trilha" é o caminho
+  // explícito que carrega o termo até a sugestão (US-002) — sem ele a
+  // sugestão só seria alcançável digitando a URL à mão.
+  const newTrackHref = await page.locator('[data-testid="searches-new-track"]').getAttribute("href");
+  await page.locator('[data-testid="searches-new-track"]').click();
   await settle(/\/searches\/tracks\/new\?term=Laravel/);
   const suggested = await page.evaluate(() => ({
     titles: document.querySelector('[data-testid="track-titles"]')?.value ?? "",
     evidence: document.querySelector('[data-testid="track-suggestion-evidence"]')?.textContent?.trim() ?? "",
   }));
+  // O envio cria a trilha sugerida E salva o termo nela (campo escondido em
+  // tracks/new/page.tsx) — ponta a ponta pela interface, não por `page.goto`.
   const laravelCreated = await feedbackOf(async () => {
     await page.locator('[data-testid="track-create"]').click();
     await settle(/\/searches$/);
   });
   const laravelTrack = (await trackCards()).find((card) => card.name === "Laravel");
   const laravelTermId = await termIdOf("Laravel");
+  await page.reload({ waitUntil: "networkidle" });
+  const laravelOccurrences = await page.evaluate((wanted) =>
+    [...document.querySelectorAll('div[data-state][data-testid^="term-"]')]
+      .filter((node) => node.querySelector("span[data-user-content]")?.textContent?.trim() === wanted).length,
+    "Laravel",
+  );
   const laravelTerm = {
     inTrack: await page.locator(`[data-testid="track-${laravelTrack?.id}"] [data-testid="term-${laravelTermId}"]`).count(),
     platforms: await page.locator(`[data-testid="term-platforms-${laravelTermId}"] li`).allTextContents(),
     coverage: ((await page.locator('[data-testid="searches-coverage"]').textContent()) ?? "").trim(),
   };
   check(
-    "term-search E2E-001 Laravel só na descrição aparece, a oferta sugere a trilha e o termo salvo mostra capturas desligadas por plataforma",
+    "term-search E2E-001 Laravel só na descrição aparece, a oferta preenche Buscas, Nova trilha leva o termo e cria a trilha sugerida com o termo salvo nela",
     laravelBoard.descriptionOnly
       && laravelBoard.hint === ptBR.filters.searchHint
-      && laravelBoard.offer === "/searches/tracks/new?term=Laravel"
+      && laravelBoard.offer === "/searches?term=Laravel"
+      && prefilled === "Laravel"
+      && newTrackHref === "/searches/tracks/new?term=Laravel"
       && suggested.titles.length > 0
       && suggested.evidence.length > 0
       && laravelCreated.role === "status"
+      && laravelTrack?.primary === false
       && laravelTerm.inTrack === 1
+      && laravelOccurrences === 1
       && laravelTerm.platforms.length > 0
       && laravelTerm.platforms.every((line) => line.includes(ptBR.captureState.captures_off))
       && laravelTerm.coverage === ptBR.searches.coverage,
-    JSON.stringify({ laravelBoard, suggested, laravelCreated, laravelTrack, laravelTerm }),
+    JSON.stringify({ laravelBoard, prefilled, newTrackHref, suggested, laravelCreated, laravelTrack, laravelTerm, laravelOccurrences }),
   );
 
   const tooShort = await saveTermOnPage("a");
@@ -516,11 +536,20 @@ export async function run(ctx) {
   };
   await feedbackOf(() => page.locator(`[data-testid="term-toggle-${techleadId}"]`).click());
   const resumed = await eventually(termStateIs, [techleadId, "active"]);
+  // techlead nasce na principal (o select de salvar não tem valor padrão, e
+  // listTracks ordena isPrimary desc); mover para a Laravel, não-principal,
+  // prova o movimento de verdade — mover para a própria trilha de origem
+  // devolveria `ok: true` sem mudar nada e o teste passaria sem testar nada.
+  const techleadOrigin = (await trackCards()).find((card) => card.primary);
   await page.locator(`[data-testid="term-move-track-${techleadId}"]`).selectOption(String(laravelTrack?.id));
   const moved = await feedbackOf(() => page.locator(`[data-testid="term-move-${techleadId}"]`).click());
   const movedInto = await eventually(
     ([track, term]) => Boolean(document.querySelector(`[data-testid="track-${track}"] [data-testid="term-${term}"]`)),
     [laravelTrack?.id, techleadId],
+  );
+  const leftOrigin = await eventually(
+    ([track, term]) => !document.querySelector(`[data-testid="track-${track}"] [data-testid="term-${term}"]`),
+    [techleadOrigin?.id, techleadId],
   );
   // Same session, second window: the page created by `browser.newPage()`
   // owns its context and cannot open another page in it.
@@ -535,17 +564,19 @@ export async function run(ctx) {
   const staleRole = await staleNotice.getAttribute("role");
   await staleCtx.close();
   check(
-    "term-search E2E-006 pausar, retomar, mover e excluir um termo; excluir de novo numa página velha não é erro",
+    "term-search E2E-006 pausar, retomar, mover (saindo de verdade da origem) e excluir um termo; excluir de novo numa página velha não é erro",
     pausedResult.role === "status"
       && paused.state
       && paused.badge === 1
       && resumed
+      && techleadOrigin?.id !== laravelTrack?.id
       && moved.role === "status"
       && movedInto
+      && leftOrigin
       && deleted.role === "status"
       && gone
       && staleRole === "status",
-    JSON.stringify({ pausedResult, paused, resumed, moved, movedInto, deleted, gone, staleRole }),
+    JSON.stringify({ pausedResult, paused, resumed, techleadOrigin, moved, movedInto, leftOrigin, deleted, gone, staleRole }),
   );
 
   const seededId = await termIdOf("E2E Seeded Stack");

@@ -2,15 +2,15 @@ import type { Route } from "next";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import type { TermView } from "../../src/contexts/matching/index.ts";
+import { preselectTrack, type TermView } from "../../src/contexts/matching/index.ts";
 import { loadSearchesScreen } from "./searches-data.ts";
 import { termSearchPlatforms, type PlatformCaptureState } from "../../src/contexts/sourcing/index.ts";
 import type { TranslationKey, Translator } from "../../src/core/i18n/index.ts";
 import { requireOwnCandidatePage } from "../auth";
 import { getTranslator } from "../i18n";
 import { MutationFeedbackForm } from "../mutation-feedback";
+import { SaveTermForm } from "./save-term-form";
 import { TransitionLink } from "../transition-link";
 import {
   archiveTrackAction,
@@ -20,7 +20,6 @@ import {
   rerunTermAction,
   restoreTrackAction,
   resumeTermAction,
-  saveTermAction,
   setPrimaryTrackAction,
 } from "./actions";
 import { feedbackMessages, rerunMessages } from "./feedback";
@@ -84,8 +83,14 @@ const REASON_KEYS = {
   stale: "captureReason.stale",
 } as const satisfies Record<string, TranslationKey>;
 
-export default async function SearchesPage() {
+export default async function SearchesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { t, locale } = await getTranslator();
+  const params = await searchParams;
+  const requestedTerm = typeof params.term === "string" ? params.term : undefined;
   // Guard antes de ler qualquer dado. O escopo vem da sessão: termos e trilhas
   // são do candidato e de mais ninguém (ADR-006).
   const { session, candidateId } = await requireOwnCandidatePage("candidate:read");
@@ -97,6 +102,10 @@ export default async function SearchesPage() {
   const fallback = impersonated || !terms.capturesOff ? "waiting_sweep" : "captures_off";
   const messages = feedbackMessages(t);
   const active = tracks.tracks.filter((track) => track.status === "active" && track.target);
+  // A trilha que já cita o termo entre as palavras-chave vem pré-marcada
+  // (US-007 AC-3); sem isso o select sempre abria na principal mesmo quando a
+  // oferta de Vagas mandava o termo para uma trilha diferente.
+  const preselectedTrackId = requestedTerm ? preselectTrack(requestedTerm, active)?.id : undefined;
   const feedback = {
     successMessage: t("feedback.success"),
     errorMessage: t("feedback.error"),
@@ -116,7 +125,23 @@ export default async function SearchesPage() {
 
       {(tracks.pending || terms.capturesOff || terms.dailyRepeatPaused) && (
         <Card className="mb-4 gap-1 p-4" role="status" data-testid="searches-notices">
-          {tracks.pending && <p className="type-body-md" data-testid="searches-pending">{t("searches.pendingPrimary")}</p>}
+          {tracks.pending && (
+            <>
+              <p className="type-body-md" data-testid="searches-pending">{t("searches.pendingPrimary")}</p>
+              <TransitionLink
+                href="/candidate"
+                className={cn(buttonVariants({ variant: "outline", size: "sm" }), TOUCH)}
+                data-testid="searches-pending-candidate"
+              >
+                {t("nav.candidate")}
+              </TransitionLink>
+              {requestedTerm && (
+                <p className="type-body-md" data-testid="searches-pending-term">
+                  {t("searches.pendingTermDiscarded")} <strong data-user-content>{requestedTerm}</strong>
+                </p>
+              )}
+            </>
+          )}
           {terms.capturesOff && <p className="type-body-md" data-testid="searches-captures-off">{t("searches.capturesOff")}</p>}
           {terms.dailyRepeatPaused && (
             <p className="type-body-md" data-testid="searches-daily-paused">{t("searches.dailyRepeatPaused")}</p>
@@ -132,33 +157,14 @@ export default async function SearchesPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <MutationFeedbackForm
-              action={saveTermAction}
-              {...feedback}
+            <SaveTermForm
+              requestedTerm={requestedTerm}
+              active={active}
+              preselectedTrackId={preselectedTrackId}
+              labels={{ term: t("searches.term"), track: t("searches.track"), save: t("searches.save") }}
+              feedback={feedback}
               resultLinkLabel={t("searchFeedback.viewExisting")}
-              keepFields
-              clearOnSuccess
-              className="grid gap-2 sm:flex sm:flex-wrap sm:items-end"
-              data-testid="searches-save-form"
-            >
-              <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1 type-caption-sm text-muted-foreground">
-                {t("searches.term")}
-                <Input name="term" required data-testid="searches-term-input" />
-              </label>
-              <label className="flex flex-col gap-1 type-caption-sm text-muted-foreground">
-                {t("searches.track")}
-                <select name="trackId" className={cn(SELECT, "w-full sm:w-auto")} data-testid="searches-term-track">
-                  {active.map((track) => (
-                    <option key={track.id} value={track.id} data-user-content>
-                      {track.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <Button type="submit" className="h-auto min-h-11 w-full sm:w-auto xl:h-8 xl:min-h-0" data-testid="searches-term-save">
-                {t("searches.save")}
-              </Button>
-            </MutationFeedbackForm>
+            />
           </CardContent>
         </Card>
       )}
@@ -166,7 +172,15 @@ export default async function SearchesPage() {
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="type-display-xs">{t("searches.tracksTitle")}</h2>
         <TransitionLink
-          href="/searches/tracks/new"
+          href={
+            (requestedTerm
+              ? `/searches/tracks/new?term=${encodeURIComponent(requestedTerm)}`
+              : "/searches/tracks/new") as Route
+          }
+          // Com termo, o destino monta a sugestão de trilha no servidor
+          // (ver tracks/new/page.tsx); pré-buscar a cada render gastaria essa
+          // consulta antes de a pessoa decidir clicar.
+          prefetch={!requestedTerm}
           className={cn(buttonVariants({ variant: "outline", size: "sm" }), TOUCH)}
           data-testid="searches-new-track"
         >

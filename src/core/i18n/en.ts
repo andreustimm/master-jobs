@@ -163,6 +163,7 @@ export const en: Dictionary = {
     capturesOff: "Captures are off in this environment: terms are saved and nothing is fetched.",
     dailyRepeatPaused: "The daily repeat is paused: no sweep search in the last 36 hours.",
     pendingPrimary: "You have no own profile yet. Save your CV to create the primary track; until then nothing is scored.",
+    pendingTermDiscarded: "The term below was not saved — complete the profile above and paste it again:",
     saveTitle: "Save a term",
     term: "Term",
     track: "Track",

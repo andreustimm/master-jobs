@@ -152,8 +152,10 @@ describe("layout", () => {
   it("lets the term validator receive values longer than its limit", () => {
     // Localiza a tag pelo `data-testid`, não por `name="term"` ser o primeiro
     // atributo: `<Input required name="term" maxLength={60} data-testid=...`
-    // reintroduziria o corte silencioso e passaria na checagem antiga.
-    const searches = read("app/searches/page.tsx");
+    // reintroduziria o corte silencioso e passaria na checagem antiga. O
+    // campo mora em `save-term-form.tsx` (Client Component extraído para o
+    // `router.replace` da oferta de Vagas), não mais em `page.tsx`.
+    const searches = read("app/searches/save-term-form.tsx");
     const termInput = searches
       .match(/<Input\b[^<]*\/>/g)
       ?.find((tag) => tag.includes('data-testid="searches-term-input"'));
