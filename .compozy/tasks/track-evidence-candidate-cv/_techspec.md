@@ -29,8 +29,16 @@ texto que a candidata salvou.
    seja marcada como tal; `inherited` fica `false` nesse caso.
 3. Skills confirmadas continuam somando suporte mesmo quando o texto do CV não
    contém o termo.
-4. Termo presente só em `growth:` do perfil da pessoa nunca sustenta (regra 7
-   do AGENTS.md), nem quando o texto bruto do CV o menciona.
+4. Termo presente só em `growth:` do perfil da pessoa nunca sustenta pelo CV
+   (regra 7 do AGENTS.md), mesmo quando o texto bruto do CV o menciona — mas
+   um termo já citado em `evidence:` da própria pessoa continua apoio dela
+   mesma, ainda que o mesmo termo apareça também numa frase de `growth:`:
+   `OwnEvidence` separa `ownLines` (nunca bloqueadas por `growth`) de
+   `cvLines` (bloqueadas quando o termo é só de `growth`). `growth` só entra
+   na leitura quando o perfil não é herdado; perfil herdado (evidência igual
+   à do padrão, por derivação) usa `growth: []` — a lacuna é de quem é dono
+   do padrão, não de quem ainda não revisou o próprio perfil (#423, achado da
+   revisão).
 5. Sem CV corrente, o comportamento existente permanece: um perfil próprio
    pode fornecer `evidence`, e evidência copiada do perfil padrão continua sem
    sustentar a trilha (`inherited=true`).

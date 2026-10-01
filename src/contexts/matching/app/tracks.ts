@@ -343,16 +343,21 @@ async function ownEvidence(candidateId: number): Promise<OwnEvidence> {
     : null;
   const ownLines = person ? Object.values(person.profile.evidence).flat() : [];
   const inherited = person ? evidenceInherited(person.profile, defaultProfile, { isOwner: owner }) : false;
-  // O CV só substitui evidência que não é da própria pessoa — herdada do
-  // perfil padrão, ou inexistente por falta de perfil próprio. Evidência
-  // própria (do dono, ou de quem já revisou a sua) soma com o CV em vez de
-  // ser descartada: o dono com CV continua sustentado pelo `profile.yaml`
-  // (#393, achado Major 1 da revisão).
-  const lines = inherited || !person ? (cvLines ?? ownLines) : [...ownLines, ...(cvLines ?? [])];
+  // Evidência herdada do perfil padrão nunca entra como `ownLines`, com ou
+  // sem CV: ela é do padrão, não da pessoa que ainda não revisou a sua — o
+  // CV soma, não ressuscita, a evidência copiada (#393, #423 achado Major da
+  // revisão). Evidência própria (do dono, ou de quem já revisou a sua) soma
+  // com o CV em vez de ser descartada: o dono com CV continua sustentado
+  // pelo `profile.yaml` (#393, achado Major 1 da revisão).
   return {
-    lines,
+    ownLines: inherited ? [] : ownLines,
+    cvLines: cvLines ?? [],
     confirmedSkills: confirmed.map((skill) => skill.name),
-    growth: person ? person.profile.growth : [],
+    // `growth` é lacuna de quem é dono do perfil padrão. Quem herdou o
+    // perfil sem revisá-lo não carrega essa lacuna junto — repassá-la
+    // reintroduz pelo `growth` a mesma contradição que a #393 fechou pelo
+    // CV (#423, achado Major da revisão).
+    growth: person && !inherited ? person.profile.growth : [],
     inherited: inherited && cvLines === null,
   };
 }

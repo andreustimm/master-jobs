@@ -412,4 +412,31 @@ describe("evidence support from the stored profile", () => {
 
     expect(support).toEqual({ supported: ["rust"], gaps: [], inherited: false });
   });
+
+  it("IT-393-03 an inherited profile with a CV citing the default's growth term still gets support (#423 review)", async () => {
+    // Evidência igual ao padrão (perfil herdado, `evidenceInherited` só olha
+    // `.evidence`), e `growth` com um termo que o CV também cita. Quem herda
+    // o perfil sem revisá-lo não deve herdar junto a lacuna assumida de outra
+    // pessoa: o achado da revisão foi `tracks.ts` repassar
+    // `person.profile.growth` mesmo quando o perfil é herdado, reintroduzindo
+    // pelo `growth` a mesma contradição que a #393 fechou pelo CV.
+    const profile = structuredClone(base);
+    profile.growth = [...profile.growth, "Kubernetes appears in delivery work but is not a headline strength."];
+    const [row] = await db.insert(candidate).values({ slug: "renata-herdada", name: "Renata" }).returning({ id: candidate.id });
+    await setMatchingProfile(row!.id, profile);
+    await saveDocument({
+      candidateId: row!.id,
+      kind: "cv",
+      label: "CV",
+      content: "Infraestrutura com Kubernetes em produção.",
+    });
+    const target: TrackTarget = {
+      ...targetOf(profile),
+      keywords: { critical: [{ term: "kubernetes", weight: 8 }], strong: [], stack: [], negative: [] },
+    };
+
+    const support = await trackSupport(row!.id, target);
+
+    expect(support).toEqual({ supported: ["kubernetes"], gaps: [], inherited: false });
+  });
 });
