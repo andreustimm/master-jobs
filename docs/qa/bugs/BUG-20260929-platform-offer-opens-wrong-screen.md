@@ -40,11 +40,25 @@ termo já está salvo".
 ## Fix
 
 - **Root cause:** A oferta usava `/searches/tracks/new?term=...`, desviando o termo para o formulário de nova trilha; a tela Buscas também não lia `searchParams` para preencher o campo.
-- **Fix commit:** `fix/oferta-termo-em-buscas` (PR a abrir).
-- **Regression test:** `tests/searches-offer.test.ts` e `term-search E2E-001/E2E-020` cobrem o destino, o preenchimento, o salvamento na trilha existente e a persistência após refresh.
+- **Fix commit:** `fix/oferta-termo-em-buscas` (PR #422); correção da revisão L1 na mesma branch.
+- **Regression test:** `term-search E2E-001/E2E-020` em `tests/e2e/ui/searches.mjs` cobrem o destino, o preenchimento, o salvamento end-to-end numa trilha criada pela sugestão (não mais na principal), e a persistência após refresh. `tests/searches-offer.test.ts` (grep estático no texto-fonte) foi removido na correção da revisão: passava com o comportamento quebrado e falhava em refatoração neutra — o E2E é quem prova o comportamento.
 
 ## Verification
 
 <!-- filled when status moves to verified -->
 - **Retested:** 2026-09-29, viewport 375×812, pt-BR, cenário `SRCH-save-term-from-jobs`.
 - **Result:** Pass — a oferta abriu `/searches?term=Laravel`, o campo permaneceu intacto, Laravel foi salvo uma vez na trilha principal e a leitura após refresh confirmou o estado.
+
+## Re-found pela revisão (2026-10-01)
+
+- A revisão L1 da PR #422 achou que o caminho explícito para a sugestão de
+  trilha (`/searches/tracks/new?term=...`) tinha ficado sem entrada na
+  interface: o único link para ele, a própria oferta, passou a ir direto para
+  Buscas. Quem quisesse a sugestão (US-002) precisava digitar a URL à mão.
+- **Fix:** o botão "Nova trilha" em Buscas agora carrega `?term=` quando a
+  tela chegou com um termo pendente (da oferta), restaurando o caminho pela
+  interface; o E2E-001 volta a criar a trilha pela sugestão, de ponta a ponta,
+  em vez de só ler o formulário por `page.goto`.
+- **Retested:** `node tests/e2e/run-isolated.mjs --areas searches`, 2026-10-01,
+  80/80 verificações — inclui o novo passo clicando "Nova trilha" e criando a
+  trilha sugerida.

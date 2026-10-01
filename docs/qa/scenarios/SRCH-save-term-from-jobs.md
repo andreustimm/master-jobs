@@ -32,3 +32,10 @@ Reteste de 29/09 (Codex, viewport 375×812, pt-BR): a oferta abriu Buscas com
 `Laravel` preenchido, o termo foi salvo uma vez na trilha existente e a leitura
 após refresh confirmou o estado. A sugestão de trilha continua coberta pelo
 caminho explícito `/searches/tracks/new?term=Laravel`.
+
+Correção da revisão (01/10): o "caminho explícito" acima tinha ficado sem
+nenhum link na interface — só a URL digitada à mão chegava lá. O botão "Nova
+trilha" em Buscas agora carrega o termo pendente para esse caminho, e o E2E
+automatizado volta a criar a trilha pela sugestão de ponta a ponta (não só
+ler o formulário por `page.goto`), em sessão própria do runner isolado:
+`node tests/e2e/run-isolated.mjs --areas searches`, 80/80 verificações.
