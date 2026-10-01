@@ -9,8 +9,20 @@ import {
 } from "../src/core/candidate.ts";
 import type { DB } from "../src/core/db/client.ts";
 import { company, job, jobScore, source } from "../src/core/db/schema.ts";
-import { setMatchingProfile } from "../src/contexts/matching/index.ts";
+import {
+  createTrack,
+  ensureMatchingProfile,
+  ensurePrimaryTrack,
+  personProfile,
+  setMatchingProfile,
+  setPrimaryTrack,
+  updateTrack,
+  type Track,
+  type TrackTarget,
+} from "../src/contexts/matching/index.ts";
+import { seedCatalog } from "../src/contexts/skills/index.ts";
 import { loadProfile } from "../src/core/profile/load.ts";
+import { runScoreQueue } from "../src/core/scoring/queue.ts";
 import { SCORER_VERSION } from "../src/core/scoring/score.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 import { primaryTrackId } from "./support/tracks.ts";
@@ -293,6 +305,135 @@ describe("analyseGap: o vocabulário é do candidato, não o do dono", () => {
     expect((await analyseGap({ candidateId: candidatoId }))?.confirmed.map((t) => t.term)).toEqual([
       TERMO_CONFIRMADO,
     ]);
+  });
+});
+
+/**
+ * Achado Major 1 da revisão L2 da PR #431: a fila deriva um perfil do
+ * currículo para QUALQUER conta, dono incluído, e as `keywords` dele são as
+ * skills que o currículo já tem. Medir a lacuna com esse perfil esvazia
+ * "faltante" por construção. Os termos têm de ser os da trilha principal — o
+ * que a pessoa de fato busca — e as vagas, as pontuadas para essa mesma trilha.
+ */
+describe("analyseGap: os termos são os da trilha principal", () => {
+  // Currículo que a extração reconhece: a derivação só acontece com skills
+  // suficientes no catálogo (`curriculoSustentaPerfil`).
+  const CV_FORTE =
+    "Senior data engineer. Python, Spark, Airflow, Kubernetes and PostgreSQL in production for years.";
+  // Fora do `profile.yaml` e do currículo: só existe na busca editada.
+  const TERMO_EDITADO = "elixir";
+
+  function semPalavras(target: TrackTarget, critical: string): TrackTarget {
+    return {
+      ...target,
+      keywords: { critical: [{ term: critical, weight: 10 }], strong: [], stack: [], negative: [] },
+    };
+  }
+
+  async function editarPrincipal(candidateId: number, alvo: (t: TrackTarget) => TrackTarget): Promise<Track> {
+    const principal = await ensurePrimaryTrack(candidateId);
+    const r = await updateTrack(candidateId, principal!.id, {
+      target: alvo(principal!.target!),
+      expectedUpdatedAt: principal!.updatedAt,
+    });
+    if (!r.ok) throw new Error(r.code);
+    return r.track;
+  }
+
+  const termosDe = (r: Awaited<ReturnType<typeof analyseGap>>) =>
+    [...r!.missing, ...r!.confirmed, ...r!.unused].map((t) => t.term);
+
+  it("(a) dono com perfil derivado do currículo e principal editada: mede com a principal editada", async () => {
+    await seedCatalog();
+    await editarPrincipal(candidatoId, (t) => ({
+      ...t,
+      keywords: { ...t.keywords, critical: [...t.keywords.critical, { term: TERMO_EDITADO, weight: 10 }] },
+    }));
+    await salvarCv(CV_FORTE);
+    expect((await ensureMatchingProfile(candidatoId)).estado).toBe("derivado");
+    expect((await personProfile(candidatoId))?.source).toBe("candidate");
+
+    await criarVagaPontuada({ descricao: `Vaga pede ${TERMO_EDITADO}, ${TERMO_FALTANTE} e kubernetes.`, fit: 80 });
+
+    const relatorio = await analyseGap({ candidateId: candidatoId });
+    expect(relatorio?.jobsAnalysed).toBe(1);
+    expect(relatorio?.missing.map((t) => t.term)).toEqual(expect.arrayContaining([TERMO_EDITADO, TERMO_FALTANTE]));
+    expect(relatorio?.confirmed.map((t) => t.term)).toContain("kubernetes");
+  });
+
+  it("(a) promover outra trilha muda termos e vagas juntos", async () => {
+    const antiga = await ensurePrimaryTrack(candidatoId);
+    await salvarCv("Currículo neutro.");
+    // Pontuada para a principal antiga: depois da troca, não entra.
+    await criarVagaPontuada({ descricao: `Vaga antiga pede ${TERMO_FALTANTE} e cobol.`, fit: 90 });
+    const nova = await createTrack(candidatoId, { name: "Legado", target: semPalavras(antiga!.target!, "cobol") });
+    if (!nova.ok) throw new Error(nova.code);
+    expect(await setPrimaryTrack(candidatoId, nova.track.id)).toMatchObject({ ok: true });
+    await criarVagaPontuada({ descricao: `Vaga nova pede cobol e ${TERMO_FALTANTE}.`, fit: 90 });
+
+    const relatorio = await analyseGap({ candidateId: candidatoId });
+    expect(relatorio?.jobsAnalysed).toBe(1);
+    expect(relatorio?.missing.map((t) => t.term)).toEqual(["cobol"]);
+    expect(termosDe(relatorio)).not.toContain(TERMO_FALTANTE);
+  });
+
+  it("(b) dono que acabou de salvar o currículo, com a fila drenada, continua vendo lacunas reais", async () => {
+    await seedCatalog();
+    // Em produção o dono já é pontuado com o `profile.yaml` antes do currículo.
+    expect((await ensurePrimaryTrack(candidatoId))?.target).toBeTruthy();
+    await salvarCv(CV_FORTE);
+    await runScoreQueue({ worker: "teste" });
+    // Pré-condição do defeito: a fila gravou um perfil derivado do currículo.
+    expect((await personProfile(candidatoId))?.source).toBe("candidate");
+
+    await criarVagaPontuada({ descricao: `Vaga pede ${TERMO_FALTANTE} e ${TERMO_CONFIRMADO}.`, fit: 80 });
+
+    const relatorio = await analyseGap({ candidateId: candidatoId });
+    expect(relatorio?.missing.map((t) => t.term)).toContain(TERMO_FALTANTE);
+    expect(relatorio?.confirmed.map((t) => t.term)).toContain(TERMO_CONFIRMADO);
+  });
+
+  it("(c) convidada com trilha própria só vê os termos dela, nenhum do dono", async () => {
+    await seedCatalog();
+    await ensurePrimaryTrack(candidatoId);
+    await salvarCv(`Operei ${TERMO_CONFIRMADO}.`);
+    const convidada = await ensureCandidate({ slug: "convidada-b", name: "Convidada B" });
+    await saveDocument({ candidateId: convidada, label: "CV", content: CV_FORTE });
+    expect((await ensureMatchingProfile(convidada)).estado).toBe("derivado");
+    const principal = await editarPrincipal(convidada, (t) => semPalavras(t, TERMO_EDITADO));
+
+    const descricao = `Vaga pede ${TERMO_EDITADO}, ${TERMO_FALTANTE}, ${TERMO_CONFIRMADO} e python.`;
+    await criarVagaPontuada({ descricao, fit: 80, paraCandidato: convidada });
+    await criarVagaPontuada({ descricao, fit: 80 });
+
+    const daConvidada = await analyseGap({ candidateId: convidada });
+    expect(daConvidada?.jobsAnalysed).toBe(1);
+    expect(daConvidada?.missing.map((t) => t.term)).toEqual([TERMO_EDITADO]);
+    // Nenhum termo fora da busca dela: nem do `profile.yaml`, nem do currículo.
+    expect(termosDe(daConvidada)).toEqual([TERMO_EDITADO]);
+    expect(principal.target!.keywords.critical.map((k) => k.term)).toEqual([TERMO_EDITADO]);
+
+    const doDono = await analyseGap({ candidateId: candidatoId });
+    expect(doDono?.missing.map((t) => t.term)).toContain(TERMO_FALTANTE);
+    expect(termosDe(doDono)).not.toContain(TERMO_EDITADO);
+  });
+
+  it("(d) convidada sem perfil e sem trilha: relatório vazio, não nulo", async () => {
+    await ensurePrimaryTrack(candidatoId);
+    const convidada = await ensureCandidate({ slug: "convidada-b", name: "Convidada B" });
+    await saveDocument({ candidateId: convidada, label: "CV", content: `Operei ${TERMO_CONFIRMADO}.` });
+
+    const relatorio = await analyseGap({ candidateId: convidada });
+    expect(relatorio).toEqual({
+      cvLength: `Operei ${TERMO_CONFIRMADO}.`.length,
+      jobsAnalysed: 0,
+      minFit: 60,
+      missing: [],
+      confirmed: [],
+      unused: [],
+    });
+    // Ler a análise não inventa uma principal para quem não tem perfil.
+    expect(await ensurePrimaryTrack(convidada)).toBeNull();
   });
 });
 

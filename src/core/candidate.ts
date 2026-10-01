@@ -19,7 +19,7 @@ import { randomBytes } from "node:crypto";
 import { application, authUser, candidate, candidateDocument, job, jobScore } from "./db/schema.ts";
 import { loadProfile } from "./profile/load.ts";
 import { isVisibility, type Visibility } from "../contexts/auth/index.ts";
-import { personProfile, primaryScoreFilter } from "../contexts/matching/index.ts";
+import { scoreTrackFilter, trackScoringProfiles } from "../contexts/matching/index.ts";
 import {
   parsePublicName,
   slugAttempt,
@@ -692,14 +692,19 @@ function mentions(haystack: string, term: string): boolean {
  * would surface the vocabulary of roles the candidate does not want, which is
  * how a CV gets diluted rather than sharpened.
  *
- * The vocabulary compared is the candidate's own matching profile
- * (`personProfile`), never the installation's `profile.yaml` on someone else's
- * behalf — that file is the owner's, and in a multi-candidate installation it
- * has nothing to do with what another candidate is pursuing. Only the owner
- * may fall back to it. A candidate with neither a saved profile nor ownership
- * has no vocabulary to compare (the same rule that stops scoring them): the
- * report comes back with no jobs and no terms, rather than terms borrowed from
- * a stranger.
+ * The vocabulary compared is what the candidate's PRIMARY track searches for —
+ * the effective profile the scorer uses for it (`trackScoringProfiles`), whose
+ * keywords are the track's `target.keywords` — and the postings are the ones
+ * scored for that same track. Terms and postings therefore always come from
+ * the same search: editing or promoting the primary moves both together.
+ *
+ * Never the saved matching profile directly: the queue derives one from the CV
+ * (owner included), and its keywords are the skills the CV already has, so
+ * nothing could ever be "missing". Never `profile.yaml` on someone else's
+ * behalf either: the owner sees it only while it is what their primary
+ * searches. A primary that is pending (no profile of one's own, the same rule
+ * that stops scoring) yields an empty report — no jobs, no terms — rather than
+ * terms borrowed from a stranger.
  */
 export async function analyseGap(
   opts: { candidateId: number; minFit?: number; limit?: number },
@@ -711,8 +716,8 @@ export async function analyseGap(
   if (!doc) return null;
 
   const cv = doc.content.toLowerCase();
-  const person = await personProfile(opts.candidateId);
-  if (!person) {
+  const primary = (await trackScoringProfiles(opts.candidateId))?.find((p) => p.track.isPrimary);
+  if (!primary) {
     return {
       cvLength: doc.content.length,
       jobsAnalysed: 0,
@@ -722,24 +727,29 @@ export async function analyseGap(
       unused: [],
     };
   }
-  const { profile } = person;
+  const { keywords } = primary.profile;
 
   const rows = await db
     .select({ text: sql<string>`lower(coalesce(${job.descriptionText}, '') || ' ' || ${job.title})` })
     .from(job)
     .innerJoin(
       jobScore,
-      and(eq(jobScore.jobId, job.id), eq(jobScore.candidateId, opts.candidateId), primaryScoreFilter()),
+      and(
+        eq(jobScore.jobId, job.id),
+        eq(jobScore.candidateId, opts.candidateId),
+        scoreTrackFilter({
+          candidateId: opts.candidateId,
+          primaryTrackId: primary.track.id,
+          trackIds: [primary.track.id],
+          mode: "single",
+        }),
+      ),
     )
     .where(and(sql`${job.closedAt} is null`, sql`${jobScore.fit} >= ${minFit}`))
     .limit(opts.limit ?? 300);
 
   const corpus = rows.map((r) => r.text);
-  const terms = [
-    ...profile.keywords.critical,
-    ...profile.keywords.strong,
-    ...profile.keywords.stack,
-  ];
+  const terms = [...keywords.critical, ...keywords.strong, ...keywords.stack];
 
   const scored: TermGap[] = terms.map((t) => {
     const inJobs = corpus.filter((text) => mentions(text, t.term)).length;
