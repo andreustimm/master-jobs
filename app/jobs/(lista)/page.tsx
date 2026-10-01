@@ -42,7 +42,6 @@ export default async function Jobs({
   };
   const page = Math.max(1, Number(one("page") ?? 1));
   const pageSize = Math.min(200, Math.max(10, Number(one("size") ?? 50)));
-  const dense = one("dense") === "1";
 
   // O vigia cobre a autenticação e TODAS as leituras — ver `app/page.tsx` para
   // por que ele não envolve a renderização.
@@ -91,6 +90,7 @@ export default async function Jobs({
     }
   });
   const { state, total, offer, broughtBy } = view;
+  const dense = state.dense ?? false;
   const showTrack = view.scope?.mode === "best";
   const trackNames = Object.fromEntries(view.tracks.map((track) => [track.id, track.name]));
 
@@ -154,7 +154,7 @@ export default async function Jobs({
         </Card>
       )}
 
-      <Presets base="/jobs" t={t} />
+      <Presets base="/jobs" dense={dense} t={t} />
       <FilterBar
         base="/jobs"
         state={state}

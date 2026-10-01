@@ -101,6 +101,27 @@
       ]
     },
     {
+      "id": "jobs-density",
+      "modules": [
+        "tests/e2e/ui/jobs-density.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/jobs"
+      ]
+    },
+    {
+      "id": "track-selector",
+      "modules": [
+        "tests/e2e/ui/track-selector.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/jobs",
+        "/searches"
+      ]
+    },
+    {
       "id": "design",
       "modules": [
         "tests/e2e/ui/design.mjs"

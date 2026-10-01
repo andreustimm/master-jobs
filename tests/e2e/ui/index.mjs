@@ -28,6 +28,7 @@ import * as i18n from "./i18n.mjs";
 import * as jobAnalysis from "./job-analysis.mjs";
 import * as jobAvailability from "./job-availability.mjs";
 import * as jobsAccessibility from "./jobs-accessibility.mjs";
+import * as jobsDensity from "./jobs-density.mjs";
 import * as jobsLoading from "./jobs-loading.mjs";
 import * as jobsNew from "./jobs-new.mjs";
 import * as logout from "./logout.mjs";
@@ -47,6 +48,7 @@ import * as roles from "./roles.mjs";
 import * as searchRelevance from "./search-relevance.mjs";
 import * as searches from "./searches.mjs";
 import * as themes from "./themes.mjs";
+import * as trackSelector from "./track-selector.mjs";
 import * as visibility from "./visibility.mjs";
 import * as workMode from "./work-mode.mjs";
 
@@ -60,6 +62,8 @@ export const SMOKE = ["auth"];
 export const AREAS = [
   { id: "auth", run: auth.run, requires: [] },
   { id: "jobs-accessibility", run: jobsAccessibility.run, requires: [] },
+  { id: "jobs-density", run: jobsDensity.run, requires: [] },
+  { id: "track-selector", run: trackSelector.run, requires: [] },
   { id: "design", run: design.run, requires: [] },
   { id: "candidate-rescore", run: candidateRescore.run, requires: [] },
   { id: "mobile", run: mobile.run, requires: [] },
