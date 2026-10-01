@@ -281,10 +281,12 @@ describe("modo aberto e sessão sintetizada", () => {
   it("só abre com o valor exato, e qualquer outra coisa exige autenticação", async () => {
     // Segurança por omissão: a omissão precisa ser a opção segura. Um `!==
     // "closed"` aqui abriria a instalação para qualquer variável mal digitada.
-    expect(isOpenMode({})).toBe(false);
-    expect(isOpenMode({ JHO_AUTH_MODE: "OPEN" })).toBe(false);
-    expect(isOpenMode({ JHO_AUTH_MODE: "open " })).toBe(false);
-    expect(isOpenMode({ JHO_AUTH_MODE: "open" })).toBe(true);
+    // Ambiente declarado local (#378) para isolar o valor do pedido.
+    const local = { JHO_ENV: "local" };
+    expect(isOpenMode({ ...local })).toBe(false);
+    expect(isOpenMode({ ...local, JHO_AUTH_MODE: "OPEN" })).toBe(false);
+    expect(isOpenMode({ ...local, JHO_AUTH_MODE: "open " })).toBe(false);
+    expect(isOpenMode({ ...local, JHO_AUTH_MODE: "open" })).toBe(true);
   });
 
   it("a sessão do modo aberto expira e não é emprestada", async () => {

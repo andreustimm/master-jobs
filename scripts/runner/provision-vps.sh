@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+# Provisionamento idempotente do HOST do runner self-hosted da Fase 2 (issue
+# #367, ADR 0030, docs/engineering/deploy.md — seção "Runner self-hosted
+# opt-in"). Revisão L2 da PR #376 (C2): o job roda dentro de um CONTÊINER
+# descartável (scripts/runner/Dockerfile + entrypoint.sh), nunca diretamente
+# no host — este script só prepara o que o CONTROLLER precisa para subir
+# esses contêineres, e nunca contém nem recebe nenhuma credencial.
+#
+# O QUE ESTE SCRIPT FAZ, cada passo checando o estado antes de agir (rodar
+# duas vezes não duplica nada):
+#   1. pacotes de sistema mínimos (curl, git, jq);
+#   2. Docker Engine no HOST — só para o `docker run --rm` de cada job; o job
+#      em si nunca recebe o socket deste Docker (docker-in-docker isolado
+#      dentro do próprio contêiner, ver entrypoint.sh);
+#   3. sysbox-runc (checksum verificado), o runtime OCI que deixa o
+#      dockerd interno do job funcionar SEM `--privileged` — sem ele, o job
+#      teria o mesmo poder do host (re-revisão L2 de 29/09/2026, C1);
+#   4. a imagem imutável do runner (`docker build`), com Node/pnpm na versão
+#      de package.json, a versão EXATA de Playwright do pnpm-lock.yaml e o
+#      binário do runner com checksum verificado — NENHUMA dessas
+#      dependências é baixada em tempo de job;
+#   5. o modelo de /etc/master-jobs-runner/env (vazio, 600, root:root) — O
+#      DONO preenche o PAT manualmente, nunca este script;
+#   6. o serviço systemd `master-jobs-runner-controller.service`
+#      (scripts/runner/runner-controller.sh), que pede uma configuração JIT
+#      de uso único por job e sobe um contêiner descartável (runtime
+#      sysbox-runc, sem `--privileged`) — nunca um token de registro
+#      reutilizável, nunca o PAT dentro do contêiner do job.
+#
+# Uso: como root, com o repositório clonado na VPS (Ubuntu 24.04 LTS):
+#   sudo bash scripts/runner/provision-vps.sh
+# Este script NUNCA é buscado e executado por `curl | bash`: sem o
+# repositório clonado, não há como montar a imagem a partir do Dockerfile.
+set -euo pipefail
+
+ENV_FILE="/etc/master-jobs-runner/env"
+SERVICE_FILE="/etc/systemd/system/master-jobs-runner-controller.service"
+RUNNER_IMAGE="master-jobs-runner:latest"
+LABELS="self-hosted,linux,master-jobs"
+REPO="andreustimm/master-jobs"
+
+# sysbox-runc (re-revisão L2 de 29/09/2026, C1): runtime OCI que deixa o
+# contêiner do job rodar um dockerd interno de verdade sem `--privileged`.
+# Sem ele, `--privileged` daria ao contêiner do job acesso aos dispositivos
+# de bloco do PRÓPRIO HOST — o job poderia montar `/dev/sda` de dentro de si
+# e ler `/etc/master-jobs-runner/env`, o PAT que controla até a política de
+# aprovação de fork.
+#
+# v0.7.1, não uma anterior (3ª revisão L2 de 29/09/2026): é a primeira versão
+# com suporte a Ubuntu 24.04/kernel 6.8+ sob containerd 2.x — a VPS-alvo desta
+# Fase 2 (Decisão 2 do PRD da issue #367, Ubuntu 24.04 LTS) — e a que carrega
+# os patches de CVE-2025-31133/52565/52881. Nome do arquivo mudou nesta
+# versão: sem o sufixo `-0` das releases anteriores. SHA-256 conferido pelo
+# agente com `gh api repos/nestybox/sysbox/releases/tags/v0.7.1` (campo
+# `digest` do asset `sysbox-ce_0.7.1.linux_amd64.deb`, e repetido na íntegra
+# na seção "Checksums" do corpo da release) em 29/09/2026 — bate com o valor
+# abaixo; o script ainda falha fechado se algum dia divergir do download real.
+SYSBOX_VERSION="0.7.1"
+SYSBOX_DEB_URL="https://github.com/nestybox/sysbox/releases/download/v${SYSBOX_VERSION}/sysbox-ce_${SYSBOX_VERSION}.linux_amd64.deb"
+SYSBOX_SHA256="9d6d5484f980d0a17f86c492c1262015c2afb66280bdb97215b79fde6a0261c5"
+
+log() { echo "[provision-vps] $*"; }
+
+require_root() {
+  if [ "$(id -u)" -ne 0 ]; then
+    echo "Rode como root (sudo)." >&2
+    exit 1
+  fi
+}
+
+require_repo_checkout() {
+  local script_dir
+  script_dir="$(cd "$(dirname "$0")" && pwd)"
+  REPO_ROOT="$(cd "${script_dir}/../.." && pwd)"
+  if [ ! -f "${REPO_ROOT}/scripts/runner/Dockerfile" ] || [ ! -f "${REPO_ROOT}/package.json" ]; then
+    echo "Rode a partir de um checkout do repositório (precisa de package.json e scripts/runner/Dockerfile)." >&2
+    exit 1
+  fi
+}
+
+apt_packages() {
+  log "pacotes de sistema"
+  apt-get update -y
+  apt-get install -y --no-install-recommends ca-certificates curl gnupg git jq
+}
+
+install_docker() {
+  if command -v docker >/dev/null 2>&1; then
+    log "Docker já instalado ($(docker --version)); pulando"
+    return
+  fi
+  log "instalando Docker Engine"
+  install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  chmod a+r /etc/apt/keyrings/docker.asc
+  # shellcheck disable=SC1091
+  . /etc/os-release
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" \
+    > /etc/apt/sources.list.d/docker.list
+  apt-get update -y
+  apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  systemctl enable --now docker
+}
+
+install_sysbox() {
+  # 3ª revisão L2 (minor 4) — compara a versão INSTALADA com SYSBOX_VERSION,
+  # não só "existe o binário": uma VPS provisionada antes desta correção
+  # ficaria presa numa versão sem os patches de CVE e sem suporte a
+  # Ubuntu 24.04/kernel 6.8+, e rodar `install_sysbox` de novo (idempotente
+  # nesse sentido) precisa detectar e corrigir isso sozinho.
+  if command -v sysbox-runc >/dev/null 2>&1; then
+    local installed_version
+    installed_version="$(sysbox-runc --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+    if [ "$installed_version" = "$SYSBOX_VERSION" ]; then
+      log "sysbox-runc ${SYSBOX_VERSION} já instalado; pulando"
+      return
+    fi
+    log "sysbox-runc instalado é ${installed_version:-desconhecido}, esperado ${SYSBOX_VERSION}; reinstalando"
+  fi
+  if [ -z "$SYSBOX_SHA256" ]; then
+    echo "SYSBOX_SHA256 está vazio — confira o valor publicado em" >&2
+    echo "https://github.com/nestybox/sysbox/releases/tag/v${SYSBOX_VERSION} e edite este script antes de continuar." >&2
+    echo "Sem isso, o contêiner do job rodaria com --privileged, que expõe o host — ver o comentário no topo do arquivo." >&2
+    exit 1
+  fi
+  log "instalando sysbox-runc ${SYSBOX_VERSION} (runtime sem --privileged para o dockerd interno do job)"
+  curl -fsSL -o /tmp/sysbox.deb "$SYSBOX_DEB_URL"
+  echo "${SYSBOX_SHA256}  /tmp/sysbox.deb" | sha256sum -c -
+  apt-get install -y /tmp/sysbox.deb
+  rm -f /tmp/sysbox.deb
+  # O pacote registra o runtime em /etc/docker/daemon.json e sobe os próprios
+  # serviços (sysbox-mgr, sysbox-fs); reiniciar o Docker garante que ele
+  # releia o daemon.json com o runtime novo antes do primeiro `docker run
+  # --runtime=sysbox-runc`.
+  systemctl enable --now sysbox 2>/dev/null || true
+  systemctl restart docker
+  if ! docker info 2>/dev/null | grep -q sysbox-runc; then
+    echo "sysbox-runc instalado, mas o Docker não relatou o runtime em 'docker info'. Confira /etc/docker/daemon.json." >&2
+    exit 1
+  fi
+}
+
+build_runner_image() {
+  log "construindo a imagem imutável do runner (${RUNNER_IMAGE})"
+  # `pnpm-lock.yaml`, não `package.json` (re-revisão L2, m3): `package.json`
+  # declara um INTERVALO (`^1.62.1`), e o intervalo pode resolver para uma
+  # versão diferente da que o lockfile fixou para esta árvore de dependências
+  # — a imagem do runner precisa da mesma versão EXATA que os testes usam, não
+  # de "qualquer uma dentro do intervalo". `grep`/`sed`, não `jq` nem `node`:
+  # o host não precisa de nenhum dos dois instalado — o job roda inteiro
+  # dentro do contêiner, que traz o próprio Node (Dockerfile). O formato do
+  # lockfile (pnpm v9) lista cada pacote resolvido como uma chave de dois
+  # espaços de indentação: `  playwright@1.62.1:`.
+  local playwright_version
+  playwright_version="$(grep -m1 -E '^  playwright@[0-9]+\.[0-9]+\.[0-9]+:' "${REPO_ROOT}/pnpm-lock.yaml" \
+    | sed -E 's/^  playwright@([0-9.]+):.*/\1/')"
+  if [ -z "$playwright_version" ]; then
+    echo "Não consegui ler a versão resolvida de playwright em pnpm-lock.yaml." >&2
+    exit 1
+  fi
+  docker build \
+    -f "${REPO_ROOT}/scripts/runner/Dockerfile" \
+    --build-arg "PLAYWRIGHT_VERSION=${playwright_version}" \
+    -t "$RUNNER_IMAGE" \
+    "$REPO_ROOT"
+  log "build concluído. Se RUNNER_SHA256 ainda for o placeholder do Dockerfile, o build FALHOU de propósito — preencha o valor publicado na página de release do runner e rode de novo."
+}
+
+write_env_file_template() {
+  if [ -f "$ENV_FILE" ]; then
+    log "${ENV_FILE} já existe; não sobrescrevendo (pode ter segredo dentro)"
+    return
+  fi
+  log "criando modelo de ${ENV_FILE} — o DONO preenche o valor, nunca este script"
+  mkdir -p "$(dirname "$ENV_FILE")"
+  cat > "$ENV_FILE" <<EOF
+# Preenchido manualmente pelo dono. Nunca commitar este arquivo.
+#
+# GH_RUNNER_REGISTRATION_PAT: PAT FINE-GRAINED com a permissão de repositório
+#   "Administration: write" — é a única permissão que a API de configuração
+#   JIT de runner aceita hoje; não existe uma mais estreita para esta
+#   capacidade específica. NUNCA use um PAT clássico com escopo "repo": esse
+#   escopo dá leitura/escrita de código, issues e mais, muito além do que
+#   registrar um runner precisa. O token nunca é gravado em log nem em banco
+#   (regra 16) — só o nome da variável aparece versionado.
+GH_RUNNER_REGISTRATION_PAT=
+RUNNER_REPO=${REPO}
+RUNNER_LABELS=${LABELS}
+RUNNER_IMAGE=${RUNNER_IMAGE}
+EOF
+  chmod 600 "$ENV_FILE"
+  chown root:root "$ENV_FILE"
+}
+
+install_controller_service() {
+  log "instalando o serviço systemd do controller"
+  install -m 0555 -o root -g root "${REPO_ROOT}/scripts/runner/runner-controller.sh" \
+    /usr/local/sbin/master-jobs-runner-controller.sh
+
+  cat > "$SERVICE_FILE" <<EOF
+[Unit]
+Description=Controller do runner efêmero do GitHub Actions (master-jobs, issue #367)
+After=network-online.target docker.service
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Roda como root: precisa de acesso ao Docker do host para subir e derrubar
+# o contêiner descartável de cada job (nunca --privileged — ver o comentário
+# no topo de runner-controller.sh e scripts/runner/Dockerfile sobre
+# sysbox-runc).
+EnvironmentFile=${ENV_FILE}
+ExecStart=/usr/local/sbin/master-jobs-runner-controller.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+  systemctl enable master-jobs-runner-controller.service
+  log "serviço instalado e habilitado. Inicie com: systemctl start master-jobs-runner-controller"
+  log "ele falha e reinicia até ${ENV_FILE} ter o PAT preenchido (Restart=always tenta de novo)."
+}
+
+main() {
+  require_root
+  require_repo_checkout
+  apt_packages
+  install_docker
+  install_sysbox
+  build_runner_image
+  write_env_file_template
+  install_controller_service
+  log "provisionamento do host concluído. Confira docs/engineering/deploy.md — 'Runner self-hosted opt-in' para os próximos passos do dono, inclusive o pré-requisito de aprovação de workflow de fork."
+}
+
+main "$@"

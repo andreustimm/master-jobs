@@ -17,7 +17,7 @@ export default async function Referrals() {
 
   const [opps, network] = await Promise.all([
     referralOpportunities(candidateId, 40),
-    companiesWithContacts(),
+    companiesWithContacts(candidateId),
   ]);
 
   return (
@@ -27,16 +27,15 @@ export default async function Referrals() {
         {t("copy.referralsLead")}</p>
 
       {opps.length === 0 ? (
-        <Card className="p-6 text-muted-foreground">
+        <Card
+          className="p-6 text-muted-foreground"
+          data-testid={network.size === 0 ? "referrals-empty-network" : "referrals-empty-matches"}
+        >
           {network.size === 0 ? (
-            <>
-              Nenhum contato registrado. Comece com{" "}
-              <code className="font-mono text-foreground">pnpm jho contacts seed</code>, que
-              {t("copy.referralsSeed")}
-            </>
+            t("copy.referralsNoNetwork")
           ) : (
             <>
-              <strong className="text-foreground">{network.size} {t("referrals.companies")}</strong>{" "}
+              <strong className="text-foreground" data-testid="referrals-network-count">{network.size} {t("referrals.companies")}</strong>{" "}
               {t("copy.referralsEmpty")}
             </>
           )}
@@ -68,7 +67,10 @@ export default async function Referrals() {
                 </div>
                 <div className="mt-0.5 text-xs text-muted-foreground">{o.companyName}</div>
                 <div className="mt-1 text-xs text-[var(--color-strong)]">
-                  via {o.contacts.join(", ")}
+                  {t("referrals.via")}{" "}
+                  <span data-user-content data-testid={`referral-contacts-${o.jobId}`}>
+                    {o.contacts.join(", ")}
+                  </span>
                 </div>
               </div>
                 {externalUrl ? (

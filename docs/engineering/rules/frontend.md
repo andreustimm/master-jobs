@@ -74,7 +74,9 @@ Origem: regra 9. Critério de revisão.
 **Obrigação.** Componente usa token semântico: `--background`,
 `--foreground`, `--card`, `--primary` (superfície de botão), `--primary-text`
 (link e texto de acento — contrasta com o FUNDO, não com o botão), `--border`,
-`--muted`, `--hairline`, `--good`, `--warn`, `--bad`, `--accent-2`, e os
+`--muted`, `--hairline`, `--good`, `--warn`, `--warn-text` (texto de aviso —
+mesma lógica do `--primary-text`: `--warn` sozinho não chega em 4.5:1 em todo
+tema, `--warn-text` chega), `--bad`, `--accent-2`, e os
 utilitários do Tailwind mapeados sobre eles. Um `#hex`, `rgb()` ou token bruto
 de paleta (`--color-iris`, `--color-ember`…) num componente é o tema vazando, e
 a partir daí um dos temas começa a ficar errado. Um `--color-*` que é apelido de
@@ -92,9 +94,11 @@ toleradas ficam nomeadas, com motivo, em `STYLE_EXCEPTIONS` de
 
 **Token de UI não serve como cor de texto.** `--accent-2`, `--warn` e afins são
 feitos para preenchimento, onde o mínimo é 3:1 — `--accent-2` no tema graphy
-claro dá 2.53:1 contra o fundo do editor. Texto precisa de 4.5:1. A paleta de
-sintaxe do editor mora em `--cm-*`, verificada nos seis ambientes por
-`pnpm test:e2e` lendo o estilo computado dos spans reais.
+claro dá 2.53:1 contra o fundo do editor, `--warn` em huly/graphy claros dava
+4.06:1 usado como texto ([#383](https://github.com/andreustimm/master-jobs/issues/383)).
+Texto precisa de 4.5:1: use `--primary-text`/`--warn-text`, não o token de
+preenchimento. A paleta de sintaxe do editor mora em `--cm-*`, verificada nos
+seis ambientes por `pnpm test:e2e` lendo o estilo computado dos spans reais.
 
 Origem: regra 10 e invariante "Token de UI". Prova: `tests/design.test.ts`
 (V10-03: hex de qualquer tamanho, `rgb()`/`oklch()`, paleta crua e do

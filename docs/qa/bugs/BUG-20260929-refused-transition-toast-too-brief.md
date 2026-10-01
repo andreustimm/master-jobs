@@ -1,6 +1,6 @@
 # BUG-20260929-refused-transition-toast-too-brief: toast de recusa de transição some rápido demais para ler
 
-- **Status:** open
+- **Status:** verified
 - **Impact (user-side):** Friction
 - **Severity:** Low · **Priority:** P3
 - **Persona Affected:** Andreus em triagem noturna
@@ -39,12 +39,12 @@ sem precisar tentar de novo.
 ## Fix
 
 <!-- filled when status moves to fixed -->
-- **Root cause:**
-- **Fix commit:**
-- **Regression test:**
+- **Root cause:** recusa usava a duração genérica de cinco segundos; agora define sete segundos.
+- **Fix commit:** 5b70e2c (PR #407 draft).
+- **Regression test:** pipeline E2E falhou antes aos seis segundos e passou depois (27/27).
 
 ## Verification
 
 <!-- filled when status moves to verified -->
-- **Retested:**
-- **Result:**
+- **Retested:** 2026-09-29, duas abas, pt-BR, 375px, ambiente descartável.
+- **Result:** Pass. Aviso legível aos seis segundos, nota preservada e salva em transição válida sem redigitar; refresh, novo login e CLI confirmam persistência. Relatório: docs/qa/reports/2026-09-29T141040713402Z-531aac7a-recusa-transicao-legivel.md

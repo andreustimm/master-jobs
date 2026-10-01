@@ -140,7 +140,7 @@ export async function buildDossier(
 
   const extracted = (row.pageExtracted ?? {}) as { requirements?: string[] };
 
-  const byCompany = await companiesWithContacts();
+  const byCompany = await companiesWithContacts(candidateId);
   const contacts = byCompany.get(slugifyCompany(row.companyName) ?? "") ?? [];
 
   let vocabularyGaps: Dossier["vocabularyGaps"] = [];
