@@ -43,6 +43,7 @@ export const ptBR = {
     internal: "Melhorias internas, sem mudança visível.",
   },
   nav: {
+    skipToHeader: "Ir para o cabeçalho",
     menu: "Menu",
     cockpit: "Cockpit",
     jobs: "Vagas",

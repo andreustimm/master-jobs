@@ -25,3 +25,18 @@ Revalidado na Task 04 com menu móvel, foco, live region, viewport de 375×812, 
 Revalidado em iPhone 15 emulado com menu por toque, fechamento no destino e `scrollWidth` igual a `innerWidth` (393 px); árvore acessível, zoom, temas e movimento reduzido passaram no E2E do mesmo commit.
 
 O Full QA repetiu teclado, destino e reload com a persona atribuída e com o Operador em pt-BR. O cenário fica Blocked até confirmar pinch e VoiceOver em iPhone físico: heading anunciado uma vez e foco fora do splash.
+
+
+## Ordem, agrupamento e retorno ao cabeçalho (#398)
+
+Após login por teclado, Tab permite chegar ao cabeçalho diretamente ou pelo
+atalho “Ir para o cabeçalho” após o título do cockpit/lista. Enter no atalho
+foca o cabeçalho; o Tab seguinte segue os controles globais. O atalho fica
+visível somente quando recebe foco.
+
+Em Vagas, a ordem atual e “Agrupar repetidas” expõem `aria-current=true`.
+Alternar e recarregar deve preservar o estado; relevância sem busca anuncia
+aderência. Percorrer em desktop e 375px. Essa verificação de teclado e árvore
+acessível não substitui VoiceOver/pinch em iPhone físico, pendente acima.
+
+Reteste dirigido #398: docs/qa/reports/2026-09-29T145000Z-acessibilidade-398.md. Hardware continua pendente.

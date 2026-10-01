@@ -1,3 +1,4 @@
+import { HeaderShortcut } from "../../header-shortcut";
 import type { Route } from "next";
 import { headers } from "next/headers";
 import { after } from "next/server";
@@ -117,6 +118,7 @@ export default async function Jobs({
           </p>
         )}
       </header>
+      <HeaderShortcut label={t("nav.skipToHeader")} />
 
       {queue && isRecalculating(queue) && (
         <ScoreQueueCard snapshot={queue} hasCv locale={locale} t={t} recalculating />

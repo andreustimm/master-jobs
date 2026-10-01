@@ -90,6 +90,17 @@
       ]
     },
     {
+      "id": "jobs-accessibility",
+      "modules": [
+        "tests/e2e/ui/jobs-accessibility.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/jobs",
+        "/login"
+      ]
+    },
+    {
       "id": "slow-filters",
       "modules": [
         "tests/e2e/ui/slow-filters.mjs"

@@ -27,6 +27,7 @@ import * as filterAutoApply from "./filter-auto-apply.mjs";
 import * as i18n from "./i18n.mjs";
 import * as jobAnalysis from "./job-analysis.mjs";
 import * as jobAvailability from "./job-availability.mjs";
+import * as jobsAccessibility from "./jobs-accessibility.mjs";
 import * as jobsDensity from "./jobs-density.mjs";
 import * as jobsLoading from "./jobs-loading.mjs";
 import * as jobsNew from "./jobs-new.mjs";
@@ -61,6 +62,7 @@ export const SMOKE = ["auth"];
 /** @type {{ id: string, run: (ctx: object) => Promise<void>, requires: string[] | typeof PREFIX }[]} */
 export const AREAS = [
   { id: "auth", run: auth.run, requires: [] },
+  { id: "jobs-accessibility", run: jobsAccessibility.run, requires: [] },
   { id: "slow-filters", run: slowFilters.run, requires: [] },
   { id: "jobs-density", run: jobsDensity.run, requires: [] },
   { id: "track-selector", run: trackSelector.run, requires: [] },

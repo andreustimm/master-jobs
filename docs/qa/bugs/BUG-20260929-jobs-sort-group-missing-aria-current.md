@@ -1,6 +1,6 @@
 # BUG-20260929-jobs-sort-group-missing-aria-current: ordem ativa e "agrupar repetidas" não expõem aria-current
 
-- **Status:** open
+- **Status:** verified
 - **Impact (user-side):** Friction
 - **Severity:** Medium · **Priority:** P2
 - **Persona Affected:** Candidato por teclado
@@ -38,12 +38,18 @@ equivalente).
 ## Fix
 
 <!-- filled when status moves to fixed -->
-- **Root cause:**
-- **Fix commit:**
-- **Regression test:**
+- **Root cause:** `Toggle` e os chips de ordem (`FilterBar`) não anunciavam
+  o estado ativo; faltava `aria-current` no controle selecionado.
+- **Fix commit:** 991cd077
+- **Regression test:** `tests/e2e/ui/jobs-accessibility.mjs` (áreas
+  `jobs-accessibility`, 26/26) cobre fallback de relevância, agrupamento e
+  persistência após reload em 1280px e 375px.
 
 ## Verification
 
 <!-- filled when status moves to verified -->
-- **Retested:**
-- **Result:**
+- **Retested:** docs/qa/reports/2026-09-29T145000Z-acessibilidade-398.md
+- **Result:** interface pública, teclado e recarga confirmaram o recorte
+  corrigido — `aria-current` exposto no controle ativo, inclusive após
+  reload. VoiceOver/pinch em aparelho físico permanece pendente no cenário
+  abrangente NAV-accessible-mobile-transition.

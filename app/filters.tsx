@@ -527,6 +527,7 @@ export function FilterBar({
             href={href(base, state, { ungrouped: state.grouped ? "1" : undefined })}
             active={state.grouped}
             hint={t("hints.grouped")}
+            testId="filters-grouped"
           >
             {t("filters.grouped")}
           </Toggle>
@@ -578,6 +579,7 @@ export function FilterBar({
             href={href(base, state, { sort: undefined })}
             className={chipClass(!state.sort || state.sort === "fit" || (state.sort === "relevance" && !state.query))}
             data-testid="filters-sort-fit"
+            aria-current={!state.sort || state.sort === "fit" || (state.sort === "relevance" && !state.query) ? "true" : undefined}
           >
             {t("filters.byFit")}
           </TransitionLink>
@@ -586,14 +588,15 @@ export function FilterBar({
               href={href(base, state, { sort: "relevance" })}
               className={chipClass(state.sort === "relevance")}
               data-testid="filters-sort-relevance"
+              aria-current={state.sort === "relevance" ? "true" : undefined}
             >
               {t("filters.byRelevance")}
             </TransitionLink>
           )}
-          <TransitionLink href={href(base, state, { sort: "recent" })} className={chipClass(state.sort === "recent")}>
+          <TransitionLink href={href(base, state, { sort: "recent" })} className={chipClass(state.sort === "recent")} data-testid="filters-sort-recent" aria-current={state.sort === "recent" ? "true" : undefined}>
             {t("filters.byRecent")}
           </TransitionLink>
-          <TransitionLink href={href(base, state, { sort: "comp" })} className={chipClass(state.sort === "comp")}>
+          <TransitionLink href={href(base, state, { sort: "comp" })} className={chipClass(state.sort === "comp")} data-testid="filters-sort-comp" aria-current={state.sort === "comp" ? "true" : undefined}>
             {t("filters.byComp")}
           </TransitionLink>
         </Row>
