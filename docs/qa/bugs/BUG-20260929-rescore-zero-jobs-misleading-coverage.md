@@ -48,7 +48,7 @@ lacunas diz "cobre o que as vagas pedem" comparando com 0 vagas.
 
 <!-- filled when status moves to fixed -->
 - **Root cause:** `ScoreQueueCard` não nomeava `data-reason` quando `scored === 0` com `state === "done"`, então "0 vagas" e "atualizado" apareciam juntos sem causa — commit `43ecd2d`. Revisão L1 da PR #418 achou dois resíduos do mesmo defeito: (1) `analyseGap` zera `coverage` de todo termo quando `jobsAnalysed === 0` (por design, ver `tests/cov-core-candidate-gap.test.ts`), mas a tela ainda renderizava os blocos "confirmado"/"raro no mercado" nesse caso — uma afirmação de mercado sem nenhuma vaga para sustentá-la; (2) o motivo `noJobsUpdated` repetia o sintoma ("pode terminar sem mudanças") em vez da causa real (perfil de busca mantido, CV novo não deriva nota nova).
-- **Fix commit:** `43ecd2d` (PR original) e o commit desta correção, referenciado no PR #418.
+- **Fix commit:** `43ecd2d` (PR original); `e7a497da` corrige o resíduo achado na revisão L1 (blocos de confirmado/raro e motivo `noJobsUpdated`).
 - **Regression test:** `tests/score-queue-card.test.ts` (`data-reason=noJobsUpdated`); `tests/candidate-vocabulary-gap.test.ts` (blocos "confirmado"/"raro" ocultos sem vaga analisada, adicionado nesta rodada); `tests/cov-core-candidate-gap.test.ts` (o domínio continua devolvendo `coverage=0` por design). E2E `candidate-rescore` (33/33), incluindo a verificação nova de que o CV do dono volta ao conteúdo original depois do cenário de CV fraco.
 
 ## Verification
