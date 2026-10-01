@@ -19,7 +19,7 @@ import { randomBytes } from "node:crypto";
 import { application, authUser, candidate, candidateDocument, job, jobScore } from "./db/schema.ts";
 import { loadProfile } from "./profile/load.ts";
 import { isVisibility, type Visibility } from "../contexts/auth/index.ts";
-import { primaryScoreFilter } from "../contexts/matching/index.ts";
+import { personProfile, primaryScoreFilter } from "../contexts/matching/index.ts";
 import {
   parsePublicName,
   slugAttempt,
@@ -691,6 +691,15 @@ function mentions(haystack: string, term: string): boolean {
  * Deliberately scoped to high-fit jobs: comparing against the whole corpus
  * would surface the vocabulary of roles the candidate does not want, which is
  * how a CV gets diluted rather than sharpened.
+ *
+ * The vocabulary compared is the candidate's own matching profile
+ * (`personProfile`), never the installation's `profile.yaml` on someone else's
+ * behalf — that file is the owner's, and in a multi-candidate installation it
+ * has nothing to do with what another candidate is pursuing. Only the owner
+ * may fall back to it. A candidate with neither a saved profile nor ownership
+ * has no vocabulary to compare (the same rule that stops scoring them): the
+ * report comes back with no jobs and no terms, rather than terms borrowed from
+ * a stranger.
  */
 export async function analyseGap(
   opts: { candidateId: number; minFit?: number; limit?: number },
@@ -702,7 +711,18 @@ export async function analyseGap(
   if (!doc) return null;
 
   const cv = doc.content.toLowerCase();
-  const profile = await loadProfile(true);
+  const person = await personProfile(opts.candidateId);
+  if (!person) {
+    return {
+      cvLength: doc.content.length,
+      jobsAnalysed: 0,
+      minFit,
+      missing: [],
+      confirmed: [],
+      unused: [],
+    };
+  }
+  const { profile } = person;
 
   const rows = await db
     .select({ text: sql<string>`lower(coalesce(${job.descriptionText}, '') || ' ' || ${job.title})` })

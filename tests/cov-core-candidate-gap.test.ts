@@ -9,6 +9,8 @@ import {
 } from "../src/core/candidate.ts";
 import type { DB } from "../src/core/db/client.ts";
 import { company, job, jobScore, source } from "../src/core/db/schema.ts";
+import { setMatchingProfile } from "../src/contexts/matching/index.ts";
+import { loadProfile } from "../src/core/profile/load.ts";
 import { SCORER_VERSION } from "../src/core/scoring/score.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 import { primaryTrackId } from "./support/tracks.ts";
@@ -223,6 +225,74 @@ describe("analyseGap: o mercado contra o currículo", () => {
       await criarVagaPontuada({ descricao: `Vaga ${i} com ${TERMO_FALTANTE}.`, fit: 80 });
     }
     expect((await analyseGap({ candidateId: candidatoId, limit: 2 }))?.jobsAnalysed).toBe(2);
+  });
+});
+
+/**
+ * O vocabulário comparado é o do PRÓPRIO candidato (#427). `profile.yaml` é o
+ * perfil do dono: usá-lo para outra conta mostraria "faltante" e "confirmado"
+ * medidos com palavras que a pessoa nunca escolheu buscar.
+ */
+describe("analyseGap: o vocabulário é do candidato, não o do dono", () => {
+  // Fora do `profile.yaml` do dono: se aparecer na análise dele, vazou.
+  const TERMO_DO_B = "elixir";
+
+  async function perfilDoB(termo: string): Promise<number> {
+    const outro = await ensureCandidate({ slug: "candidato-b", name: "Candidato B" });
+    const base = await loadProfile(true);
+    await setMatchingProfile(outro, {
+      ...base,
+      keywords: { critical: [], strong: [{ term: termo, weight: 8 }], stack: [], negative: [] },
+    });
+    return outro;
+  }
+
+  it("a conta B recebe só os termos do próprio perfil, e o dono continua com os dele", async () => {
+    const outro = await perfilDoB(TERMO_DO_B);
+    await salvarCv(`Operei ${TERMO_CONFIRMADO}.`);
+    await saveDocument({ candidateId: outro, label: "CV", content: "Escrevi sistemas em outra linguagem." });
+    // A mesma vaga cita o termo do dono e o do B. Duas linhas, uma por conta.
+    const descricao = `Vaga pede ${TERMO_CONFIRMADO}, ${TERMO_FALTANTE} e ${TERMO_DO_B}.`;
+    await criarVagaPontuada({ descricao, fit: 80 });
+    await criarVagaPontuada({ descricao, fit: 80, paraCandidato: outro });
+
+    const doB = await analyseGap({ candidateId: outro });
+    expect(doB?.jobsAnalysed).toBe(1);
+    const termosDoB = [...doB!.missing, ...doB!.confirmed, ...doB!.unused].map((t) => t.term);
+    expect(doB?.missing.map((t) => t.term)).toEqual([TERMO_DO_B]);
+    expect(termosDoB).not.toContain(TERMO_CONFIRMADO);
+    expect(termosDoB).not.toContain(TERMO_FALTANTE);
+
+    const doDono = await analyseGap({ candidateId: candidatoId });
+    const termosDoDono = [...doDono!.missing, ...doDono!.confirmed, ...doDono!.unused].map((t) => t.term);
+    expect(doDono?.confirmed.map((t) => t.term)).toEqual([TERMO_CONFIRMADO]);
+    expect(doDono?.missing.map((t) => t.term)).toEqual([TERMO_FALTANTE]);
+    expect(termosDoDono).not.toContain(TERMO_DO_B);
+  });
+
+  it("sem perfil próprio, quem não é o dono não recebe os termos do dono", async () => {
+    // Sem perfil não há pontuação (`scoreCandidate`); uma nota antiga que
+    // sobrou não pode reviver o vocabulário de outra pessoa.
+    const outro = await ensureCandidate({ slug: "candidato-b", name: "Candidato B" });
+    await saveDocument({ candidateId: outro, label: "CV", content: `Operei ${TERMO_CONFIRMADO}.` });
+    await criarVagaPontuada({
+      descricao: `Vaga pede ${TERMO_CONFIRMADO} e ${TERMO_FALTANTE}.`,
+      fit: 90,
+      paraCandidato: outro,
+    });
+
+    const relatorio = await analyseGap({ candidateId: outro });
+    expect(relatorio).toMatchObject({ jobsAnalysed: 0, missing: [], confirmed: [], unused: [] });
+    // O currículo existe: a resposta é "nada a comparar", não "sem currículo".
+    expect(relatorio?.cvLength).toBeGreaterThan(0);
+  });
+
+  it("o dono sem perfil gravado usa o profile.yaml, que é dele", async () => {
+    await salvarCv(`Operei ${TERMO_CONFIRMADO}.`);
+    await criarVagaPontuada({ descricao: `Vaga pede ${TERMO_CONFIRMADO}.`, fit: 80 });
+    expect((await analyseGap({ candidateId: candidatoId }))?.confirmed.map((t) => t.term)).toEqual([
+      TERMO_CONFIRMADO,
+    ]);
   });
 });
 
