@@ -34,6 +34,13 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.8] - 2026-10-01T18:11:47.000Z
+
+### Fixed
+
+- Pasting a long term in Searches now shows the length warning and does not save a truncated version.
+- When a term is refused, the typed text stays in the field to fix — it used to be lost and had to be pasted again.
+
 ## [1.32.7] - 2026-10-01T17:39:17.000Z
 
 ### Fixed

@@ -9,6 +9,13 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.32.8] - 2026-10-01
+
+### Corrigido
+
+- O campo de termo em `/searches` deixa o domínio receber entradas acima de 60 caracteres, para que a validação `term_too_long` recuse o valor completo sem criar um termo truncado. A regressão cobre o contrato do campo e a jornada E2E após recarregar.
+- A recusa de termo (longo, curto, duplicado) não apaga mais o que a pessoa digitou — só o envio aceito limpa o campo (`MutationFeedbackForm` ganha `clearOnSuccess`, usado junto de `keepFields` em `/searches`).
+
 ## [1.32.7] - 2026-10-01
 
 ### Corrigido
