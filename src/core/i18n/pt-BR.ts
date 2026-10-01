@@ -1287,8 +1287,6 @@ export const ptBR = {
     pdfReviewFirst: "revise antes de confiar",
     pdfCaveat:
       "Extração de PDF erra com layout em colunas, e currículo digitalizado não tem texto nenhum para ler.",
-    pdfUploadTodo:
-      "Upload de PDF ainda não existe. Quando existir, o texto extraído entra aqui e o arquivo original fica recuperável — o schema já prevê ({fields}).",
     vocabularyWorking: "Vocabulário que já está funcionando",
     skillsLead:
       "Detectadas automaticamente no seu currículo, contra um catálogo global de 100 tecnologias e práticas.",

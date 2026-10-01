@@ -1263,8 +1263,6 @@ export const en: Dictionary = {
     pdfReviewFirst: "review before trusting it",
     pdfCaveat:
       "PDF extraction gets column layouts wrong, and a scanned CV has no text to read at all.",
-    pdfUploadTodo:
-      "PDF upload does not exist yet. When it does, the extracted text lands here and the original file stays recoverable — the schema already allows for it ({fields}).",
     vocabularyWorking: "Vocabulary that is already working",
     skillsLead:
       "Detected automatically in your CV, against a global catalogue of 100 technologies and practices.",
