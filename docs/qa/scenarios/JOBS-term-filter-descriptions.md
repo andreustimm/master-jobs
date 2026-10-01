@@ -10,7 +10,7 @@ qa_status: untested
 bug_ids: BUG-20260929-search-term-false-negative-laravel
 fix_status: fixed
 retest_status: pending
-fix_commits: 7f69ab7; <FIXER_SHA>
+fix_commits: 7f69ab7; 04e3560
 evidence: evidence/2026-09-22-rc-1.22.0/log.txt
 last_report: docs/qa/reports/2026-10-01T162051Z-fixer-busca-vazia-com-filtros.md
 overlaps: JOBS-work-mode-continuity

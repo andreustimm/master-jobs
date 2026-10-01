@@ -5,7 +5,7 @@
   de "termo ausente no acervo" — o fix anterior (7f69ab7) trocou uma frase
   única por outra frase única, sem a distinção que a issue pede.
 - **Cadence tier:** targeted
-- **Build:** `<FIXER_SHA>` · **Environment:** `pnpm vitest run` (testes
+- **Build:** `04e3560` · **Environment:** `pnpm vitest run` (testes
   afetados) e `pnpm test:e2e --areas searches` (suíte completa), runner
   isolado local, PostgreSQL descartável, autenticação real. Sem sessão
   manual nesta rodada.
@@ -24,7 +24,7 @@
 
 | # | Charter | Journey / Scenario | Persona | Tour | Status | Issue | Fix commit |
 |---|---|---|---|---|---|---|---|
-| 1 | — (automatizado, sem charter manual) | J-save-term-search / JOBS-term-filter-descriptions | Andreus em triagem | — | Fixed (parcial) | BUG-20260929-search-term-false-negative-laravel | `<FIXER_SHA>` |
+| 1 | — (automatizado, sem charter manual) | J-save-term-search / JOBS-term-filter-descriptions | Andreus em triagem | — | Fixed (parcial) | BUG-20260929-search-term-false-negative-laravel | `04e3560` |
 
 Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human verify) | Blocked (human decision)`
 
@@ -67,7 +67,7 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
   filtro nenhum escolhido — a distinção que a #402 pede continuava ausente.
 - **Root cause:** a escolha da mensagem olhava só `state.query`, nunca se
   havia recorte além do termo.
-- **Fix:** `<FIXER_SHA>` adiciona `hasFilterBeyondTerm` e as chaves
+- **Fix:** `04e3560` adiciona `hasFilterBeyondTerm` e as chaves
   `jobs.emptyTermFiltered`/`jobs.emptyTermAbsent`.
 - **Regression test:** `tests/filter-state.test.ts`, `tests/jobs-empty-term.test.ts`,
   `tests/e2e/ui/searches.mjs` (E2E-020 e o par PT/EN do recorte).
