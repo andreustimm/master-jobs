@@ -60,6 +60,9 @@ export function SaveTermForm({
     >
       <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1 type-caption-sm text-muted-foreground">
         {labels.term}
+        {/* Sem `maxLength`: o limite de 60 caracteres é do domínio
+            (`validateTerm`), não do navegador — ver #390/PR #411, que também
+            preserva o texto na recusa. */}
         <Input name="term" required defaultValue={requestedTerm} data-testid="searches-term-input" />
       </label>
       <label className="flex flex-col gap-1 type-caption-sm text-muted-foreground">
