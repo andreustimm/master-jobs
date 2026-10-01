@@ -8,11 +8,11 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { LocaleId, Translator } from "../src/core/i18n/index.ts";
 import { renderScoreMessage } from "../src/core/i18n/index.ts";
-import { scoreMessages } from "../src/contexts/matching/index.ts";
+import { hasNamedEmployer, scoreMessages } from "../src/contexts/matching/index.ts";
 import type { listBoard } from "../src/contexts/matching/index.ts";
 import { isPublicJobUrl } from "../src/core/job-url.ts";
 import { explainMatch, type MatchField } from "../src/core/search.ts";
-import { formatMoney, money, parseCurrency, parsePeriod } from "../src/core/money.ts";
+import { formatMoney, money, parseCurrency, parsePeriod, type MoneyLabels } from "../src/core/money.ts";
 import { ACTION_BUTTON, ACTION_GROUP, Fit, ScoreBar, StatusBadge } from "./ui";
 import { jobOrigin, ORIGIN_LABEL } from "../src/core/job-origin.ts";
 import { TriageButton } from "./triage-button";
@@ -27,12 +27,32 @@ export const MATCH_FIELD_LABEL = {
   description: "jobs.matchDescription",
 } as const satisfies Record<MatchField, string>;
 
-function pay(r: Row): string | null {
+/**
+ * Period words for `formatMoney`, read from the dictionary (regra 9) instead
+ * of living inside the core money module — `src/core/money.ts` stays pure
+ * and only this UI layer knows which language is on screen.
+ */
+function moneyLabels(t: Translator["t"]): MoneyLabels {
+  return {
+    period: {
+      month: t("jobs.moneyPeriodMonth"),
+      week: t("jobs.moneyPeriodWeek"),
+      day: t("jobs.moneyPeriodDay"),
+      hour: t("jobs.moneyPeriodHour"),
+    },
+    project: {
+      withoutDuration: t("jobs.moneyProjectTotal"),
+      withDuration: (months) => t("jobs.moneyProjectTotalWithDuration", { count: months }),
+    },
+  };
+}
+
+function pay(r: Row, locale: LocaleId, t: Translator["t"]): string | null {
   const amount = r.compMax ?? r.compMin;
   const currency = parseCurrency(r.compCurrency);
   const period = parsePeriod(r.compPeriod);
   if (!amount || amount <= 0 || !currency || !period) return null;
-  return formatMoney(money(amount, currency, period), "pt-BR");
+  return formatMoney(money(amount, currency, period), locale, moneyLabels(t));
 }
 
 /** How the Jobs screen asked rows to be read: which track, which pay unit. */
@@ -77,14 +97,13 @@ export function JobList({
         const blockers = scoreMessages(r.blockers);
         // Mais de uma publicação no grupo: a linha fala pelo conjunto.
         const agrupada = r.repeats.length > 1;
-        const salary = pay(r);
+        const salary = pay(r, locale, t);
         const externalUrl = isPublicJobUrl(r.url);
         const externalApplyUrl = isPublicJobUrl(r.applyUrl) ? r.applyUrl : null;
         // Jobgether and other intermediaries publish under their own name, so
         // the employer is unknowable — worth saying, since you cannot research
         // the company or use your network on one of these.
-        const anonymous =
-          r.sourceLabel && r.companyName.toLowerCase() === r.sourceLabel.toLowerCase();
+        const anonymous = !hasNamedEmployer(r.sourceId, r.companyName, r.sourceLabel);
 
         return (
           <article
@@ -111,6 +130,7 @@ export function JobList({
                   // o de menor id, que é escolha de ordenação, não de produto.
                   href={agrupada ? `/jobs/${r.jobId}/paises` : `/jobs/${r.jobId}`}
                   data-testid={`job-link-${r.jobId}`}
+                  data-user-content="true"
                   className="type-body-md font-semibold hover:underline"
                 >
                   {r.title}
@@ -154,7 +174,11 @@ export function JobList({
                 {context.pay && r.payState === "amount" && r.payAmount !== null && (
                   <span className="font-mono" data-testid={`job-pay-${r.jobId}`}>
                     {t("jobs.payConverted", {
-                      amount: formatMoney(money(r.payAmount, context.pay.currency, context.pay.period), locale),
+                      amount: formatMoney(
+                        money(r.payAmount, context.pay.currency, context.pay.period),
+                        locale,
+                        moneyLabels(t),
+                      ),
                     })}
                   </span>
                 )}

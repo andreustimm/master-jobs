@@ -40,3 +40,7 @@ controles alinhados em 375×812, usou a fileira de 65px em 812×375 e não criou
 overflow horizontal. A suíte E2E completa confirmou também tablet e desktop.
 
 **Reset 2026-09-22 (#220):** o contrato mudou para navegações na mesma tela, que não abrem mais o splash. Revalidar o inventário com a expectativa nova.
+
+Reteste dirigido #395: idioma do rodapé/modal e marca de títulos após recarga
+registrados em docs/qa/reports/2026-09-29T143300Z-d433dcf-vagas-idioma-395.md.
+Não substitui o percurso completo deste cenário.

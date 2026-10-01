@@ -34,6 +34,18 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.5] - 2026-10-01T15:18:50.000Z
+
+### Fixed
+
+- Direct career sources show named employers and group their postings. Compact density survives sorting, filtering and pagination.
+
+## [1.32.4] - 2026-10-01T14:58:19.000Z
+
+### Fixed
+
+- The Jobs track selector distinguishes a track named “Principal” from the current primary track.
+
 ## [1.32.3] - 2026-10-01T01:39:55.000Z
 
 ### Fixed
