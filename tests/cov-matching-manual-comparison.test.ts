@@ -232,6 +232,21 @@ describe("createManualComparison: upload de arquivo", () => {
 });
 
 describe("createManualComparison: caminho feliz", () => {
+  it("mantém o cadastro quando o candidato ainda não tem perfil para pontuar", async () => {
+    const candidatoSemPerfil = await ensureCandidate({
+      slug: "candidato-sem-perfil",
+      name: "Candidato sem perfil próprio",
+    });
+
+    const primeira = await createManualComparison(candidatoSemPerfil, entrada());
+    const segunda = await createManualComparison(candidatoSemPerfil, entrada());
+
+    expect(primeira.jobId).toBeTypeOf("number");
+    expect(segunda.jobId).toBe(primeira.jobId);
+    expect(await db.select().from(job)).toHaveLength(1);
+    expect((await getComparisonDetail(candidatoSemPerfil, primeira.jobId))?.score).toBeNull();
+  });
+
   it("observa a vaga e grava o score canônico do candidato", async () => {
     const { jobId } = await createManualComparison(candidatoId, entrada());
 
