@@ -9,6 +9,12 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.32.4] - 2026-10-01
+
+### Corrigido
+
+- Preserva a capitalização do nome das trilhas no seletor de Vagas, distinguindo o nome “Principal” do rótulo da trilha principal.
+
 ## [1.32.3] - 2026-10-01
 
 ### Corrigido

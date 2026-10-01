@@ -60,3 +60,16 @@ aparece como texto da própria publicação, não como país agrupado.
 o da fonte colocaria empresas diferentes na mesma linha.
 
 Evidência: `docs/qa/evidence/2026-09-21-quadro-com-fixtures-de-agrupamento.txt`.
+
+
+## Fonte direta e densidade (#397)
+
+O contrato `careers` identifica a empresa pelo rótulo configurado. Nessa
+fonte, nome igual ao rótulo continua nomeado: conferir uma linha consolidada
+com Brasil/França e presença no filtro de empresa identificada. O agregador
+anônimo continua separado e com o aviso de empregador oculto.
+
+Ligar Compacta, ordenar, aplicar modalidade e consulta, paginar e escolher
+preset. `dense=1` e o estado Compacta devem sobreviver a cada recarga.
+
+Reteste dirigido: docs/qa/reports/2026-09-29T150058Z-empregador-densidade-397.md.
