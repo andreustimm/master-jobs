@@ -34,6 +34,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.10] - 2026-10-01T20:27:30.000Z
+
+### Corrigido
+
+- A explicação de salário no score de uma vaga agora mostra o período em português ("/mês", "/hora") quando a tela está em português, em vez de "/month".
+
 ## [1.32.9] - 2026-10-01T18:45:17.000Z
 
 ### Corrigido

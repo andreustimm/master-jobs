@@ -34,6 +34,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.10] - 2026-10-01T20:27:30.000Z
+
+### Fixed
+
+- The pay line in a job's score explanation now follows the interface language: fixed-price projects read "total (2 months)" in English instead of "total (2 meses)".
+
 ## [1.32.9] - 2026-10-01T18:45:17.000Z
 
 ### Fixed

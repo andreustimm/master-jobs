@@ -9,6 +9,12 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.32.10] - 2026-10-01
+
+### Corrigido
+
+- O rótulo de remuneração das mensagens de score (`comp.ideal`, `comp.target`, `comp.range`, `comp.below`, `comp.noBasis`, `comp.projectNoDuration`) passa a ter o período no idioma de quem lê. O scorer continua gravando o rótulo pronto e sem idioma (`$5,000/month`, `total (2 meses)`); `renderScoreMessage` troca o sufixo pelas chaves `jobs.moneyPeriod*` e `jobs.moneyProject*` na hora de exibir. A saída gravada não muda: sem aumento de `SCORER_VERSION` e sem repontuação (#426).
+
 ## [1.32.9] - 2026-10-01
 
 ### Corrigido
