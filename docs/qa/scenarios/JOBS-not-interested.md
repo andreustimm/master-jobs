@@ -20,6 +20,7 @@ O caso que motivou: abrir a vaga na origem, ler "United States only" e voltar.
 O clique arquiva pela mesma regra do seletor de estágio e grava o evento no
 histórico. Arquivada depois de aplicar não oferece "restaurar". Recrutador não
 vê o botão. Na lista ele fica logo abaixo do aviso de bloqueio, fora do grupo
-vaga/site/aplicar, e mede ao menos 40px de altura no celular.
+vaga/site/aplicar, e mede ao menos 44px de altura no celular (piso subiu de
+40 para 44px em #403, alinhado ao DESIGN.md).
 
 Full 1.22.0 (2026-09-22): Não me interessa no detalhe (375 px) tira a vaga de Vagas e do cockpit, ela aparece em Arquivadas após reload, e restaurar a devolve.
