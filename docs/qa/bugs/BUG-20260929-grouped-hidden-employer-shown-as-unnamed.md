@@ -39,15 +39,15 @@ tratados como não nomeados.
 ## Fix
 
 <!-- filled when status moves to fixed -->
-- **Root cause:**
-- **Fix commit:**
-- **Regression test:**
+- **Root cause:** o agrupamento, o filtro "Named employer" e as facetas (`src/core/db/repo.ts`) comparavam só `companyName` com `source.label`: igual era "sem nome". Fontes diretas (`careers:*`) preenchem o rótulo da fonte com o próprio nome da empresa por contrato (`DIRECT_EMPLOYER_SOURCE_KIND`), então a vaga de empregador que anuncia ocultando o nome caía na mesma comparação que um agregador anônimo de fato — a heurística não sabia distinguir rótulo = nome por contrato de rótulo = nome por anonimização.
+- **Fix commit:** 5432c3fe
+- **Regression test:** `tests/employer.test.ts` (`hasNamedEmployer` distingue fonte `careers:*` de agregador anônimo mesmo com nome igual ao rótulo); `tests/jobs-board.test.ts` (agrupamento conta a vaga de fonte direta como nomeada — 3 linhas, não 4).
 
 ## Verification
 
 <!-- filled when status moves to verified -->
-- **Retested:**
-- **Result:**
+- **Retested:** 29/09/2026, Chromium, standalone com PostgreSQL isolado, jornada pública com agent-browser (desktop e 375×812).
+- **Result:** pass — Vercel/Anthropic (fonte `careers:*`) aparecem nomeadas e agrupadas na lista, no agrupamento e no filtro "Named employer"; o agregador anônimo (rótulo igual ao nome por ocultação, não por contrato) continua separado. Relatório `docs/qa/reports/2026-09-29T150058Z-empregador-densidade-397.md`.
 
 ## Reteste #397
 

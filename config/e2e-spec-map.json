@@ -90,6 +90,16 @@
       ]
     },
     {
+      "id": "jobs-density",
+      "modules": [
+        "tests/e2e/ui/jobs-density.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/jobs"
+      ]
+    },
+    {
       "id": "design",
       "modules": [
         "tests/e2e/ui/design.mjs"
