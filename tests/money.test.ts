@@ -161,8 +161,8 @@ describe("formatMoney", () => {
     expect(formatMoney(money(30_000, "USD", "project", 2), "pt-BR", moneyLabels("pt-BR"))).toContain("2 meses");
   });
 
-  it("without labels, falls back to an untranslated (English) suffix — the scorer's blocker messages still call formatMoney this way (issue #426)", () => {
-    expect(formatMoney(money(30_000, "USD", "project", 2))).toContain("2 months");
+  it("without labels, keeps the pre-existing Portuguese suffix unchanged — the scorer's blocker messages still call formatMoney this way (issue #426), and tests/scorer-version.test.ts hashes that exact text", () => {
+    expect(formatMoney(money(30_000, "USD", "project", 2))).toContain("2 meses");
   });
 
   it("degrades gracefully for an unknown currency code", () => {

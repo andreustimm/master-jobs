@@ -204,8 +204,12 @@ export type MoneyLabels = { period: MoneyPeriodLabels; project: MoneyProjectLabe
  *
  * `labels` is optional only because the scorer's blocker messages
  * (`src/core/scoring/score.ts`) call this without the viewer's locale yet
- * (issue #426); the fallback below keeps those messages in English rather
- * than guessing a translation without a dictionary to read from.
+ * (issue #426). The fallback below is byte-for-byte the behaviour this
+ * module had before labels existed — including the Portuguese "meses" — on
+ * purpose: `tests/scorer-version.test.ts` hashes the scorer's output text,
+ * and changing this fallback would move that hash with no change to any
+ * score or verdict, forcing an unrelated `SCORER_VERSION` bump. Issue #426
+ * is where that text actually gets fixed, once the scorer can pass labels.
  */
 export function formatMoney(m: Money, locale = "en-US", labels?: MoneyLabels): string {
   const periodLabel = (period: Exclude<Period, "year" | "project">): string =>
@@ -215,7 +219,7 @@ export function formatMoney(m: Money, locale = "en-US", labels?: MoneyLabels): s
       ? ""
       : m.period === "project"
         ? m.durationMonths
-          ? ` ${labels ? labels.project.withDuration(m.durationMonths) : `total (${m.durationMonths} months)`}`
+          ? ` ${labels ? labels.project.withDuration(m.durationMonths) : `total (${m.durationMonths} meses)`}`
           : ` ${labels ? labels.project.withoutDuration : "total"}`
         : `/${periodLabel(m.period)}`;
   try {
