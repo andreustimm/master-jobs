@@ -34,6 +34,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.3] - 2026-10-01T01:39:55.000Z
+
+### Corrigido
+
+- Corrigido o retorno de links de login inválidos para manter o endereço local e o idioma escolhido.
+
 ## [1.32.2] - 2026-09-30T08:16:50.000Z
 
 ### Corrigido

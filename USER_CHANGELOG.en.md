@@ -34,6 +34,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.3] - 2026-10-01T01:39:55.000Z
+
+### Fixed
+
+- Invalid login links now return to the canonical local address while preserving the selected language.
+
 ## [1.32.2] - 2026-09-30T08:16:50.000Z
 
 ### Fixed

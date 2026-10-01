@@ -9,6 +9,12 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.32.3] - 2026-10-01
+
+### Corrigido
+
+- O callback de login usa `Location` relativo nos redirects 303, preservando a origem da requisição e evitando a normalização de loopback pelo Next.js.
+
 ## [1.32.2] - 2026-09-30
 
 ### Corrigido
