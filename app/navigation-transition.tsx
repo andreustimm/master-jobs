@@ -170,7 +170,7 @@ export function NavigationTransition({ labels }: { labels: TransitionLabels }) {
           dentro de uma região que já acompanha, e pode ignorar uma que já
           nasce com o texto. */}
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="navigation-soft-status">
-        {soft && snapshot.phase === "loading" ? labels.updating : ""}
+        {soft && snapshot.phase === "prolonged" ? labels.prolonged : soft && snapshot.phase === "loading" ? labels.updating : ""}
       </p>
       {active && !soft ? (
         <div
