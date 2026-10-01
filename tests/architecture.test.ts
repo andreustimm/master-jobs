@@ -477,7 +477,6 @@ describe("V10-05 leque de consultas: toda composição de tela está no inventá
     "app/cockpit-data.ts": { measuredBy: "loadCockpit" },
     "app/jobs/jobs-data.ts": { measuredBy: "loadJobsView" },
     "app/candidate/page.tsx": { declared: "pessoa e fila de pontuação: uma consulta cada, o resto em série" },
-    "app/searches/tracks/[id]/page.tsx": { declared: "suporte da trilha e fila de pontuação, depois de a trilha ser achada" },
     "app/referrals/page.tsx": { declared: "oportunidades de indicação e empresas da rede, uma consulta cada" },
     "app/recruiter/[candidateId]/page.tsx": { declared: "contagem e página do funil de um candidato, uma consulta cada" },
     "app/compare/page.tsx": { declared: "tradutor com sessão, depois currículo e detalhe da comparação" },
@@ -553,6 +552,12 @@ describe("architecture inventory", () => {
     for (const file of APP) {
       for (const match of read(file).matchAll(/<a\b[\s\S]*?>/g)) {
         const compact = match[0].replace(/\s+/g, " ").trim();
+        // Âncora de mesma página (`href="#id"`) não troca de rota: é
+        // navegação nativa do browser, e TransitionLink intercepta o clique
+        // e quebra o foco automático no destino (#398). Fica fora da regra
+        // de transição, que só vale para troca de tela.
+        const literalHref = /\bhref="([^"]*)"/.exec(compact)?.[1];
+        if (literalHref?.startsWith("#")) continue;
         const href = /\bhref=\{([^}]+)\}/.exec(compact)?.[1]?.trim();
         const nativeNavigation = /\bdownload(?:\s|=)/.test(compact) || /\btarget="_blank"/.test(compact);
         if (!href || !allowedRawAnchors.get(file)?.has(href) || !nativeNavigation) {

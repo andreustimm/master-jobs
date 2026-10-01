@@ -34,6 +34,45 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.7] - 2026-10-01T17:39:17.000Z
+
+### Fixed
+
+- A refresh with no recalculated jobs explains its result (search profile kept); gap analysis no longer claims CV coverage or flags terms as rare without jobs to compare.
+
+## [1.32.6] - 2026-10-01T16:32:46.000Z
+
+### Fixed
+
+- Screen readers can identify active sorting and grouping. A keyboard shortcut returns focus to the header after sign-in.
+- Fixes mismatched cockpit and list counts when filtering by company or salary range.
+- Keeps the out-of-range salary notice consistent when repeated postings are grouped.
+- Slow Jobs filters keep the list visible and interactive instead of covering it with the loading screen.
+- Buttons and links on touch devices (phone, tablet) now measure at least 44px tall, the recommended minimum for a reliable tap — some previously shrank to 40px even though they looked taller on screen.
+- CV PDF imports explain why a file was rejected without replacing your current CV.
+- Login now recovers an older tab after logout in another tab and remains usable on narrow screens.
+- Track evidence now reads the signed-in candidate’s current CV instead of showing evidence inherited from the default profile.
+- A term already cited in your own evidence stays marked as support even when it also appears in an assumed gap, and inheriting the default profile no longer inherits someone else's assumed gap too.
+- The jobs list now localizes pagination, posting dismissal and salary periods while keeping job titles as posting data.
+
+## [1.32.5] - 2026-10-01T15:18:50.000Z
+
+### Fixed
+
+- Direct career sources show named employers and group their postings. Compact density survives sorting, filtering and pagination.
+
+## [1.32.4] - 2026-10-01T14:58:19.000Z
+
+### Fixed
+
+- The Jobs track selector distinguishes a track named “Principal” from the current primary track.
+
+## [1.32.3] - 2026-10-01T01:39:55.000Z
+
+### Fixed
+
+- Invalid login links now return to the canonical local address while preserving the selected language.
+
 ## [1.32.2] - 2026-09-30T08:16:50.000Z
 
 ### Fixed

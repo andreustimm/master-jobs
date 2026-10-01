@@ -1,5 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { loadCockpit } from "../app/cockpit-data.ts";
+import { readFilters, toBoardFilters } from "../app/filter-state.ts";
 import { loadJobsView } from "../app/jobs/jobs-data.ts";
 import {
   boardFacets,
@@ -12,6 +14,7 @@ import {
   suggestTrack,
   targetOf,
   trackScope,
+  invalidateBoardFacets,
   type BoardFilters,
   type PayFilter,
 } from "../src/contexts/matching/index.ts";
@@ -38,6 +41,7 @@ let seq = 0;
 
 beforeEach(async () => {
   db = await useTestDb();
+  invalidateBoardFacets();
   const [row] = await db.insert(candidate).values({ slug: "owner", name: "Owner", isDefault: true }).returning();
   owner = row!.id;
   await setMatchingProfile(owner, await loadProfile(true));
@@ -45,6 +49,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  invalidateBoardFacets();
   await releaseTestDb();
 });
 
@@ -513,6 +518,64 @@ describe("minimum pay and pay sort (ADR-013)", () => {
   });
 });
 
+describe("contagens compartilhadas do quadro (#396)", () => {
+  it("IT-396-01 aplica empresa ao total e às facetas do cockpit e da lista", async () => {
+    const turing = await addJob({ title: "Architect", company: "Turing" });
+    const other = await addJob({ title: "Architect", company: "Other" });
+    await score(turing, 80);
+    await score(other, 80);
+
+    const state = readFilters({ company: "Turing" });
+    const filters = toBoardFilters(state);
+    const cockpit = await loadCockpit(owner, state, filters);
+    const view = await loadJobsView({
+      candidateId: owner,
+      params: { company: "Turing" },
+      page: 1,
+      pageSize: 50,
+      prefetch: false,
+      schedule: () => undefined,
+      now: new Date("2026-09-22T12:00:00Z"),
+    });
+
+    expect(cockpit.total).toBe(1);
+    expect(cockpit.facets.unblocked).toBe(1);
+    expect(view.total).toBe(cockpit.total);
+    expect(view.facets.unblocked).toBe(cockpit.facets.unblocked);
+    expect(ids(view.rows)).toEqual([turing]);
+  });
+
+  it("IT-396-02 usa a mesma faixa salarial e agrupa o aviso sem duplicar grupo", async () => {
+    await rates({ BRL: 5.0 });
+    const lowSibling = await addJob({ title: "Engineer", company: "Turing", compMax: 4_000, cur: "USD", per: "month" });
+    const qualifyingSibling = await addJob({ title: "Engineer", company: "Turing", compMax: 8_000, cur: "USD", per: "month" });
+    const qualifying = await addJob({ title: "Architect", company: "Turing", compMax: 7_000, cur: "USD", per: "month" });
+    const outside = await addJob({ title: "Designer", company: "Turing", compMax: 4_000, cur: "USD", per: "month" });
+    for (const jobId of [lowSibling, qualifyingSibling, qualifying, outside]) await score(jobId, 80);
+
+    const params = { fit: "0", company: "Turing", pay: "6000", payMax: "9000", cur: "USD", per: "month" };
+    const state = readFilters(params);
+    const cockpit = await loadCockpit(owner, state, toBoardFilters(state));
+    const view = await loadJobsView({
+      candidateId: owner,
+      params,
+      page: 1,
+      pageSize: 50,
+      prefetch: false,
+      schedule: () => undefined,
+      now: new Date("2026-09-22T12:00:00Z"),
+    });
+
+    expect(cockpit.total).toBe(2);
+    expect(view.total).toBe(2);
+    expect(cockpit.total).toBe(view.total);
+    expect(cockpit.facets.unblocked).toBe(2);
+    expect(view.facets.unblocked).toBe(2);
+    expect(view.hiddenByPayRange).toBe(1);
+    expect(await countBoard(owner, { ...toBoardFilters(state), pay: view.pay, rates: undefined })).toBe(2);
+  });
+});
+
 describe("performance", () => {
   it("IT-113 term, pay, track and pay sort over 10,000 jobs answer in under 2 seconds", async () => {
     await rates({ BRL: 5.0, EUR: 0.9 });
@@ -572,5 +635,27 @@ describe("descrição mínima sem medir o texto inteiro", () => {
     expect(ids(await listBoard(owner, { hasDescription: true })).sort()).toEqual([exact, accented].sort());
     expect(await countBoard(owner, { hasDescription: true })).toBe(2);
     expect((await boardFacets(owner, {})).described).toBe(2);
+  });
+});
+
+
+describe("empregador direto (#397)", () => {
+  it("reconhece careers pelo contrato sem nomear agregador anônimo", async () => {
+    await db.insert(source).values({ id: "careers:vercel", kind: "careers", handle: "vercel", label: "Vercel" });
+    const ids = await Promise.all([
+      addJob({ title: "Staff Engineer", company: "Vercel", location: "Brazil" }),
+      addJob({ title: "Staff Engineer", company: "Vercel", location: "France" }),
+    ]);
+    for (const id of ids) await db.update(job).set({ sourceId: "careers:vercel" }).where(eq(job.id, id));
+    await addJob({ title: "Staff Engineer", company: "Board", location: "Brazil" });
+    await addJob({ title: "Staff Engineer", company: "Board", location: "France" });
+    const base = { minFit: 0, keepUnscored: true, groupRepeats: true };
+    expect(await countBoard(owner, base)).toBe(3);
+    expect(await countBoard(owner, { ...base, namedEmployer: true })).toBe(1);
+    expect((await boardFacets(owner, base)).named).toBe(1);
+    const named = await listBoard(owner, { ...base, namedEmployer: true });
+    expect(named).toHaveLength(1);
+    expect(named[0]?.companyName).toBe("Vercel");
+    expect(named[0]?.repeats).toHaveLength(2);
   });
 });

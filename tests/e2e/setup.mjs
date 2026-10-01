@@ -89,6 +89,11 @@ export const E2E_ROLES = {
   // Troca a própria senha na jornada de Minha conta; dedicada para não mudar a
   // senha de quem as outras jornadas usam.
   account: { email: "e2e-conta@local.test", roles: ["recruiter"] },
+  // Recebe o CV fraco em `candidate-rescore` (recusa `weakCv`). Dedicada
+  // porque reaproveitar `noCv` deixava a conta COM currículo depois da
+  // execução, e `E2E-003` (que exige `noCv` sem CV) reprovava numa segunda
+  // rodada contra a mesma base (achado 3 da revisão da PR #418, issue #387).
+  weakCv: { email: "e2e-cv-fraco@local.test", roles: ["candidate"] },
 };
 
 try {

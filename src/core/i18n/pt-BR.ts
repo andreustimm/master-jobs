@@ -43,6 +43,7 @@ export const ptBR = {
     internal: "Melhorias internas, sem mudança visível.",
   },
   nav: {
+    skipToHeader: "Ir para o cabeçalho",
     menu: "Menu",
     cockpit: "Cockpit",
     jobs: "Vagas",
@@ -144,6 +145,13 @@ export const ptBR = {
     notInterestedHint: "Tira a vaga das suas listas. Ela fica em “Arquivadas”, e dá para restaurar enquanto você não tiver aplicado.",
     restore: "restaurar",
     restoreHint: "Devolve a vaga às suas listas, no começo do funil.",
+    /** Período do salário exibido por vaga (ver `src/core/money.ts`). */
+    moneyPeriodMonth: "mês",
+    moneyPeriodWeek: "semana",
+    moneyPeriodDay: "dia",
+    moneyPeriodHour: "hora",
+    moneyProjectTotal: "total",
+    moneyProjectTotalWithDuration: "total ({count} meses)",
   },
   /** Tela Buscas: termos salvos e trilhas (term-search-target-tracks). */
   searches: {
@@ -559,6 +567,9 @@ export const ptBR = {
     current: "atual",
     chars: "caracteres",
     savedOn: "salvo em",
+    noJobsForGap: "Não há vagas pontuadas neste recorte para comparar. Ainda não é possível avaliar a cobertura do CV. Revise suas trilhas e o ranking.",
+    queueNoUpdatesLabel: "Nenhuma vaga recalculada",
+    queueNoUpdates: "Seu perfil de busca foi mantido: o CV novo não altera as notas até você editar a trilha. Esse resultado não confirma a cobertura do CV. Revise suas trilhas e o ranking.",
     noRelevantGap:
       "Nenhuma lacuna relevante. O vocabulário do CV cobre o que as vagas do seu alvo pedem.",
     gapEmpty: "A análise de lacunas aparece assim que houver um currículo salvo.",
@@ -1280,8 +1291,6 @@ export const ptBR = {
     pdfReviewFirst: "revise antes de confiar",
     pdfCaveat:
       "Extração de PDF erra com layout em colunas, e currículo digitalizado não tem texto nenhum para ler.",
-    pdfUploadTodo:
-      "Upload de PDF ainda não existe. Quando existir, o texto extraído entra aqui e o arquivo original fica recuperável — o schema já prevê ({fields}).",
     vocabularyWorking: "Vocabulário que já está funcionando",
     skillsLead:
       "Detectadas automaticamente no seu currículo, contra um catálogo global de 100 tecnologias e práticas.",

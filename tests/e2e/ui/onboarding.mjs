@@ -1,6 +1,6 @@
 // Área `onboarding` do E2E de navegador: Criar o próprio perfil, inclusive pelo PDF do currículo.
 // Fatiada de ui.mjs (#320); a ordem e o contexto compartilhado moram em ./index.mjs.
-import { en, makePortugueseLeaks } from "./shared.mjs";
+import { en, ptBR, makePortugueseLeaks } from "./shared.mjs";
 
 export async function run(ctx) {
   const { BASE, E2E_PASSWORD, browser, check, page, trackConsole } = ctx;
@@ -195,6 +195,36 @@ export async function run(ctx) {
     check("texto extraído do PDF vira o currículo, no editor", cvText.includes(marker), cvText.slice(0, 120));
     check("versão do currículo leva o nome do arquivo", cvLabel === "e2e-onboarding-cv", cvLabel);
     check("perfil criado com PDF cabe em 375px", overflow <= 1, `overflow=${overflow}`);
+    if (created) {
+      const importResponses = [];
+      const observeImport = (response) => {
+        if (response.request().method() === "POST" && response.url() === `${BASE}/candidate`) {
+          importResponses.push(response.status());
+        }
+      };
+      onboarding.on("response", observeImport);
+      for (const [locale, dictionary] of [["en", en], ["pt-BR", ptBR]]) {
+        await context.addCookies([{ name: "jho_locale", value: locale, url: BASE }]);
+        await onboarding.reload({ waitUntil: "networkidle" });
+        await onboarding.locator('[data-testid="candidate-pdf-file"]').setInputFiles({
+          name: "curriculo.pdf",
+          mimeType: "application/pdf",
+          buffer: Buffer.from("Este arquivo de texto foi renomeado para PDF."),
+        });
+        await onboarding.locator('[data-testid="candidate-pdf-submit"]').click();
+        await refusalNotice.waitFor({ timeout: 10_000 }).catch(() => undefined);
+        const reason = (await refusalNotice.textContent().catch(() => "")) ?? "";
+        check(`importação de PDF existente explica a recusa em ${locale}`, reason.includes(dictionary.onboarding.pdfNotPdf), reason);
+        await onboarding.reload({ waitUntil: "networkidle" });
+        const unchangedText = await onboarding.locator('textarea[name="content"]').inputValue();
+        const unchangedLabel = await onboarding.locator('input[name="label"]').inputValue();
+        check(`recusa mantém CV e versão após refresh em ${locale}`, unchangedText === cvText && unchangedLabel === cvLabel);
+        const main = (await onboarding.locator("main").textContent()) ?? "";
+        check(`perfil não anuncia upload inexistente em ${locale}`, !/PDF upload does not exist yet|Upload de PDF ainda não existe/.test(main));
+      }
+      onboarding.off("response", observeImport);
+      check("PDF inválido recebe recusa sem HTTP 500", importResponses.length === 2 && importResponses.every((status) => status < 500), importResponses.join(", "));
+    }
     await context.close();
   }
 

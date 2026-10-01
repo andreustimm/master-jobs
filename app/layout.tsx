@@ -229,7 +229,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <div id="application-shell">
           <ServiceWorkerRegister />
           <TooltipProvider>
-          <header className="border-b bg-card">
+          <header id="application-header" tabIndex={-1} className="border-b bg-card">
             {/*
               Três faixas: marca, links roláveis, e o estado da sessão.
 
@@ -242,7 +242,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             {/* A faixa do cabeçalho é full-bleed; esta linha limita apenas o
                 conteúdo. No celular, `app-shell-content` deixa 2,5% de cada
                 lado. Tablet e desktop continuam na escala do DESIGN.md. */}
-            <div className="app-shell-content mx-auto flex min-h-16 w-full max-w-[1760px] items-center gap-2 px-4 py-3 sm:gap-6 sm:px-6 lg:px-8">
+            {/* DESIGN.md fixa `nav-bar-top` em 64px. `py-3` (24px) cabia
+                porque os controles mediam até 40px; com o piso de 44px
+                (pointer: coarse) a mesma folga passaria de 64 para 68px.
+                `pointer-coarse:py-2.5` (20px) é a folga mínima que ainda
+                cabe os 44px dentro dos mesmos 64px — só no toque, onde o
+                piso se aplica; ponteiro fino continua em `py-3`. */}
+            <div className="app-shell-content mx-auto flex min-h-16 w-full max-w-[1760px] items-center gap-2 px-4 py-3 pointer-coarse:py-2.5 sm:gap-6 sm:px-6 lg:px-8">
               <TransitionLink
                 href="/"
                 data-testid="nav-logo"

@@ -9,6 +9,46 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.32.7] - 2026-10-01
+
+### Corrigido
+
+- O cartão de repontuação distingue conclusão sem vagas recalculadas com `data-reason=noJobsUpdated`, nomeando a causa (perfil de busca mantido) e preservando motivos de recusa conhecidos.
+- Análise de lacunas com zero vagas mostra ausência de base de comparação e não lista mais termos do CV como "confirmado" ou "raro no mercado" sem nenhuma vaga para sustentar a afirmação.
+
+## [1.32.6] - 2026-10-01
+
+### Corrigido
+
+- Ordem e agrupamento expõem o estado ativo por aria-current; cockpit e lista oferecem atalho de teclado ao cabeçalho.
+- #396: cockpit, facetas e lista compartilham empresa, faixa salarial, câmbio e agrupamento ao contar vagas.
+- Preserva transições suaves na mesma tela após o limiar de espera prolongada e anuncia a demora na região de status.
+- `@media (pointer: coarse)` em `app/globals.css` fixava `min-height: 40px`, fora de `@layer` — vencia `min-h-11` (44px) do Tailwind v4 e derrubava para 40px todo botão, `summary` e link `inline-flex` num aparelho de toque real, inclusive botões `size="sm"` sem altura explícita (`save-public-facts`, `save-visibility`). DESIGN.md pede 44×44px ("Touch Targets"); a regra agora bate com o número (#403). `tests/e2e/ui/mobile.mjs` ganhou um bloco com contexto `hasTouch: true, isMobile: true` (o resto da suíte não emula toque real, então `pointer: coarse` nunca casava) medindo `save-public-facts`, `save-visibility`, `public-profile-linkedin`, `public-profile-github`, `public-profile-copy-link` e `public-skill-more`, mais uma varredura de `OVERFLOW_SWEEP` inteiro (dez rotas, inclusive `/jobs` com chips e barra de filtro, e o cabeçalho com idioma/aparência/sessão) em 375px de toque real — nada quebrou com o piso mais alto.
+- A importação de CV devolve recusas tipadas para arquivo ausente, inválido, grande ou sem texto; a tela traduz o motivo e mantém o documento atual.
+- Remove o aviso obsoleto de que upload de PDF ainda não existe.
+- A tela de login libera somente a geração de transição capturada após um redirecionamento efetivo, evitando splash inerte em abas antigas.
+- O painel de evidência das trilhas lê as linhas do CV corrente da candidata e preserva o fallback de perfil quando não existe documento próprio.
+- O filtro de lacuna assumida (`growth`) deixou de bloquear termo já citado em `evidence:` própria e de repassar o `growth` do perfil padrão a quem herdou o perfil sem revisar.
+- A lista de vagas usa o locale da tela para a paginação, o modal e os valores de remuneração, e identifica títulos vindos do acervo para a varredura de idioma.
+
+## [1.32.5] - 2026-10-01
+
+### Corrigido
+
+- Alinha reconhecimento de empregador direto careers no agrupamento, filtro, faceta e lista; preserva dense no estado serializado e presets.
+
+## [1.32.4] - 2026-10-01
+
+### Corrigido
+
+- Preserva a capitalização do nome das trilhas no seletor de Vagas, distinguindo o nome “Principal” do rótulo da trilha principal.
+
+## [1.32.3] - 2026-10-01
+
+### Corrigido
+
+- O callback de login usa `Location` relativo nos redirects 303, preservando a origem da requisição e evitando a normalização de loopback pelo Next.js.
+
 ## [1.32.2] - 2026-09-30
 
 ### Corrigido
