@@ -6,13 +6,13 @@ persona: Andreus em triagem noturna
 journey: J-preserve-application-decision
 expected: O seletor oferece só estágios alcançáveis, e uma recusa do servidor mantém a nota no formulário e nomeia os dois estágios
 entry_points: /jobs/<id>; /pipeline
-qa_status: untested
-bug_ids: BUG-20260910-application-edit-not-retained; BUG-20260917-stale-stages-after-refusal
+qa_status: pass
+bug_ids: BUG-20260910-application-edit-not-retained; BUG-20260917-stale-stages-after-refusal; BUG-20260929-refused-transition-toast-too-brief
 fix_status: fixed
-retest_status: pending
-fix_commits: f16c2b4; 916c531; fa1269d; 03ac0f6; 9bb7fc0
-evidence: evidence/2026-09-22-rc-1.22.0/s4-pipe-refused.png
-last_report: docs/qa/reports/2026-09-22-release-candidate-1.22.0-full.md
+retest_status: pass
+fix_commits: f16c2b4; 916c531; fa1269d; 03ac0f6; 9bb7fc0; 5b70e2c
+evidence: docs/qa/evidence/2026-09-29T141040713402Z-531aac7a-recusa-transicao-legivel/recusa-6s.png
+last_report: docs/qa/reports/2026-09-29T141040713402Z-531aac7a-recusa-transicao-legivel.md
 overlaps: PIPE-save-resume-decision
 ---
 
@@ -32,6 +32,10 @@ O veredito exige as duas metades na mesma tentativa: a nota digitada ainda
 visível no campo depois do aviso, e o aviso citando o estágio gravado e o
 pretendido pelo nome traduzido.
 
+Reteste da #389: o aviso de recusa deve permanecer por sete segundos, salvo
+dispensa pela pessoa. Ler novamente aos seis segundos, conferir o rascunho e
+reenviar uma transição válida sem redigitar. Conferir também a 375px.
+
 Re-andado em 17/09 sobre o head final (`9bb7fc0`), porque o formulário mudou
 duas vezes depois do primeiro veredito — as correções que a revisão
 independente pediu. As três propriedades se sustentam: o aviso diz "The funnel
@@ -47,3 +51,5 @@ não alcança nada" deixou de ser o caminho curto para a recusa. Provoque-a com
 dois encerramentos: CLI grava `rejected` por fora com a tela aberta em
 Candidatura enviada, e a tela tenta Retirada (encerramento para encerramento
 continua ilegal). O seletor agora vem agrupado em Avançar / Voltar / Encerrar.
+
+Reteste #389 em 29/09: Pass sobre `5b70e2c`; observáveis e limitações no relatório atual.

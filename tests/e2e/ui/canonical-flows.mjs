@@ -692,6 +692,8 @@ export async function run(ctx) {
   await publicPage.goto(`${BASE}/login/callback?token=${E2E_LOGIN_EXPIRED_TOKEN}`, { waitUntil: "networkidle" });
   const expiredCallback = new URL(publicPage.url());
   const expiredCallbackUrl = expiredCallback.pathname + expiredCallback.search;
+  const expiredCallbackOrigin = expiredCallback.origin;
+  const expiredCallbackMessage = await publicPage.locator('[data-testid="route-login"] [role="alert"]').textContent();
   const loginRaceContexts = await Promise.all([browser.newContext(), browser.newContext()]);
   const loginRacePages = await Promise.all(loginRaceContexts.map((context) => context.newPage()));
   await Promise.all(loginRacePages.map((loginPage) =>
@@ -701,6 +703,7 @@ export async function run(ctx) {
     const url = new URL(loginPage.url());
     return url.pathname + url.search;
   });
+  const loginRaceOrigins = loginRacePages.map((loginPage) => new URL(loginPage.url()).origin);
   const loginRaceSessions = await Promise.all(loginRaceContexts.map(async (context) =>
     (await context.cookies()).some((cookie) => cookie.name === "jho_session")
   ));
@@ -750,8 +753,11 @@ export async function run(ctx) {
       && resetRaceUrls.filter((url) => url === "/login?reset=1").length === 1
       && resetRaceUrls.filter((url) => url.includes("error=invalid")).length === 1
       && expiredCallbackUrl === "/login?error=invalid"
-      && loginRaceUrls.filter((url) => url === "/login").length === 1
+      && expiredCallbackOrigin === new URL(BASE).origin
+      && expiredCallbackMessage?.trim() === ptBR.login.invalid
+      && loginRaceUrls.filter((url) => url === "/").length === 1
       && loginRaceUrls.filter((url) => url === "/login?error=invalid").length === 1
+      && loginRaceOrigins.every((origin) => origin === new URL(BASE).origin)
       && loginRaceSessions.filter(Boolean).length === 1
       && replayCallbackUrl === "/login?error=invalid"
       && [resetReplayAfterConsume, resetReplayAfterReload, resetReplayAfterHistory]
@@ -778,7 +784,10 @@ export async function run(ctx) {
       resetRacePosts,
       resetRaceUrls,
       expiredCallbackUrl,
+      expiredCallbackOrigin,
+      expiredCallbackMessage,
       loginRaceUrls,
+      loginRaceOrigins,
       loginRaceSessions,
       replayCallbackUrl,
       resetReplayAfterConsume,

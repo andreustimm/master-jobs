@@ -12,6 +12,8 @@ export async function run(ctx) {
   // OFERECE só contém o alcançável, e quando o servidor recusa mesmo assim —
   // outra aba mudou o estágio no meio — o texto digitado continua na tela.
   const funnelUrl = `${BASE}/jobs/${TASK04_FIXTURES.funnelJobId}`;
+  const originalViewport = page.viewportSize();
+  await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(funnelUrl, { waitUntil: "networkidle" });
   await page.selectOption('[data-testid="track-status"]', "shortlisted");
   await page.locator('[data-testid="track-submit"]').click();
@@ -82,6 +84,24 @@ export async function run(ctx) {
     rejection.includes("A fazer") && rejection.includes("Preparando"),
     rejection.slice(0, 120),
   );
+  // O tempo é o comportamento sob teste: a recusa deve continuar legível
+  // depois que o prazo de 5 s dos avisos comuns já terminou (#389).
+  await page.waitForTimeout(6_000);
+  const refusalStillVisible = await page.locator('[data-testid="mutation-feedback"][role="alert"]').isVisible();
+  check("a recusa permanece visível após seis segundos", refusalStillVisible);
+  check(
+    "o rascunho permanece durante a leitura da recusa",
+    await page.inputValue('[data-testid="track-note"]') === draft,
+  );
+  check(
+    "a recusa não causa rolagem horizontal em 375px (regra 11)",
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+  );
+  if (refusalStillVisible) {
+    await page.locator('[data-testid="mutation-feedback-dismiss"]').click();
+    check("a pessoa pode dispensar a recusa", await page.locator('[data-testid="mutation-feedback"]').count() === 0);
+  }
+  if (originalViewport) await page.setViewportSize(originalViewport);
 
   // BUG-20260917-stale-stages-after-refusal: a lista acompanha o estágio
   // gravado. A revalidação chega pela resposta da própria action; esperar o
