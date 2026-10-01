@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { defaultPay, facetHref, href, openJobsHref, readFilters, toBoardFilters } from "../app/filter-state.ts";
+import {
+  defaultPay,
+  facetHref,
+  href,
+  openJobsHref,
+  readFilters,
+  toBoardFilters,
+} from "../app/filter-state.ts";
 import { targetOf } from "../src/contexts/matching/index.ts";
 import { loadProfile } from "../src/core/profile/load.ts";
 

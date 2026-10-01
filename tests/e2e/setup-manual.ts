@@ -125,5 +125,41 @@ try {
     await scoreOne(owner, direct.jobId);
   }
 
-  console.log("Manual QA accounts, career data and grouping fixtures prepared in isolated PostgreSQL.");
+  /**
+   * Vagas para percorrer `JOBS-term-filter-descriptions` por inteiro: palavra
+   * inteira ("go" não traz "Google"), termos com símbolo (`c++`, `node.js`),
+   * termo só na descrição, acento e o termo que só existe numa vaga que a
+   * pessoa vai arquivar na própria sessão (`quokkaprobe`).
+   */
+  await ensureImportSource("manual:termos", "manual", "termos", "Termos QA");
+  const termos = [
+    { externalId: "term-go", companyName: "Gopher Labs QA", title: "Go Platform Engineer",
+      locationRaw: "Remoto · Brasil",
+      descriptionText: "Arquitetura de serviços distribuídos em Go e TypeScript, trabalho remoto no Brasil, observabilidade e liderança técnica." },
+    { externalId: "term-google", companyName: "Google Cloud Partners QA", title: "Cloud Platform Architect",
+      locationRaw: "Remoto · Brasil",
+      descriptionText: "Parceiro de nuvem: arquitetura de serviços distribuídos em TypeScript, trabalho remoto no Brasil e liderança técnica." },
+    { externalId: "term-cpp", companyName: "Systems QA Lab", title: "C++ Systems Architect",
+      locationRaw: "Remoto · Brasil",
+      descriptionText: "Arquitetura de serviços distribuídos em C++ e TypeScript, trabalho remoto no Brasil e liderança técnica." },
+    { externalId: "term-node", companyName: "Runtime QA Lab", title: "Node.js Backend Architect",
+      locationRaw: "Remoto · Brasil",
+      descriptionText: "Arquitetura de serviços distribuídos em Node.js e TypeScript, trabalho remoto no Brasil e liderança técnica." },
+    { externalId: "term-gestao", companyName: "Pessoas QA Lab", title: "Senior Software Architect Pessoas",
+      locationRaw: "Lisboa, Portugal",
+      descriptionText: "Arquitetura de serviços distribuídos em TypeScript e Python, gestão de pessoas, observabilidade e liderança de engenharia." },
+    { externalId: "term-quokkaprobe", companyName: "Quokkaprobe QA Lab", title: "Senior Software Architect Quokkaprobe",
+      locationRaw: "Remoto · Brasil",
+      descriptionText: "Arquitetura de serviços distribuídos em TypeScript e Python, trabalho remoto no Brasil, quokkaprobe, observabilidade e liderança técnica." },
+  ];
+  for (const termo of termos) {
+    const publicacao = await upsertRawJob({
+      ...termo,
+      url: `https://example.com/careers/${termo.externalId}`,
+      raw: {},
+    }, "manual:termos");
+    await scoreOne(owner, publicacao.jobId);
+  }
+
+  console.log("Manual QA accounts, career data, grouping and term fixtures prepared in isolated PostgreSQL.");
 } finally { await closeDb(); }
