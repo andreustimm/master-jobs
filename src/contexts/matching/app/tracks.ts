@@ -341,10 +341,19 @@ async function ownEvidence(candidateId: number): Promise<OwnEvidence> {
   const cvLines = cvContent?.trim()
     ? cvContent.split(/\r?\n/).filter((line) => line.trim().length > 0)
     : null;
+  const ownLines = person ? Object.values(person.profile.evidence).flat() : [];
+  const inherited = person ? evidenceInherited(person.profile, defaultProfile, { isOwner: owner }) : false;
+  // O CV só substitui evidência que não é da própria pessoa — herdada do
+  // perfil padrão, ou inexistente por falta de perfil próprio. Evidência
+  // própria (do dono, ou de quem já revisou a sua) soma com o CV em vez de
+  // ser descartada: o dono com CV continua sustentado pelo `profile.yaml`
+  // (#393, achado Major 1 da revisão).
+  const lines = inherited || !person ? (cvLines ?? ownLines) : [...ownLines, ...(cvLines ?? [])];
   return {
-    lines: cvLines ?? (person ? Object.values(person.profile.evidence).flat() : []),
+    lines,
     confirmedSkills: confirmed.map((skill) => skill.name),
-    inherited: cvLines ? false : person ? evidenceInherited(person.profile, defaultProfile, { isOwner: owner }) : false,
+    growth: person ? person.profile.growth : [],
+    inherited: inherited && cvLines === null,
   };
 }
 

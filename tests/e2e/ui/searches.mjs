@@ -577,10 +577,10 @@ export async function run(ctx) {
   check(
     "term-search E2E-002 principal primeiro; a trilha aceita salva a palavra nova, a recusa mantém o digitado e Vagas avisa o recálculo com as notas anteriores",
     tracksBefore[0]?.primary === true
-      // O CV da fixture tem TypeScript e Python, mas não PHP: o perfil padrão
-      // não pode emprestar `php` como evidência da candidata.
-      && !/php/i.test(evidence.supported)
-      && /php/i.test(evidence.gaps)
+      // O CV da fixture tem TypeScript e Python, mas não PHP: quem roda a
+      // suíte é o dono, cuja evidência própria (`profile.yaml`) cita PHP —
+      // o CV soma à evidência dele, não a substitui (#393, Major 1).
+      && /php/i.test(evidence.supported)
       && /symfony/i.test(gapsAfterSave)
       && refusedEdit.role === "alert"
       && refusedEdit.text.includes(ptBR.searchFeedback.range_invalid)

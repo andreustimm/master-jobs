@@ -20,16 +20,21 @@ texto que a candidata salvou.
 ## Contrato
 
 1. Quando existir um CV corrente não vazio para o `candidateId`, suas linhas
-   são a fonte de `OwnEvidence.lines` para `trackOverview`, `trackSuggestion`
-   e `trackSupport`.
-2. A presença do CV corrente impede que a evidência do perfil padrão seja
-   marcada como herdada; `inherited` fica `false` nesse caso.
+   entram em `OwnEvidence.lines` para `trackOverview`, `trackSuggestion` e
+   `trackSupport`: substituem a evidência do perfil quando ela é herdada do
+   padrão ou quando não existe perfil próprio; somam à evidência quando ela é
+   própria da pessoa (dono, ou candidata que já revisou a sua) — o CV nunca
+   apaga `evidence:` que é da própria pessoa.
+2. A presença do CV corrente impede que a evidência herdada do perfil padrão
+   seja marcada como tal; `inherited` fica `false` nesse caso.
 3. Skills confirmadas continuam somando suporte mesmo quando o texto do CV não
    contém o termo.
-4. Sem CV corrente, o comportamento existente permanece: um perfil próprio
+4. Termo presente só em `growth:` do perfil da pessoa nunca sustenta (regra 7
+   do AGENTS.md), nem quando o texto bruto do CV o menciona.
+5. Sem CV corrente, o comportamento existente permanece: um perfil próprio
    pode fornecer `evidence`, e evidência copiada do perfil padrão continua sem
    sustentar a trilha (`inherited=true`).
-5. O ajuste não muda o scorer, `profile.yaml`, persistência de matching,
+6. O ajuste não muda o scorer, `profile.yaml`, persistência de matching,
    autorização ou texto de interface.
 
 ## Implementação mínima

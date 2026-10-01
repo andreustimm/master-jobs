@@ -65,6 +65,7 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 
 - `rtk proxy env PATH=/Users/andreus/.nvm/versions/node/v24.19.0/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin node tests/e2e/run-isolated.mjs --areas searches` — exit 1; `79/80 verificações passaram`. O cenário alterado de #393 (`term-search E2E-002`) passou; a única falha foi `term-search E2E-009`, com `newBefore=2`, `markedNew=[]` e `newAfter=0`, fora do escopo desta correção.
 - `rtk proxy env PATH=/Users/andreus/.nvm/versions/node/v24.19.0/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin node tests/e2e/run-isolated.mjs` — exit 1; `429/430 verificações passaram` antes do ajuste da asserção de #393. A única falha era o `E2E-002` esperando `php` herdado do perfil padrão; a expectativa foi alinhada ao CV real no delta desta branch. A suíte completa não foi repetida após esse ajuste; o E2E direcionado confirmou o cenário corrigido.
+- **Atualização (revisão FIX_BEFORE_SHIP, 2026-10-01):** o CI do commit `0b808c1` rodou o `e2e-navegador` com a suíte inteira e passou (run `36588465901`, job `e2e-navegador`) — a falha local de `term-search E2E-009` acima não se reproduziu lá, nem na reexecução de `node tests/e2e/run-isolated.mjs --areas searches` depois da correção dos achados Major 1/Major 2 (`80/80 verificações passaram`, incluindo `E2E-009`). Era flutuação do isolado local, não regressão do produto.
 
 ## Human Verifications Needed
 
@@ -80,7 +81,7 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 
 ## Final Status
 
-- **Exit gate (full automated suite):** `run-isolated.mjs --areas searches` — exit 1, `79/80 verificações passaram`; #393 passou e a falha restante é `E2E-009`, fora do escopo. A execução completa anterior terminou em `429/430`, antes da atualização da expectativa de #393.
+- **Exit gate (full automated suite):** CI do commit `0b808c1` — `e2e-navegador` (suíte inteira) verde (run `36588465901`); reexecução local de `run-isolated.mjs --areas searches` depois da correção dos achados da revisão — `80/80 verificações passaram`, incluindo `E2E-009`. A falha local isolada de `79/80` registrada acima não se reproduziu em nenhuma das duas execuções: era flutuação do ambiente isolado, não um defeito pendente — não há issue de `E2E-009` a abrir.
 - **Issues by user impact:** Blocks-Completion 0 · Data-Loss 0 · Trust-Damage 0 para #393 · Friction 0 · Cosmetic 0
 - **Coverage:** 1/1 jornadas caminhadas; o cenário geral continua bloqueado pela decisão do #391.
-- **Verdict:** not-ready — a correção de #393 está verificada, mas a execução E2E direcionada ainda tem a falha independente `E2E-009`, que deve ser tratada em sua própria issue.
+- **Verdict:** ready — a correção de #393 está verificada e o CI (inclusive `e2e-navegador` completo) está verde; a suspeita de falha independente de `E2E-009` não se confirmou.

@@ -273,19 +273,27 @@ export type OwnEvidence = {
    * Nesse caso as linhas não sustentam nada.
    */
   inherited: boolean;
+  /**
+   * `growth` do perfil da pessoa — lacuna honesta, nunca apoio (regra 7 do
+   * AGENTS.md), mesmo quando o termo aparece no texto bruto do CV.
+   */
+  growth?: string[];
 };
 
 /**
  * Quais palavras-chave da trilha a evidência sustenta, e quais são lacuna.
  *
  * `growth` nunca sustenta: é lacuna assumida por definição (regra 7 do
- * AGENTS.md). O marcador nunca muda a nota.
+ * AGENTS.md). O marcador nunca muda a nota. Skill confirmada continua
+ * sustentando mesmo que o mesmo termo apareça em `growth` — é um sinal
+ * próprio, diferente do texto que fala pela pessoa.
  */
 export function evidenceSupport(
   target: TrackTarget,
   evidence: OwnEvidence,
 ): { supported: string[]; gaps: string[] } {
   const lines = evidence.inherited ? [] : evidence.lines;
+  const growth = evidence.growth ?? [];
   const confirmed = new Set(evidence.confirmedSkills.map(termKey));
   const supported: string[] = [];
   const gaps: string[] = [];
@@ -294,7 +302,8 @@ export function evidenceSupport(
     const key = termKey(term);
     if (seen.has(key)) continue;
     seen.add(key);
-    const backed = confirmed.has(key) || lines.some((line) => matchesTerm(term, line));
+    const isGrowthOnly = growth.some((line) => matchesTerm(term, line));
+    const backed = confirmed.has(key) || (!isGrowthOnly && lines.some((line) => matchesTerm(term, line)));
     (backed ? supported : gaps).push(term);
   }
   return { supported, gaps };

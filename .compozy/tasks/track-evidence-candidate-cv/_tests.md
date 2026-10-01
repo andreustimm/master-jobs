@@ -4,11 +4,14 @@
 
 | ID | Cenário | Prova |
 |---|---|---|
-| IT-393-01 | Candidata não dona salva um CV com um termo que não está no `profile.evidence` padrão; o perfil de matching persistido ainda contém a evidência padrão. | `trackSupport()` lista o termo em `supported`, não em `gaps`, e devolve `inherited: false`. |
+| IT-393-01 | Candidata não dona salva um CV com um termo que não está no `profile.evidence` padrão; o perfil de matching persistido ainda contém a evidência padrão (herdada). | `trackSupport()` lista o termo em `supported`, não em `gaps`, e devolve `inherited: false`. |
+| IT-393-02 | O dono (evidência própria, nunca herdada) salva um CV com um termo que não está em `evidence:` do `profile.yaml`. | `trackSupport()` sustenta os dois: o termo só no `evidence:` e o termo só no CV — o CV soma, não substitui. |
+| UT-038b | Perfil próprio (não herdado) com um termo só em `growth:`; a candidata salva um CV cujo texto bruto menciona esse termo. | O termo continua em `gaps`, nunca em `supported`: `growth` não sustenta mesmo quando a fonte é o CV (regra 7). |
 
-O teste precisa reprovar em `origin/dev`: isso demonstra que o painel lia o
-perfil padrão e não o CV corrente. Depois da correção, ele passa sem alterar o
-scorer ou o perfil persistido.
+Os testes precisam reprovar em `origin/dev`/na versão com o bug (IT-393-01
+contra o perfil padrão ignorando o CV; IT-393-02 e UT-038b contra o CV
+substituindo evidência própria e emprestando apoio a termo de `growth`).
+Depois da correção, passam sem alterar o scorer ou o perfil persistido.
 
 ## Regressões preservadas
 
@@ -22,8 +25,9 @@ scorer ou o perfil persistido.
 - `pnpm typecheck`.
 - `pnpm vitest related --run src/contexts/matching/app/tracks.ts tests/target-tracks.test.ts`.
 - `node tests/e2e/run-isolated.mjs` por tocar a tela de trilha.
-- `term-search E2E-002` preserva a edição/recusa e confirma que `php`, ausente
-  do CV fixture, permanece em lacunas em vez de vir do perfil padrão.
+- `term-search E2E-002` preserva a edição/recusa e confirma que `php`, que só
+  está no `evidence:` do dono (não no CV fixture), continua em apoio — a
+  evidência própria soma com o CV, não cede lugar a ele.
 - QA vivo do cenário `SRCH-track-primary-archive`, com refresh e leitura
   independente; se o ambiente não permitir o rewalk, registrar a limitação na
   PR e no cenário.
