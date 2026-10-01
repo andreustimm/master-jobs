@@ -11,7 +11,7 @@ bug_ids: BUG-20260824-canonical-route-splash; BUG-20260827-changelog-visible-bef
 fix_status: fixed
 retest_status: pending
 fix_commits: 7ba2890; fe5cdbf; 1570ccd; 0276c6e; 2c7a4f7
-evidence: tests/e2e/ui.mjs; tests/changelog.test.ts; tests/e2e/ui/stale-tab-login.mjs; docs/qa/evidence/2026-09-29T-stale-tab-login-manual/candidate-relogin-375px.png; docs/qa/evidence/2026-09-29T-stale-tab-login-manual/recruiter-relogin-375px.png; docs/qa/evidence/2026-09-29T-login-callback-ptbr/callback-invalid-after-reload-375px.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-repeated-reset-terminal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-impersonated-target-terminal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-impersonation-ended-terminal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-candidate-forbidden-admin.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-candidate-forbidden-admin-goal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/recruiter-forbidden-candidate.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/recruiter-forbidden-candidate-goal.png; docs/qa/reports/2026-08-27T162317105000Z-76fc8fc9-pwa-cache-refresh.md; docs/qa/evidence/2026-09-29T035351654581Z-97f37e1c-full/CH-auth-boundary-recovery/stale-tab-login-inert.png; docs/qa/evidence/2026-09-29T035351654581Z-97f37e1c-full/CH-recruiter-private-boundary/stale-tab-login-inert-recruiter.png
+evidence: tests/e2e/ui.mjs; tests/changelog.test.ts; tests/e2e/ui/stale-tab-login.mjs; tests/e2e/ui/recruiter-logo-transition.mjs; docs/qa/evidence/2026-09-29T-stale-tab-login-manual/candidate-relogin-375px.png; docs/qa/evidence/2026-09-29T-stale-tab-login-manual/recruiter-relogin-375px.png; docs/qa/evidence/2026-09-29T-login-callback-ptbr/callback-invalid-after-reload-375px.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-repeated-reset-terminal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-impersonated-target-terminal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-impersonation-ended-terminal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-candidate-forbidden-admin.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/auth-candidate-forbidden-admin-goal.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/recruiter-forbidden-candidate.png; docs/qa/evidence/2026-08-24T210158000000Z-71293d34-release-1.3.0-full/recruiter-forbidden-candidate-goal.png; docs/qa/reports/2026-08-27T162317105000Z-76fc8fc9-pwa-cache-refresh.md; docs/qa/evidence/2026-09-29T035351654581Z-97f37e1c-full/CH-auth-boundary-recovery/stale-tab-login-inert.png; docs/qa/evidence/2026-09-29T035351654581Z-97f37e1c-full/CH-recruiter-private-boundary/stale-tab-login-inert-recruiter.png
 last_report: docs/qa/reports/2026-09-29T035351654581Z-97f37e1c-full-release-candidate-1.29-full.md
 overlaps:
 ---
@@ -50,3 +50,10 @@ mesma família do splash já corrigido, gatilho novo (`BUG-20260929-stale-tab-lo
 (2) `/login/callback` com token inválido redireciona para
 `http://localhost:3210/login?error=invalid`, saindo do host canônico
 `127.0.0.1` e perdendo o idioma da sessão (`BUG-20260929-login-callback-redirect-leaves-canonical-host`).
+
+#436, logo do topo para recrutador: o redirect de `/` para `/jobs` leva a URL
+diferente do alvo da transição, e a leitura do código sugeria splash preso.
+Medido em build de produção local (E2E `recruiter-logo-transition`), em 1280 e
+375px, a partir de `/jobs` e de `/account`: o overlay entra e sai em cerca de
+0,5 s, sem `inert` nem `aria-busy` residuais. Não há defeito; o teste fica como
+cobertura e não muda o `qa_status` do cenário.
