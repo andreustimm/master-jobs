@@ -1,6 +1,6 @@
 # BUG-20260929-stale-tab-login-inert: aba antiga fica presa no splash em /login depois de sair em outra aba
 
-- **Status:** open
+- **Status:** fixed
 - **Impact (user-side):** Blocks-Completion
 - **Severity:** High · **Priority:** P1
 - **Persona Affected:** Andreus em triagem; Recrutadora convidada
