@@ -89,7 +89,7 @@ export default async function Jobs({
       registrarTempo(timer.report("/jobs"));
     }
   });
-  const { state, total, offer, broughtBy } = view;
+  const { state, total, offer, broughtBy, filteredBeyondTerm } = view;
   const dense = state.dense ?? false;
   const showTrack = view.scope?.mode === "best";
   const trackNames = Object.fromEntries(view.tracks.map((track) => [track.id, track.name]));
@@ -97,7 +97,7 @@ export default async function Jobs({
   const empty = broughtBy
     ? t("jobs.broughtByEmpty", { term: broughtBy.term, state: t(`termRun.${broughtBy.run}`) })
     : state.query
-      ? t("jobs.emptyTerm", { term: state.query.raw })
+      ? t(filteredBeyondTerm ? "jobs.emptyTermFiltered" : "jobs.emptyTermAbsent", { term: state.query.raw })
       : undefined;
 
   return (

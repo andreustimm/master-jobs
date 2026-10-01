@@ -102,6 +102,9 @@ export { FIT_MAX, FIT_SLIDER_STEP, PAY_FILTER_MAX, PAY_SLIDER_CEILING, PAY_SLIDE
 
 const SORTS = ["fit", "recent", "comp", "relevance"] as const;
 
+/** O corte de fit sem `?fit=` na URL — não é uma escolha da pessoa (#402). */
+const DEFAULT_FIT = 45;
+
 /**
  * A score read from the URL, held between zero and the scorer's ceiling.
  *
@@ -138,7 +141,7 @@ export function readFilters(params: Record<string, string | string[] | undefined
   };
   const notices: FilterNotice[] = [];
   const state: FilterState = {
-    fit: boundedFit(one("fit"), 45),
+    fit: boundedFit(one("fit"), DEFAULT_FIT),
     cluster: one("cluster"),
     sources: many("source"),
     workMode: readWorkMode(one("workMode")),
@@ -391,6 +394,45 @@ export function resolvePayFilter(state: FilterState, tracks: Track[], fx: FxTabl
  */
 export function payFilterActive(pay: PayFilter | undefined): boolean {
   return pay !== undefined && (pay.min !== undefined || pay.max !== undefined || pay.disclosedOnly === true);
+}
+
+/**
+ * Há recorte além do termo buscado?
+ *
+ * Decide entre "0 vagas com este filtro" e "termo ausente no acervo" quando
+ * a busca por termo não acha nada (#402): a primeira frase, dita sem filtro
+ * nenhum escolhido, mandava "remova filtros" para quem não tinha o que
+ * remover; a segunda, dita COM filtro, já foi falsa uma vez — "laravel"
+ * existe no acervo, o `workMode=onsite` é que zerava (BUG-20260929-search
+ * -term-false-negative-laravel).
+ *
+ * `fit` só conta ACIMA do padrão de 45: nem o próprio padrão (sem `?fit=` na
+ * URL) nem um corte mais frouxo (`fit=0`, "qualquer nota") cortam vaga que o
+ * padrão já não cortasse — não são a causa de um zero. Só um corte MAIS
+ * exigente reduz o universo abaixo do que o padrão já mostra. `track` conta
+ * porque muda o universo pontuado, não só a ordenação. `status`, `pay`,
+ * `cluster`, `company`, fonte, modalidade e os sinalizadores booleanos vêm de
+ * `toBoardFilters` — são exatamente os campos que entram na consulta do
+ * quadro.
+ */
+export function hasFilterBeyondTerm(state: FilterState): boolean {
+  return (
+    state.fit > DEFAULT_FIT
+    || state.fitMax !== undefined
+    || Boolean(state.cluster)
+    || Boolean(state.company)
+    || state.sources.length > 0
+    || state.workMode !== undefined
+    || state.unblocked === true
+    || state.fresh === true
+    || state.paid === true
+    || state.named === true
+    || state.described === true
+    || state.notApplied === true
+    || state.track !== undefined
+    || state.pay !== undefined
+    || Boolean(state.status)
+  );
 }
 
 const BOARD_STATUSES = [...FUNNEL_STATUSES, "unfiled", "any"] as const;

@@ -139,7 +139,12 @@ export const ptBR = {
     countryUnknown: "sem localização",
     offerSearch: "Buscar “{term}” nas plataformas",
     offerSearchLead: "Salvar o termo busca vagas novas com ele nas plataformas cadastradas, todo dia.",
-    emptyTerm: "Nenhuma vaga corresponde a “{term}” com os filtros atuais. Remova filtros ou tente outro termo.",
+    // Duas frases, não uma: com recorte além do termo, "ausente no acervo"
+    // seria falso (#402, BUG-20260929-search-term-false-negative-laravel —
+    // "laravel" existe, o filtro de modalidade é que zera). Sem recorte, dizer
+    // só "remova filtros" não ajuda quem não escolheu nenhum.
+    emptyTermFiltered: "Nenhuma vaga corresponde a “{term}” com os filtros atuais. Remova filtros ou tente outro termo.",
+    emptyTermAbsent: "Nenhuma vaga do acervo tem “{term}”. Buscar nas plataformas inclui vagas novas com esse termo.",
     broughtByEmpty: "O termo “{term}” ainda não trouxe vagas. Última busca: {state}.",
     notInterested: "não me interessa",
     notInterestedHint: "Tira a vaga das suas listas. Ela fica em “Arquivadas”, e dá para restaurar enquanto você não tiver aplicado.",

@@ -343,8 +343,11 @@ export async function run(ctx) {
     emphasized: document.querySelector('[data-testid="jobs-offer-search"]')?.getAttribute("data-emphasized"),
   }));
   check(
-    "term-search E2E-020 termo sem vaga: o vazio nomeia o termo e oferece buscar nas plataformas",
-    emptyTerm.empty.includes("zzqxunmatched")
+    // Sem filtro nenhum escolhido (só `q=`), a frase certa é "ausente no
+    // acervo" — não "remova filtros", que não ajuda quem não tinha filtro
+    // pra remover (#402).
+    "term-search E2E-020 termo sem vaga e sem filtro: o vazio afirma a ausência no acervo e oferece buscar nas plataformas",
+    emptyTerm.empty === ptBR.jobs.emptyTermAbsent.replace("{term}", "zzqxunmatched")
       && emptyTerm.offer === "/searches/tracks/new?term=zzqxunmatched"
       && emptyTerm.emphasized === "true",
     JSON.stringify(emptyTerm),
@@ -360,7 +363,15 @@ export async function run(ctx) {
     await page.reload({ waitUntil: "networkidle" });
     const emptyText = (await page.locator('[data-testid="jobs-empty"]').textContent()) ?? "";
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-    check(`termo existente com filtro sem resultado explica o recorte em ${locale}`, beforeFilter === 1 && emptyText.includes(dictionary.jobs.emptyTerm.replace("{term}", "Laravel")), emptyText);
+    // A frase do recorte, não a de ausência: "laravel" existe (a vaga some só
+    // com `workMode=onsite`) — afirmar ausência aqui é exatamente o falso
+    // negativo do BUG-20260929-search-term-false-negative-laravel. A frase
+    // antiga ("Nenhuma vaga do acervo menciona…") não bateria mais aqui.
+    check(
+      `termo existente com filtro sem resultado explica o recorte, não a ausência, em ${locale}`,
+      beforeFilter === 1 && emptyText === dictionary.jobs.emptyTermFiltered.replace("{term}", "Laravel"),
+      emptyText,
+    );
     check(`vazio contextualizado cabe em 375px em ${locale}`, overflow <= 1, `${overflow}px`);
     await page.goto(`${BASE}/jobs?q=Laravel&fit=0`, { waitUntil: "networkidle" });
     check(`remover modalidade recupera a vaga que menciona o termo em ${locale}`, await page.locator('[data-testid="job-link-905000001"]').count() === 1);

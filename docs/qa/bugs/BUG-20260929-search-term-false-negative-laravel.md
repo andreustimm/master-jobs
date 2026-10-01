@@ -38,14 +38,14 @@ mencionam o termo sem o filtro de modalidade.
 ## Fix
 
 <!-- filled when status moves to fixed -->
-- **Root cause:**
-- **Fix commit:**
-- **Regression test:**
+- **Root cause:** `app/jobs/(lista)/page.tsx` escolhia a mensagem de zero resultados só por `state.query` existir, sem olhar se havia recorte ativo — uma frase só para "0 com este filtro" e "termo ausente no acervo", os dois casos que o produto promete distinguir.
+- **Fix commit:** 7f69ab7 (`fix(vagas): descreve filtros no vazio da busca por termo`) trocou a frase que afirmava ausência por uma neutra ("filtros atuais"), mas não fez a distinção — a frase neutra passou a aparecer também sem filtro nenhum escolhido (achado da revisão da PR #419, 01/10). A correção da revisão adiciona `hasFilterBeyondTerm` (`app/filter-state.ts`), que decide pelos mesmos campos que entram na consulta do quadro (`toBoardFilters`, `payFilterActive`, `track`), e `app/jobs/(lista)/page.tsx` escolhe `jobs.emptyTermFiltered` ou `jobs.emptyTermAbsent` por ela.
+- **Regression test:** `tests/filter-state.test.ts` (`hasFilterBeyondTerm` unitário: `fit` padrão e `fit=0` não contam, `fit` acima do padrão e cada outro campo contam); `tests/jobs-empty-term.test.ts` (as duas frases, cada uma pelo lado certo); `tests/e2e/ui/searches.mjs` (`laravel&workMode=onsite` mostra a frase de recorte, `zzqxunmatched` sem filtro mostra a de ausência, PT e EN).
 
 ## Verification
 
 <!-- filled when status moves to verified -->
-- **Retested:**
-- **Result:**
+- **Retested:** 2026-10-01, automatizado — `pnpm vitest run tests/filter-state.test.ts tests/jobs-empty-term.test.ts` e `node tests/e2e/run-isolated.mjs --areas searches` (86/86, PT-BR e EN). Sem sessão manual nesta rodada.
+- **Result:** a frase de recorte aparece só com filtro além do termo; a de ausência, só sem filtro — nenhuma das duas aparece fora do seu caso.
 
-Correção 7f69ab7: o texto descreve ausência nos filtros atuais. Dois testes falharam antes; 16 testes relacionados, typecheck e E2E searches 86/86 passaram. Reteste manual em conta Alex, PT/EN e 375px: TypeScript retorna duas vagas, presencial zera com orientação correta após refresh, e remover modalidade recupera ambas; detalhe confirma o termo e modalidade. Pass no escopo da #402. Relatório: `docs/qa/reports/2026-09-29T144500Z-codex402-busca-filtrada.md`.
+Correção 7f69ab7 (histórico): o texto passou a descrever "filtros atuais" em vez de afirmar ausência, mas isso tornou a MESMA frase genérica para os dois casos — a distinção pedida pela #402 continuava sem existir, achado pela revisão da PR #419. Ver Fix/Verification acima para a correção real.

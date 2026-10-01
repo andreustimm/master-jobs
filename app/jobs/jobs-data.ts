@@ -24,6 +24,7 @@ import { loadRates } from "../../src/contexts/fx/index.ts";
 import type { StageTimer } from "../../src/core/observability.ts";
 import {
   defaultPay,
+  hasFilterBeyondTerm,
   payFilterActive,
   readFilters,
   resolvePayFilter,
@@ -59,6 +60,8 @@ export type JobsView = {
   near: { available: boolean; rows: NearRow[] } | null;
   /** Offer to search the platforms for the typed term; emphasized when few match. */
   offer: { term: string; emphasized: boolean } | null;
+  /** Há recorte além do termo buscado? Decide a frase do vazio (#402). */
+  filteredBeyondTerm: boolean;
 };
 
 function trackChoice(state: FilterState): TrackChoice {
@@ -233,5 +236,6 @@ export async function loadJobsView(input: {
     pay,
     near,
     offer: state.term && candidateId !== null ? { term: state.term.term, emphasized: total < FEW_MATCHES } : null,
+    filteredBeyondTerm: hasFilterBeyondTerm(state),
   };
 }

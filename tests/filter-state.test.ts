@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { defaultPay, facetHref, href, openJobsHref, readFilters, toBoardFilters } from "../app/filter-state.ts";
+import {
+  defaultPay,
+  facetHref,
+  hasFilterBeyondTerm,
+  href,
+  openJobsHref,
+  readFilters,
+  toBoardFilters,
+} from "../app/filter-state.ts";
 import { targetOf } from "../src/contexts/matching/index.ts";
 import { loadProfile } from "../src/core/profile/load.ts";
 
@@ -233,6 +241,41 @@ describe("Jobs screen filters in the URL", () => {
     // E as duas faixas foram efetivamente trocadas, não só avisadas.
     expect([state.fit, state.fitMax]).toEqual([20, 80]);
     expect([state.pay?.min, state.pay?.max]).toEqual([1000, 5000]);
+  });
+});
+
+describe("recorte além do termo, para a mensagem de zero resultados (#402)", () => {
+  it("termo sozinho, sem `fit` na URL (padrão 45), não é filtro", () => {
+    expect(hasFilterBeyondTerm(readFilters({ q: "zzqxunmatched" }))).toBe(false);
+  });
+
+  it("`fit=0` explícito (qualquer nota) não é filtro — é mais frouxo que o padrão", () => {
+    // BUG-20260929-search-term-false-negative-laravel ao contrário: um corte
+    // mais largo que o padrão nunca é a causa de um zero.
+    expect(hasFilterBeyondTerm(readFilters({ q: "zzqxunmatched", fit: "0" }))).toBe(false);
+  });
+
+  it("`fit` acima do padrão é filtro", () => {
+    expect(hasFilterBeyondTerm(readFilters({ q: "laravel", fit: "60" }))).toBe(true);
+  });
+
+  it.each([
+    ["fitMax", { fitMax: "80" }],
+    ["workMode", { workMode: "onsite" }],
+    ["company", { company: "Acme" }],
+    ["cluster", { cluster: "ai" }],
+    ["source", { source: "remotive" }],
+    ["status", { status: "unfiled" }],
+    ["track", { track: "12" }],
+    ["pay", { pay: "5000" }],
+    ["unblocked", { unblocked: "1" }],
+    ["fresh", { fresh: "1" }],
+    ["paid", { paid: "1" }],
+    ["named", { named: "1" }],
+    ["described", { described: "1" }],
+    ["notApplied", { notApplied: "1" }],
+  ] as const)("%s sozinho com o termo conta como filtro", (_label, extra) => {
+    expect(hasFilterBeyondTerm(readFilters({ q: "laravel", ...extra }))).toBe(true);
   });
 });
 
