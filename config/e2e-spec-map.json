@@ -90,6 +90,17 @@
       ]
     },
     {
+      "id": "jobs-accessibility",
+      "modules": [
+        "tests/e2e/ui/jobs-accessibility.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/jobs",
+        "/login"
+      ]
+    },
+    {
       "id": "design",
       "modules": [
         "tests/e2e/ui/design.mjs"

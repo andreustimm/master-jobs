@@ -553,6 +553,12 @@ describe("architecture inventory", () => {
     for (const file of APP) {
       for (const match of read(file).matchAll(/<a\b[\s\S]*?>/g)) {
         const compact = match[0].replace(/\s+/g, " ").trim();
+        // Âncora de mesma página (`href="#id"`) não troca de rota: é
+        // navegação nativa do browser, e TransitionLink intercepta o clique
+        // e quebra o foco automático no destino (#398). Fica fora da regra
+        // de transição, que só vale para troca de tela.
+        const literalHref = /\bhref="([^"]*)"/.exec(compact)?.[1];
+        if (literalHref?.startsWith("#")) continue;
         const href = /\bhref=\{([^}]+)\}/.exec(compact)?.[1]?.trim();
         const nativeNavigation = /\bdownload(?:\s|=)/.test(compact) || /\btarget="_blank"/.test(compact);
         if (!href || !allowedRawAnchors.get(file)?.has(href) || !nativeNavigation) {

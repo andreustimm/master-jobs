@@ -38,17 +38,18 @@ do login.
 ## Fix
 
 <!-- filled when status moves to fixed -->
-- **Root cause:**
-- **Fix commit:**
-- **Regression test:**
+- **Root cause:** não existia atalho "pular para o cabeçalho"; o primeiro
+  `Tab` depois do login ia direto ao conteúdo principal.
+- **Fix commit:** 991cd077
+- **Regression test:** `tests/e2e/ui/jobs-accessibility.mjs` (áreas
+  `jobs-accessibility`, 26/26) cobre o primeiro `Tab` após login e o `Enter`
+  no atalho devolvendo foco ao cabeçalho, em cockpit e Vagas.
 
 ## Verification
 
 <!-- filled when status moves to verified -->
-- **Retested:**
-- **Result:**
-
-## Reteste #398
-
-Interface pública, teclado e recarga confirmaram o recorte corrigido. Relatório: docs/qa/reports/2026-09-29T145000Z-acessibilidade-398.md.
-VoiceOver/pinch em aparelho físico permanece pendente no cenário abrangente.
+- **Retested:** docs/qa/reports/2026-09-29T145000Z-acessibilidade-398.md
+- **Result:** interface pública, teclado e recarga confirmaram o recorte
+  corrigido — `Tab` alcança o atalho "Ir para o cabeçalho" e `Enter` leva o
+  foco ao cabeçalho. VoiceOver/pinch em aparelho físico permanece pendente
+  no cenário abrangente NAV-accessible-mobile-transition.
