@@ -1,6 +1,15 @@
 import type { Route } from "next";
-import { WORK_MODES, readWorkMode, type BoardFilters, type TrackTarget, type WorkMode } from "../src/contexts/matching/index.ts";
+import {
+  WORK_MODES,
+  readWorkMode,
+  type BoardFilters,
+  type PayFilter,
+  type Track,
+  type TrackTarget,
+  type WorkMode,
+} from "../src/contexts/matching/index.ts";
 import { FUNNEL_STATUSES } from "../src/contexts/pursuit/domain/application.ts";
+import type { FxTable } from "../src/core/money.ts";
 import { parseQuery } from "../src/core/search.ts";
 import { validateTerm, type TermError, type ValidTerm } from "../src/core/term.ts";
 import { FIT_MAX, PAY_FILTER_MAX } from "./filter-scales.ts";
@@ -295,20 +304,22 @@ export type FacetToggle = "unblocked" | "fresh" | "named";
 /**
  * O link de um card do cockpit que conta uma faceta.
  *
- * Carrega SÓ o que a faceta lê — corte, cluster, consulta, fontes, modalidade
- * e agrupamento — mais o recorte do card, e nunca o estado inteiro. `status`,
- * `company`, `fitMax`, faixa salarial ou "ainda não enviadas" ficam de fora
+ * Carrega SÓ o que a faceta lê — corte, cluster, consulta, fontes, modalidade,
+ * empresa, faixa salarial e agrupamento — mais o recorte do card, e nunca o
+ * estado inteiro. `status`, `fitMax` e "ainda não enviadas" ficam de fora
  * porque `cachedBoardFacets` não os aplica: levá-los faria `/jobs` contar um
- * quadro menor que o número do card, e a mesma pergunta teria duas respostas.
+ * quadro menor que o número do card.
  */
 export function facetHref(state: FilterState, toggle: FacetToggle): Route {
   const facet: FilterState = {
     fit: state.fit,
     cluster: state.cluster,
     query: state.query,
+    company: state.company,
     sources: state.sources,
     workMode: state.workMode,
     grouped: state.grouped,
+    pay: state.pay,
     dense: state.dense,
     [toggle]: true,
     notices: [],
@@ -334,6 +345,52 @@ export function defaultPay(primary: TrackTarget | null): { currency: string; per
   const first = primary?.compensation.ranges[0];
   if (!first) return { currency: "USD", period: "month" };
   return { currency: first.currency.toUpperCase(), period: first.period === "year" ? "year" : "month" };
+}
+
+/** A trilha principal que conta para a faixa salarial: ativa e com alvo. */
+function primaryTarget(tracks: Track[]): TrackTarget | null {
+  return tracks.find((track) => track.status === "active" && track.target && track.isPrimary)?.target ?? null;
+}
+
+/**
+ * Normaliza a faixa da URL para o filtro do repositório.
+ *
+ * A moeda e o período omitidos significam o primeiro intervalo da trilha
+ * principal; uma moeda sem cotação na tabela de câmbio cai na mesma moeda
+ * padrão, em vez de seguir para uma consulta que trata tudo como não
+ * comparável. O cockpit e `/jobs` chamam esta mesma função, com a mesma lista
+ * de trilhas e a mesma cotação, para não responderem perguntas diferentes
+ * quando a URL só informa o piso/teto — antes, `/jobs` validava a moeda
+ * contra `rates` e escolhia a principal só entre trilhas ativas com alvo,
+ * enquanto o cockpit usava a moeda crua e a principal de qualquer trilha.
+ */
+export function resolvePayFilter(state: FilterState, tracks: Track[], fx: FxTable | null): PayFilter | undefined {
+  const active = state.pay !== undefined || state.sort === "comp";
+  if (!active) return undefined;
+  const defaults = defaultPay(primaryTarget(tracks));
+  const currencies = fx
+    ? new Set([fx.base, ...Object.keys(fx.rates)].map((code) => code.toUpperCase()))
+    : new Set([defaults.currency]);
+  const currency =
+    state.pay?.currency && currencies.has(state.pay.currency) ? state.pay.currency : defaults.currency;
+  return {
+    min: state.pay?.min,
+    max: state.pay?.max,
+    currency,
+    period: state.pay?.period ?? defaults.period,
+    disclosedOnly: state.pay?.disclosedOnly ?? false,
+  };
+}
+
+/**
+ * A faixa realmente filtra o universo contado — mínimo, máximo ou só
+ * divulgados. `sort=comp` por si só normaliza o valor exibido e a ordenação
+ * mas não corta vaga nenhuma (a condição de pagamento do repositório devolve
+ * "sem filtro" sem limites), então não merece entrada própria no cache de
+ * facetas nem o join lateral de pagamento na consulta.
+ */
+export function payFilterActive(pay: PayFilter | undefined): boolean {
+  return pay !== undefined && (pay.min !== undefined || pay.max !== undefined || pay.disclosedOnly === true);
 }
 
 const BOARD_STATUSES = [...FUNNEL_STATUSES, "unfiled", "any"] as const;

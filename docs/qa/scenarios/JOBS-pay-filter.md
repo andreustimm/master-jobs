@@ -6,13 +6,13 @@ persona: Andreus em triagem
 journey: J-trust-the-filtered-board
 expected: A faixa (mínimo e máximo) na moeda e no período escolhidos filtra vagas convertidas; pagamento não informado ou não comparável fica visível e marcado
 entry_points: /jobs?pay=<min>&payMax=<max>&cur=USD&per=month; /jobs?sort=pay
-qa_status: untested
-bug_ids:
-fix_status:
-retest_status:
-fix_commits:
-evidence: docs/qa/evidence/2026-09-21-docs-qa-jornada-do-quadro-filtrado/pay-disclosed-only-empty.png
-last_report: 2026-09-21-docs-qa-jornada-do-quadro-filtrado
+qa_status: pass
+bug_ids: BUG-20260929-jobs-cockpit-ignores-salary-filter; BUG-20260929-jobs-grouped-pay-banner-off-by-one
+fix_status: fixed
+retest_status: pass
+fix_commits: 7bdacc7f7c323dfb6d3fa2f14b657b149487b8ac
+evidence: docs/qa/evidence/2026-09-21-docs-qa-jornada-do-quadro-filtrado/pay-disclosed-only-empty.png; docs/qa/evidence/2026-09-29-cockpit-contagens-filtros/CH-filtered-board-numbers-agree/jobs-pay-deep-link.png
+last_report: docs/qa/reports/2026-09-29-cockpit-contagens-filtros.md
 overlaps: JOBS-track-selector-fit
 ---
 
@@ -26,3 +26,7 @@ que é "sem limite" — o placeholder do campo diz isso. Mínimo acima do máxim
 trocado, com aviso. O campo aceita até 2.000.000.
 
 **Reset 2026-09-23 (#218):** a faixa salarial deixou de ser remontada por `key` (valores, período e moeda seguem a URL por dentro) e passou a se aplicar sozinha, inclusive ao trocar moeda ou período. Refazer a faixa invertida, o limpar e a troca de período digitando o valor logo depois.
+
+Reteste targeted de #396 (29/09): a recarga preservou `pay=6000`,
+`payMax=9000`, USD e mês na sessão manual; a área E2E `searches` passou os
+casos de mínimo, faixa salarial, agrupamento, ordenação e recarga (`80/80`).

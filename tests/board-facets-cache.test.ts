@@ -87,7 +87,7 @@ describe("cache das facetas", () => {
     expect(reads).toBe(2);
   });
 
-  it("paginar, ordenar, a faixa salarial, a empresa e os chips de recorte não refazem as facetas", async () => {
+  it("paginar, reordenar e chips independentes reaproveitam, mas salário que filtra e empresa criam faceta própria", async () => {
     await scored(1, 1, "architect");
     const view = (params: Record<string, string>, page = 1) =>
       loadJobsView({
@@ -98,14 +98,19 @@ describe("cache das facetas", () => {
     const reads = await facetReads(async () => {
       const first = await view({});
       await view({}, 2);
-      await view({ sort: "comp", cur: "USD", per: "month" });
+      // `sort=comp` sozinho normaliza o valor exibido e a ordenação, mas sem
+      // mínimo, máximo ou "só divulgados" não corta vaga nenhuma — reaproveita
+      // a mesma entrada de `view({})` (`payFilterActive` em `app/filter-state.ts`).
+      const sameAsFirst = await view({ sort: "comp", cur: "USD", per: "month" });
+      expect(sameAsFirst.facets).toEqual(first.facets);
       await view({ pay: "6000", payMax: "30000", cur: "USD", per: "month" });
       await view({ fresh: "1", unblocked: "1", notApplied: "1" });
       await view({ company: "Acme" });
       const last = await view({}, 3);
       expect(last.facets).toEqual(first.facets);
     });
-    expect(reads).toBe(1);
+    // Três leituras de verdade: `view({})`, a faixa que filtra e a empresa.
+    expect(reads).toBe(3);
 
     // Um filtro que muda as facetas é outra entrada.
     expect(await facetReads(() => view({ cluster: "architect" }))).toBe(1);
