@@ -4,6 +4,7 @@ import type { DB } from "../src/core/db/client.ts";
 import { llmModel, llmProvider } from "../src/core/db/schema.ts";
 import {
   chooseModel,
+  explainNoModel,
   isEffort,
   isKind,
   listModels,
@@ -67,9 +68,11 @@ describe("seedProviders", () => {
     await seedProviders();
     const models = await listModels();
     const providers = new Set(models.map((m) => m.providerSlug));
-    expect(providers).toEqual(
-      new Set(["anthropic", "openai", "openrouter", "nvidia", "opencode-zen", "opencode-go"]),
-    );
+    expect(providers).toEqual(new Set(["anthropic", "openai", "openrouter", "opencode-zen", "opencode-go"]));
+    // NVIDIA entra como provedor, mas os três modelos que a semente trazia
+    // foram desligados pelo provedor (#438): nenhum deles é cadastrado.
+    const slugs = (await db.select({ slug: llmProvider.slug }).from(llmProvider)).map((p) => p.slug);
+    expect(slugs).toContain("nvidia");
     expect(models.some((m) => m.modelId === "claude-sonnet-5")).toBe(true);
   });
 
@@ -77,9 +80,12 @@ describe("seedProviders", () => {
     // Without it the adapter would call api.openai.com with someone else's key.
     await seedProviders();
     const models = await listModels();
-    const nvidia = models.find((m) => m.providerSlug === "nvidia")!;
-    expect(nvidia.baseUrl).toBe("https://integrate.api.nvidia.com");
-    expect(nvidia.kind).toBe("compatible");
+    const openrouter = models.find((m) => m.providerSlug === "openrouter")!;
+    expect(openrouter.baseUrl).toBe("https://openrouter.ai/api");
+    expect(openrouter.kind).toBe("compatible");
+    // O provedor NVIDIA continua cadastrado, com a base URL, mesmo sem modelo vivo.
+    const [nvidia] = await db.select().from(llmProvider).where(eq(llmProvider.slug, "nvidia"));
+    expect(nvidia!.baseUrl).toBe("https://integrate.api.nvidia.com");
   });
 
   it("marks free tiers as costing zero, not unknown", async () => {
@@ -163,10 +169,97 @@ describe("chooseModel", () => {
   });
 });
 
+/**
+ * Cadastro antigo: a semente de antes de #438 gravou os modelos NIM, com
+ * `enabled` verdadeiro. É o estado das máquinas que já rodaram `jho llm seed`.
+ */
+async function cadastroAntigoComKimiPadrao(): Promise<void> {
+  const [nvidia] = await db.select({ id: llmProvider.id }).from(llmProvider).where(eq(llmProvider.slug, "nvidia"));
+  await db.update(llmModel).set({ isDefault: false });
+  await db.insert(llmModel).values([
+    { providerId: nvidia!.id, modelId: "moonshotai/kimi-k2-instruct", label: "Kimi K2", isDefault: true },
+    { providerId: nvidia!.id, modelId: "meta/llama-3.1-405b-instruct", label: "Llama 3.1 405B" },
+  ]);
+}
+
+describe("modelos desligados pelo provedor (#438)", () => {
+  it("a semente não cadastra modelo desligado e diz quais pulou, com status e data", async () => {
+    const r = await seedProviders();
+
+    expect((await db.select().from(llmModel)).map((m) => m.modelId)).not.toContain("moonshotai/kimi-k2-instruct");
+    expect(r.retired.map((m) => [m.modelId, m.httpStatus, m.endOfLife])).toEqual([
+      ["moonshotai/kimi-k2-instruct", 410, "2026-05-12"],
+      ["qwen/qwen3-coder-480b-a35b-instruct", 410, "2026-06-11"],
+      ["meta/llama-3.1-405b-instruct", 404, null],
+    ]);
+  });
+
+  it("cadastro antigo: a lista sinaliza o desligado e a escolha nunca o devolve", async () => {
+    await seedProviders();
+    await cadastroAntigoComKimiPadrao();
+    process.env.NVIDIA_API_KEY = "nvapi-sintetica-de-teste";
+
+    const kimi = (await listModels(true)).find((m) => m.modelId === "moonshotai/kimi-k2-instruct")!;
+    expect(kimi.retired).toEqual({ httpStatus: 410, endOfLife: "2026-05-12", observedOn: "2026-10-01" });
+    // O padrão gravado é o Kimi, e a chave da NVIDIA está lá: antes, era ele
+    // que rodava e voltava `provider_error`.
+    expect(await chooseModel()).toBeNull();
+    expect(await chooseModel("moonshotai/kimi-k2-instruct")).toBeNull();
+    expect(await chooseModel("Kimi K2")).toBeNull();
+  });
+
+  it("sem modelo vivo com chave, explica que os com chave foram desligados", async () => {
+    await seedProviders();
+    await cadastroAntigoComKimiPadrao();
+    process.env.NVIDIA_API_KEY = "nvapi-sintetica-de-teste";
+
+    const motivo = await explainNoModel();
+    expect(motivo.kind).toBe("only_retired");
+    expect(motivo.kind === "only_retired" && motivo.retired.map((m) => m.model.modelId).sort()).toEqual([
+      "meta/llama-3.1-405b-instruct",
+      "moonshotai/kimi-k2-instruct",
+    ]);
+    const pedido = await explainNoModel("moonshotai/kimi-k2-instruct");
+    expect(pedido).toMatchObject({
+      kind: "retired",
+      model: { modelId: "moonshotai/kimi-k2-instruct" },
+      retirement: { httpStatus: 410, endOfLife: "2026-05-12" },
+    });
+    expect(await explainNoModel("modelo-inventado")).toEqual({ kind: "unknown_model", explicit: "modelo-inventado" });
+  });
+
+  it("sem chave nenhuma, o motivo é a chave, não o desligamento", async () => {
+    await seedProviders();
+    await cadastroAntigoComKimiPadrao();
+    expect(await explainNoModel()).toEqual({ kind: "no_key" });
+  });
+
+  it("um modelo vivo com chave vence o padrão desligado", async () => {
+    await seedProviders();
+    await cadastroAntigoComKimiPadrao();
+    process.env.NVIDIA_API_KEY = "nvapi-sintetica-de-teste";
+    process.env.OPENROUTER_API_KEY = "sk-or-sintetica";
+
+    expect((await chooseModel())!.providerSlug).toBe("openrouter");
+  });
+
+  it("`use` recusa tornar padrão um modelo desligado e não mexe no padrão atual", async () => {
+    await seedProviders();
+    await cadastroAntigoComKimiPadrao();
+    await db.update(llmModel).set({ isDefault: false });
+    await db.update(llmModel).set({ isDefault: true }).where(eq(llmModel.modelId, "claude-sonnet-5"));
+
+    expect(await setDefaultModel("moonshotai/kimi-k2-instruct")).toBe("retired");
+
+    const defaults = (await db.select().from(llmModel)).filter((m) => m.isDefault).map((m) => m.modelId);
+    expect(defaults).toEqual(["claude-sonnet-5"]);
+  });
+});
+
 describe("setDefaultModel", () => {
   it("moves the default and leaves exactly one", async () => {
     await seedProviders();
-    expect(await setDefaultModel("claude-opus-5")).toBe(true);
+    expect(await setDefaultModel("claude-opus-5")).toBe("ok");
 
     const defaults = (await db.select().from(llmModel)).filter((m) => m.isDefault);
     expect(defaults).toHaveLength(1);
@@ -175,7 +268,7 @@ describe("setDefaultModel", () => {
 
   it("reports an unknown model instead of silently doing nothing", async () => {
     await seedProviders();
-    expect(await setDefaultModel("nao-existe")).toBe(false);
+    expect(await setDefaultModel("nao-existe")).toBe("not_found");
   });
 });
 

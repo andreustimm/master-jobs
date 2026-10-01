@@ -1286,8 +1286,20 @@ export const ptBR = {
     adminTokens: "{input} entrada / {output} saída tokens",
     adminCost: "custo estimado US$ {cost}",
     adminError: "erro: {code}",
+    adminErrorStatus: "erro: {code} (HTTP {status})",
     adminRetryOf: "nova tentativa de #{id}",
     adminRetry: "Tentar de novo",
+    adminRetryAfterFix: "Tentar após trocar o modelo",
+    causeModelUnavailable:
+      "Modelo desligado: o provedor não oferece mais este modelo (ou ele não existe). Tentar de novo com ele falha sempre — escolha outro na CLI (jho llm list, jho llm use <modelo>) antes.",
+    causeUnauthorized:
+      "Chave sem permissão: o provedor aceitou a chave, mas recusou este modelo para ela. Tentar de novo não resolve — autorize a chave na conta do provedor ou escolha outro modelo (jho llm use <modelo>).",
+    causeUnstable:
+      "Provedor instável: ele falhou ou não respondeu. Costuma passar — tentar de novo mais tarde pode resolver.",
+    causeRejected:
+      "O provedor recusou o pedido. Confira o modelo e o provedor cadastrados (jho llm list) antes de tentar de novo.",
+    causeUnknown:
+      "Erro do provedor sem o status HTTP: esta tentativa foi gravada antes de o status ser guardado. Confira o modelo em uso (jho llm list) antes de tentar de novo.",
   },
   copy: {
     candidateLead:

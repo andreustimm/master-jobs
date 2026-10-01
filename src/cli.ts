@@ -2461,8 +2461,17 @@ llm
   .action(async () => {
     await withDb(async () => {
       const { seedProviders } = await import("./core/llm/registry.ts");
+      const { describeRetirement } = await import("./core/llm/model-retirement.ts");
       const r = await seedProviders();
       console.log(`${c.green("\u2713")} ${r.providers} provedor(es), ${r.models} modelo(s)`);
+      // O que a semente sabe que saiu do ar (#438): dito aqui, e n\u00e3o descoberto
+      // depois como `provider_error`. Escolher o substituto \u00e9 de quem paga.
+      if (r.retired.length > 0) {
+        console.log(c.yellow("  Desligados pelo provedor, fora do cadastro:"));
+        for (const m of r.retired) {
+          console.log(c.dim(`    ${m.providerLabel} \u00b7 ${m.label} (${m.modelId}): ${describeRetirement(m)}`));
+        }
+      }
       console.log(c.dim("  Nada foi sobrescrito. Veja: jho llm list\n"));
     });
   });
@@ -2474,6 +2483,7 @@ llm
   .action(async (opts: { all?: boolean }) => {
     await withDb(async () => {
       const { chooseModel, listModels } = await import("./core/llm/registry.ts");
+      const { describeRetirement } = await import("./core/llm/model-retirement.ts");
       const models = await listModels(!opts.all);
 
       if (models.length === 0) {
@@ -2494,10 +2504,13 @@ llm
           (isActive ? c.green : (x: string) => x)(
             `  ${m.providerLabel.padEnd(12)}${name.padEnd(30)}` +
             `${(m.supportsReasoning ? (m.effort ?? "sim") : "—").padEnd(9)}${cost.padEnd(14)}` +
-            (m.keyPresent ? c.green("ok") : c.dim(m.apiKeyEnv)),
+            (m.keyPresent ? c.green("ok") : c.dim(m.apiKeyEnv)) +
+            // Nunca escolhido (#438): a marca diz por quê, com status e data.
+            (m.retired ? ` ${c.yellow(describeRetirement(m.retired))}` : ""),
           ),
         );
       }
+      if (!active) console.log(c.red("\n  Nenhum modelo disponível: escolha um."));
       console.log(
         c.dim(
           "\n  → é o modelo em uso. Trocar: jho llm use <modelo>\n" +
@@ -2513,7 +2526,14 @@ llm
   .action(async (model: string) => {
     await withDb(async () => {
       const { setDefaultModel } = await import("./core/llm/registry.ts");
-      if (await setDefaultModel(model)) {
+      const { RETIRED_MODELS, describeRetirement } = await import("./core/llm/model-retirement.ts");
+      const result = await setDefaultModel(model);
+      if (result === "retired") {
+        // `retired` só sai quando o id está no catálogo de desligados.
+        const retired = RETIRED_MODELS.find((m) => m.modelId === model)!;
+        console.error(c.red(`\n  Modelo "${model}" foi ${describeRetirement(retired)}: escolha outro. Veja: jho llm list\n`));
+        process.exitCode = 1;
+      } else if (result === "ok") {
         console.log(`${c.green("\u2713")} padrão: ${model}\n`);
       } else {
         console.error(c.red(`\n  Modelo "${model}" não cadastrado. Veja: jho llm list\n`));
@@ -2605,6 +2625,39 @@ llm
     });
   });
 
+/**
+ * "Nenhum modelo disponível: escolha um", com o motivo (#438). Sem isto, um
+ * cadastro só com modelos desligados pelo provedor parecia funcionar e
+ * terminava em `provider_error` depois de a pessoa esperar.
+ */
+async function printNoModel(explicit: string | undefined): Promise<void> {
+  const { explainNoModel } = await import("./core/llm/registry.ts");
+  const { describeRetirement } = await import("./core/llm/model-retirement.ts");
+  const { ENV_KEYS } = await import("./core/llm/port.ts");
+  const reason = await explainNoModel(explicit);
+  console.error(c.red("\n  Nenhum modelo disponível: escolha um."));
+  const lines: string[] = [];
+  if (reason.kind === "retired") {
+    lines.push(`  ${reason.model.modelId} foi ${describeRetirement(reason.retirement)}.`);
+  } else if (reason.kind === "unknown_model") {
+    lines.push(`  O modelo "${reason.explicit}" não está cadastrado, ou está desabilitado.`);
+  } else if (reason.kind === "only_retired") {
+    lines.push("  Os modelos com chave configurada foram desligados pelo provedor:");
+    for (const { model: m, retirement } of reason.retired) {
+      lines.push(`    ${m.providerLabel} · ${m.modelLabel} (${m.modelId}): ${describeRetirement(retirement)}`);
+    }
+  } else {
+    lines.push("  Nenhum modelo habilitado tem a chave no ambiente.");
+    lines.push(`  Defina ${Object.values(ENV_KEYS).join(" ou ")} no .env.`);
+  }
+  lines.push(
+    "  Cadastre: jho llm seed · veja: jho llm list · escolha: jho llm use <modelo>",
+    "  Modelo novo de um provedor: jho llm add-model <provedor> <id>.",
+    "  A chave é sua: fica só no .env, nunca no banco nem em log.\n",
+  );
+  console.log(c.dim(lines.join("\n")));
+}
+
 program
   .command("analyze <id>")
   .description("Leitura qualitativa de uma vaga com LLM (BYOK — sua chave, seu custo)")
@@ -2616,18 +2669,11 @@ program
     await withDb(async () => {
       const { chooseModel, portFor } = await import("./core/llm/registry.ts");
       const { redactKey } = await import("./core/llm/port.ts");
-      const { ENV_KEYS } = await import("./core/llm/port.ts");
 
-      const choice = await chooseModel(typeof opts.model === "string" ? opts.model : undefined);
+      const explicit = typeof opts.model === "string" ? opts.model : undefined;
+      const choice = await chooseModel(explicit);
       if (!choice) {
-        console.error(c.red("\n  Nenhum modelo disponível com chave configurada."));
-        console.log(
-          c.dim(
-            `  Cadastre: jho llm seed · veja: jho llm list\n` +
-            `  Defina ${Object.values(ENV_KEYS).join(" ou ")} no .env.\n` +
-            "  A chave é sua: fica só no .env, nunca no banco nem em log.\n",
-          ),
-        );
+        await printNoModel(explicit);
         process.exitCode = 1;
         return;
       }
@@ -2741,14 +2787,15 @@ analysis
     if (max === null) return;
     await withDb(async () => {
       const { chooseModel, portFor } = await import("./core/llm/registry.ts");
-      const { ENV_KEYS, redactKey } = await import("./core/llm/port.ts");
+      const { redactKey } = await import("./core/llm/port.ts");
       const { processNextAnalysis, queuedAnalyses } = await import("./core/llm/job-analysis.ts");
 
-      // Sem chave, nada é reivindicado: a fila fica como está, e ninguém paga.
-      const choice = await chooseModel(typeof opts.model === "string" ? opts.model : undefined);
+      // Sem modelo vivo com chave, nada é reivindicado: a fila fica como está,
+      // ninguém paga, e a tentativa não vira `provider_error` (#438).
+      const explicit = typeof opts.model === "string" ? opts.model : undefined;
+      const choice = await chooseModel(explicit);
       if (!choice) {
-        console.error(c.red("\n  Nenhum modelo disponível com chave configurada."));
-        console.log(c.dim(`  Cadastre: jho llm seed · defina ${Object.values(ENV_KEYS).join(" ou ")} no .env.\n`));
+        await printNoModel(explicit);
         process.exitCode = 1;
         return;
       }

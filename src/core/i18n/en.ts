@@ -1262,8 +1262,20 @@ export const en: Dictionary = {
     adminTokens: "{input} input / {output} output tokens",
     adminCost: "estimated cost US$ {cost}",
     adminError: "error: {code}",
+    adminErrorStatus: "error: {code} (HTTP {status})",
     adminRetryOf: "retry of #{id}",
     adminRetry: "Try again",
+    adminRetryAfterFix: "Retry after changing model",
+    causeModelUnavailable:
+      "Model retired: the provider no longer offers this model (or it does not exist). Retrying with it always fails — pick another one in the CLI (jho llm list, jho llm use <model>) first.",
+    causeUnauthorized:
+      "Key not authorized: the provider accepted the key but refused this model for it. Retrying does not help — authorize the key in the provider account or pick another model (jho llm use <model>).",
+    causeUnstable:
+      "Provider unstable: it failed or did not answer. This usually passes — retrying later may work.",
+    causeRejected:
+      "The provider rejected the request. Check the registered model and provider (jho llm list) before retrying.",
+    causeUnknown:
+      "Provider error without an HTTP status: this attempt was recorded before the status was kept. Check the model in use (jho llm list) before retrying.",
   },
   copy: {
     candidateLead:

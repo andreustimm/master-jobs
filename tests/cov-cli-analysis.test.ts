@@ -118,6 +118,44 @@ describe("jho analysis run", () => {
     expect(linhas).toEqual([{ status: "queued" }]);
   });
 
+  it("só modelo desligado com chave: erro claro, sem reivindicar nem chamar (#438)", async () => {
+    const id = await vaga();
+    await rodar("analysis", "queue", String(id));
+    await rodar("llm", "add-provider", "nvidia", "--label", "NVIDIA NIM", "--key-env", VAR_CHAVE, "--base-url", "https://93.184.216.34");
+    await rodar("llm", "add-model", "nvidia", "moonshotai/kimi-k2-instruct", "--label", "Kimi K2");
+    process.env[VAR_CHAVE] = CHAVE;
+    const chamadas: string[] = [];
+    vi.stubGlobal("fetch", provedor(chamadas));
+
+    const r = await rodar("analysis", "run", "--yes");
+
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("Nenhum modelo disponível: escolha um");
+    expect(r.out).toContain("desligado pelo provedor (HTTP 410, fim de vida em 2026-05-12)");
+    expect(r.out).not.toContain("provider_error");
+    expect(chamadas).toEqual([]);
+    const linhas = await banco().select({ status: jobAnalysis.status }).from(jobAnalysis);
+    expect(linhas).toEqual([{ status: "queued" }]);
+  });
+
+  it("recusa do provedor imprime o código e o status HTTP, sem a mensagem dele (#438)", async () => {
+    const id = await vaga();
+    await rodar("analysis", "queue", String(id));
+    await cadastrarModelo();
+    process.env[VAR_CHAVE] = CHAVE;
+    vi.stubGlobal("fetch", (async () =>
+      new Response(JSON.stringify({ error: { message: "Authorization failed MENSAGEM-DO-PROVEDOR" } }), {
+        status: 403,
+        headers: { "content-type": "application/json" },
+      })) as unknown as typeof fetch);
+
+    const r = await rodar("analysis", "run", "--yes");
+
+    expect(r.out).toContain('"status":"failed","errorCode":"provider_error","providerStatus":403');
+    expect(r.out).not.toContain("MENSAGEM-DO-PROVEDOR");
+    expect(r.out).not.toContain(CHAVE);
+  });
+
   it("fila vazia não pergunta nem chama nada", async () => {
     await cadastrarModelo();
     process.env[VAR_CHAVE] = CHAVE;

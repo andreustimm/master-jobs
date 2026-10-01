@@ -16,10 +16,52 @@ import {
   canRetry,
   decideAnalysisRequest,
   estimateCost,
+  failureCause,
+  httpStatusOf,
   interpretOutput,
   structureInputHash,
   type AttemptRow,
 } from "../src/core/llm/job-structure.ts";
+
+describe("causa da falha do provedor (#438)", () => {
+  it("separa modelo desligado, chave sem permissão e provedor instável pelo status", () => {
+    expect(failureCause("provider_error", 410)).toBe("model_unavailable");
+    expect(failureCause("provider_error", 404)).toBe("model_unavailable");
+    expect(failureCause("provider_error", 401)).toBe("unauthorized");
+    expect(failureCause("provider_error", 403)).toBe("unauthorized");
+    expect(failureCause("provider_error", 500)).toBe("unstable");
+    expect(failureCause("provider_error", 503)).toBe("unstable");
+    expect(failureCause("provider_error", 408)).toBe("unstable");
+    // Sem resposta HTTP nenhuma: o provedor não respondeu.
+    expect(failureCause("network", null)).toBe("unstable");
+  });
+
+  it("outro 4xx é pedido recusado, não modelo nem chave", () => {
+    expect(failureCause("provider_error", 400)).toBe("rejected");
+    expect(failureCause("provider_error", 422)).toBe("rejected");
+  });
+
+  it("tentativa gravada antes do status (só provider_error) continua legível, como causa desconhecida", () => {
+    expect(failureCause("provider_error", null)).toBe("unknown");
+  });
+
+  it("falha que não é do provedor não ganha causa de provedor", () => {
+    expect(failureCause("malformed_output", null)).toBeNull();
+    expect(failureCause("input_changed", null)).toBeNull();
+    expect(failureCause("lease_expired", null)).toBeNull();
+    expect(failureCause("quota", 429)).toBeNull();
+    expect(failureCause(null, null)).toBeNull();
+  });
+
+  it("só aceita status HTTP inteiro de 100 a 599; o resto vira nulo", () => {
+    expect(httpStatusOf(410)).toBe(410);
+    expect(httpStatusOf(0)).toBeNull();
+    expect(httpStatusOf(99)).toBeNull();
+    expect(httpStatusOf(600)).toBeNull();
+    expect(httpStatusOf(403.5)).toBeNull();
+    expect(httpStatusOf(Number.NaN)).toBeNull();
+  });
+});
 
 const SOURCE = buildStructureInput({
   title: "Staff Software Engineer",

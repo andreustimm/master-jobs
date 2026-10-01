@@ -156,9 +156,9 @@ describe("IT-011 fila, idempotência, cota e vaga alterada", () => {
     await processNextAnalysis(model(fakePort(() => new LlmError("anthropic", 500, "corpo do provedor"))), { now: () => at(1000) });
     await requestJobAnalysis({ jobId, requestedBy: null, now: at(2000) });
     await processNextAnalysis(model(fakePort(() => new Error("ECONNRESET"))), { now: () => at(3000) });
-    expect((await allRows()).map((r) => [r.status, r.errorCode])).toEqual([
-      ["failed", "provider_error"],
-      ["failed", "network"],
+    expect((await allRows()).map((r) => [r.status, r.errorCode, r.providerStatus])).toEqual([
+      ["failed", "provider_error", 500],
+      ["failed", "network", null],
     ]);
     expect(JSON.stringify(await allRows())).not.toContain("corpo do provedor");
     expect(await retryJobAnalysis({ analysisId: 999_999, requestedBy: null, now: at(4000) })).toEqual({ ok: false, code: "not_found" });
@@ -171,6 +171,57 @@ describe("IT-011 fila, idempotência, cota e vaga alterada", () => {
     expect((await jobAnalysisPanel(jobId, { admin: false })).exhausted).toBe(true);
     const [, , third] = await allRows();
     expect(await retryJobAnalysis({ analysisId: third!.id, requestedBy: null, now: at(8000) })).toMatchObject({ ok: true, outcome: "created" });
+  });
+
+  it("modelo desligado (410) grava o status, só o número, e o admin lê a causa (#438)", async () => {
+    await requestJobAnalysis({ jobId, requestedBy: null, now: T0 });
+    const key = "nvapi-SINTETICA-NAO-E-CHAVE-0000000000";
+    const processed = await processNextAnalysis(
+      model(fakePort(() => new LlmError("openai", 410, `model reached its end of life on 2026-05-12 (key ${key})`))),
+      { now: () => at(1000) },
+    );
+    expect(processed).toEqual({ id: expect.any(Number), status: "failed", errorCode: "provider_error", providerStatus: 410 });
+    const [row] = await allRows();
+    expect(row).toMatchObject({ status: "failed", errorCode: "provider_error", providerStatus: 410 });
+    // Nem a mensagem do provedor nem a chave que ele ecoou.
+    expect(JSON.stringify(row)).not.toContain("end of life");
+    expect(JSON.stringify(row)).not.toContain("SINTETICA");
+
+    const admin = await jobAnalysisPanel(jobId, { admin: true });
+    expect(admin.admin && admin.attempts[0]).toMatchObject({ providerStatus: 410, cause: "model_unavailable" });
+    // Quem não é admin não recebe status nem causa.
+    const other = await jobAnalysisPanel(jobId, { admin: false });
+    expect(other.latest).not.toHaveProperty("providerStatus");
+    expect(other.latest).not.toHaveProperty("cause");
+  });
+
+  it("403 é chave sem permissão; status fora de HTTP não é gravado", async () => {
+    await requestJobAnalysis({ jobId, requestedBy: null, now: T0 });
+    await processNextAnalysis(model(fakePort(() => new LlmError("openai", 403, "Authorization failed"))), { now: () => at(1000) });
+    await requestJobAnalysis({ jobId, requestedBy: null, now: at(2000) });
+    await processNextAnalysis(model(fakePort(() => new LlmError("openai", 0, "sem status"))), { now: () => at(3000) });
+    const admin = await jobAnalysisPanel(jobId, { admin: true });
+    expect(admin.admin && admin.attempts.map((a) => [a.errorCode, a.providerStatus, a.cause])).toEqual([
+      ["provider_error", null, "unknown"],
+      ["provider_error", 403, "unauthorized"],
+    ]);
+  });
+
+  it("tentativa antiga, gravada só como provider_error, continua legível como causa desconhecida", async () => {
+    // Linha como as anteriores a #438: sem coluna de status preenchida.
+    await db.insert(jobAnalysis).values({
+      jobId,
+      status: "failed",
+      inputHash: "hash-antigo",
+      promptVersion: "1",
+      schemaVersion: "1",
+      providerSlug: "nvidia",
+      modelId: "moonshotai/kimi-k2-instruct",
+      errorCode: "provider_error",
+      finishedAt: T0,
+    });
+    const admin = await jobAnalysisPanel(jobId, { admin: true });
+    expect(admin.admin && admin.attempts[0]).toMatchObject({ errorCode: "provider_error", providerStatus: null, cause: "unknown" });
   });
 
   it("processador que perde o lease no meio da chamada não grava nem diz que concluiu", async () => {
