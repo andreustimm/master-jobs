@@ -175,6 +175,11 @@ describe("jho cv show e versions", () => {
 });
 
 describe("jho contacts", () => {
+  // A rede é do candidato ativo da CLI (#379): sem ele não há de quem ler.
+  beforeEach(async () => {
+    await syncCandidateFromProfile();
+  });
+
   it("sem contato nenhum, a lista ensina o comando que cadastra", async () => {
     const r = await rodar("contacts", "list");
 
@@ -264,6 +269,7 @@ describe("jho engage", () => {
   });
 
   it("`targets` sem conta-alvo cadastrada não fica em branco", async () => {
+    await syncCandidateFromProfile();
     const r = await rodar("engage", "targets");
 
     expect(r.erro).toBeUndefined();
@@ -272,6 +278,7 @@ describe("jho engage", () => {
   });
 
   it("`targets` mostra a conta cadastrada com URL", async () => {
+    await syncCandidateFromProfile();
     await rodar(
       "contacts", "add", "Rafael Souza",
       "-c", "Acme", "-u", "https://www.linkedin.test/in/rafael", "-k", "peer",

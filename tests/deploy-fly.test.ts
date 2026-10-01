@@ -168,11 +168,11 @@ describe("Dockerfile — reprodutibilidade e diretiva de sintaxe (minors da revi
 });
 
 describe("Dockerfile e fly.toml — JHO_ENV=production (CRITICAL C1 da revisão)", () => {
-  it("o Dockerfile declara o deployment, e não deixa isLocalProcess() confundir o contêiner com o laptop", () => {
-    // Reprodução do defeito: sem JHO_ENV (e sem VERCEL/VERCEL_ENV, que não
-    // existem no Fly), isLocalProcess() devolveria true dentro do contêiner —
-    // liberando JHO_AUTH_MODE=open, imprimindo o link de recuperação no log
-    // (G18) e recusando a varredura por não se reconhecer como produção.
+  it("o Dockerfile declara o deployment explicitamente", () => {
+    // Sem JHO_ENV a varredura recusaria por não se reconhecer como produção.
+    // Até a #378, a ausência também fazia isLocalProcess() devolver true no
+    // contêiner; hoje ela nega por omissão (tests/auth-session.test.ts), e
+    // esta linha segue como declaração explícita do ambiente.
     expect(DOCKERFILE).toMatch(/ENV\s+JHO_ENV=production/);
   });
 
@@ -187,6 +187,25 @@ describe("fly.toml — JHO_PUBLIC_URL fixada (MAJOR M1 da revisão)", () => {
     // falharia fechado no plano B: o Fly nunca declara VERCEL_PROJECT_PRODUCTION_URL
     // nem VERCEL_URL, e o Host da requisição não é confiável fora da máquina do dono.
     expect(FLY_TOML).toMatch(/JHO_PUBLIC_URL\s*=\s*"https:\/\/jobs\.mastertimm\.com\.br"/);
+  });
+});
+
+describe("#378: a máquina do dono se declara local, e só o `dev` faz isso sozinho", () => {
+  it("`pnpm dev` passa por scripts/dev.ts, que só declara local na ausência de declaração", () => {
+    // `isLocalProcess()` exige o sinal positivo. `next dev` só roda na máquina
+    // de quem desenvolve, então é o único script que pode declará-lo sozinho —
+    // e sem passar por cima do `.env` (tests/dev-env.test.ts).
+    expect(PACKAGE_JSON.scripts.dev).toMatch(/\bscripts\/dev\.ts\s+next dev\b/);
+  });
+
+  it("nenhum script embute JHO_ENV — `start`, build e CLI dependem do ambiente real", () => {
+    // `pnpm start` e `pnpm jho` também rodam fora do laptop (varredura no
+    // Actions com JHO_ENV=production): um `JHO_ENV=local` embutido ali
+    // transformaria deployment em máquina do dono. Um `JHO_ENV=` no próprio
+    // `dev` passaria por cima do `.env`.
+    for (const [name, command] of Object.entries(PACKAGE_JSON.scripts)) {
+      expect(command, `scripts.${name}`).not.toMatch(/JHO_ENV=/);
+    }
   });
 });
 

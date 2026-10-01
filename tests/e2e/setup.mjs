@@ -449,8 +449,10 @@ try {
     [905000011, 905000012].map((jobId) => ({ termKey: seededRow.termKey, jobId, platform: "remotive" })),
   ).onConflictDoNothing();
 
+  // Contato do dono: a conta candidata pura não pode vê-lo em /referrals (#379).
   await getDb().insert(targetAccount).values({
     id: TASK04_FIXTURES.referralContactId,
+    candidateId,
     name: "Task 04 referral contact",
     company: TASK04_FIXTURES.referralCompany,
     category: "former",
@@ -458,6 +460,7 @@ try {
   }).onConflictDoUpdate({
     target: targetAccount.id,
     set: {
+      candidateId,
       name: "Task 04 referral contact",
       company: TASK04_FIXTURES.referralCompany,
       category: "former",
