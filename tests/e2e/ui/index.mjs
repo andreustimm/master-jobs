@@ -46,6 +46,7 @@ import * as recheck from "./recheck.mjs";
 import * as roles from "./roles.mjs";
 import * as searchRelevance from "./search-relevance.mjs";
 import * as searches from "./searches.mjs";
+import * as slowFilters from "./slow-filters.mjs";
 import * as themes from "./themes.mjs";
 import * as trackSelector from "./track-selector.mjs";
 import * as visibility from "./visibility.mjs";
@@ -60,6 +61,7 @@ export const SMOKE = ["auth"];
 /** @type {{ id: string, run: (ctx: object) => Promise<void>, requires: string[] | typeof PREFIX }[]} */
 export const AREAS = [
   { id: "auth", run: auth.run, requires: [] },
+  { id: "slow-filters", run: slowFilters.run, requires: [] },
   { id: "jobs-density", run: jobsDensity.run, requires: [] },
   { id: "track-selector", run: trackSelector.run, requires: [] },
   { id: "design", run: design.run, requires: [] },
