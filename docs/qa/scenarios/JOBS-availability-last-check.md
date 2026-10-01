@@ -6,13 +6,13 @@ persona: Andreus em triagem
 journey: J-trust-the-filtered-board
 expected: A página da vaga mostra disponível com a data da última checagem quando a verificação respondeu; disponibilidade desconhecida quando nunca foi conferida; vencida quando a checagem tem mais de 14 dias; encerrada na origem depois de um 404/410, com o histórico da candidatura ainda visível; o estado sobrevive a recarga e cabe em 375 px
 entry_points: /jobs/<id>
-qa_status: blocked-verify
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence: docs/qa/evidence/2026-09-28-qa-223-catch-up/CH-relevance-and-availability-catch-up-availability-375px.png
-last_report: docs/qa/reports/2026-09-28-qa-223-catch-up.md
+evidence: docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-relevance-and-availability-catch-up-job15-antes.png; docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-relevance-and-availability-catch-up-job15-disponivel.png; docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-relevance-and-availability-catch-up-disponivel-375px.png; docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-relevance-and-availability-catch-up-vencida.png; docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-relevance-and-availability-catch-up-vencida-375px.png
+last_report: docs/qa/reports/2026-10-01-qa-223-verificacoes.md
 overlaps: JOBS-detail-owner-view-english
 ---
 
@@ -22,31 +22,33 @@ desconhecida até a próxima checagem, com a data da checagem antiga. Vaga
 fechada pelo sync aparece encerrada, igual ao selo. Um 403 ou 5xx não muda o
 que o último veredito conclusivo provou.
 
-**Percorrido em 2026-09-28** (`CH-relevance-and-availability-catch-up`, persona
-Andreus em triagem), parcial — confirmado por 3 dos 4 estados:
+**2026-09-28** (`CH-relevance-and-availability-catch-up`): confirmados
+"desconhecida · nunca conferido" (`/jobs/8778`), "desconhecida · conferido em
+<data antiga>" para checagem anterior aos eventos (`/jobs/13133`, `/jobs/38`)
+e "encerrada — saiu da listagem da fonte" para fechamento pelo sync
+(`/jobs/15027`). `open` e `stale` ficaram bloqueados: sem rede de ingestão.
 
-- `/jobs/8778` (nunca verificada): "availability unknown · never checked" —
-  sobrevive a `reload` e cabe em 375 px.
-- `/jobs/13133` e `/jobs/38` (checadas em 2026-09-19 e 2026-08-20 pelo
-  mecanismo antigo, antes de `job_check_event` existir): as duas mostram
-  "availability unknown · checked on <data antiga>" — exatamente o
-  comportamento documentado acima (checagem antiga não prova estado atual).
-- `/jobs/15027` (fechada pelo sync, sem verificação): "closed — dropped from
-  the source listing · never checked".
+**2026-10-01** (mesma charter, perna de disponibilidade; relatório em
+`last_report`), em Postgres descartável com a fonte real `lever:epoch-ai`
+(9 vagas) e `JHO_ENV=local JHO_INGESTION_OPT_IN=true` só na CLI:
 
-**Bloqueado, não reprovado:** os estados "available" (`open`) e "stale"
-(vencida) exigem um `job_check_event` real, e a tabela está com 0 linhas em
-todo o corpus local — `pnpm jho jobs recheck queue`/`run` enfileiraram e
-tentaram 3 vagas nesta sessão, mas `runVerifyQueue` recusou com
-`Ingestion blocked in preview: preview runs on fixtures only` (o mesmo guard
-de rede citado em `ADMN-source-catalog-operate`). Correto por design — não é
-um defeito — mas significa que "vencida" e "disponível com data" só são
-verificáveis num ambiente que libere sondagem de rede real (produção, ou um
-preview autorizado). Também não confirmei nesta sessão que o histórico de
-candidatura permanece visível numa vaga encerrada: a única vaga fechada com
-candidatura no corpus (`/jobs/42`) pertence à conta real do dono
-(`andreus@zorbit.com.br`), e evitei trocar a senha dela só para este teste.
-Pré-requisito para fechar: (1) rodar a reconferência num ambiente com rede
-liberada e reabrir a mesma vaga; (2) reabrir `/jobs/42` autenticado como o
-dono (ou recriar o cenário com a conta de QA) para confirmar o funil visível
-com a vaga fechada.
+- Antes da checagem, `/jobs/15`: "disponibilidade desconhecida · nunca
+  conferido".
+- "Atualizar status" da plataforma na tela, depois `jho jobs verify --run <id>
+  --limit 3` (3 vagas, 3 vivas). `/jobs/15`, `/jobs/19`, `/jobs/22`: "disponível ·
+  conferido em 2026-10-01" (`data-availability="open"`); sobrevive a `reload`;
+  as outras seis seguem "desconhecida · nunca conferido".
+- Evento de `/jobs/15` envelhecido 15 dias por SQL no banco descartável (a
+  única forma de ver "vencida" sem esperar 14 dias; o resto do caminho é o do
+  produto): "disponibilidade vencida · conferido em 2026-09-16"
+  (`data-availability="stale"`), sobrevive a `reload`, enquanto `/jobs/19`
+  continua "disponível".
+- Os dois estados cabem em 375 px (sem rolagem horizontal).
+
+**Fora desta rodada, continua com o dono:** reabrir `/jobs/42` autenticado
+como `andreus@zorbit.com.br` para confirmar o histórico de candidatura visível
+numa vaga encerrada por 404/410. Nenhuma vaga fechada por 404/410 foi
+produzida aqui (não há 404 legítimo numa fonte real de baixo volume); o caminho
+roda em E2E-004 com vereditos pelo mesmo `applyVerdict`. O achado de texto da
+execução de verificação está em `BUG-20261001-verify-run-shows-capture-completeness-copy`,
+ligado ao cenário `ADMN-source-runs-partial-retry`.

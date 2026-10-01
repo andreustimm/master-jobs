@@ -7,12 +7,12 @@ journey: J-read-structured-job-analysis
 expected: Pedir a análise deixa a seção pendente mesmo após recarga; depois do processamento cada campo traz valor e trecho do anúncio, o que falta aparece como desconhecido, modelo e custo só para admin, pedir de novo o mesmo texto não cria outra análise e o texto alterado mostra o aviso de desatualizada
 entry_points: /jobs/<id>
 qa_status: blocked-verify
-bug_ids:
-fix_status:
+bug_ids: BUG-20261001-analysis-provider-error-hides-cause
+fix_status: pending
 retest_status:
 fix_commits:
-evidence: docs/qa/evidence/2026-09-28-qa-223-catch-up/CH-structured-analysis-first-read-pending.png
-last_report: docs/qa/reports/2026-09-28-qa-223-catch-up.md
+evidence: docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-structured-analysis-first-read-pendente.png; docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-structured-analysis-first-read-falhou.png
+last_report: docs/qa/reports/2026-10-01-qa-223-verificacoes.md
 overlaps: JOBS-detail-owner-view-english
 ---
 
@@ -20,28 +20,41 @@ Novo em #223 (tarefa 06). O processamento roda pela CLI (`jho analysis run`)
 com a chave de quem opera; a jornada completa pede um provedor configurado ou
 o processador com provedor falso do E2E-006.
 
-**Percorrido em 2026-09-28** (`CH-structured-analysis-first-read`, persona
-Andreus em triagem), parcial: em `/jobs/8778`, "Request analysis" deixou a
-seção como "Analysis pending. It runs outside this page and shows up here
-when it finishes. · queued · prompt v1 · schema v1", e o estado sobreviveu a
-`reload`. Havia de fato um provedor configurado (`NVIDIA_API_KEY`, NVIDIA NIM
-· Kimi K2) — rodei `jho analysis run --yes` como operadora, e o único anúncio
-na fila terminou `{"id":1,"status":"failed"}`. Reaberta a vaga, a seção mostra
-"The latest attempt did not finish (failed)" com botão "Request a new
-analysis"; como admin (`e2e@local.test`) o painel "Attempts (visible to admins
-only)" lista "#1 · failed · model nvidia/moonshotai/kimi-k2-instruct · error:
-provider_error"; como candidata (`e2e-candidato@local.test`) a mesma vaga
-mostra só "did not finish (failed)", sem o painel de tentativas nem o nome do
-modelo — a distinção admin/candidato se confirma mesmo numa tentativa
-malsucedida.
+**2026-09-28** (`CH-structured-analysis-first-read`): "Pedir análise" deixa a
+seção pendente e ela sobrevive a `reload`; a única tentativa com o provedor
+terminou `provider_error`; o admin vê o painel "Tentativas" com o modelo, a
+candidata não vê painel nem modelo.
 
-**Bloqueado, não reprovado:** não forcei uma segunda chamada real ao provedor
-(persona fidelity: não insista além de uma tentativa limpa, e o erro é de um
-serviço de terceiro, não algo que eu deva mascarar reexecutando às custas do
-saldo do dono) — por isso não observei o caminho de sucesso (campos com valor
-e trecho, "desconhecido" onde falta evidência, aviso de análise desatualizada
-após alterar o texto). `provider_error` não foi registrado como bug: é uma
-falha externa que o produto já trata bem (mensagem clara, sem vazar chave nem
-stack, botão de tentar de novo). Pré-requisito para fechar: rodar
-`jho analysis run --yes` de novo quando o provedor estiver saudável (ou trocar
-de modelo com `--model`) e completar a leitura dos campos processados.
+**2026-10-01** (mesma charter, relatório em `last_report`), em Postgres
+descartável, com uma vaga cadastrada em `/compare` (texto próprio, em inglês,
+sem salário):
+
+- Pendente depois de pedir ("Análise pendente… na fila · prompt v1 · esquema
+  v1"), igual após `reload`.
+- `jho analysis run --max 1 --yes` terminou `{"id":1,"status":"failed"}`; a
+  tela mostra "A última tentativa não terminou (falhou)"; admin lê "modelo
+  nvidia/moonshotai/kimi-k2-instruct · erro: provider_error"; `bruno@local.test`
+  (candidato) lê só "não terminou (falhou)", sem painel, modelo nem erro.
+- Texto da vaga alterado pelo mesmo `/compare` (mesma identidade): a seção
+  mostra "A vaga mudou depois desta análise: os campos abaixo leem o texto
+  anterior", mesmo numa tentativa falha, sem campo nenhum abaixo (incômodo
+  pequeno, registrado nos paper cuts do relatório).
+
+**Bloqueado, não reprovado, com a causa exata.** O provedor NVIDIA NIM
+responde e a chave autentica (chave de controle inválida dá 401), mas: os três
+modelos NIM do cadastro estão desligados — `moonshotai/kimi-k2-instruct`
+(o padrão) HTTP 410, fim de vida em 2026-05-12; `qwen/qwen3-coder-480b-a35b-instruct`
+HTTP 410, em 2026-06-11; `meta/llama-3.1-405b-instruct` HTTP 404 — e cinco
+modelos vivos do catálogo do provedor devolvem HTTP 403 "Authorization failed"
+para esta chave. Sem um modelo autorizado não há caminho de sucesso para
+observar: campos com valor e trecho, "desconhecido" onde falta evidência,
+versão visível ao candidato, custo ao admin, pedir de novo o mesmo texto sem
+criar outra análise e o aviso de desatualizada sobre uma análise concluída.
+Nenhum resultado foi simulado. O defeito de diagnóstico (a tela só diz
+`provider_error`; o cadastro oferece modelos desligados) é
+`BUG-20261001-analysis-provider-error-hides-cause`.
+
+Pré-requisito para fechar: uma chave de provedor autorizada para pelo menos um
+modelo vivo (autorizar a chave NVIDIA na conta do dono, ou configurar outro
+provedor), e então `jho analysis run --yes [--model <id>]` sobre uma vaga com
+análise pendente.
