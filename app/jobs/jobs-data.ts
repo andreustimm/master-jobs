@@ -9,6 +9,7 @@ import {
   recordTermVisit,
   resolveClusterFilter,
   savedTermForBoard,
+  termExistsInOpenCorpus,
   trackScope,
   type BoardFacets,
   type BoardFilters,
@@ -215,6 +216,17 @@ export async function loadJobsView(input: {
   // o teto de conexões da tela continua o mesmo.
   const near = filters.query ? await stage("near", () => nearMatches(candidateId, filters)) : null;
 
+  // `hasFilterBeyondTerm` só vê filtro ESCOLHIDO na URL. Zero vagas sem
+  // nenhum deles ainda pode ser o corte padrão de fit ou a candidatura
+  // arquivada escondida por padrão — não ausência do termo (#402, achado da
+  // revisão da PR #419). O EXISTS roda só quando a lista já veio vazia: é a
+  // única hora em que a distinção importa, e a única em que vale o
+  // round-trip extra.
+  let filteredBeyondTerm = hasFilterBeyondTerm(state);
+  if (!filteredBeyondTerm && total === 0 && filters.query) {
+    filteredBeyondTerm = await stage("term_exists", () => termExistsInOpenCorpus({ query: filters.query }));
+  }
+
   if (broughtBy && candidateId !== null && !input.prefetch) {
     const termId = broughtBy.id;
     const at = input.now;
@@ -236,6 +248,6 @@ export async function loadJobsView(input: {
     pay,
     near,
     offer: state.term && candidateId !== null ? { term: state.term.term, emphasized: total < FEW_MATCHES } : null,
-    filteredBeyondTerm: hasFilterBeyondTerm(state),
+    filteredBeyondTerm,
   };
 }

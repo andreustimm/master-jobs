@@ -956,6 +956,31 @@ async function readBoard(
 }
 
 /**
+ * O termo aparece em alguma vaga aberta, sem NENHUM outro recorte — nem o
+ * corte padrão de fit (45), nem o status padrão que esconde a candidatura
+ * arquivada, nem fonte, modalidade, trilha ou faixa salarial.
+ *
+ * Usada só quando a lista filtrada volta vazia, para decidir entre "termo
+ * ausente no acervo" e "0 vagas com este recorte" (#402). `hasFilterBeyondTerm`
+ * (`app/filter-state.ts`) só vê filtro ESCOLHIDO na URL: `/jobs?q=laravel` com
+ * toda vaga do termo pontuada abaixo de 45, ou só em vaga arquivada, zerava a
+ * lista sem nenhum filtro explícito e a tela afirmava ausência falsa — o
+ * mesmo defeito do BUG-20260929-search-term-false-negative-laravel, agora pelo
+ * corte implícito em vez da modalidade (achado da revisão da PR #419).
+ */
+export async function termExistsInOpenCorpus(opts: Pick<BoardFilters, "term" | "query">): Promise<boolean> {
+  const matched = queryCondition(queryParts(opts));
+  if (!matched) return false;
+  const rows = await getDb()
+    .select({ jobId: job.id })
+    .from(job)
+    .leftJoin(jobPage, eq(jobPage.jobId, job.id))
+    .where(and(isNull(job.closedAt), matched))
+    .limit(1);
+  return rows.length > 0;
+}
+
+/**
  * How many rows match, without fetching them.
  *
  * Needed for pagination: the page shows 50 of N, and N cannot come from the

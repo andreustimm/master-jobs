@@ -245,7 +245,18 @@ describe("Jobs screen filters in the URL", () => {
 });
 
 describe("recorte além do termo, para a mensagem de zero resultados (#402)", () => {
-  it("termo sozinho, sem `fit` na URL (padrão 45), não é filtro", () => {
+  it("termo sozinho, sem `fit` na URL (padrão 45), não é filtro ESCOLHIDO", () => {
+    // `hasFilterBeyondTerm` só vê o que a PESSOA escolheu na URL — o corte
+    // padrão de 45 não é uma escolha dela, então continua `false` aqui. Isso
+    // não basta para decidir a mensagem de zero resultados: o próprio corte
+    // padrão (ou o status padrão, que esconde arquivadas) pode ser a causa de
+    // um zero sem filtro nenhum escolhido, e nesse caso a tela ainda precisa
+    // dizer "0 vagas com este recorte", não "termo ausente no acervo". Quem
+    // resolve essa lacuna é `termExistsInOpenCorpus`
+    // (`src/core/db/repo.ts`), chamada por `loadJobsView`
+    // (`app/jobs/jobs-data.ts`) só quando a lista já veio vazia — ver
+    // `tests/jobs-board.test.ts` ("recorte implícito contra ausência no
+    // acervo") para os casos de banco (achado da revisão da PR #419).
     expect(hasFilterBeyondTerm(readFilters({ q: "zzqxunmatched" }))).toBe(false);
   });
 

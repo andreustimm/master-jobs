@@ -13,6 +13,7 @@ import {
   setMatchingProfile,
   suggestTrack,
   targetOf,
+  termExistsInOpenCorpus,
   trackScope,
   invalidateBoardFacets,
   type BoardFilters,
@@ -20,6 +21,7 @@ import {
 } from "../src/contexts/matching/index.ts";
 import type { DB } from "../src/core/db/client.ts";
 import {
+  application,
   candidate,
   company,
   fxRate,
@@ -237,6 +239,69 @@ describe("term filter over the corpus (ADR-005, ADR-012)", () => {
       });
     expect(text).toContain("job_description_trgm_idx");
     expect(text).toContain("job_page_text_trgm_idx");
+  });
+});
+
+describe("recorte implícito contra ausência no acervo (#402, achado da revisão da PR #419)", () => {
+  it("termExistsInOpenCorpus acha o termo abaixo do corte padrão de fit, sem aplicar nenhum filtro", async () => {
+    await addJob({ title: "Laravel Developer" });
+
+    expect(await termExistsInOpenCorpus({ query: { terms: [term("laravel")], phrases: [] } })).toBe(true);
+    expect(await termExistsInOpenCorpus({ query: { terms: [term("zzqxunmatched")], phrases: [] } })).toBe(false);
+  });
+
+  it("vaga do termo só abaixo do corte padrão (45): a tela diz recorte, não ausência", async () => {
+    const lowFit = await addJob({ title: "Laravel Developer" });
+    await score(lowFit, 20);
+
+    const view = await loadJobsView({
+      candidateId: owner,
+      params: { q: "laravel" },
+      page: 1,
+      pageSize: 50,
+      prefetch: false,
+      schedule: () => undefined,
+      now: new Date(),
+    });
+
+    expect(view.total).toBe(0);
+    expect(view.filteredBeyondTerm).toBe(true);
+  });
+
+  it("vaga do termo só em candidatura arquivada (status padrão): a tela diz recorte, não ausência", async () => {
+    const archived = await addJob({ title: "Laravel Developer" });
+    await score(archived, 90);
+    await db.insert(application).values({ candidateId: owner, jobId: archived, status: "archived" });
+
+    const view = await loadJobsView({
+      candidateId: owner,
+      params: { q: "laravel" },
+      page: 1,
+      pageSize: 50,
+      prefetch: false,
+      schedule: () => undefined,
+      now: new Date(),
+    });
+
+    expect(view.total).toBe(0);
+    expect(view.filteredBeyondTerm).toBe(true);
+  });
+
+  it("termo de verdade ausente do acervo: a tela mantém a frase de ausência", async () => {
+    await addJob({ title: "Laravel Developer" });
+
+    const view = await loadJobsView({
+      candidateId: owner,
+      params: { q: "zzqxunmatched" },
+      page: 1,
+      pageSize: 50,
+      prefetch: false,
+      schedule: () => undefined,
+      now: new Date(),
+    });
+
+    expect(view.total).toBe(0);
+    expect(view.filteredBeyondTerm).toBe(false);
   });
 });
 
