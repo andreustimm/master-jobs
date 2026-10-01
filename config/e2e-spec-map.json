@@ -137,6 +137,7 @@
         "/compare",
         "/jobs",
         "/jobs/[id]",
+        "/p/[slug]",
         "/pipeline",
         "/searches",
         "/searches/tracks/new"
