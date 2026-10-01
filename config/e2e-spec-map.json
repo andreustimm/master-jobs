@@ -601,6 +601,21 @@
       ]
     },
     {
+      "id": "stale-tab-login",
+      "modules": [
+        "tests/e2e/ui/stale-tab-login.mjs"
+      ],
+      "patterns": [
+        "app/login/transition-boundary.tsx"
+      ],
+      "routes": [
+        "/",
+        "/candidate",
+        "/jobs",
+        "/login"
+      ]
+    },
+    {
       "id": "logout",
       "modules": [
         "tests/e2e/ui/logout.mjs"

@@ -371,6 +371,25 @@ describe("browser-local transition store", () => {
     expect(fixture.store.getSnapshot().phase).toBe("leaving");
   });
 
+  it("UT-031 ignores a login-boundary release from an older generation", () => {
+    const fixture = storeFixture();
+    const first = fixture.store.begin("/pipeline");
+    const second = fixture.store.begin("/compare");
+
+    fixture.store.reset(first ?? undefined);
+    expect(fixture.store.getSnapshot()).toMatchObject({
+      generation: second,
+      phase: "loading",
+      target: "/compare",
+    });
+
+    fixture.store.reset(second ?? undefined);
+    expect(fixture.store.getSnapshot()).toMatchObject({
+      generation: second,
+      phase: "idle",
+    });
+  });
+
   it("handles matching worker messages and ignores hostile message events", () => {
     const fixture = storeFixture();
     fixture.store.begin("/pipeline");

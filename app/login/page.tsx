@@ -6,6 +6,7 @@ import { getTranslator } from "../i18n";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { passwordLoginAction } from "./actions";
+import { LoginTransitionBoundary } from "./transition-boundary";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,7 @@ export default async function LoginPage({
   if (accounts.length === 0) {
     return (
       <main className="flex min-h-[70vh] flex-col items-center justify-center py-16" data-testid="route-login">
+        <LoginTransitionBoundary />
         <h1 className="type-display-md chevron mb-4">{t("login.firstAccess")}</h1>
         <Card className="w-full max-w-[46ch]">
           <CardContent className="pt-0">
@@ -74,6 +76,7 @@ pnpm jho auth set-password ${"seu@email.com"}`}
     // ao redor, e um formulário encostado no canto de uma tela vazia parece
     // um erro de layout.
     <main className="flex min-h-[70vh] flex-col items-center justify-center py-16" data-testid="route-login">
+      <LoginTransitionBoundary />
       {/* Depois do logout: pede ao service worker para esvaziar o cache
           privado. Ver a nota no componente sobre por que existe mesmo com o
           service worker não guardando página autenticada. */}
