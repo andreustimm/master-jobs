@@ -2,7 +2,8 @@
  * Facetas da tela Vagas com cache local, no processo (#216).
  *
  * As facetas dependem só do escopo da sessão e dos filtros que elas recebem —
- * não de página, tamanho, ordenação, densidade, faixa salarial nem empresa.
+ * não de página, tamanho, ordenação ou densidade. Empresa e faixa salarial
+ * fazem parte do universo contado, então entram na consulta e na chave.
  * Paginar ou reordenar refazia a consulta mais cara da tela (3,5 s numa
  * requisição de produção medida em 22/09/2026) para devolver os mesmos números.
  *
@@ -19,7 +20,18 @@ import { createTtlLru, facetCacheKey, type TtlLru } from "../domain/facet-cache.
 /** Os filtros que as facetas leem. Qualquer campo passado entra na chave. */
 export type FacetQuery = Pick<
   BoardFilters,
-  "minFit" | "keepUnscored" | "cluster" | "term" | "query" | "sourceKinds" | "workMode" | "track" | "groupRepeats"
+  | "minFit"
+  | "keepUnscored"
+  | "cluster"
+  | "term"
+  | "query"
+  | "sourceKinds"
+  | "company"
+  | "workMode"
+  | "track"
+  | "groupRepeats"
+  | "pay"
+  | "rates"
 >;
 
 export type BoardFacets = Awaited<ReturnType<typeof boardFacets>>;

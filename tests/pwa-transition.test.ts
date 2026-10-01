@@ -371,6 +371,25 @@ describe("browser-local transition store", () => {
     expect(fixture.store.getSnapshot().phase).toBe("leaving");
   });
 
+  it("UT-031 ignores a login-boundary release from an older generation", () => {
+    const fixture = storeFixture();
+    const first = fixture.store.begin("/pipeline");
+    const second = fixture.store.begin("/compare");
+
+    fixture.store.reset(first ?? undefined);
+    expect(fixture.store.getSnapshot()).toMatchObject({
+      generation: second,
+      phase: "loading",
+      target: "/compare",
+    });
+
+    fixture.store.reset(second ?? undefined);
+    expect(fixture.store.getSnapshot()).toMatchObject({
+      generation: second,
+      phase: "idle",
+    });
+  });
+
   it("handles matching worker messages and ignores hostile message events", () => {
     const fixture = storeFixture();
     fixture.store.begin("/pipeline");
@@ -463,13 +482,13 @@ describe("transição suave na mesma tela (#220)", () => {
     expect(isSameScreenNavigation("/jobs?q=%zz", current)).toBe(false);
   });
 
-  it("UT-OVL-2 demora e falta de rede promovem a suave ao overlay", () => {
+  it("UT-OVL-2 demora preserva a suave; falta de rede oferece recuperação", () => {
     const soft = reduceTransition(INITIAL_NAVIGATION_TRANSITION, {
       type: "start", target: "/jobs?fit=60", at: 0, soft: true,
     });
     expect(soft).toMatchObject({ phase: "loading", soft: true });
     expect(reduceTransition(soft, { type: "prolonged", generation: 1 })).toMatchObject({
-      phase: "prolonged", soft: false,
+      phase: "prolonged", soft: true,
     });
     expect(
       reduceTransition(soft, { type: "offline", target: "/jobs?fit=60", generation: 1 }),
@@ -509,11 +528,11 @@ describe("transição suave na mesma tela (#220)", () => {
     expect(store.getSnapshot()).toMatchObject({ generation: second, committed: true, target: "/jobs?fit=60" });
   });
 
-  it("UT-OVL-7 a suave que demora vira overlay de espera prolongada", () => {
+  it("UT-OVL-7 a suave que demora mantém a tela operável (#394)", () => {
     const { store, time } = storeFixture();
     store.begin("/jobs?fit=60");
     time.advance(TRANSITION_PROLONGED_MS);
-    expect(store.getSnapshot()).toMatchObject({ phase: "prolonged", soft: false });
+    expect(store.getSnapshot()).toMatchObject({ phase: "prolonged", soft: true });
   });
 
   it("UT-OVL-8 os dois dicionários trazem o aviso da atualização", () => {

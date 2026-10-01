@@ -1,6 +1,6 @@
 # BUG-20260929-pwa-filter-overlay-blocks-same-screen: filtro na mesma tela em Vagas abre overlay opaco de carregamento (regressão do contrato #220)
 
-- **Status:** open
+- **Status:** verified
 - **Impact (user-side):** Trust-Damage
 - **Severity:** High · **Priority:** P1
 - **Persona Affected:** Andreus no celular
@@ -46,12 +46,12 @@ tela, 3/3 tentativas.
 ## Fix
 
 <!-- filled when status moves to fixed -->
-- **Root cause:**
-- **Fix commit:**
-- **Regression test:**
+- **Root cause:** evento prolonged zerava soft, mesmo sem troca de pathname.
+- **Fix commit:** bc6d7e5
+- **Regression test:** pwa-transition.test.ts e E2E slow-filters (24/24 com smoke).
 
 ## Verification
 
 <!-- filled when status moves to verified -->
-- **Retested:**
-- **Result:**
+- **Retested:** docs/qa/reports/2026-09-29T144400Z-filtros-394.md
+- **Result:** percurso público normal passou; espera prolongada passou no E2E de servidor isolado.

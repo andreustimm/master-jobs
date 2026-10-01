@@ -6,13 +6,13 @@ persona: Andreus em triagem
 journey: J-trust-the-filtered-board
 expected: O "N vagas" do cockpit reflete os filtros aplicados e concorda com /jobs na mesma URL; cada card de contagem abre a lista que ele conta, com o mesmo número
 entry_points: /; /?company=Acme; /?notApplied=1; /?fitMax=70; /?fit=60&workMode=remote
-qa_status: fail
+qa_status: pass
 bug_ids: BUG-20260929-jobs-chips-ignore-employer-filter; BUG-20260929-jobs-cockpit-ignores-salary-filter; BUG-20260929-jobs-grouped-pay-banner-off-by-one
-fix_status: pending
-retest_status:
-fix_commits:
-evidence: docs/qa/evidence/2026-09-21-docs-qa-jornada-do-quadro-filtrado/numbers-agree-empty-employer.png; docs/qa/evidence/2026-09-29T035351654581Z-97f37e1c-full/CH-filtered-board-numbers-agree/company-turing-chips-5545-vs-19.png
-last_report: docs/qa/reports/2026-09-29T035351654581Z-97f37e1c-full-release-candidate-1.29-full.md
+fix_status: fixed
+retest_status: pass
+fix_commits: 7bdacc7f7c323dfb6d3fa2f14b657b149487b8ac
+evidence: docs/qa/evidence/2026-09-21-docs-qa-jornada-do-quadro-filtrado/numbers-agree-empty-employer.png; docs/qa/evidence/2026-09-29T035351654581Z-97f37e1c-full/CH-filtered-board-numbers-agree/company-turing-chips-5545-vs-19.png; docs/qa/evidence/2026-09-29-cockpit-contagens-filtros/CH-filtered-board-numbers-agree/cockpit-default.png; docs/qa/evidence/2026-09-29-cockpit-contagens-filtros/CH-filtered-board-numbers-agree/company-aurora-counts-agree.png; docs/qa/evidence/2026-09-29-cockpit-contagens-filtros/CH-filtered-board-numbers-agree/jobs-company-aurora.png; docs/qa/evidence/2026-09-29-cockpit-contagens-filtros/CH-filtered-board-numbers-agree/jobs-default.png; docs/qa/evidence/2026-09-29-cockpit-contagens-filtros/CH-filtered-board-numbers-agree/jobs-pay-deep-link.png
+last_report: docs/qa/reports/2026-09-29-cockpit-contagens-filtros.md
 overlaps: JOBS-employer-filter; JOBS-score-range; JOBS-hide-already-sent
 ---
 
@@ -62,3 +62,10 @@ chip "sem bloqueio" mostra "5545" (total sem filtro); com faixa salarial
 aplicada, `/` mostra 5.545 e `/jobs` mostra 5.143 para a mesma faixa; e com
 "agrupar repetidas" ligado, a soma do aviso de faixa (5.143 + 403) dá 5.546
 contra os 5.545 mostrados. `qa_status` passa de `untested` para `fail`.
+
+Reteste targeted de #396 (29/09): login real na sessão manual isolada mostrou
+3 vagas no cockpit e as mesmas 3 em `/jobs`; `Aurora` reduziu ambos para 1,
+com leitura independente em `/jobs?company=Aurora` e a recarga preservando a
+faixa salarial. A área E2E `searches`, com fixtures de remuneração e
+agrupamento, passou 80/80 verificações. `qa_status` passa para `pass` e
+`retest_status` para `pass`.

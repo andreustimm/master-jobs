@@ -85,11 +85,12 @@ consulta casou, e nunca fala em semântica: não há vetor.
 
 **Os cards do cockpit levam só o que o número conta.** Cada contagem do topo de
 `/` é um link para a lista que ela descreve (#314). "Empresa nomeada", "sem
-bloqueio" e "últimos 3 dias" são facetas: o link carrega apenas o que a faceta
-lê — `fit`, `cluster`, `q`, `source`, `workMode`, `ungrouped` — mais o chip do
-card (`named`, `unblocked` ou `fresh`), e nunca `status`, `company`, `fitMax`,
-faixa salarial ou `notApplied`, que a faceta não aplica e fariam `/jobs` contar
-outra coisa. O helper é `facetHref`. "Vagas abertas" conta o acervo inteiro e
+bloqueio" e "últimos 3 dias" são facetas: o link carrega o que a faceta lê —
+`fit`, `cluster`, `q`, `source`, `company`, `workMode`, `pay`, `payMax`, `cur`,
+`per`, `disclosed` e `ungrouped` — mais o chip do card (`named`, `unblocked`
+ou `fresh`), e nunca
+`status`, `fitMax` ou `notApplied`, que a faceta não aplica e fariam `/jobs`
+contar outra coisa. O helper é `facetHref`. "Vagas abertas" conta o acervo inteiro e
 abre `/jobs?fit=0&ungrouped=1&status=any` (`openJobsHref`), qualquer que seja o
 filtro do cockpit. "Melhor fit" abre `/jobs/<id>` da vaga de maior nota na
 trilha principal, e fica sem link quando não há nota; "no funil" abre
@@ -150,3 +151,15 @@ filtrado, então filtro novo entra sem precisar ser repetido na escolha.
 /jobs?notApplied=1                           esconde o que já foi enviado
 /jobs?ungrouped=1                            uma linha por publicação
 ```
+
+
+### Densidade e empregador direto
+
+`dense=1` seleciona linhas compactas e acompanha a ordem, os filtros, os
+formulários GET, a paginação e os presets. Não altera o conjunto de vagas.
+Sem esse parâmetro a lista é confortável.
+
+Em fontes `careers`, o rótulo configurado representa a empresa real. Por
+isso empresa igual ao rótulo continua nomeada no agrupamento, na lista e
+nas facetas. Em agregadores a igualdade continua indicando empregador
+oculto; não se deduz a identidade da empresa contratante.

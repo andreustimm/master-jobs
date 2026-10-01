@@ -81,6 +81,20 @@ describe("design tokens", () => {
     expect(offenders).toEqual([]);
   });
 
+  it("keeps --warn out of text colour (G32: fill token, not text)", () => {
+    // `--warn` é feito para preenchimento (faixa, borda), onde o mínimo do
+    // WCAG é 3:1. Texto precisa de 4.5:1, e `--warn` sozinho não chega lá em
+    // huly/graphy claros (4.06:1, medido — #383). `--warn-text` é o token
+    // correto para cor de texto de aviso.
+    const offenders: string[] = [];
+    for (const file of COMPONENTS) {
+      for (const match of read(file).matchAll(/(?<![\w-])text-\[var\(--warn\)\]/g)) {
+        offenders.push(`${file}: ${match[0]}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it("uses no arbitrary font size outside the type scale", () => {
     // `type-*` classes carry size, weight, line-height and tracking together,
     // which is what makes the scale hold. A bare `text-[13px]` keeps the size

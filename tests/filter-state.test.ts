@@ -237,8 +237,9 @@ describe("Jobs screen filters in the URL", () => {
 });
 
 describe("links dos cards do cockpit (#314)", () => {
-  it("o card de faceta leva só o que a faceta lê, mais o recorte ligado", () => {
-    // Tudo o que o cockpit aceita na URL, inclusive o que a faceta NÃO aplica.
+  it("o card de faceta leva os filtros que a faceta lê, mais o recorte ligado", () => {
+    // Tudo o que o cockpit aceita na URL, inclusive os filtros de empresa e
+    // salário que agora também restringem o universo contado pela faceta.
     const state = readFilters({
       fit: "60",
       fitMax: "90",
@@ -266,9 +267,12 @@ describe("links dos cards do cockpit (#314)", () => {
         fit: "60",
         cluster: "architect",
         q: "laravel",
+        company: "Acme",
         source: ["lever", "ashby"],
         workMode: "remote",
         ungrouped: "1",
+        pay: "6000",
+        cur: "USD",
         [toggle]: "1",
       });
     }
@@ -283,5 +287,17 @@ describe("links dos cards do cockpit (#314)", () => {
   it("vagas abertas abre o acervo inteiro, sem corte, sem agrupamento e com arquivadas", () => {
     expect(parse(openJobsHref())).toEqual({ fit: "0", status: "any", ungrouped: "1" });
     expect(openJobsHref().startsWith("/jobs?")).toBe(true);
+  });
+});
+
+
+describe("densidade da lista (#397)", () => {
+  it("preserva dense ao ordenar, paginar e filtrar, permitindo desligar", () => {
+    const state = readFilters({ dense: "1" });
+    for (const patch of [{ sort: "recent" }, { page: "2" }, { company: "Vercel" }]) {
+      expect(parse(href("/jobs", state, patch)).dense).toBe("1");
+    }
+    expect(parse(href("/jobs", state, { dense: undefined })).dense).toBeUndefined();
+    expect(parse(href("/jobs", readFilters({ dense: "false" }), {})).dense).toBeUndefined();
   });
 });

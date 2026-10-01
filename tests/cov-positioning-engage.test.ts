@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { ensureCandidate } from "../src/core/candidate.ts";
 import type { DB } from "../src/core/db/client.ts";
 import { engagement, metricSnapshot, post, targetAccount } from "../src/core/db/schema.ts";
 import {
@@ -295,18 +296,26 @@ describe("métricas do funil, registradas à mão por decisão", () => {
 });
 
 describe("coldTargets: a lacuna da §2.2", () => {
+  let candidatoId: number;
+
+  beforeEach(async () => {
+    candidatoId = await ensureCandidate({ name: "Dono da Rede" });
+  });
+
   it("lista só quem ainda não foi tocado e tem URL para abrir", async () => {
     // Sem URL não há o que o humano abrir, e a linha seria uma tarefa
     // impossível no meio da fila. Quem já está em `following` saiu da lacuna.
     await db.insert(targetAccount).values([
       {
+        candidateId: candidatoId,
         name: "Frio com URL",
         category: "ai-leader",
         linkedinUrl: "https://www.linkedin.com/in/frio",
         status: "identified",
       },
-      { name: "Frio sem URL", category: "peer", status: "identified" },
+      { candidateId: candidatoId, name: "Frio sem URL", category: "peer", status: "identified" },
       {
+        candidateId: candidatoId,
         name: "Já engajado",
         category: "recruiter",
         linkedinUrl: "https://www.linkedin.com/in/quente",
@@ -314,20 +323,43 @@ describe("coldTargets: a lacuna da §2.2", () => {
       },
     ]);
 
-    const frios = await coldTargets();
+    const frios = await coldTargets(candidatoId);
     expect(frios.map((t) => t.name)).toEqual(["Frio com URL"]);
   });
 
   it("respeita o limite", async () => {
     await db.insert(targetAccount).values(
       Array.from({ length: 5 }, (_, i) => ({
+        candidateId: candidatoId,
         name: `Alvo ${i}`,
         category: "peer",
         linkedinUrl: `https://www.linkedin.com/in/alvo-${i}`,
         status: "identified",
       })),
     );
-    expect(await coldTargets(3)).toHaveLength(3);
-    expect(await coldTargets()).toHaveLength(5);
+    expect(await coldTargets(candidatoId, 3)).toHaveLength(3);
+    expect(await coldTargets(candidatoId)).toHaveLength(5);
+  });
+
+  it("não lista conta-alvo da rede de outro candidato (#379)", async () => {
+    const outro = await ensureCandidate({ slug: "outro-alvo", name: "Outro" });
+    await db.insert(targetAccount).values({
+      candidateId: outro,
+      name: "Alvo alheio",
+      category: "peer",
+      linkedinUrl: "https://www.linkedin.com/in/alheio",
+      status: "identified",
+    });
+    expect(await coldTargets(candidatoId)).toEqual([]);
+  });
+
+  it("não lista conta-alvo sem dono (#379)", async () => {
+    await db.insert(targetAccount).values({
+      name: "Alvo sem dono",
+      category: "peer",
+      linkedinUrl: "https://www.linkedin.com/in/sem-dono",
+      status: "identified",
+    });
+    expect(await coldTargets(candidatoId)).toEqual([]);
   });
 });

@@ -306,9 +306,11 @@ coberta pelos cenários por papel de `pnpm test:e2e`.
 **Modo aberto só na máquina local** — ✅ **22/09 (#197).** A proibição de
 `JHO_AUTH_MODE=open` em produção era só documental; agora é do código.
 `openModeActive()` (`src/contexts/auth/domain/open-mode.ts`) exige o pedido E
-um ambiente local: nenhum `VERCEL`, e `JHO_ENV` e `VERCEL_ENV` ausentes ou
-iguais a `local` — as duas são conferidas, sem precedência. Produção, preview, staging, dev e valor
-desconhecido ignoram o pedido e continuam exigindo login. Sessão e `proxy.ts`
+um ambiente que se declara local: `JHO_ENV=local`, sem `VERCEL` nem
+`VERCEL_ENV` — sinal positivo desde a #378; antes a ausência das três
+variáveis também contava como local. Produção, preview, staging, dev, valor
+desconhecido e ambiente sem declaração ignoram o pedido, continuam exigindo
+login e avisam uma vez no log do servidor. Sessão e `proxy.ts`
 chamam a mesma função; nenhum outro arquivo lê a variável.
 
 **O consentimento do CV não publica o que nunca sai** — ✅ **22/09 (#197).**

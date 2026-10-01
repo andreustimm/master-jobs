@@ -30,17 +30,19 @@ export function Toggle({
   active,
   hint,
   children,
+  testId,
 }: {
   href: Route;
   active: boolean;
   hint: string;
   children: React.ReactNode;
+  testId?: string;
 }) {
   return (
     <Tooltip>
       <TooltipTrigger
         render={
-          <TransitionLink href={href} className={chipClass(active)}>
+          <TransitionLink href={href} className={chipClass(active)} aria-current={active ? "true" : undefined} data-testid={testId}>
             {children}
           </TransitionLink>
         }

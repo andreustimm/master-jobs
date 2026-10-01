@@ -78,7 +78,7 @@ export function JobModal({
           type="button"
           popoverTarget={id}
           popoverTargetAction="hide"
-          aria-label="Fechar"
+          aria-label={t("common.close")}
           className="shrink-0 rounded-md px-2 py-1 text-lg leading-none text-muted-foreground hover:bg-muted"
         >
           ×

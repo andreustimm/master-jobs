@@ -1,6 +1,6 @@
 # BUG-20260929-import-non-pdf-500: importar arquivo não-PDF renomeado .pdf devolve 500 genérico
 
-- **Status:** open
+- **Status:** verified
 - **Impact (user-side):** Friction
 - **Severity:** Low · **Priority:** P3
 - **Persona Affected:** Candidato convidado sem perfil
@@ -36,12 +36,12 @@ caso cai em erro não tratado.
 ## Fix
 
 <!-- filled when status moves to fixed -->
-- **Root cause:**
-- **Fix commit:**
-- **Regression test:**
+- **Root cause:** `importPdfAction` lançava exceção ao ler um arquivo que não é PDF de verdade (`readCvPdf` não reconhecia o conteúdo), e a Server Action não capturava esse caminho — a exceção não tratada virava o 500 genérico do Next.js em vez de uma recusa tipada.
+- **Fix commit:** `053a5d8`
+- **Regression test:** `tests/candidate-pdf-import-action.test.ts` (casos `pdfNotPdf`/`pdfMissing`, que reprovavam antes da correção por lançarem em vez de devolver a recusa); E2E `onboarding` (`tests/e2e/ui/onboarding.mjs`, "PDF inválido recebe recusa sem HTTP 500").
 
 ## Verification
 
 <!-- filled when status moves to verified -->
-- **Retested:**
-- **Result:**
+- **Retested:** Manual Pass em `053a5d8`, relatório `docs/qa/reports/2026-09-29T143500Z-codex388-importacao-pdf.md` (importação em perfil existente); E2E `onboarding` 44/44, incluindo a criação inicial de perfil via PDF, cobertura confirmada no retest de `PROF-create-own-profile-pdf` (`docs/qa/reports/2026-10-01-pr414-prof-create-own-profile-pdf-retest.md`, achado 1 da revisão L1 da PR #414).
+- **Result:** Pass. Razão localizada (`pdfNotPdf`), sem HTTP 500, CV anterior preservado e recuperação com PDF válido confirmadas após refresh e no histórico, na criação do perfil e na importação em perfil existente.

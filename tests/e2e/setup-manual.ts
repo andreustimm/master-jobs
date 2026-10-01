@@ -111,5 +111,19 @@ try {
   }, "manual:grupo");
   await scoreOne(owner, anonima.jobId);
 
+  await ensureImportSource("careers:qa-vercel", "careers", "qa-vercel", "Vercel");
+  for (const location of ["Brazil", "France"]) {
+    const direct = await upsertRawJob({
+      externalId: `direct-career-${location}`,
+      companyName: "Vercel",
+      title: "Staff Engineer Direct Career",
+      locationRaw: location,
+      url: `https://example.com/careers/direct-${location}`,
+      descriptionText: "Software architecture and TypeScript engineering, remote collaboration and cloud services.",
+      raw: {},
+    }, "careers:qa-vercel");
+    await scoreOne(owner, direct.jobId);
+  }
+
   console.log("Manual QA accounts, career data and grouping fixtures prepared in isolated PostgreSQL.");
 } finally { await closeDb(); }
