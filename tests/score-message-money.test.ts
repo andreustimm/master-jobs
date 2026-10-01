@@ -58,12 +58,19 @@ describe("rótulo de remuneração do score no idioma de quem lê (#426)", () =>
     expect(english).not.toContain("/mês");
   });
 
-  it("comp.projectNoDuration: o sufixo de projeto vem do dicionário nos dois idiomas", () => {
+  it("comp.projectNoDuration: guarda de não regressão (não prova tradução)", () => {
+    // `jobs.moneyProjectTotal` vale "total" em pt-BR e em en, e o rótulo gravado
+    // já traz " total ": este caso passaria mesmo sem `localizeMoneyLabel`. A
+    // tradução do sufixo de projeto fica provada pelo caso com duração abaixo
+    // ("meses" x "months"). Aqui só se garante que a frase inteira sai do
+    // template do dicionário de cada idioma, com o rótulo intacto.
     const stored = storedCompMessage(job({ compMax: 30000, compCurrency: "USD", compPeriod: "project" }));
     expect(stored.code).toBe("comp.projectNoDuration");
+    const label = String(stored.params?.label);
+    expect(label).toContain(" total");
 
-    expect(renderScoreMessage(stored, pt)).toContain(` ${pt("jobs.moneyProjectTotal")} `);
-    expect(renderScoreMessage(stored, en)).toContain(` ${en("jobs.moneyProjectTotal")} `);
+    expect(renderScoreMessage(stored, pt)).toBe(pt("scoreReason.compProjectNoDuration", { label }));
+    expect(renderScoreMessage(stored, en)).toBe(en("scoreReason.compProjectNoDuration", { label }));
   });
 
   it("projeto com duração: \"N meses\" em pt-BR e \"N months\" em inglês", () => {
