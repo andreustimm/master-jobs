@@ -34,6 +34,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.7] - 2026-10-01T17:39:17.000Z
+
+### Fixed
+
+- A refresh with no recalculated jobs explains its result (search profile kept); gap analysis no longer claims CV coverage or flags terms as rare without jobs to compare.
+
 ## [1.32.6] - 2026-10-01T16:32:46.000Z
 
 ### Fixed

@@ -34,6 +34,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.7] - 2026-10-01T17:39:17.000Z
+
+### Corrigido
+
+- Uma atualização sem vagas recalculadas explica seu resultado (perfil de busca mantido); a análise de lacunas não afirma cobertura do CV nem destaca termos como raros no mercado sem vagas para comparar.
+
 ## [1.32.6] - 2026-10-01T16:32:46.000Z
 
 ### Corrigido

@@ -9,6 +9,13 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.32.7] - 2026-10-01
+
+### Corrigido
+
+- O cartão de repontuação distingue conclusão sem vagas recalculadas com `data-reason=noJobsUpdated`, nomeando a causa (perfil de busca mantido) e preservando motivos de recusa conhecidos.
+- Análise de lacunas com zero vagas mostra ausência de base de comparação e não lista mais termos do CV como "confirmado" ou "raro no mercado" sem nenhuma vaga para sustentar a afirmação.
+
 ## [1.32.6] - 2026-10-01
 
 ### Corrigido
