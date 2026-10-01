@@ -9,6 +9,13 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.32.9] - 2026-10-01
+
+### Corrigido
+
+- A oferta de busca em Vagas agora navega para Buscas com o termo preservado; o fluxo salva na trilha existente e mantém a sugestão de nova trilha no caminho explícito.
+- "Nova trilha" em Buscas carrega o termo da oferta para a sugestão (US-002), restaurando a criação de trilha a partir do termo pela interface. A trilha que já cita o termo vem pré-marcada no seletor de salvar (US-007 AC-3). O parâmetro `?term=` some da URL depois de um salvamento aceito, e trilha pendente com termo na oferta mostra aviso em vez de descartar em silêncio.
+
 ## [1.32.8] - 2026-10-01
 
 ### Corrigido

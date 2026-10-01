@@ -34,6 +34,13 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.9] - 2026-10-01T18:45:17.000Z
+
+### Corrigido
+
+- Ao escolher “Buscar nas plataformas” em Vagas, o termo já aparece preenchido em Buscas para você salvar na trilha desejada.
+- O botão "Nova trilha" leva esse termo até a sugestão de trilha nova, e a trilha que já usa o termo vem pré-selecionada para salvar.
+
 ## [1.32.8] - 2026-10-01T18:11:47.000Z
 
 ### Corrigido

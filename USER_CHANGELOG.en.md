@@ -34,6 +34,13 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.9] - 2026-10-01T18:45:17.000Z
+
+### Fixed
+
+- Choosing “Search platforms” from Jobs now opens Searches with the term prefilled so it can be saved to the selected track.
+- The "New track" button now carries that term into the new-track suggestion, and the track that already uses the term comes pre-selected for saving.
+
 ## [1.32.8] - 2026-10-01T18:11:47.000Z
 
 ### Fixed
