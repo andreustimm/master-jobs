@@ -100,6 +100,17 @@
       ]
     },
     {
+      "id": "track-selector",
+      "modules": [
+        "tests/e2e/ui/track-selector.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/jobs",
+        "/searches"
+      ]
+    },
+    {
       "id": "design",
       "modules": [
         "tests/e2e/ui/design.mjs"
