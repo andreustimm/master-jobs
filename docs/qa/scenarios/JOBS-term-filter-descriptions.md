@@ -10,9 +10,9 @@ qa_status: untested
 bug_ids: BUG-20260929-search-term-false-negative-laravel
 fix_status: fixed
 retest_status: pending
-fix_commits: 7f69ab7; 04e3560
+fix_commits: 7f69ab7; 04e3560; 882e4877
 evidence: evidence/2026-09-22-rc-1.22.0/log.txt
-last_report: docs/qa/reports/2026-10-01T162051Z-fixer-busca-vazia-com-filtros.md
+last_report: docs/qa/reports/2026-10-01T185201Z-fixer-busca-vazia-com-filtros-exists.md
 overlaps: JOBS-work-mode-continuity
 ---
 
@@ -37,3 +37,16 @@ confirma as duas frases, pt-BR e en (86/86). O estado global continua
 `untested`: a distinção da #402 tem evidência automatizada nova, mas o
 restante do cenário (palavra inteira, `c++`, `node.js`, acento, frase exata,
 localização) segue sem sessão de QA de jornada que o repercorra por inteiro.
+
+**Re-revisão (01/10, `882e4877`):** `hasFilterBeyondTerm` só via filtro
+ESCOLHIDO na URL — o corte padrão de fit (45) e o status padrão (esconde
+candidatura arquivada) continuavam causando a mesma ausência falsa, agora
+sem filtro nenhum escolhido. `termExistsInOpenCorpus`
+(`src/core/db/repo.ts`) confirma a ausência com o mesmo casamento de termo
+de `listBoardPage`, sem nenhum recorte, chamada só quando a lista vem
+vazia. Reteste automatizado: `tests/jobs-board.test.ts` (termo abaixo do
+corte padrão, termo só em candidatura arquivada, termo de fato ausente) e
+`tests/e2e/ui/searches.mjs` E2E-022 (termo real abaixo do corte padrão
+mostra a frase de recorte), 96/96. O estado global continua `untested`
+pelo mesmo motivo de antes, e o caso de status padrão só tem cobertura de
+banco, não de navegador.

@@ -354,6 +354,22 @@ export async function run(ctx) {
     JSON.stringify(emptyTerm),
   );
 
+  // Termo real no acervo, mas só numa vaga pontuada abaixo do corte padrão
+  // (45): sem filtro nenhum escolhido na URL, `hasFilterBeyondTerm` não vê o
+  // corte implícito. A tela tem de distinguir isso de ausência de verdade
+  // (EXISTS sem os demais filtros, #402, achado da revisão da PR #419).
+  await page.goto(`${BASE}/jobs?q=zyxquantumcut`, { waitUntil: "networkidle" });
+  const belowDefaultCut = await page.evaluate(() => ({
+    empty: document.querySelector('[data-testid="jobs-empty"]')?.textContent ?? "",
+    total: document.querySelector('[data-testid="jobs-total"]')?.getAttribute("data-total") ?? "",
+  }));
+  check(
+    "term-search E2E-022 termo existente só abaixo do corte padrão de fit: o vazio explica o recorte, não a ausência",
+    belowDefaultCut.total === "0"
+      && belowDefaultCut.empty === ptBR.jobs.emptyTermFiltered.replace("{term}", "zyxquantumcut"),
+    JSON.stringify(belowDefaultCut),
+  );
+
   /* ------ term-search task_05: Buscas, trilhas, saúde das capturas e papéis ------ */
   await page.setViewportSize({ width: 375, height: 812 });
   for (const [locale, dictionary] of [["pt-BR", ptBR], ["en", en]]) {

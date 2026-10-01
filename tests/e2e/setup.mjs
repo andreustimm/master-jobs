@@ -414,6 +414,28 @@ try {
   await getDb().insert(jobScore).values(fixtureScore(longTitleFixture.id, primaryTrack.id, 60))
     .onConflictDoNothing({ target: [jobScore.candidateId, jobScore.trackId, jobScore.jobId] });
 
+  // Termo que só existe abaixo do corte padrão de fit (45): `/jobs?q=…` sem
+  // nenhum filtro escolhido zera com o padrão, mas o termo está no acervo —
+  // a frase certa é "0 vagas com este recorte", não "ausente" (#402, achado
+  // da revisão da PR #419).
+  const belowDefaultCutFixture = {
+    id: 905000041,
+    title: "Zyxquantumcut Engineer",
+    companyName: "Below Default Cut Lab",
+    descriptionText: "Only scored below the default fit cut on purpose.",
+  };
+  await getDb().insert(job).values({
+    ...belowDefaultCutFixture,
+    fingerprint: `e2e:${belowDefaultCutFixture.id}`,
+    contentHash: `e2e:${belowDefaultCutFixture.id}`,
+    sourceId: "ashby:e2e",
+    externalId: String(belowDefaultCutFixture.id),
+    url: `https://jobs.example.com/${belowDefaultCutFixture.id}`,
+    raw: { e2e: true },
+  }).onConflictDoNothing({ target: job.id });
+  await getDb().insert(jobScore).values(fixtureScore(belowDefaultCutFixture.id, primaryTrack.id, 20))
+    .onConflictDoNothing({ target: [jobScore.candidateId, jobScore.trackId, jobScore.jobId] });
+
   // As notas das fixtures são fixas, e desde a #280 salvar currículo roda a
   // fila de repontuação logo depois da resposta: nota marcada como de outro
   // scorer seria recalculada no meio da suíte e mudaria os recortes que os
