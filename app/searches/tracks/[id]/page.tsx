@@ -39,7 +39,12 @@ export default async function TrackPage({ params }: { params: Promise<{ id: stri
     : undefined;
   if (!track?.target) notFound();
 
-  const [support, queue] = await Promise.all([trackSupport(candidateId, track.target), candidateScoreQueueStatus(candidateId)]);
+  // Em série: `trackSupport` já abre duas conexões por dentro de `ownEvidence`
+  // (confirmedSkills + currentDocument), e somar `candidateScoreQueueStatus`
+  // a elas no mesmo `Promise.all` passava do teto `POOL - 1` de
+  // `tests/db-fan-out.test.ts`.
+  const support = await trackSupport(candidateId, track.target);
+  const queue = await candidateScoreQueueStatus(candidateId);
   const feedback = {
     successMessage: t("feedback.success"),
     errorMessage: t("feedback.error"),

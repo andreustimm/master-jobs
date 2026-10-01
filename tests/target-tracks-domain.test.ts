@@ -198,7 +198,8 @@ describe("track domain", () => {
 
   it("UT-037 splits supported keywords from gaps using own evidence", () => {
     const result = evidenceSupport(trackOf(["laravel", "vue"]), {
-      lines: ["MPC — enterprise multi-tenant User Management System on Laravel 12 + Jetstream"],
+      ownLines: ["MPC — enterprise multi-tenant User Management System on Laravel 12 + Jetstream"],
+      cvLines: [],
       confirmedSkills: [],
       inherited: false,
     });
@@ -206,18 +207,29 @@ describe("track domain", () => {
   });
 
   it("an empty evidence list supports nothing (UT-038 lives in the integration suite)", () => {
-    const result = evidenceSupport(trackOf(["kubernetes"]), { lines: [], confirmedSkills: [], inherited: false });
+    const result = evidenceSupport(trackOf(["kubernetes"]), {
+      ownLines: [],
+      cvLines: [],
+      confirmedSkills: [],
+      inherited: false,
+    });
     expect(result.gaps).toEqual(["kubernetes"]);
   });
 
   it("UT-039 counts confirmed skills as support", () => {
-    const result = evidenceSupport(trackOf(["react"]), { lines: [], confirmedSkills: ["React"], inherited: false });
+    const result = evidenceSupport(trackOf(["react"]), {
+      ownLines: [],
+      cvLines: [],
+      confirmedSkills: ["React"],
+      inherited: false,
+    });
     expect(result.supported).toEqual(["react"]);
   });
 
   it("UT-040 ignores inherited evidence", () => {
     const result = evidenceSupport(trackOf(["laravel"]), {
-      lines: ["Laravel 12 platform"],
+      ownLines: ["Laravel 12 platform"],
+      cvLines: [],
       confirmedSkills: [],
       inherited: true,
     });
@@ -225,8 +237,41 @@ describe("track domain", () => {
   });
 
   it("UT-041 reports every keyword as a gap without evidence", () => {
-    const result = evidenceSupport(trackOf(["laravel", "php"]), { lines: [], confirmedSkills: [], inherited: false });
+    const result = evidenceSupport(trackOf(["laravel", "php"]), {
+      ownLines: [],
+      cvLines: [],
+      confirmedSkills: [],
+      inherited: false,
+    });
     expect(result).toEqual({ supported: [], gaps: ["laravel", "php"] });
+  });
+
+  it("UT-038c a term present in both evidence: and growth: still counts as support (#423 review)", () => {
+    // O achado da revisão: `isGrowthOnly` bloqueava TODAS as linhas, inclusive
+    // as do `evidence:` próprio, sempre que o mesmo termo aparecesse numa
+    // frase de `growth:` — exatamente o caso de `kubernetes` no `profile.yaml`
+    // real (evidence em `cloud_devops`, growth na frase sobre não ser destaque).
+    const result = evidenceSupport(trackOf(["kubernetes"]), {
+      ownLines: ["ADT Solar / Sunpro — React, Node.js, MongoDB, WebSockets, Kubernetes and AWS Lambda."],
+      cvLines: [],
+      confirmedSkills: [],
+      inherited: false,
+      growth: ["Kubernetes appears in delivery work but is not a headline strength."],
+    });
+    expect(result).toEqual({ supported: ["kubernetes"], gaps: [] });
+  });
+
+  it("UT-038d growth still blocks a term that only the CV mentions (#423 review)", () => {
+    // O mesmo filtro continua valendo para o CV: o texto bruto não é citação
+    // assistida, e `growth` é lacuna honesta mesmo quando só o CV cita o termo.
+    const result = evidenceSupport(trackOf(["kubernetes"]), {
+      ownLines: [],
+      cvLines: ["Infraestrutura com Kubernetes em produção."],
+      confirmedSkills: [],
+      inherited: false,
+      growth: ["Kubernetes appears in delivery work but is not a headline strength."],
+    });
+    expect(result).toEqual({ supported: [], gaps: ["kubernetes"] });
   });
 
   it("UT-042 marks inherited target fields for non-owners only", () => {
@@ -326,7 +371,8 @@ describe("track domain", () => {
     });
 
     const resultado = evidenceSupport(repetido, {
-      lines: [],
+      ownLines: [],
+      cvLines: [],
       confirmedSkills: [],
       inherited: false,
     });
