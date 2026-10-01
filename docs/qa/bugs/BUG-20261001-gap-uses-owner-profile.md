@@ -20,30 +20,37 @@ escolheu buscar.
 
 - **Issue:** #427 · **Environment:** leitura do código e teste de banco com duas contas
 
-1. Criar duas contas candidato; dar à segunda um perfil de matching próprio com
-   termos diferentes dos do `profile.yaml`.
+1. Criar duas contas candidato; dar à segunda uma trilha principal com termos
+   diferentes dos do `profile.yaml`.
 2. Pontuar uma vaga que cite termos dos dois vocabulários para a segunda conta.
 3. Chamar `analyseGap` para a segunda conta.
 
-**Expected:** só os termos do perfil dela aparecem.
+**Expected:** só os termos da busca principal dela aparecem.
 **Actual:** os termos do `profile.yaml` do dono aparecem, e os dela não.
 
 ## Evidence
 
-- `tests/cov-core-candidate-gap.test.ts`, bloco "o vocabulário é do candidato,
-  não o do dono": reprova sem a correção (2 casos) e passa com ela.
+- `tests/cov-core-candidate-gap.test.ts`, blocos "o vocabulário é do
+  candidato, não o do dono" e "os termos são os da trilha principal".
+- Área E2E `candidate-gap` (`tests/e2e/ui/candidate-gap.mjs`).
 
 ## Fix
 
-- **Root cause:** `analyseGap` lia `loadProfile(true)` para qualquer `candidateId`.
-- **Fix commit:** pendente (PR da #427 ainda não mesclada). `analyseGap` passa a
-  usar `personProfile(candidateId)` do contexto de matching: o perfil gravado do
-  candidato; o dono sem perfil gravado usa o `profile.yaml`, que é dele; quem
-  não tem nenhum dos dois recebe um relatório sem vagas e sem termos, a mesma
-  regra que impede pontuá-lo.
-- **Regression test:** `tests/cov-core-candidate-gap.test.ts`.
+- **Root cause:** `analyseGap` lia `loadProfile(true)` para qualquer
+  `candidateId`. A primeira correção (`e53f4972`) trocou por `personProfile`,
+  que devolve o perfil gravado, e a fila grava um perfil derivado do currículo
+  para qualquer conta, dono incluído: as `keywords` desse perfil são as skills
+  que o CV já cita, e "faltante" ficava vazio por construção (achado Major 1
+  da revisão L2 da PR #431).
+- **Fix commit:** `e53f4972`, `78c047fd`. `analyseGap` tira termos e vagas da
+  mesma trilha principal, pelo perfil efetivo do scorer
+  (`trackScoringProfiles`): `keywords` do alvo da principal e notas dessa
+  trilha. Principal pendente devolve relatório vazio.
+- **Regression test:** `tests/cov-core-candidate-gap.test.ts` (quatro casos
+  reprovam com `e53f4972`) e a área E2E `candidate-gap` (três verificações da
+  convidada reprovam com `e53f4972`).
 
 ## Verification
 
-- **Retested:** `pnpm vitest run tests/cov-core-candidate-gap.test.ts` (22/22), E2E `candidate-rescore` (33/33) e `onboarding`/`cv-versions` (99/99 junto com a fumaça), `pnpm typecheck`.
-- **Result:** automatizado passa; percurso manual com duas contas pendente (ver o cenário).
+- **Retested:** 2026-10-01, `node tests/e2e/run-isolated.mjs --areas candidate-gap` 39/39 (com a fumaça e `candidate-rescore`); vitest dos arquivos afetados; `pnpm typecheck`. Relatório: `docs/qa/reports/2026-10-01T201500Z-gap-trilha-principal-retest.md`.
+- **Result:** pass.

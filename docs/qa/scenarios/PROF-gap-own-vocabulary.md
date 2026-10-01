@@ -1,31 +1,38 @@
 ---
 id: PROF-gap-own-vocabulary
 area: PROF
-title: A análise de lacunas compara o currículo com o vocabulário do próprio candidato
+title: A análise de lacunas compara o currículo com a busca principal do próprio candidato
 persona: Candidato convidado sem perfil
 journey: J-refresh-candidate-ranking
-expected: Em /candidate, "Vocabulário do currículo contra as vagas" lista só termos do perfil de busca do próprio candidato; quem não tem perfil próprio e não é o dono não vê termo nenhum (zero vagas analisadas), e nunca os termos do profile.yaml do dono
+expected: Em /candidate, "Vocabulário do currículo contra as vagas" lista só termos da trilha principal do próprio candidato, medidos nas vagas pontuadas para ela; nunca os termos do profile.yaml do dono em outra conta, nem as skills do perfil derivado do currículo; quem tem a principal pendente vê zero vagas analisadas e termo nenhum
 entry_points: /candidate
-qa_status: untested
+qa_status: pass
 bug_ids: BUG-20261001-gap-uses-owner-profile
 fix_status: fixed
-retest_status: pending
-fix_commits: pendente (PR da #427 ainda não mesclada)
-evidence: tests/cov-core-candidate-gap.test.ts; tests/e2e/ui/candidate-rescore.mjs
-last_report: docs/qa/reports/2026-10-01-gap-perfil-proprio-targeted.md
+retest_status: pass
+fix_commits: e53f4972, 78c047fd
+evidence: tests/cov-core-candidate-gap.test.ts; tests/e2e/ui/candidate-gap.mjs; tests/candidate-vocabulary-gap.test.ts
+last_report: docs/qa/reports/2026-10-01T201500Z-gap-trilha-principal-retest.md
 overlaps: PROF-rescore-refused-reason
 ---
 
-Entrar com duas contas de papel candidato: a do dono (perfil de `profile.yaml`)
-e uma conta convidada cujo currículo gerou um perfil próprio. Abrir `/candidate`
-em cada uma e comparar a seção de lacunas: os termos "ausentes", "confirmados"
-e "raros" da conta convidada têm de sair das competências do currículo dela, não
-das do dono. Uma conta convidada ainda sem perfil próprio (currículo fraco ou
-sem competência reconhecida) mostra a mensagem de nenhuma vaga analisada, e
-não termos do dono.
+Duas contas de papel candidato. A convidada tem currículo próprio, perfil
+derivado dele pela fila e a trilha principal editada para outros termos. O
+dono salvou o currículo e a fila derivou um perfil dele também. Entrar com
+cada uma, abrir `/candidate` e ler a seção de lacunas: os termos "ausentes",
+"confirmados" e "raros" são os da trilha principal de cada conta, e não os do
+perfil derivado do currículo nem os da outra conta. Recarregar e repetir em
+sessão nova. Uma conta sem perfil próprio (principal pendente) mostra a
+mensagem de nenhuma vaga analisada.
 
-Cobertura automatizada: `tests/cov-core-candidate-gap.test.ts` (duas contas no
-banco, B não recebe os termos do dono; B sem perfil recebe relatório vazio; o
-dono sem perfil gravado usa o `profile.yaml`) e `candidate-rescore` no E2E (a
-conta de CV fraco mostra "nenhuma vaga" em pt-BR e en, 375 px). O percurso
-manual com duas contas e leitura independente após refresh continua pendente.
+Cobertura: `tests/cov-core-candidate-gap.test.ts` (dono com perfil derivado e
+principal editada, promoção de outra trilha, dono com CV salvo e fila drenada,
+convidada com trilha própria, convidada sem perfil) e a área E2E
+`candidate-gap`, que entra pelo login com a convidada e o dono, lê a seção a
+375 px, depois do refresh e em sessão nova.
+
+Limite conhecido do E2E: no acervo de fixtures, as vagas do dono acima de 60
+não citam termo do perfil, então a tela do dono só tem termos raros, que
+coincidem com os do perfil derivado. O E2E prova que o dono vê só termos da
+principal; a distinção entre principal e perfil derivado no dono está no teste
+de banco (caso b).

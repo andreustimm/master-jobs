@@ -112,7 +112,7 @@ rtk pnpm jho referrals           # vagas onde já conhece alguém
 # currículo
 rtk pnpm jho cv import <arquivo.pdf>   # extrai texto de PDF (--dry-run para conferir)
 rtk pnpm jho cv set <arquivo.md>       # salva de texto/markdown
-rtk pnpm jho cv gap                    # termos do SEU perfil de busca que as vagas-alvo usam e o CV não (quem não tem perfil próprio e não é o dono recebe zero vagas e zero termos)
+rtk pnpm jho cv gap                    # termos da SUA trilha principal que as vagas pontuadas para ela usam e o CV não (principal pendente, sem perfil próprio: zero vagas e zero termos)
 
 # vocabulário e skills
 rtk pnpm jho skills gap          # o que o mercado escreve e o CV não — lacuna de vocabulário

@@ -18,7 +18,7 @@
 
 | # | Charter | Journey / Scenario | Persona | Tour | Status | Issue | Fix commit |
 |---|---|---|---|---|---|---|---|
-| 1 | — (automatizado, sem charter manual) | J-refresh-candidate-ranking / PROF-gap-own-vocabulary | Candidato convidado sem perfil | — | Fixed (parcial) | BUG-20261001-gap-uses-owner-profile | pendente (PR ainda não mesclada) |
+| 1 | — (automatizado, sem charter manual) | J-refresh-candidate-ranking / PROF-gap-own-vocabulary | Candidato convidado sem perfil | — | Pending | BUG-20261001-gap-uses-owner-profile | pendente (PR ainda não mesclada) |
 
 Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human verify) | Blocked (human decision)`
 
@@ -36,7 +36,7 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 
 | Journey | Usability | Accessibility | Perceived performance | Compatibility | Error recoverability | Production parity | Evidence / findings |
 |---|---|---|---|---|---|---|---|
-| J-refresh-candidate-ranking | pass | — | — | — | — | — | `tests/cov-core-candidate-gap.test.ts`, `tests/e2e/ui/candidate-rescore.mjs`; não é QA de jornada completa |
+| J-refresh-candidate-ranking | — | — | — | — | — | — | sem sessão pela interface pública nesta rodada; só `tests/cov-core-candidate-gap.test.ts` e `tests/e2e/ui/candidate-rescore.mjs`. Reteste em `2026-10-01T201500Z-gap-trilha-principal-retest.md` |
 
 ## What Was Fixed
 
