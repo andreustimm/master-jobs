@@ -34,6 +34,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.4] - 2026-10-01T14:58:19.000Z
+
+### Corrigido
+
+- O seletor de Vagas diferencia a trilha chamada “Principal” da trilha principal atual.
+
 ## [1.32.3] - 2026-10-01T01:39:55.000Z
 
 ### Corrigido
