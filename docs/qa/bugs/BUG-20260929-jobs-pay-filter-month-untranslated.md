@@ -34,10 +34,18 @@ vazamento de português na interface em inglês, mesma causa provável
 
 ## Fix
 
-<!-- filled when status moves to fixed -->
-- **Root cause:**
-- **Fix commit:**
-- **Regression test:**
+- **Root cause:** `formatMoney` (`src/core/money.ts`) só sabia escrever o
+  sufixo de período em inglês; com a interface em pt-BR o valor normalizado
+  da faixa salarial (`cur`/`per` da URL, mostrado junto de cada vaga) saía
+  como "/month" em vez de "/mês".
+- **Fix commit:** d433dcf5 — `formatMoney` passou a localizar o sufixo pelo
+  `locale` recebido. Revisão posterior (achado da `deep-review` de #408)
+  moveu as palavras para o dicionário (`jobs.moneyPeriod*` em `pt-BR.ts` e
+  `en.ts`) e fez `app/joblist.tsx` passá-las como rótulos, para o módulo
+  `src/core/money.ts` continuar sem texto de interface embutido (regra 9).
+- **Regression test:** `tests/money.test.ts` ("localizes the period suffix
+  used on the jobs board") e `tests/e2e/ui/i18n.mjs` (confere "/mês" em
+  `/jobs?...&cur=BRL&per=month` com a interface em pt-BR).
 
 ## Verification
 

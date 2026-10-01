@@ -147,6 +147,13 @@ export const en: Dictionary = {
     notInterestedHint: "Takes the job off your lists. It stays under “Archived”, and you can restore it while you have not applied.",
     restore: "restore",
     restoreHint: "Puts the job back on your lists, at the start of the pipeline.",
+    /** Pay period shown per job (see `src/core/money.ts`). */
+    moneyPeriodMonth: "month",
+    moneyPeriodWeek: "week",
+    moneyPeriodDay: "day",
+    moneyPeriodHour: "hour",
+    moneyProjectTotal: "total",
+    moneyProjectTotalWithDuration: "total ({count} months)",
   },
   searches: {
     title: "Searches",

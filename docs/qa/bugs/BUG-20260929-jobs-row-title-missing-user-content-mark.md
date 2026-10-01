@@ -35,16 +35,22 @@ motivo, e a ausência da marca também é, por si, uma lacuna da regra.
 
 ## Fix
 
-<!-- filled when status moves to fixed -->
-- **Root cause:**
-- **Fix commit:**
-- **Regression test:**
+- **Root cause:** o link do título da vaga em `app/joblist.tsx` não carregava
+  `data-user-content`, então a guarda de vazamento de português não tinha
+  como distinguir um título acentuado do acervo de uma tradução esquecida.
+- **Fix commit:** d433dcf5 — `data-user-content="true"` adicionado ao link
+  do título em `JobList`.
+- **Regression test:** `tests/e2e/ui/i18n.mjs` (confere
+  `title.getAttribute("data-user-content") === "true"` em `/jobs`).
 
 ## Verification
 
-<!-- filled when status moves to verified -->
-- **Retested:**
-- **Result:**
+- **Retested:** 2026-09-29 · d433dcf5 · QA dirigido da PR #408
+  (`docs/qa/reports/2026-09-29T143300Z-d433dcf-vagas-idioma-395.md`), leitura
+  independente do DOM após recarga.
+- **Result:** verified — os seis títulos da lista carregam
+  `data-user-content="true"` e a marca sobrevive à recarga. `tests/e2e/ui/i18n.mjs`
+  confere o mesmo atributo no CI, em `/jobs` com a interface em inglês.
 
 ## Reteste da issue #395
 

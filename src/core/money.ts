@@ -184,19 +184,40 @@ export function convert(m: Money, to: Currency, fx: FxTable): Money | null {
   return { amount: (m.amount / from) * dest, currency: target, period: m.period };
 }
 
-export function formatMoney(m: Money, locale = "en-US"): string {
-  const localizedPeriod = (period: Exclude<Period, "year" | "project">): string => {
-    if (!locale.toLowerCase().startsWith("pt")) return period;
-    return { month: "mês", week: "semana", day: "dia", hour: "hora" }[period];
-  };
+/** Period words shown after the slash, one per locale (see `src/core/i18n/`). */
+export type MoneyPeriodLabels = Record<Exclude<Period, "year" | "project">, string>;
+
+/** Suffix words for a fixed-price project, one per locale. */
+export type MoneyProjectLabels = {
+  /** Shown when the project has no known duration. */
+  withoutDuration: string;
+  /** Shown when the project has a known duration, in months. */
+  withDuration: (months: number) => string;
+};
+
+export type MoneyLabels = { period: MoneyPeriodLabels; project: MoneyProjectLabels };
+
+/**
+ * `m` as a string, in the caller's language. Text comes only from `labels`
+ * (sourced from the dictionary, see `src/core/i18n/`) — this module is pure
+ * domain and carries no UI copy of its own (regra 9).
+ *
+ * `labels` is optional only because the scorer's blocker messages
+ * (`src/core/scoring/score.ts`) call this without the viewer's locale yet
+ * (issue #426); the fallback below keeps those messages in English rather
+ * than guessing a translation without a dictionary to read from.
+ */
+export function formatMoney(m: Money, locale = "en-US", labels?: MoneyLabels): string {
+  const periodLabel = (period: Exclude<Period, "year" | "project">): string =>
+    labels ? labels.period[period] : period;
   const perYear =
     m.period === "year"
       ? ""
       : m.period === "project"
         ? m.durationMonths
-          ? ` total (${m.durationMonths} meses)`
-          : " total"
-        : `/${localizedPeriod(m.period)}`;
+          ? ` ${labels ? labels.project.withDuration(m.durationMonths) : `total (${m.durationMonths} months)`}`
+          : ` ${labels ? labels.project.withoutDuration : "total"}`
+        : `/${periodLabel(m.period)}`;
   try {
     const formatted = new Intl.NumberFormat(locale, {
       style: "currency",

@@ -8,7 +8,22 @@ import {
   parsePeriod,
   toPeriod,
   type FxTable,
+  type MoneyLabels,
 } from "../src/core/money.ts";
+import { dictionary } from "../src/core/i18n/index.ts";
+
+/** Mirrors `moneyLabels()` in `app/joblist.tsx` — the labels come from the
+ * dictionary, never from a map hardcoded inside the core money module. */
+function moneyLabels(locale: "pt-BR" | "en"): MoneyLabels {
+  const d = dictionary(locale).jobs;
+  return {
+    period: { month: d.moneyPeriodMonth, week: d.moneyPeriodWeek, day: d.moneyPeriodDay, hour: d.moneyPeriodHour },
+    project: {
+      withoutDuration: d.moneyProjectTotal,
+      withDuration: (months) => d.moneyProjectTotalWithDuration.replace("{count}", String(months)),
+    },
+  };
+}
 
 /** Real ECB quote from 2026-08-18, as fetched by `jho fx refresh`. */
 const FX: FxTable = {
@@ -136,12 +151,18 @@ describe("formatMoney", () => {
   });
 
   it("localizes the period suffix used on the jobs board", () => {
-    expect(formatMoney(money(5_000, "BRL", "month"), "pt-BR")).toContain("/mês");
-    expect(formatMoney(money(5_000, "USD", "month"), "en")).toContain("/month");
+    // Labels come from the dictionary and travel in from the caller — money.ts
+    // carries no translated text of its own (regra 9).
+    expect(formatMoney(money(5_000, "BRL", "month"), "pt-BR", moneyLabels("pt-BR"))).toContain("/mês");
+    expect(formatMoney(money(5_000, "USD", "month"), "en", moneyLabels("en"))).toContain("/month");
   });
 
   it("renders a project with its duration", () => {
-    expect(formatMoney(money(30_000, "USD", "project", 2))).toContain("2 meses");
+    expect(formatMoney(money(30_000, "USD", "project", 2), "pt-BR", moneyLabels("pt-BR"))).toContain("2 meses");
+  });
+
+  it("without labels, falls back to an untranslated (English) suffix — the scorer's blocker messages still call formatMoney this way (issue #426)", () => {
+    expect(formatMoney(money(30_000, "USD", "project", 2))).toContain("2 months");
   });
 
   it("degrades gracefully for an unknown currency code", () => {

@@ -50,9 +50,10 @@ describe("formatMoney: código de moeda que o Intl recusa", () => {
 
   it("mantém o sufixo de projeto no caminho degradado", () => {
     // O caminho de exceção precisa produzir a mesma informação do caminho
-    // feliz; perder "total (3 meses)" transformaria um fixo em taxa aos olhos
-    // de quem lê.
-    expect(formatMoney(money(30_000, "US$", "project", 3))).toContain("total (3 meses)");
+    // feliz; perder a duração transformaria um fixo em taxa aos olhos de quem
+    // lê. Sem rótulos (nenhum chamador os passou aqui), o sufixo cai no
+    // inglês — regra 9 proíbe uma tradução hardcoded dentro do core.
+    expect(formatMoney(money(30_000, "US$", "project", 3))).toContain("total (3 months)");
     expect(formatMoney(money(30_000, "US$", "project"))).toContain("total");
   });
 
