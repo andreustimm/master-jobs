@@ -183,7 +183,7 @@ export default async function Jobs({
         }}
       />
 
-      <Pagination base="/jobs" state={state} page={page} pageSize={pageSize} total={total} t={t} />
+      <Pagination base="/jobs" state={state} page={page} pageSize={pageSize} total={total} locale={locale} t={t} />
 
       {/* Fora da lista e do total: são vagas que a consulta NÃO casou, só de
           título parecido. Sem a extensão de trigrama, nada aparece — nem o

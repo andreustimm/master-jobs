@@ -144,6 +144,13 @@ export const ptBR = {
     notInterestedHint: "Tira a vaga das suas listas. Ela fica em “Arquivadas”, e dá para restaurar enquanto você não tiver aplicado.",
     restore: "restaurar",
     restoreHint: "Devolve a vaga às suas listas, no começo do funil.",
+    /** Período do salário exibido por vaga (ver `src/core/money.ts`). */
+    moneyPeriodMonth: "mês",
+    moneyPeriodWeek: "semana",
+    moneyPeriodDay: "dia",
+    moneyPeriodHour: "hora",
+    moneyProjectTotal: "total",
+    moneyProjectTotalWithDuration: "total ({count} meses)",
   },
   /** Tela Buscas: termos salvos e trilhas (term-search-target-tracks). */
   searches: {
