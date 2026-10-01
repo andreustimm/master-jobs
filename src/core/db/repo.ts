@@ -1002,6 +1002,17 @@ export async function countHiddenByPayRange(
   // O aviso fala de salários fora da faixa; uma publicação sem salário não é
   // uma ocorrência fora dela. Por isso a leitura comparável mantém os não
   // divulgados, mesmo quando `disclosedOnly` também os oculta na lista.
+  //
+  // Duas consultas, não uma (achado da `deep-review` de #421): juntar as duas
+  // em uma, com `count(*) filter`, exigiria repetir a mesma lógica de
+  // publicação canônica do grupo (`canonicalOfGroup`) dentro e fora do filtro,
+  // arriscando reintroduzir o defeito do parágrafo acima — que foi exatamente
+  // o motivo de abandonar a consulta única anterior. Em troca, cada `await` é
+  // sequencial, não paralelo: o pico de conexões deste estágio continua 2 (a
+  // consulta em voo aqui mais `listSavedTerms`, em `app/jobs/jobs-data.ts`),
+  // o mesmo de antes da divisão — o custo extra é uma latência de round-trip
+  // de um `count(*)` simples e indexado, não uma conexão adicional. Medir com
+  // acervo de produção: `pnpm perf:facetas` (`tests/perf-facetas.test.ts`).
   const all = await countBoard(candidateId, { ...opts, pay: undefined, rates: undefined });
   const visible = await countBoard(candidateId, {
     ...opts,

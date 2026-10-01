@@ -9,7 +9,7 @@ import {
 } from "../src/contexts/matching/index.ts";
 import { loadRates } from "../src/contexts/fx/index.ts";
 import { pipelineCounts } from "../src/contexts/pursuit/index.ts";
-import { resolvePayFilter, type FilterState } from "./filter-state.ts";
+import { payFilterActive, resolvePayFilter, type FilterState } from "./filter-state.ts";
 
 /**
  * As leituras do cockpit, na ordem em que podem acontecer.
@@ -42,8 +42,10 @@ export async function loadCockpit(
   const payContext = state.pay !== undefined || state.sort === "comp"
     ? await Promise.all([listCandidateTracks(candidateId), loadRates()])
     : null;
-  const primary = payContext?.[0].find((track) => track.isPrimary);
-  const pay = resolvePayFilter(state, primary?.target ?? null);
+  // Mesma função que `/jobs` usa, com a mesma lista de trilhas e a mesma
+  // cotação: valida a moeda contra `rates` e escolhe a principal só entre
+  // trilhas ativas com alvo, para as duas telas concordarem.
+  const pay = resolvePayFilter(state, payContext?.[0] ?? [], payContext?.[1] ?? null);
   const boardFilters: BoardFilters = {
     ...filters,
     pay,
@@ -65,6 +67,10 @@ export async function loadCockpit(
     countBoard(candidateId, boardFilters),
   ]);
   const top = await listBoard(candidateId, { ...boardFilters, limit: 12 });
+  // `sort=comp` sozinho normaliza o valor exibido, não filtra nada
+  // (`payCondition` em `src/core/db/repo.ts`), então não entra na faceta —
+  // mesmo critério de `/jobs`, ver `payFilterActive`.
+  const payFacet = payFilterActive(boardFilters.pay);
   const facets = await cachedBoardFacets(candidateId, {
     minFit: state.fit,
     keepUnscored: boardFilters.keepUnscored,
@@ -73,8 +79,8 @@ export async function loadCockpit(
     company: boardFilters.company,
     sourceKinds: state.sources,
     workMode: state.workMode,
-    pay: boardFilters.pay,
-    rates: boardFilters.rates,
+    pay: payFacet ? boardFilters.pay : undefined,
+    rates: payFacet ? boardFilters.rates : undefined,
     groupRepeats: boardFilters.groupRepeats,
   });
   return { stats, counts, clusters, total, top, facets };

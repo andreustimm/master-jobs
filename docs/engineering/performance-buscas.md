@@ -528,7 +528,11 @@ faz nada. Se a migration a criar, ela vai para o primeiro schema do
 A requisição de produção medida acima gastou 3.479 ms em `facets`, 66% do
 total. As facetas dependem só do escopo da sessão e dos filtros que definem o
 universo contado; paginar, reordenar ou trocar os chips de recorte não muda a
-consulta, enquanto empresa e faixa salarial mudam seus números. Desde a #216,
+consulta, enquanto empresa e faixa salarial que de fato filtra (mínimo, máximo
+ou só divulgados) mudam seus números. `sort=comp` sozinho normaliza o valor
+exibido e a ordenação, não filtra nada, e por isso reaproveita a mesma entrada
+(`payFilterActive`, em `app/filter-state.ts`) — levá-lo à chave pagaria de novo
+o join lateral de pagamento sem motivo (#396). Desde a #216,
 `cachedBoardFacets` (`src/contexts/matching/app/board-facets.ts`) guarda o
 resultado num mapa do processo. `/jobs` e `/` passam por ele; `boardFacets`
 continua sendo a consulta, sem mudança de semântica.
