@@ -17,6 +17,7 @@ import * as account from "./account.mjs";
 import * as admin from "./admin.mjs";
 import * as adminCatalog from "./admin-catalog.mjs";
 import * as auth from "./auth.mjs";
+import * as candidateGap from "./candidate-gap.mjs";
 import * as candidateRescore from "./candidate-rescore.mjs";
 import * as canonicalFlows from "./canonical-flows.mjs";
 import * as cardActions from "./card-actions.mjs";
@@ -69,6 +70,9 @@ export const AREAS = [
   { id: "track-selector", run: trackSelector.run, requires: [] },
   { id: "design", run: design.run, requires: [] },
   { id: "candidate-rescore", run: candidateRescore.run, requires: [] },
+  // O dono só tem perfil derivado do currículo depois que candidate-rescore
+  // salva o CV e a fila roda: é a pré-condição do defeito (#427).
+  { id: "candidate-gap", run: candidateGap.run, requires: ["candidate-rescore"] },
   { id: "mobile", run: mobile.run, requires: [] },
   { id: "themes", run: themes.run, requires: [] },
   { id: "recheck", run: recheck.run, requires: [] },

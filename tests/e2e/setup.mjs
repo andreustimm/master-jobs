@@ -30,18 +30,21 @@ import {
 import { seedCatalog } from "../../src/contexts/skills/index.ts";
 import {
   createTrack,
+  ensureMatchingProfile,
   ensurePrimaryTrack,
   listCandidateTracks,
   saveTerm,
   setMatchingProfile,
   suggestTrack,
   trackScoringProfiles,
+  updateTrack,
 } from "../../src/contexts/matching/index.ts";
 import { runMigrations } from "../../src/core/db/migrate.ts";
 import { loadProfile } from "../../src/core/profile/load.ts";
 import { scoreOne } from "../../src/core/scoring/apply.ts";
 import { SCORER_VERSION } from "../../src/core/scoring/score.ts";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
+import { GAP_GUEST_FIXTURE } from "./gap-fixture.mjs";
 import { PUBLIC_CV_FIXTURE, PUBLIC_FACTS_OFF_FIXTURE, factColumns } from "./public-cv-format.mjs";
 import { isolationRefusal } from "./database-guard.mjs";
 
@@ -94,6 +97,10 @@ export const E2E_ROLES = {
   // execução, e `E2E-003` (que exige `noCv` sem CV) reprovava numa segunda
   // rodada contra a mesma base (achado 3 da revisão da PR #418, issue #387).
   weakCv: { email: "e2e-cv-fraco@local.test", roles: ["candidate"] },
+  // Convidada com perfil derivado do currículo e trilha principal editada:
+  // a área `candidate-gap` prova que as lacunas dela saem da busca dela, e não
+  // do `profile.yaml` do dono nem das skills do próprio currículo (#427).
+  gapGuest: { email: GAP_GUEST_FIXTURE.email, roles: ["candidate"] },
 };
 
 try {
@@ -765,6 +772,70 @@ try {
     // Salvar termo pede trilha principal, e a sessão emprestada (E2E-019)
     // assume esta conta: ela recebe o perfil de matching do dono.
     await setMatchingProfile(failedQueueCandidate.candidateId, await loadProfile(true));
+  }
+
+  // #427: a convidada da área `candidate-gap`. O perfil sai do currículo pelo
+  // mesmo caminho da fila (`ensureMatchingProfile`), e a principal é então
+  // editada, como a pessoa faria em Buscas. A vaga `public-role` entra com nota
+  // alta na principal dela, para a análise ter o que comparar.
+  const [gapGuest] = await getDb()
+    .select({ candidateId: authUser.candidateId })
+    .from(authUser)
+    .where(eq(authUser.email, E2E_ROLES.gapGuest.email))
+    .limit(1);
+  if (gapGuest?.candidateId !== null && gapGuest?.candidateId !== undefined) {
+    const guestId = gapGuest.candidateId;
+    await saveDocument({
+      candidateId: guestId,
+      kind: "cv",
+      label: "E2E CV da convidada",
+      format: "markdown",
+      content: GAP_GUEST_FIXTURE.cv,
+    });
+    const derived = await ensureMatchingProfile(guestId);
+    if (derived.estado !== "derivado" && derived.estado !== "ja-tinha") {
+      throw new Error(`E2E gap guest profile: ${derived.estado}`);
+    }
+    const guestPrimary = await ensurePrimaryTrack(guestId);
+    if (!guestPrimary?.target) throw new Error("E2E gap guest has no primary track");
+    if (JSON.stringify(guestPrimary.target.keywords) !== JSON.stringify(GAP_GUEST_FIXTURE.keywords)) {
+      const edited = await updateTrack(guestId, guestPrimary.id, {
+        target: { ...guestPrimary.target, keywords: GAP_GUEST_FIXTURE.keywords },
+        expectedUpdatedAt: guestPrimary.updatedAt,
+      });
+      if (!edited.ok) throw new Error(`E2E gap guest track: ${edited.code}`);
+    }
+    const [publicRole] = await getDb()
+      .select({ id: job.id })
+      .from(job)
+      .where(and(eq(job.sourceId, "ashby:e2e"), eq(job.externalId, "public-role")))
+      .limit(1);
+    if (publicRole) {
+      await getDb().insert(jobScore).values({
+        candidateId: guestId,
+        trackId: guestPrimary.id,
+        jobId: publicRole.id,
+        fit: 90,
+        titleScore: 10,
+        keywordScore: 10,
+        seniorityScore: 10,
+        geoScore: 10,
+        compScore: 10,
+        freshnessScore: 5,
+        benefitScore: 5,
+        penalty: 0,
+        cluster: "other",
+        matchedKeywords: [],
+        missingKeywords: [],
+        reasons: [],
+        blockers: [],
+        scorerVersion: "e2e",
+        profileHash: "e2e",
+      }).onConflictDoNothing({ target: [jobScore.candidateId, jobScore.trackId, jobScore.jobId] });
+    }
+    // Salvar currículo e editar a trilha enfileiram repontuação; a nota fixa
+    // acima é o cenário, e o worker não pode trocá-la pela do scorer.
+    await getDb().delete(scoreTask).where(eq(scoreTask.candidateId, guestId));
   }
 
   const tokenFixtures = [
