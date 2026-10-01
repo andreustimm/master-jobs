@@ -336,9 +336,9 @@ describe("contatos", () => {
     // Indicação é ~7% dos candidatos e ~40% das contratações. É a pergunta que
     // mais muda o resultado, e por isso vem antes da evidência no dossiê.
     await db.insert(targetAccount).values([
-      { name: "Marina Souza", company: "Acme Labs Inc.", category: "peer" },
-      { name: "Rui Alves", company: "Acme Labs", category: "former" },
-      { name: "Fulano de Outra", company: "Outra Empresa", category: "peer" },
+      { candidateId, name: "Marina Souza", company: "Acme Labs Inc.", category: "peer" },
+      { candidateId, name: "Rui Alves", company: "Acme Labs", category: "former" },
+      { candidateId, name: "Fulano de Outra", company: "Outra Empresa", category: "peer" },
     ]);
     const jobId = await seedJob({ companyName: "Acme Labs" });
 
@@ -347,6 +347,21 @@ describe("contatos", () => {
     // "Acme Labs Inc." e "Acme Labs" colapsam no mesmo slug: sufixo societário
     // é ruído que quebraria o casamento entre fontes.
     expect(dossier?.contacts).toEqual(["Marina Souza", "Rui Alves (ex-colega)"]);
+  });
+
+  it("não mostra contato da rede de outro candidato (#379)", async () => {
+    // O dossiê é do candidato que o pediu; o nome de quem outra conta conhece
+    // na empresa não entra nele.
+    const outro = await ensureCandidate({ slug: "outro-dossie", name: "Outro" });
+    await db.insert(targetAccount).values({
+      candidateId: outro,
+      name: "Contato Alheio",
+      company: "Acme Labs",
+      category: "former",
+    });
+    const jobId = await seedJob({ companyName: "Acme Labs" });
+
+    await expect(buildDossier(candidateId, jobId, CV)).resolves.toMatchObject({ contacts: [] });
   });
 
   it("devolve lista vazia quando não há ninguém conhecido ali", async () => {

@@ -136,6 +136,34 @@ export async function run(ctx) {
       );
     }
 
+    if (scenario.role === "candidato") {
+      // #379: a rede de contatos é do candidato. O dono tem um contato na
+      // fixture ("Task 04 referral contact", numa empresa com vaga aberta);
+      // esta conta não tem nenhum, então /referrals mostra a rede vazia — e
+      // nunca a contagem de empresas nem o nome do contato de outra pessoa.
+      // Duas leituras, a segunda depois de recarregar: o estado precisa
+      // sobreviver a refresh, não só à navegação suave.
+      await rolePage.goto(`${BASE}/referrals`, { waitUntil: "networkidle" });
+      const leaks = [];
+      for (const when of ["na primeira carga", "depois de recarregar"]) {
+        if (when !== "na primeira carga") await rolePage.reload({ waitUntil: "networkidle" });
+        const referralsText = (await rolePage.locator("main").innerText()) ?? "";
+        if ((await rolePage.locator('[data-testid="referrals-empty-network"]').count()) !== 1) {
+          leaks.push(`${when}: a tela não mostrou a rede vazia`);
+        }
+        if ((await rolePage.locator('[data-testid="referrals-network-count"]').count()) !== 0) {
+          leaks.push(`${when}: a tela contou empresas de uma rede que não é desta conta`);
+        }
+        if ((await rolePage.locator('[data-testid^="referral-job-"]').count()) !== 0) {
+          leaks.push(`${when}: a tela listou indicação por contato alheio`);
+        }
+        if (referralsText.includes("Task 04 referral contact")) {
+          leaks.push(`${when}: o nome do contato do dono apareceu`);
+        }
+      }
+      check("#379 candidato não vê a rede de contatos de outra conta em /referrals", leaks.length === 0, leaks.join(" | "));
+    }
+
     // `start_url` do manifest é "/" e não pode variar por papel. Instalada, a
     // PWA abre ali — então `/` precisa LEVAR cada papel a uma tela dele, e não
     // negar. É o defeito da E-06 tentando voltar pela porta do manifest.
