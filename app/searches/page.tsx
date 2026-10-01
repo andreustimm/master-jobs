@@ -136,6 +136,8 @@ export default async function SearchesPage() {
               action={saveTermAction}
               {...feedback}
               resultLinkLabel={t("searchFeedback.viewExisting")}
+              keepFields
+              clearOnSuccess
               className="grid gap-2 sm:flex sm:flex-wrap sm:items-end"
               data-testid="searches-save-form"
             >

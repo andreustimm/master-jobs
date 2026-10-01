@@ -38,14 +38,12 @@ cria termo.
 
 <!-- filled when status moves to fixed -->
 - **Root cause:** o sintoma é o termo cortado sem aviso; a causa é o `maxlength` do campo, que impede o envio do texto inteiro e com ele a mensagem de termo longo que o servidor já tem.
-- **Fix commit:** e6ff264 (`fix: validar termo longo sem corte`).
-- **Regression test:** `tests/mobile.test.ts` (o campo não corta antes da validação); `tests/e2e/ui/searches.mjs` (termo de 65 caracteres mostra `term_too_long` e não aparece após recarregar).
+- **Fix commit:** e6ff264 (`fix: validar termo longo sem corte`); `<FIXER_SHA>` (`fix: manter o termo digitado na recusa e limpar só no sucesso`) — a correção de e6ff264 deixava a validação do servidor alcançável, mas o `MutationFeedbackForm` ainda reiniciava o campo em qualquer desfecho (React reseta formulário não controlado quando a action assenta); a pessoa recusada perdia o texto colado e tinha de colar e cortar de novo às cegas.
+- **Regression test:** `tests/mobile.test.ts` (o campo não corta antes da validação; localizado por `data-testid`, não por `name="term"` ser o primeiro atributo); `tests/e2e/ui/searches.mjs` (termo de 65 caracteres mostra `term_too_long`, **mantém os 65 caracteres no campo** depois da recusa, some do campo depois de um envio aceito, e não aparece — inteiro nem cortado em 60 — após recarregar).
 
 ## Verification
 
 <!-- filled when status moves to verified -->
-- **Retested:** E2E seletivo (81/81) e jornada manual `CH-term-input-mistreated` em 375×812, PT-BR, com refresh e leitura independente.
-- **Result:** o aviso "O termo passa de 60 caracteres." apareceu; após recarregar, o termo longo não foi criado.
 
 ## Re-found (2026-09-29)
 

@@ -150,8 +150,15 @@ describe("layout", () => {
   });
 
   it("lets the term validator receive values longer than its limit", () => {
+    // Localiza a tag pelo `data-testid`, não por `name="term"` ser o primeiro
+    // atributo: `<Input required name="term" maxLength={60} data-testid=...`
+    // reintroduziria o corte silencioso e passaria na checagem antiga.
     const searches = read("app/searches/page.tsx");
-    expect(searches).not.toMatch(/<Input name="term"[^>]*maxLength=/);
+    const termInput = searches
+      .match(/<Input\b[^<]*\/>/g)
+      ?.find((tag) => tag.includes('data-testid="searches-term-input"'));
+    expect(termInput).toBeDefined();
+    expect(termInput).not.toMatch(/maxLength=/);
   });
 
   it("keeps administrative row actions touchable on mobile", () => {
