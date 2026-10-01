@@ -1,6 +1,6 @@
 # BUG-20260929-density-resets-on-list-changes: densidade compacta some ao paginar, ordenar ou filtrar
 
-- **Status:** open
+- **Status:** verified
 - **Impact (user-side):** Friction
 - **Severity:** Low · **Priority:** P3
 - **Persona Affected:** Andreus em triagem
@@ -36,12 +36,16 @@ URL.
 ## Fix
 
 <!-- filled when status moves to fixed -->
-- **Root cause:**
-- **Fix commit:**
-- **Regression test:**
+- **Root cause:** `dense` nunca fez parte de `FilterState` (`app/filter-state.ts`): `readFilters` não o lia da URL e `toParams`/`facetHref` não o reescreviam ao montar o link de paginação, ordenação, filtro ou preset. Cada navegação remonta a URL a partir do estado, então um campo ausente do estado é descartado nela — `dense=1` só sobrevivia enquanto a pessoa não tocava em outro controle.
+- **Fix commit:** 5432c3fe
+- **Regression test:** `tests/filter-state.test.ts` (dense entra e sai de `readFilters`/`toParams`/`facetHref`); `tests/e2e/ui/jobs-density.mjs` (desktop e 375px): antes, `dense` se perdia ao paginar, ordenar, filtrar, submeter busca por texto ou trocar de preset; depois, 24/24 passam com reload em cada etapa.
 
 ## Verification
 
 <!-- filled when status moves to verified -->
-- **Retested:**
-- **Result:**
+- **Retested:** 29/09/2026, Chromium, standalone com PostgreSQL isolado, jornada pública com agent-browser (desktop e 375×812).
+- **Result:** pass — `dense=1` e `aria-current="page"` de Compact persistem após paginação, ordenação, filtro, busca por texto, preset e reload, em desktop e 375px. Relatório `docs/qa/reports/2026-09-29T150058Z-empregador-densidade-397.md`; captura `docs/qa/evidence/2026-09-29T150058Z-empregador-densidade-397/careers-compacta-375.png`.
+
+## Reteste #397
+
+docs/qa/reports/2026-09-29T150058Z-empregador-densidade-397.md. Fonte careers nomeada/agrupada e densidade persistente confirmadas após reload; paginação também coberta no E2E.
