@@ -64,7 +64,10 @@ export function ScoreQueueCard({
   recalculating?: boolean;
 }) {
   const display = scoreQueueDisplay(snapshot, hasCv);
-  const keys = display.state === "refused"
+  const noJobsUpdated = display.state === "done" && display.scored === 0;
+  const keys = noJobsUpdated
+    ? { label: "candidate.queueNoUpdatesLabel" as const, detail: "candidate.queueNoUpdates" as const }
+    : display.state === "refused"
     ? { label: "candidate.queueRefusedLabel" as const, detail: REFUSAL_DETAIL_KEYS[display.reason] }
     : QUEUE_STATE_KEYS[display.state];
   const values = display.state === "done"
@@ -76,7 +79,7 @@ export function ScoreQueueCard({
       className="mb-6"
       data-testid="score-queue-status"
       data-state={display.state}
-      data-reason={display.state === "refused" ? display.reason : undefined}
+      data-reason={display.state === "refused" ? display.reason : noJobsUpdated ? "noJobsUpdated" : undefined}
       role="status"
       aria-live="polite"
       aria-atomic="true"
@@ -85,7 +88,7 @@ export function ScoreQueueCard({
         <CardTitle className="type-body-emphasis" role="heading" aria-level={2}>
           {t("candidate.queueTitle")}
         </CardTitle>
-        <Badge variant={QUEUE_BADGE_VARIANT[display.state]}>{t(keys.label)}</Badge>
+        <Badge variant={noJobsUpdated ? "outline" : QUEUE_BADGE_VARIANT[display.state]}>{t(keys.label)}</Badge>
       </CardHeader>
       <CardContent className="pt-0">
         <p className="type-body-sm max-w-[62ch] text-muted-foreground">

@@ -1,6 +1,6 @@
 // Área `candidate-rescore` do E2E de navegador: Estado da repontuação do candidato e a comparação de vaga.
 // Fatiada de ui.mjs (#320); a ordem e o contexto compartilhado moram em ./index.mjs.
-import { COMPARISON_TEXT } from "./shared.mjs";
+import { COMPARISON_TEXT, en, ptBR } from "./shared.mjs";
 
 export async function run(ctx) {
   const { BASE, E2E_PASSWORD, browser, check, page, rememberCreatedJob, trackConsole } = ctx;
@@ -89,7 +89,7 @@ export async function run(ctx) {
   const englishQueueLabel = {
     pending: "Queued",
     scoring: "Scoring",
-    done: "Up to date",
+    done: await queuedStatus.getAttribute("data-reason") === "noJobsUpdated" ? en.candidate.queueNoUpdatesLabel : "Up to date",
     failed: "Refresh failed",
     refused: "Track not built",
   }[(await queuedStatus.getAttribute("data-state")) ?? ""];
@@ -167,6 +167,74 @@ export async function run(ctx) {
       ),
     JSON.stringify(noCvQueue),
   );
+
+  // A mesma versão fraca tem dois resultados legítimos: perfil próprio já
+  // existente não é sobrescrito; perfil ainda ausente recusa a derivação.
+  const weakCv = "Atuei com organização de documentos, atendimento ao público e acompanhamento de rotinas administrativas. Procuro novas oportunidades para continuar aprendendo.";
+  async function saveAndRead(target, text, label) {
+    await target.locator(".cm-content").click();
+    await target.keyboard.press("ControlOrMeta+A");
+    await target.keyboard.insertText(text);
+    await target.fill('input[name="label"]', label);
+    await target.locator('[data-testid="save-cv"]').click();
+    await target.locator('[data-testid="mutation-feedback"][role="status"]').waitFor();
+    for (let attempt = 0; attempt < 15; attempt++) {
+      await target.reload({ waitUntil: "networkidle" });
+      const state = await target.locator('[data-testid="score-queue-status"]').getAttribute("data-state");
+      if (state === "done" || state === "refused" || state === "failed") return;
+      await target.waitForTimeout(1_000);
+    }
+  }
+  await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+  // `textContent` junta as divs do CodeMirror sem quebra de linha (mesmo
+  // problema do comentário acima); `innerText` é o que preserva o documento
+  // do dono para a restauração logo depois.
+  const originalOwnerCv = await page.locator(".cm-content").innerText();
+  await saveAndRead(page, weakCv, "Atualização administrativa");
+  const zeroReason = await queuedStatus.getAttribute("data-reason");
+  check("execução sem recalcular vagas explica o resultado sem prometer cobertura", zeroReason === "noJobsUpdated" && (await queuedStatus.textContent()).includes(en.candidate.queueNoUpdatesLabel), `${zeroReason}: ${await queuedStatus.textContent()}`);
+  // Devolve o CV do dono: o resto da suíte lê este currículo para pontuar e
+  // medir lacuna (setup.mjs), e este bloco só o usou para forçar `noJobsUpdated`
+  // (achado 3 da revisão da PR #418, issue #387).
+  await saveAndRead(page, originalOwnerCv, "E2E CV (restaurado após candidate-rescore)");
+  await page.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+  const restoredOwnerCv = await page.locator(".cm-content").innerText();
+  // Normaliza espaço em branco: o CodeMirror duplica quebra de linha em volta
+  // de linha vazia no roundtrip leitura→digitação→leitura (mesma classe de
+  // divergência `innerText`/`textContent` do comentário da task 03). O que
+  // importa para o resto da suíte é a palavra, não a contagem de linha vazia.
+  const normalizeWhitespace = (text) => text.replace(/\s+/g, " ").trim();
+  check(
+    "CV do dono volta ao conteúdo original depois do teste de CV fraco",
+    normalizeWhitespace(restoredOwnerCv) === normalizeWhitespace(originalOwnerCv),
+    `esperado: ${originalOwnerCv} · obtido: ${restoredOwnerCv}`,
+  );
+
+  const weakContext = await browser.newContext({ viewport: { width: 375, height: 812 } });
+  const weakPage = await weakContext.newPage();
+  trackConsole(weakPage);
+  await weakPage.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+  // Conta dedicada (`E2E_ROLES.weakCv` em setup.mjs): reaproveitar `noCv`
+  // deixava essa conta COM currículo depois da execução, e o `E2E-003` (que
+  // exige `noCv` sem CV) reprovava numa segunda rodada contra a mesma base.
+  await weakPage.fill('input[name="email"]', "e2e-cv-fraco@local.test");
+  await weakPage.fill('input[name="password"]', E2E_PASSWORD);
+  await weakPage.locator('[data-testid="login-submit"]').click();
+  await weakPage.waitForTimeout(1_000);
+  await weakPage.goto(`${BASE}/candidate`, { waitUntil: "networkidle" });
+  await saveAndRead(weakPage, weakCv, "Experiência administrativa");
+  for (const [locale, dictionary] of [["pt-BR", ptBR], ["en", en]]) {
+    await weakContext.addCookies([{ name: "jho_locale", value: locale, url: BASE }]);
+    await weakPage.reload({ waitUntil: "networkidle" });
+    const status = weakPage.locator('[data-testid="score-queue-status"]');
+    const gap = weakPage.locator('[data-testid="candidate-vocabulary-gap"]');
+    check(`CV sem evidência mostra recusa conhecida em ${locale}`, await status.getAttribute("data-reason") === "weakCv", await status.textContent());
+    const gapText = (await gap.textContent()) ?? "";
+    check(`zero vagas não afirma cobertura em ${locale}`, gapText.includes(dictionary.candidate.noJobsForGap) && !gapText.includes(dictionary.candidate.noRelevantGap), gapText);
+    const overflow = await weakPage.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    check(`mensagens de ranking e lacunas cabem em 375px em ${locale}`, overflow <= 1, `${overflow}px`);
+  }
+  await weakContext.close();
 
   await page.context().addCookies([{ name: "jho_locale", value: "pt-BR", url: BASE }]);
 
