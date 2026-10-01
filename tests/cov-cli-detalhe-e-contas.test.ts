@@ -30,11 +30,12 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { authUser, positioningTask } from "../src/core/db/schema.ts";
+import { declaredJhoEnv } from "../src/core/dev-env.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 import { banco, carregarCli, rodar } from "./cov-cli-harness.ts";
 
 /** Variáveis de ambiente tocadas por algum caso, restauradas no `afterEach`. */
-const AMBIENTE_TOCADO = ["JHO_AUTH_MODE"] as const;
+const AMBIENTE_TOCADO = ["JHO_AUTH_MODE", "JHO_ENV"] as const;
 let ambienteOriginal: Record<string, string | undefined> = {};
 
 beforeAll(async () => {
@@ -168,5 +169,24 @@ describe("jho auth status", () => {
     // não sabe o que desligar. Este é o comando que existe para responder
     // "estou exposto?", e a resposta precisa vir acionável.
     expect(aberto.out).toContain("JHO_AUTH_MODE");
+  });
+
+  it("#378: pedido recusado sem JHO_ENV avisa que o pnpm dev abre com o mesmo .env", async () => {
+    // A CLI recusa (não se declara local), mas `pnpm dev` declara
+    // JHO_ENV=local sozinho quando o .env não declara nada: dizer só
+    // "autenticado" aqui esconderia que o servidor local está exposto.
+    process.env.JHO_AUTH_MODE = "open";
+    delete process.env.JHO_ENV;
+    const semDeclaracao = await rodar("auth", "status");
+    // A CLI decide como o `scripts/dev.ts` (processo + `.env*` do Next no
+    // cwd). Numa máquina cujo `.env` declara JHO_ENV, o `pnpm dev` também
+    // recusaria — e o aviso certo é o outro.
+    if (declaredJhoEnv({}) === undefined) expect(semDeclaracao.out).toContain("SEM PROTEÇÃO no pnpm dev");
+    else expect(semDeclaracao.out).toContain("ignorado");
+
+    process.env.JHO_ENV = "preview";
+    const declaradoPreview = await rodar("auth", "status");
+    expect(declaradoPreview.out).not.toContain("pnpm dev");
+    expect(declaradoPreview.out).toContain("ignorado");
   });
 });

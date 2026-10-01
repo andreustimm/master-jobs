@@ -325,7 +325,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           {borrowedAs && (
             <div className="border-b border-[var(--warn)] bg-[var(--warn)]/10">
               <div className="app-shell-content mx-auto flex w-full max-w-[1760px] flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2 sm:px-6 lg:px-8">
-                <span className="type-body-sm font-medium text-[var(--warn)]">
+                <span
+                  className="type-body-sm font-medium text-[var(--warn-text)]"
+                  data-testid="impersonation-banner-text"
+                >
                   {t("impersonation.banner", { email: borrowedAs })}
                 </span>
                 <span className="type-meta text-muted-foreground">
@@ -341,7 +344,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   <button
                     type="submit"
                     data-testid="stop-impersonating"
-                    className="cursor-pointer type-body-sm font-medium text-[var(--warn)] underline-offset-2 hover:underline"
+                    className="cursor-pointer type-body-sm font-medium text-[var(--warn-text)] underline-offset-2 hover:underline"
                   >
                     {t("impersonation.exit")}
                   </button>

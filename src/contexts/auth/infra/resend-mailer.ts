@@ -118,9 +118,9 @@ export function configuredMailer(env = process.env): Mailer {
   const from = env.RESEND_FROM?.trim();
   if (key && from) return resendMailer(key, from);
   // Lista de permissão: o terminal só vale onde o processo se declara local
-  // ou não se declara deployment nenhum (`isLocalProcess`, a mesma regra do
-  // modo aberto). Produção, preview, `JHO_ENV` desconhecido ou `VERCEL=1`
-  // omitem o corpo — valor inventado depois cai no lado seguro.
+  // (`JHO_ENV=local`, via `isLocalProcess`, a mesma regra do modo aberto).
+  // Produção, preview, `JHO_ENV` desconhecido, `VERCEL=1` e processo que não
+  // declara nada omitem o corpo — valor inventado depois cai no lado seguro.
   if (key || !isLocalProcess(env)) return withheldMailer;
   return consoleMailer;
 }

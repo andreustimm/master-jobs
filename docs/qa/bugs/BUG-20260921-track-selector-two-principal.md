@@ -1,6 +1,6 @@
 # BUG-20260921-track-selector-two-principal: depois de promover outra trilha, Vagas mostra dois botões "PRINCIPAL"
 
-- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->
+- **Status:** verified
 - **Impact (user-side):** Trust-Damage
 - **Severity:** High · **Priority:** P1
 - **Persona Affected:** Andreus em triagem
@@ -36,15 +36,24 @@ aviso — a pessoa lê notas de uma trilha achando que são da outra.
 - `docs/qa/evidence/2026-09-21T175034729239Z-e901131e-qa-buscas/CH-target-track-edit-archive-baseline-seletor-dois-principal.png`
 - Leitura independente: em Buscas, depois de recarregar, só "laravel" carrega o selo "principal", e a trilha "Principal" tem o botão TORNAR PRINCIPAL — o estado está certo; é o seletor de Vagas que não o diz.
 
+## Re-found (2026-09-29)
+
+- **Charter:** CH-target-track-edit-archive · **Report:** docs/qa/reports/2026-09-29T035351654581Z-97f37e1c-full-release-candidate-1.29-full.md (QA full do release candidate 1.29)
+- Mesmo sintoma reproduzido: depois de tornar outra trilha principal, o
+  seletor de Vagas mostra dois botões "PRINCIPAL", sem distinguir qual é
+  qual.
+- **Evidence:** `docs/qa/evidence/2026-09-29T035351654581Z-97f37e1c-full/CH-target-track-edit-archive/04-seletor-dois-principal.png`
+- Ainda `open` — sem fix aplicado entre 2026-09-21 e esta rodada.
+
 ## Fix
 
 <!-- filled when status moves to fixed -->
 - **Root cause:** o botão da trilha principal em `app/filters.tsx` usa o rótulo genérico `filters.trackPrimary` ("principal") em vez do nome da trilha, e os demais botões usam o nome que a trilha tem. A trilha padrão se chama "Principal", então basta ela deixar de ser a principal para os dois rótulos coincidirem. O sintoma é o seletor ambíguo; a causa é o rótulo da principal não nomear a trilha.
-- **Fix commit:**
-- **Regression test:**
+- **Fix commit:** a57fc6a
+- **Regression test:** `tests/e2e/ui/track-selector.mjs`: falhou em desktop e 375px antes; 16/16 verificações passaram depois. O nome da trilha usa `normal-case`, preservando “Principal” e mantendo o rótulo funcional “PRINCIPAL”.
 
 ## Verification
 
 <!-- filled when status moves to verified -->
-- **Retested:**
-- **Result:**
+- **Retested:** 29/09/2026, Chromium, standalone com PostgreSQL isolado, jornada pública com agent-browser.
+- **Result:** pass — promoção, seleção, voltar/avançar, recarga, arquivamento e restauração confirmados por Vagas e Buscas. Evidências no relatório `2026-09-29T141137897408Z-1d3a7255-trilha-principal-391.md`.

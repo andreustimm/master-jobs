@@ -86,7 +86,7 @@ da varredura fatiada não depende da sorte: `next.config.ts` inclui
 | `BLOB_READ_WRITE_TOKEN` | Vercel (Preview **e** Production), criada pela integração do Blob | credencial do Vercel Blob; o adapter grava sempre privado e apaga o valor de todo erro. Nunca em banco, log ou `.env.example` |
 | `JHO_STORAGE_BUCKET` | Vercel (opcional) | prefixo dos objetos no Blob (bucket no S3); padrão `master-jobs` |
 | `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE` | local (MinIO) ou futuro AWS S3 | só com `JHO_STORAGE_DRIVER=s3`; `S3_ENDPOINT` ausente é a AWS ([local-storage.md](local-storage.md)) |
-| `JHO_ENV` | qualquer deployment que não seja a Vercel (o plano B no Fly, `fly.toml` **e** `Dockerfile`); recomendado também na Vercel, ver abaixo | declara o ambiente para `isLocalProcess()` (`src/contexts/auth/domain/open-mode.ts`) e para a guarda de ingestão (`src/core/ingest/guard.ts`); sem ela, fora da Vercel, o processo seria tratado como a máquina do dono — libera o modo aberto, imprime link de recuperação no log (G18) e recusa a varredura |
+| `JHO_ENV` | todo deployment (Vercel Production `production`, Preview `preview`; plano B no Fly em `fly.toml` **e** `Dockerfile`); na máquina do dono, `local` | declara o ambiente para `isLocalProcess()` (`src/contexts/auth/domain/open-mode.ts`) e para a guarda de ingestão (`src/core/ingest/guard.ts`). Só `JHO_ENV=local` (sem `VERCEL`/`VERCEL_ENV`) conta como máquina do dono — o sinal é positivo (G27, #378): ausente ou vazia, o processo **não** é local, então o modo aberto é recusado, o mailer omite o link (G18), `resolvePublicOrigin` não usa o `Host` (G17) e a varredura recusa. `pnpm dev` declara `JHO_ENV=local` sozinho (`scripts/dev.ts`) só quando nem o shell nem os `.env*` que o Next carrega em dev a declaram — um `JHO_ENV` do `.env` vence; `pnpm jho` e `pnpm start` locais leem do `.env` e precisam da linha lá para o modo aberto e o mailer de terminal |
 | `JHO_PUBLIC_URL` | **só em Production** na Vercel; obrigatória no plano B no Fly (já fixada em `fly.toml`) | origem confiável (`https://host`) para o link de recuperação de senha (`src/contexts/auth/domain/public-origin.ts`), nunca o `Host` da requisição (G17/G18, host poisoning). **Na Vercel Production não precisa ser cadastrada**: sem ela, a função usa `VERCEL_PROJECT_PRODUCTION_URL` — variável de sistema da própria plataforma, não controlada pelo cliente. `VERCEL_PROJECT_PRODUCTION_URL` deve resolver para `jobs.mastertimm.com.br` (o domínio próprio tem precedência sobre o `*.vercel.app` gerado, quando o projeto tem um domínio de produção configurado) — confirmar isso é o item novo do checklist pós-deploy, abaixo. Cadastrar `JHO_PUBLIC_URL=https://jobs.mastertimm.com.br` em Production elimina a dúvida por completo, sem depender de nenhuma variável de sistema. **Nunca cadastrar em Preview**: um valor fixo enviaria o token de recuperação de qualquer branch de preview para o domínio de produção — Preview precisa continuar resolvendo por `VERCEL_BRANCH_URL`/`VERCEL_URL` (variáveis por branch/deployment). Fora da Vercel e da máquina do dono (o plano B no Fly), a ausência falha fechado |
 
 **Dependência silenciosa: "Automatically expose System Environment
@@ -100,18 +100,18 @@ desligado sem ninguém notar. **Não verificado nesta entrega** exatamente
 quais variáveis sobrevivem com a opção desligada (documentação da Vercel e
 comportamento real podem divergir).
 
-**O efeito real não é "falha fechada" — é o oposto.** Se `VERCEL` também não
-chegar ao runtime (cenário não confirmado, mas é o que esta dependência
-poderia causar), `isLocalProcess()`
-(`src/contexts/auth/domain/open-mode.ts`) trata o processo como a **máquina
-do dono**, porque ele decide pela ausência de variável, não por um sinal
-positivo de estar local (issue [#378](https://github.com/andreustimm/master-jobs/issues/378),
-aberta por esta revisão, não corrigida aqui). Nesse cenário: `resolvePublicOrigin`
-cairia no ramo do `Host` da requisição — reabrindo o host poisoning que ela
-existe para impedir (G17) —, `JHO_AUTH_MODE=open` seria aceito (G38), e o
-mailer de recuperação imprimiria o link no log em vez de omiti-lo (G18). A
-mitigação, disponível hoje, cadastrada explicitamente na Vercel, **com
-valores diferentes por ambiente**:
+**O efeito é falha fechada, de disponibilidade e não de segurança.** Se
+`VERCEL` e `VERCEL_ENV` não chegarem ao runtime, `isLocalProcess()`
+(`src/contexts/auth/domain/open-mode.ts`) **não** trata o processo como a
+máquina do dono: ela exige o sinal positivo `JHO_ENV=local` e nega por
+omissão (issue [#378](https://github.com/andreustimm/master-jobs/issues/378);
+até ela, a ausência de variáveis contava como "local", e esse cenário
+reabria o modo aberto, o link no log e o `Host` do cliente como origem). O
+que sobra é disponibilidade: sem `JHO_PUBLIC_URL` nem as variáveis de host
+da Vercel, `resolvePublicOrigin` devolve `null` e a recuperação de senha
+grava `reset_send_failed` em vez de enviar. A configuração que evita isso,
+cadastrada explicitamente na Vercel, **com valores diferentes por
+ambiente**:
 
 - **Production:** `JHO_ENV=production` e
   `JHO_PUBLIC_URL=https://jobs.mastertimm.com.br`.
@@ -123,12 +123,12 @@ valores diferentes por ambiente**:
   depender de `JHO_SOURCE_ALLOWLIST` estar ausente por acaso. **Nunca**
   `JHO_PUBLIC_URL` em Preview — ver a tabela acima.
 
-Isso elimina a dependência da opção em Production por completo. Em Preview
-reduz ao mínimo: `JHO_ENV=preview` corrige o modo aberto e o mailer, mas
-`resolvePublicOrigin` continua dependendo de `VERCEL_BRANCH_URL`/`VERCEL_URL`
-chegarem ao runtime — um `JHO_PUBLIC_URL` fixo ali seria pior, não melhor
-(ver a tabela acima). A correção
-completa é a estrutural da issue #378, não esta mitigação.
+Isso elimina a dependência da opção em Production por completo. Em Preview,
+a recuperação de senha continua dependendo de `VERCEL_BRANCH_URL`/`VERCEL_URL`
+chegarem ao runtime — sem elas, falha fechado; um `JHO_PUBLIC_URL` fixo ali
+seria pior, não melhor (ver a tabela acima). `JHO_ENV` nos dois ambientes
+continua valendo pela guarda de ingestão e como declaração explícita, mas a
+segurança do modo aberto, do mailer e da origem já não depende dela.
 
 **A URL pode vir de mais de um nome, e a ordem é declarada.** A integração do
 Supabase com a Vercel cadastra `POSTGRES_URL` e `POSTGRES_URL_NON_POOLING` e as
@@ -170,12 +170,11 @@ bundle. Valor que não é nenhum dos dois falha nomeando a variável.
 
 `RESEND_API_KEY` e `RESEND_FROM` formam um par: se qualquer uma estiver ausente
 ou vazia, nenhum e-mail é enviado. Onde o link vai parar depende de quem lê o
-log: sem chave nenhuma, num processo que se declara local (`JHO_ENV=local`) ou
-não se declara deployment nenhum (nem `JHO_ENV`, nem `VERCEL_ENV`, nem
-`VERCEL`), `configuredMailer` usa o adapter de console, que imprime o e-mail
-inteiro no terminal de quem opera. Em qualquer outro caso — deployment na
-Vercel, `JHO_ENV` diferente de `local`, ou chave presente com o remetente
-faltando — usa `withheldMailer`, que registra um alerta **sem** destinatário, assunto nem link —
+log: sem chave nenhuma, num processo que se declara local (`JHO_ENV=local`,
+sem `VERCEL` nem `VERCEL_ENV`), `configuredMailer` usa o adapter de console,
+que imprime o e-mail inteiro no terminal de quem opera. Em qualquer outro caso
+— deployment na Vercel, `JHO_ENV` diferente de `local` **ou ausente**, ou
+chave presente com o remetente faltando — usa `withheldMailer`, que registra um alerta **sem** destinatário, assunto nem link —
 o link de recuperação é credencial, e o log das funções é lido por outras
 pessoas. O pedido de recuperação continua respondendo igual para quem pede, e o
 `auth_event` grava `reset_send_failed`. A regra de "processo local" é a mesma
@@ -234,9 +233,12 @@ manual de `.eml`.
 **`JHO_AUTH_MODE` não deve existir em produção.** Com `open`, o sistema sintetiza
 uma sessão e serve currículo, funil e export para qualquer requisição. É modo de
 desenvolvimento local e num endereço público é o vazamento inteiro. Desde #197 o
-código também recusa: em qualquer deployment (`VERCEL` presente, ou
-`VERCEL_ENV`/`JHO_ENV` diferente de `local`) o pedido é ignorado e o login continua exigido —
-ver `src/contexts/auth/domain/open-mode.ts`.
+código também recusa: o pedido só vale num processo que se declara local
+(`JHO_ENV=local`, sem `VERCEL` nem `VERCEL_ENV`); em qualquer outro — inclusive
+o que não declara ambiente nenhum (#378) — é ignorado, o login continua exigido
+e o servidor registra uma vez no log `[auth] JHO_AUTH_MODE=open ignorado` com a
+instrução de declarar `JHO_ENV=local` — ver
+`src/contexts/auth/domain/open-mode.ts`.
 
 ## Os três ambientes
 
@@ -676,6 +678,182 @@ que é como o drizzle embrulha o erro de conexão. `migrar.sh` converte a URL di
 no pooler de sessão da mesma região (`aws-0-sa-east-1.pooler.supabase.com:5432`,
 usuário `postgres.<ref>`, mesma senha) por `reachableMigrationTarget()` e mascara
 o resultado no log. A porta 6543 (transação) continua recusada.
+
+### Runner self-hosted opt-in (`CI_RUNS_ON`)
+
+Fase 2 da contingência de CI/deploy ([issue #367](https://github.com/andreustimm/master-jobs/issues/367),
+[ADR 0030](../adr/0030-contingencia-de-ci-e-deploy.md)). O `runs-on:` de todo
+job de `ci.yml` é uma única expressão, nunca um literal
+(`tests/ci-runner-selection.test.ts` reprova quem adicionar `runs-on:
+ubuntu-latest` de novo):
+
+```yaml
+runs-on: ${{ github.event_name == 'pull_request' &&
+  github.event.pull_request.head.repo.full_name != github.repository &&
+  'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+```
+
+- **Ausente ou vazia** (padrão): `ubuntu-latest`, o runner hospedado de hoje —
+  nada muda sem ação do dono (princípio 1/2 da ADR).
+- **Setada** com **JSON válido** (`gh variable set CI_RUNS_ON --body
+  '["self-hosted","linux","master-jobs"]'`): todo job passa a rodar no runner
+  próprio, sem editar `ci.yml`. **Cuidado com a citação:** o valor precisa ser
+  JSON — uma string entre aspas duplas ou um array — nunca texto cru. `gh
+  variable set CI_RUNS_ON --body 'self-hosted'` (sem aspas internas) faz
+  `fromJSON` falhar e derruba o CI inteiro no próximo push; os dois comandos
+  acima, com as aspas simples e duplas exatamente como estão, são os únicos
+  valores testados.
+
+#### Pré-requisito do dono: aprovação de workflow de fork (aplicado em 29/09/2026)
+
+**A metade da expressão antes de `||` (a guarda de fork embutida no
+`runs-on:`) é defesa em profundidade, NÃO a barreira real** (achado da
+revisão L2 da PR #376, C1). Num evento `pull_request`, o GitHub executa a
+versão de `ci.yml` que está na `head` da PRÓPRIA PR — uma PR de fork pode
+editar o arquivo e substituir a expressão inteira por `runs-on:
+[self-hosted, ...]` literal, sem esbarrar em nada que esteja dentro do
+workflow, porque é o próprio workflow que está sendo reescrito. Nenhuma
+guarda embutida no YAML resolve isso sozinha.
+
+A barreira que de fato impede a execução é externa ao arquivo: a política de
+aprovação de workflow de colaborador externo do repositório
+(`fork-pr-contributor-approval`). **O dono já mudou essa política para
+`all_external_contributors` em 29/09/2026** (todo PR de colaborador externo,
+não só o primeiro, exige "Approve and run" de alguém com escrita no
+repositório) — confira o valor efetivo antes de qualquer mudança em
+`CI_RUNS_ON`:
+
+```bash
+gh api repos/andreustimm/master-jobs/actions/permissions/fork-pr-contributor-approval
+```
+
+Comando usado pelo dono, registrado aqui para repetir se algum dia a política
+regredir ao padrão (nunca rodado por um agente):
+
+```bash
+gh api -X PUT repos/andreustimm/master-jobs/actions/permissions/fork-pr-contributor-approval \
+  -f approval_policy=all_external_contributors
+```
+
+O padrão de fábrica, `first_time_contributors`, dispensa aprovação para quem
+já teve uma contribuição aceita antes — insuficiente aqui, porque uma conta
+comprometida ou um colaborador que vira malicioso depois de aprovado uma vez
+não passaria por aprovação nenhuma na PR seguinte. **Nenhum agente muda essa
+política sozinho** — é decisão e ação do dono, assim como contratar a VPS. A
+exigência de aprovação em si ("Approve and run", em *Settings → Actions →
+General*) já está ativa; o que mudou aqui foi o alcance dela.
+
+#### Provisionamento: contêiner descartável, sem credencial de longa duração no job
+
+Revisão L2 da PR #376 (C2) trocou o desenho original (runner instalado direto
+no host, registrado por token reutilizável) por um mais estreito; a
+re-revisão de 29/09/2026 (C1) fechou um furo do primeiro desenho do
+contêiner:
+
+- **`scripts/runner/Dockerfile`** builda uma imagem IMUTÁVEL com Node/pnpm na
+  versão de `package.json`, a versão EXATA de Playwright do
+  `pnpm-lock.yaml`, o binário do runner do GitHub (checksum verificado, M5) e
+  um Docker Engine para um dockerd **isolado dentro do próprio contêiner** —
+  o job nunca recebe o socket Docker do host, só o seu próprio, descartado
+  com o contêiner.
+- **Cada job roda num CONTÊINER DESCARTÁVEL** (`docker run --rm`) criado
+  dessa imagem, com o runtime **`sysbox-runc`, NUNCA `--privileged`**
+  (re-revisão C1: `--privileged` daria ao contêiner do job acesso aos
+  dispositivos de bloco do PRÓPRIO HOST — montar `/dev/sda`, ler
+  `/etc/master-jobs-runner/env`, o arquivo com o PAT que controla até a
+  política de fork acima. `sysbox-runc`, instalado por `provision-vps.sh`
+  com checksum verificado, dá ao contêiner o suficiente para um dockerd
+  interno de verdade sem essas capacidades amplas). `scripts/runner/
+  entrypoint.sh`, root-owned e só leitura dentro da imagem, limpa qualquer
+  resquício de execução anterior, sobe o dockerd isolado e roda o runner como
+  o usuário não-root `runner` sobre uma CÓPIA gravável e descartável do
+  binário, com o bit de escrita restaurado para o novo dono (M1 — a origem
+  em `/opt/actions-runner` continua sem bit de escrita para ninguém depois
+  do build da imagem).
+- **`scripts/runner/runner-controller.sh`** roda no HOST, como o serviço
+  systemd `master-jobs-runner-controller.service` (instalado por
+  `provision-vps.sh`, com `Requires=docker.service`). Para cada job, ele pede
+  à API do GitHub uma **configuração JIT de uso único** (`POST .../actions/
+  runners/generate-jitconfig`, cabeçalho `Authorization` passado ao `curl`
+  por `-H @-`/stdin — nunca como argumento visível em `ps`) e passa só essa
+  configuração (`JIT_CONFIG`, variável de ambiente daquele contêiner
+  específico) para `docker run` — o PAT de longa duração nunca sai do
+  processo do controller, e nunca entra no contêiner do job. Um `docker run`
+  que falha (status ≠ 0), ou um contêiner que sinaliza "nunca peguei um job"
+  (`entrypoint.sh` sai com o código 75 quando `run.sh` termina sem o log
+  `_diag/Worker_*.log`) faz o controller desregistrar o runner órfão e
+  esperar com backoff exponencial (30s a 10min) antes de tentar de novo —
+  NUNCA por duração de parede (3ª revisão L2 de 29/09/2026, minor 2): um job
+  curto e legítimo, como uma PR só de documentação, não pode ser tratado como
+  falha só por ser rápido.
+- **Escopo do PAT.** Fine-grained, com a permissão de repositório
+  **"Administration: write"** — é a permissão mínima que a API de
+  configuração JIT aceita hoje; não existe uma mais estreita para esta
+  capacidade específica (o próprio endpoint de registro de runner exige
+  administração do repositório). **Nunca** um PAT clássico com escopo `repo`:
+  esse escopo clássico dá leitura/escrita de código, issues e muito mais,
+  bem além do que registrar um runner precisa — a diferença importa porque o
+  PAT fica na VPS, fora do controle de acesso do GitHub.
+
+**Passo do dono, antes de ligar a chave:**
+
+1. Confirmar `fork-pr-contributor-approval=all_external_contributors`
+   (seção acima — já aplicada em 29/09/2026).
+2. Contratar a VPS (Hetzner CPX22 ou DigitalOcean 4 GB — Decisão 2 do PRD da
+   issue #367), Ubuntu 24.04 LTS.
+3. Antes de rodar o script, confirmar o checksum ainda placeholder do runner
+   do GitHub (`RUNNER_SHA256` em `scripts/runner/Dockerfile`, publicado em
+   <https://github.com/actions/runner/releases> para a versão fixada) — o
+   build da imagem falha de propósito enquanto o valor for o placeholder. O
+   checksum do `sysbox-ce` (`SYSBOX_SHA256` em
+   `scripts/runner/provision-vps.sh`) já foi conferido pelo agente com `gh
+   api repos/nestybox/sysbox/releases/tags/v0.7.1` em 29/09/2026 — só
+   reconfira se `SYSBOX_VERSION` mudar.
+4. Copiar o repositório para a VPS e rodar como root:
+   `sudo bash scripts/runner/provision-vps.sh`. O script instala Docker,
+   depois `sysbox-runc` (registrando o runtime no Docker do host) e só então
+   builda a imagem do runner.
+5. Criar um PAT fine-grained com "Administration: write" só neste
+   repositório, e colar em `/etc/master-jobs-runner/env` (o script cria o
+   arquivo vazio com o `chmod 600` certo, se ainda não existir):
+   `GH_RUNNER_REGISTRATION_PAT=<valor>`. Depois: `systemctl start
+   master-jobs-runner-controller`.
+6. Confirmar, no log do serviço (`journalctl -u
+   master-jobs-runner-controller -f`), um contêiner subindo e um runner
+   aparecendo em *Settings → Actions → Runners* com os labels `self-hosted`,
+   `linux`, `master-jobs`, e desaparecendo de novo ao fim de cada job (é
+   efêmero — "sumir" entre jobs é o comportamento esperado, não uma falha).
+7. Só então: `gh variable set CI_RUNS_ON --body
+   '["self-hosted","linux","master-jobs"]'` e um push real em `dev` para
+   confirmar o CI inteiro verde no runner próprio (checklist F2-M01–F2-M03 em
+   `_tests.md`).
+
+**Voltar ao hospedado**, a qualquer momento e sem tocar na VPS:
+
+```bash
+gh variable set CI_RUNS_ON --body '"ubuntu-latest"'   # ou: gh variable delete CI_RUNS_ON
+```
+
+O próximo push já roda em `ubuntu-latest`. **Se havia execução do CI em fila
+ou em andamento esperando o runner próprio** no momento da troca, ela fica
+presa (nenhum runner com aquele label vai aparecer para pegá-la). Restrinja a
+`--workflow ci.yml` — cancelar um workflow alheio (`varredura.yml`,
+`migrate.yml` etc.) por engano é um efeito colateral desnecessário — e
+redispare o MESMO run com `gh run rerun`, sem criar commit nenhum (regra 18:
+nada de commit avulso fora do fluxo de PR só para forçar um re-run):
+
+```bash
+# Guarda os IDs antes de cancelar, para redisparar exatamente esses runs.
+presos=$(gh run list --workflow ci.yml --status queued --json databaseId -q '.[].databaseId'; \
+         gh run list --workflow ci.yml --status in_progress --json databaseId -q '.[].databaseId')
+for id in $presos; do gh run cancel "$id"; done
+# `gh run cancel` é assíncrono — sem esperar o cancelamento terminar de
+# verdade, `gh run rerun` num run ainda "cancelling" falha ou não faz nada
+# (minor 3, 3ª revisão L2 de 29/09/2026). `gh run watch` bloqueia até o run
+# concluir (`--exit-status` não importa aqui, só queremos o estado final).
+for id in $presos; do gh run watch "$id" --exit-status || true; done
+for id in $presos; do gh run rerun "$id"; done
+```
 
 ## Migrar o banco
 

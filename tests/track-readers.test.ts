@@ -221,7 +221,7 @@ describe("single-fit readers use the primary track", () => {
   it("IT-034 dossier, export, report, analytics, gap, referrals, corpus and cockpit report fit 50", async () => {
     const { id, jobId } = await twoTracks();
     await saveDocument({ candidateId: id, kind: "cv", label: "CV", content: "Senior AI architect. Python, LLM systems." });
-    await addContact({ name: "Ana", company: "Tracks Co", category: "peer" });
+    await addContact(id, { name: "Ana", company: "Tracks Co", category: "peer" });
 
     expect(await buildDossier(id, jobId, null)).toMatchObject({ fit: 50, cluster: "architect" });
 

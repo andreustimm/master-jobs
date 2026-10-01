@@ -9,6 +9,81 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.32.5] - 2026-10-01
+
+### Corrigido
+
+- Alinha reconhecimento de empregador direto careers no agrupamento, filtro, faceta e lista; preserva dense no estado serializado e presets.
+
+## [1.32.4] - 2026-10-01
+
+### Corrigido
+
+- Preserva a capitalização do nome das trilhas no seletor de Vagas, distinguindo o nome “Principal” do rótulo da trilha principal.
+
+## [1.32.3] - 2026-10-01
+
+### Corrigido
+
+- O callback de login usa `Location` relativo nos redirects 303, preservando a origem da requisição e evitando a normalização de loopback pelo Next.js.
+
+## [1.32.2] - 2026-09-30
+
+### Corrigido
+
+- `--warn` usado como cor de texto (G32: token de preenchimento, não de texto) media 4,06:1 em huly e graphy claros — abaixo do mínimo WCAG 1.4.3 AA de 4,5:1 (#383). Novo token `--warn-text` (`app/themes.css`, definido em todos os temas/modos) substitui os quatro usos como cor: `app/candidate/page.tsx`, `app/layout.tsx` (faixa de sessão emprestada, x2) e `app/admin/operacoes/page.tsx`. `tests/design.test.ts` reprova `text-[var(--warn)]` daqui em diante; `tests/e2e/ui/themes.mjs` mede o contraste do aviso de visibilidade e da faixa de sessão emprestada nas seis combinações de tema/modo, lendo o estilo computado num Chromium real. `--warn-text` calibrado em `#7a5510` (claro) para passar não só contra `--card` sólido mas também contra o fundo REAL da faixa (`--warn` a 10% de opacidade composto sobre `--background`, que o Tailwind v4 resolve como `oklab(... / 0.1)` — o teste agora compõe as camadas por canvas em vez de assumir `rgba()`).
+
+## [1.32.1] - 2026-09-29
+
+### Adicionado
+
+- Gate da G63 versionado (#380): `.claude/hooks/no-compound-bash.mjs`, registrado em `.claude/settings.json` como `PreToolUse` do Bash, recusa com saída 2 comando de shell composto (`&&`, `||`, `;`, `|`, `&` de segundo plano, `$(...)`, crase, heredoc e várias linhas fora de aspas); separadores entre aspas, `2>&1`, `&>` e `\;` do `find -exec` passam. A mensagem de recusa sugere `git commit -F <arquivo>` quando o motivo é heredoc ou `$(...)`. `tests/no-compound-bash.test.ts` cobre a tabela de casos e executa o hook real com o JSON do `PreToolUse` na entrada. Codex mantém o guard próprio, que julga por trecho; OpenCode não tem hook (lacuna registrada na G63).
+
+### Corrigido
+
+- `/compare` mantém o cadastro manual bem-sucedido mesmo quando o score ainda
+  não pode ser calculado para a conta; o fingerprint existente continua
+  evitando duplicação em novas tentativas.
+- Avisos de recusa de transição no funil usam sete segundos, com regressão de duração e preservação do rascunho em navegador a 375px (#389).
+
+### Segurança
+
+- `target_account` ganha `candidate_id` (anulável), com FK `ON DELETE CASCADE` para `candidate` (G20) e índice `target_account_candidate_idx`, pela migration aditiva `0031_contatos_por_candidato`. `addContact`, `listContacts`, `companiesWithContacts`, `referralOpportunities`, `seedWorkHistory` e `coldTargets` recebem `candidateId` e filtram por ele; `/referrals` e o dossiê usam o candidato da sessão, e a CLI (`contacts`, `referrals`, `engage targets`) o candidato ativo. Antes, `/referrals` mostrava a qualquer conta a contagem de empresas e os nomes dos contatos da rede do dono (#379, G39/G40).
+- Contatos gravados antes da 0031 ficam sem dono e **ocultos para todas as contas, inclusive o dono**, até o lote da #405 (backfill para o candidato `default`, URL única por candidato, drop do índice global e NOT NULL), que exige revisão humana da migration. Até lá, a URL do LinkedIn continua única no banco inteiro: a segunda conta que cadastra a mesma pessoa é recusada.
+
+## [1.32.0] - 2026-09-29
+
+### Adicionado
+
+- `runs-on:` dos nove jobs de `.github/workflows/ci.yml` passa a ler `vars.CI_RUNS_ON`, com fallback ao `ubuntu-latest` hospedado quando a variável está ausente ou vazia (issue #367, ADR 0030 decisões 1/2/4/5). A metade da expressão que roteia fork para `ubuntu-latest` é **defesa em profundidade**, documentada como tal (revisão L2 da PR #376, C1): a barreira real é a política `fork-pr-contributor-approval=all_external_contributors`, aplicada pelo dono em 29/09/2026.
+- `scripts/github/fork-guard.ts` (`isForkPullRequest`, puro), `tests/support/expr-eval.ts` (mini-avaliador de expressões do GitHub Actions — avalia a STRING de `runs-on:` de verdade, não reimplementa a decisão), `tests/support/ci-workflow.ts` (`resolveCanonicalRunsOn`) e `tests/ci-runner-selection.test.ts` (F2-01–F2-04 de `_tests.md`, prova de equivalência comportamental entre a expressão avaliada e a função pura sobre os mesmos eventos, cobertura do skip de instalação do Playwright, e ausência de `--privileged` em qualquer invocação real de `docker run`/`dockerd`).
+- `scripts/runner/Dockerfile` (imagem imutável: Node/pnpm de `package.json`, versão exata de Playwright do `pnpm-lock.yaml`, runner do GitHub com checksum verificado) e `scripts/runner/entrypoint.sh`: cada job roda num **contêiner descartável**, com dockerd isolado dentro do próprio contêiner (nunca o socket Docker do host, nunca `--privileged` — runtime `sysbox-runc` v0.7.1, checksum conferido via `gh api`, com suporte a Ubuntu 24.04/kernel 6.8+/containerd 2.x e os patches de CVE-2025-31133/52565/52881) e uma cópia gravável e descartável do runner, com o bit de escrita restaurado após o `chown` (M1) — a origem `/opt/actions-runner` nunca é escrita depois do build. O contêiner sinaliza ao controller (código de saída 75) quando `run.sh` termina sem `_diag/Worker_*.log`, isto é, sem nunca ter pego um job — nunca por duração de parede, que puniria job curto legítimo.
+- `scripts/runner/provision-vps.sh` instala `sysbox-runc` (versão e checksum fixos, reinstala se a versão instalada divergir) antes de buildar a imagem do runner.
+- `scripts/runner/runner-controller.sh` (host, systemd com `Requires=docker.service`): pede uma configuração JIT de uso único por job (`generate-jitconfig`, cabeçalho `Authorization` passado por `-H @-`/stdin, nunca no `argv`), desregistra runner órfão e aplica backoff exponencial (30s–10min) quando o `docker run` falha ou o contêiner sinaliza "nenhum job pego"; escopo recomendado é fine-grained "Administration: write", não o clássico `repo`.
+- `.github/workflows/ci.yml`: instalação do Playwright (`--with-deps`/`install-deps`) pula quando `runner.environment == 'self-hosted'`, já coberto pela imagem.
+- `docs/engineering/deploy.md`, seção "Runner self-hosted opt-in (`CI_RUNS_ON`)": status atualizado do pré-requisito de aprovação de fork (aplicado), o porquê de `sysbox-runc` v0.7.1, aviso sobre `fromJSON` exigir JSON válido, e runbook de volta restrito a `--workflow ci.yml`, com `gh run watch` antes de `gh run rerun` em vez de commit vazio.
+- ADR 0030: notas de execução datadas (29/09/2026) rebaixando a guarda de `runs-on` a defesa em profundidade, registrando a aprovação de fork como aplicada, e documentando `sysbox-runc` na decisão do runner efêmero.
+
+### Segurança
+
+- `isLocalProcess()` (`src/contexts/auth/domain/open-mode.ts`) passa a exigir sinal positivo de máquina local — `JHO_ENV=local` declarado, sem `VERCEL` nem `VERCEL_ENV` — e nega por omissão (issue #378, G27). Antes, a ausência das três variáveis contava como "máquina do dono": um deployment em que nenhuma chegasse (a Vercel sem as variáveis de sistema expostas, um destino novo que não declara nada) aceitava `JHO_AUTH_MODE=open` (G38), usava o mailer de terminal com o link de recuperação no log (G18) e deixava `resolvePublicOrigin()` montar o link a partir do `Host` do cliente (G17). Os três consumidores herdam a correção sem mudança própria; `VERCEL_ENV` declarado com qualquer valor (inclusive `local`) nunca conta como local.
+- Pedido de modo aberto recusado agora avisa uma vez por processo no log do servidor (`[auth] JHO_AUTH_MODE=open ignorado…`), dizendo o que declarar, sem ecoar valor do ambiente (`openModeRefused()` no domínio, aviso em `isOpenMode()`).
+- Conveniência local preservada por declaração, não por omissão: `pnpm dev` passa por `scripts/dev.ts`, que declara `JHO_ENV=local` só quando nem o processo nem os `.env*` que o Next carrega em dev declaram `JHO_ENV` (na ordem do Next: `.env.development.local`, `.env.local`, `.env.development`, `.env`) — um `JHO_ENV` do `.env` nunca é sobrescrito. A suíte já declarava em `tests/support/ingestion-env.ts`. Nenhum script do `package.json` embute `JHO_ENV` (`tests/deploy-fly.test.ts`), porque `start` e a CLI também rodam fora do laptop. `pnpm jho` e `pnpm start` locais precisam de `JHO_ENV=local` no `.env` para o modo aberto e o mailer de terminal; `jho auth status` avisa quando o `.env` pede `JHO_AUTH_MODE=open` sem declarar `JHO_ENV` (a CLI recusa, mas o `pnpm dev` abre).
+- E2E isolado (`tests/e2e/run-isolated.mjs`): sobe o servidor com `JHO_PUBLIC_URL` apontando para a própria porta. Sem ela, a recuperação de senha cairia em `recordResetSendFailure` para qualquer endereço, e o E2E de G17 compararia dois caminhos idênticos. `tests/e2e/ui/password-reset.mjs` agora confere em `auth_event` que os dois pedidos passaram por `requestPasswordReset` (`reset_requested_unknown` para o endereço inexistente). O `--manual` também declara `JHO_ENV=local`, para o link de recuperação sair no terminal de quem faz o QA; a suíte automática não declara, e o link nunca vai para o log do CI.
+- `docs/engineering/deploy.md` ("Dependência silenciosa") e `docs/engineering/rules/security.md` (G17, G38) atualizados: sem as variáveis de sistema da Vercel o efeito passa a ser falha fechada de disponibilidade (a recuperação grava `reset_send_failed`), não a abertura do modo aberto.
+
+## [1.31.0] - 2026-09-29
+
+### Adicionado
+
+- Vigia de cota (ADR 0030, Fase 3, #368): `src/contexts/operations/domain/quota-watch.ts` decide, sem rede nem relógio, se uma amostra de `{ vercelDeploys24h, actionsQueueMaxWaitS, actionsStatus }` é `ok`, `aviso` (70 %/minor), `acao-recomendada` (90 %/major/critical) ou `amostra-indisponivel` (métrica que falhou nunca vira "ok" por omissão). `planAlert()` (M1) decide, puro, se um alerta comenta numa issue já aberta ou abre outra — mesma decisão e mesmo gatilho da checagem anterior comentam. `isPersistentlyUnavailable()` (M4) escala amostra indisponível para alerta só depois de 3 checagens seguidas. `src/contexts/operations/app/quota-watch.ts` orquestra coleta → decisão → dedupe → alerta → gravação, com portas em `ports.ts` (`QuotaMetricsPort`, `QuotaAlertPort` com `open`/`comment`, `QuotaWatchStore` com `record`/`recent`).
+- Migração `0030_quota_watch` (aditiva, veredito `[]`): tabela `production.quota_watch` (`checked_at`, as duas métricas, `decision`, `trigger`, `action_recommended`, `reversal_command`, `note`, `issue_number`), no mesmo estilo de `sweep_run`. A coluna chama-se `action_recommended`, não `action_taken` — o vigia nunca aplica a mudança sozinho.
+- Adapters de infraestrutura: `quota-watch-metrics.ts` (lê `api.vercel.com`, `api.github.com` e o componente "Actions" de `githubstatus.com/api/v2/components.json` — não o indicador agregado da página, M2 — cada chamada isolada com `AbortSignal.timeout(10s)`; fila usa `run_started_at` com fallback `created_at`), `quota-watch-issue.ts` (abre/comenta issue com rótulo `vigia-de-cota`, escopo mínimo `actions:read`+`issues:write`), `drizzle-quota-watch.ts` (persistência e `recent()`/`recentQuotaWatch`, ordenados por `id`, imunes a duas linhas no mesmo instante).
+- `GET /api/cron/watchdog` — checagem manual/de teste, mesma borda de segredo das outras rotas de `/api/cron/` (`cronDenied`, `CRON_SECRET`); registrada em `PUBLIC_ROUTES` de `tests/architecture.test.ts`. **Não é o agendador de produção.**
+- `supabase/cron/watchdog.sql`: `pg_cron`/`pg_net` do Supabase consultando a Vercel e o GitHub Actions **diretamente** (nunca `jobs.mastertimm.com.br`), de propósito, para que uma indisponibilidade real de qualquer um dos dois não leve o vigia junto (ADR 0030 decisão 6) — provado por teste estático (`tests/quota-watch-sql.test.ts`, F3-04: contagem de chamadas bate com alvos literais, `jho_cron_base_url` nunca dentro de uma função) e por teste funcional contra Postgres local com `net`/`vault` falsos (`tests/quota-watch-sql-function.test.ts`, F3-01/F3-02/M1/M2/M4 rodando a função de verdade). Três passos assíncronos (`vigia_disparar`/`vigia_coletar`/`vigia_registrar_issue`) porque `pg_net` é fire-and-forget; cada métrica é parseada isolada (`exception when others`), a linha é sempre gravada. Recomendação do gatilho `vercel`: pausar `promover-para-staging.yml` (`gh workflow disable`/`enable`) — `DEPLOY_PREVIEW_ENVS` é só registro, não a alavanca real. Recomendação nunca aplicada sozinha nesta entrega — sem variável "opt-in" morta reservada para isso.
+- `docs/operations.md`, seção "Vigia de cota: ativar" — passo do dono (PAT com `actions:read`+`issues:write`, token da Vercel, `project id`/`team id` opcional, segredos no Vault, aplicar o SQL), risco residual do canal de alerta (issue do GitHub sem canal alternativo hoje). `docs/security.md`, `docs/engineering/rules/security.md` e `docs/architecture.md` citam `/api/cron/watchdog` na lista de rotas sem sessão. `docs/README.md` e `docs/engineering/context-map.md` atualizados (`quota_watch` no contexto `operations`, contagem 44).
+- Testes: `quota-watch-domain` (F3-01/02/03/05, M1, M4), `quota-watch-composition`, `quota-watch-route`, `quota-watch-metrics`, `quota-watch-issue`, `quota-watch-store-db` (Postgres real), `quota-watch-sql` (F3-04) e `quota-watch-sql-function` (a função de verdade, Postgres real com `net`/`vault` falsos) — 100 % de cobertura de linha e branch nos cinco arquivos novos de domínio/app/infra.
+
 ## [1.30.0] - 2026-09-29
 
 ### Adicionado

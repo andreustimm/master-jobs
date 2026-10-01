@@ -144,6 +144,13 @@ export const ptBR = {
     notInterestedHint: "Tira a vaga das suas listas. Ela fica em “Arquivadas”, e dá para restaurar enquanto você não tiver aplicado.",
     restore: "restaurar",
     restoreHint: "Devolve a vaga às suas listas, no começo do funil.",
+    /** Período do salário exibido por vaga (ver `src/core/money.ts`). */
+    moneyPeriodMonth: "mês",
+    moneyPeriodWeek: "semana",
+    moneyPeriodDay: "dia",
+    moneyPeriodHour: "hora",
+    moneyProjectTotal: "total",
+    moneyProjectTotalWithDuration: "total ({count} meses)",
   },
   /** Tela Buscas: termos salvos e trilhas (term-search-target-tracks). */
   searches: {
@@ -1155,6 +1162,7 @@ export const ptBR = {
   referrals: {
     title: "Referrals",
     companies: "empresa(s)",
+    via: "via",
   },
   recruiter: {
     title: "Acompanhados",
@@ -1291,7 +1299,8 @@ export const ptBR = {
       "Vagas abertas onde você já conhece alguém. Referrals são ~7% dos candidatos e ~40% das contratações — nenhuma outra alavanca do sistema chega perto.",
     referralsEmpty:
       "na sua rede, nenhuma com vaga aberta no acervo hoje. Isso é uma resposta, não um erro — quando abrir, aparece aqui.",
-    referralsSeed: "carrega as empresas onde você já trabalhou.",
+    referralsNoNetwork:
+      "Nenhum contato na sua rede ainda. Quando houver contatos registrados, as vagas abertas nas empresas deles aparecem aqui.",
     pipelineLead:
       "A única coisa que o sistema não consegue recriar. Nenhuma ingestão escreve aqui — só você.",
     vocabularyLead: "comparar o seu vocabulário com o das vagas que interessam",

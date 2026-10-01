@@ -147,6 +147,13 @@ export const en: Dictionary = {
     notInterestedHint: "Takes the job off your lists. It stays under “Archived”, and you can restore it while you have not applied.",
     restore: "restore",
     restoreHint: "Puts the job back on your lists, at the start of the pipeline.",
+    /** Pay period shown per job (see `src/core/money.ts`). */
+    moneyPeriodMonth: "month",
+    moneyPeriodWeek: "week",
+    moneyPeriodDay: "day",
+    moneyPeriodHour: "hour",
+    moneyProjectTotal: "total",
+    moneyProjectTotalWithDuration: "total ({count} months)",
   },
   searches: {
     title: "Searches",
@@ -1133,6 +1140,7 @@ export const en: Dictionary = {
   referrals: {
     title: "Referrals",
     companies: "company/companies",
+    via: "via",
   },
   recruiter: {
     title: "Followed",
@@ -1267,7 +1275,8 @@ export const en: Dictionary = {
       "Open jobs where you already know someone. Referrals are ~7% of applicants and ~40% of hires — no other lever in this system comes close.",
     referralsEmpty:
       "in your network, none with an open job in the corpus today. That is an answer, not an error — when one opens, it shows up here.",
-    referralsSeed: "loads the companies you have worked at.",
+    referralsNoNetwork:
+      "No contacts in your network yet. Once contacts are recorded, open jobs at their companies show up here.",
     pipelineLead:
       "The one thing this system cannot recreate. No ingestion writes here — only you.",
     vocabularyLead: "compare your vocabulary against the jobs that matter",

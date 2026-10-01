@@ -64,6 +64,9 @@ export const postSnapshotColumns: Record<string, Record<string, unknown>> = {
   source: { retired_at: null, origin: "system", config_revision: 1, secret_ref: null, managed_at: null },
   // Desfazer do funil (#316). Todo evento do snapshot é original: nenhum desfaz outro.
   application_event: { reverts_event_id: null },
+  // Dono do contato (#379). O snapshot não diz de quem é cada contato: chega
+  // sem dono, e contato sem dono não aparece para ninguém.
+  target_account: { candidate_id: null },
 };
 
 /**

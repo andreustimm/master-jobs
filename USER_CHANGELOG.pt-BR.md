@@ -30,7 +30,53 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 <!-- sem-nota-usuario: 1.30.0 - 2026-09-29T11:55:09.000Z -->
 
+<!-- sem-nota-usuario: 1.32.0 - 2026-09-29T15:11:03.000Z -->
+
 ## [Unreleased]
+
+## [1.32.5] - 2026-10-01T15:18:50.000Z
+
+### Corrigido
+
+- Empresas de fontes diretas aparecem identificadas e agrupam suas publicações. A densidade compacta permanece ao ordenar, filtrar e paginar.
+
+## [1.32.4] - 2026-10-01T14:58:19.000Z
+
+### Corrigido
+
+- O seletor de Vagas diferencia a trilha chamada “Principal” da trilha principal atual.
+
+## [1.32.3] - 2026-10-01T01:39:55.000Z
+
+### Corrigido
+
+- Corrigido o retorno de links de login inválidos para manter o endereço local e o idioma escolhido.
+
+## [1.32.2] - 2026-09-30T08:16:50.000Z
+
+### Corrigido
+
+- O aviso "legível por qualquer um" do perfil público (e três outros avisos) ficava difícil de ler nos temas Huly e Graphy claros. Agora o contraste passa no mínimo de acessibilidade em todos os temas.
+
+## [1.32.1] - 2026-09-29T15:47:51.000Z
+
+### Adicionado
+
+- Os agentes que trabalham no repositório passam a ser impedidos de mandar vários comandos de terminal numa só chamada, o que fazia o terminal parar e pedir aprovação manual para comandos simples.
+
+### Corrigido
+
+- Corrigida a mensagem enganosa de falha ao cadastrar uma vaga manual sem
+  perfil próprio para pontuação. A ficha agora informa o estado sem score e
+  repetir o mesmo cadastro reaproveita a vaga.
+- Indicações agora mostram só a sua rede de contatos. Antes, uma conta nova via as empresas e os nomes dos contatos de outra pessoa. Os contatos cadastrados antes desta versão ficam ocultos até uma próxima atualização.
+- O aviso que explica por que uma mudança de estágio foi recusada fica visível por mais tempo.
+
+## [1.31.0] - 2026-09-29T14:04:44.000Z
+
+### Adicionado
+
+- Um vigia pode ser ativado (passo do dono, fora do código) para rodar de hora em hora, fora da Vercel e do GitHub, checando se algum dos dois está perto do limite de uso. Perto do limite, ele abre um aviso; muito perto (ou com um dos dois fora do ar por três checagens seguidas), ele recomenda a mudança e já indica o comando exato para desfazer, evitando abrir o mesmo aviso duas vezes seguidas — mas quem aplica a mudança continua sendo o dono. O objetivo é nunca mais passar 24 h sem poder publicar uma correção, como aconteceu em 22/09.
 
 ## [1.29.0] - 2026-09-29T04:43:43.000Z
 

@@ -7,12 +7,12 @@ journey: J-trust-the-filtered-board
 expected: Com a interface em inglês, a localização e o nome da vaga continuam como o anúncio escreveu — inclusive com acento — e nada da interface aparece em português
 entry_points: /jobs; /jobs/<id>; /jobs/<id>/paises
 qa_status: pass
-bug_ids: BUG-20260921-job-detail-labels-untranslated
+bug_ids: BUG-20260921-job-detail-labels-untranslated; BUG-20260929-jobs-list-english-ui-shows-portuguese; BUG-20260929-jobs-row-title-missing-user-content-mark
 fix_status: fixed
 retest_status: pass
-fix_commits: 23fa064; 52ba067
-evidence: docs/qa/reports/2026-09-21-execucao-ingles-detalhe.md
-last_report: docs/qa/reports/2026-09-21-execucao-ingles-detalhe.md
+fix_commits: 23fa064; 52ba067; d433dcf5
+evidence: docs/qa/reports/2026-09-21-execucao-ingles-detalhe.md; tests/e2e/ui/i18n.mjs
+last_report: docs/qa/reports/2026-09-29T143300Z-d433dcf-vagas-idioma-395.md
 overlaps: JOBS-country-hub; JOBS-group-repeated-countries
 ---
 
@@ -64,3 +64,41 @@ O que este cenário passou a exigir, por isso:
 - A recíproca também: rota em que o dado do usuário não está marcado só pode
   entrar depois da marca, e pular esse passo troca um defeito por um falso
   positivo permanente.
+
+## O quarto lugar, achado em 2026-09-29
+
+QA full do release candidate 1.29 achou a mesma classe de defeito numa
+terceira tela: a lista de vagas (`/jobs`), fora do detalhe já corrigido.
+Com a interface em inglês, `aria-label="Fechar"` no modal de publicação e a
+paginação "51–100 de 5.273" continuam em português
+(`BUG-20260929-jobs-list-english-ui-shows-portuguese`). O título da linha
+também não tem `data-user-content`
+(`BUG-20260929-jobs-row-title-missing-user-content-mark`) — ainda sem falso
+positivo porque nenhum título de teste tem acento, mas é a mesma lacuna
+estrutural que já fez a tela de detalhe passar despercebida. `qa_status`
+volta de `pass` para `fail`: o cenário promete que nada da interface aparece
+em português, e a lista quebra essa promessa.
+
+## O quinto lugar, revalidado em 2026-09-29/30 (#395, PR #408)
+
+A correção (commit d433dcf5) trocou `aria-label="Fechar"` por `t("common.close")`,
+passou `locale` para `Pagination` (que usa `t("grid.of")` em vez de " de "
+literal) e marcou o título da linha com `data-user-content="true"`. Revisão
+L1 da PR achou um quarto literal fora do dicionário na mesma classe — o mapa
+`{ month: "mês", ... }` dentro de `formatMoney` (`src/core/money.ts`) — e a
+correção subsequente moveu as palavras para `jobs.moneyPeriod*` em `pt-BR.ts`
+e `en.ts`, com `app/joblist.tsx` passando os rótulos.
+
+Reteste por browser (QA dirigido, `docs/qa/reports/2026-09-29T143300Z-d433dcf-vagas-idioma-395.md`):
+interface em inglês mostrou `Close` no modal e `1–6 of 6`/`PER PAGE` na
+paginação, sobrevivendo à recarga; trocando para pt-BR pelo seletor, o rodapé
+voltou a `1–6 de 6`/`POR PÁGINA`; os seis títulos mantiveram o texto original
+com a marca de dado do usuário confirmada por leitura independente do DOM. A
+fixture manual não tinha vaga com salário — esse caso ficou só na automação.
+
+`node tests/e2e/run-isolated.mjs --areas i18n` (sessão 2026-09-30, build de
+produção, PostgreSQL descartável): as 15 verificações da área passaram,
+incluindo `lista de vagas em inglês mantém a rota e os nomes acessíveis`,
+`lista de vagas em inglês usa números e texto de paginação traduzidos` e
+`lista de vagas em pt-BR localiza o período do salário` (o caso do quarto
+literal, em `/jobs?...&cur=BRL&per=month`). `qa_status: pass`.
