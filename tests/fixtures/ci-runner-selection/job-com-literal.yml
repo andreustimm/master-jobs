@@ -1,0 +1,15 @@
+# Fixture de `tests/ci-runner-selection.test.ts` (F2-02): um job novo com
+# `runs-on:` literal, fora da expressão canônica, para provar que o gate
+# reprova regressão, não só o estado atual de `ci.yml`.
+name: CI de teste
+on:
+  push:
+jobs:
+  conforme:
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+    steps:
+      - run: echo ok
+  job-novo-com-literal:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo regressao

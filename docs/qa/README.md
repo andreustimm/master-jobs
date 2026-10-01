@@ -229,6 +229,7 @@ execução.
 | `NAV` | Navegação, transições e recuperação entre telas |
 | `PWA` | Carregamento inicial e experiência instalada/offline |
 | `JOBS` | Descoberta, filtros, detalhe e explicação de vagas |
+| `COMPARE` | Cadastro manual, comparação e idempotência de vagas |
 | `SRCH` | Buscas por termo salvas e trilhas-alvo |
 | `PIPE` | Shortlist, candidatura e histórico do funil |
 | `PROF` | Perfil do candidato e currículo |

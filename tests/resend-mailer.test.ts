@@ -40,11 +40,21 @@ function captureConsole(): string[] {
 }
 
 describe("configuredMailer", () => {
-  it("sem chave, cai para o terminal em vez de falhar", () => {
+  it("sem chave, na máquina local, cai para o terminal em vez de falhar", () => {
     // A chave é do usuário e ninguém mais pode gerá-la. Falhar o cadastro de
     // conta porque não há provedor configurado transformaria um detalhe de
     // infraestrutura em bloqueio de produto.
-    expect(configuredMailer({} as unknown as NodeJS.ProcessEnv).name).toBe("console");
+    expect(configuredMailer({ JHO_ENV: "local" } as unknown as NodeJS.ProcessEnv).name).toBe("console");
+  });
+
+  it("#378: sem chave e sem declaração nenhuma de ambiente, omite o corpo", () => {
+    // Reprodução do defeito: a ausência de `VERCEL`, `VERCEL_ENV` e `JHO_ENV`
+    // era lida como "máquina do dono", e o link de recuperação ia para o log
+    // de um deployment que não declarou nada (G18). Ambiente que não se
+    // declara local não é local — lista de permissão (G27).
+    expect(configuredMailer({} as unknown as NodeJS.ProcessEnv).name).toBe("withheld");
+    expect(configuredMailer({ JHO_ENV: "" } as unknown as NodeJS.ProcessEnv).name).toBe("withheld");
+    expect(configuredMailer({ JHO_ENV: "  " } as unknown as NodeJS.ProcessEnv).name).toBe("withheld");
   });
 
   it("chave sem remetente não envia e não imprime o corpo", () => {
@@ -52,7 +62,9 @@ describe("configuredMailer", () => {
     // não envia. Mas chave presente é intenção de enviar: imprimir o link ali
     // seria o vazamento que a chave veio evitar.
     expect(configuredMailer({ RESEND_API_KEY: "re_x" } as unknown as NodeJS.ProcessEnv).name).toBe("withheld");
-    expect(configuredMailer({ RESEND_FROM: "eu@dominio.test" } as unknown as NodeJS.ProcessEnv).name).toBe("console");
+    expect(
+      configuredMailer({ RESEND_FROM: "eu@dominio.test", JHO_ENV: "local" } as unknown as NodeJS.ProcessEnv).name,
+    ).toBe("console");
   });
 
   it("deployment hospedado sem chave nunca usa o terminal", () => {
@@ -64,9 +76,9 @@ describe("configuredMailer", () => {
         configuredMailer({ VERCEL_ENV, RESEND_FROM: "eu@dominio.test" } as unknown as NodeJS.ProcessEnv).name,
       ).toBe("withheld");
     }
-    // Lista de permissão, a mesma do modo aberto: só `local` ou nenhuma
-    // declaração usam o terminal. `development`, `VERCEL=1` e valor inventado
-    // caem no lado seguro.
+    // Lista de permissão, a mesma do modo aberto: só `JHO_ENV=local` usa o
+    // terminal. `development`, `VERCEL=1`, valor inventado e nenhuma
+    // declaração caem no lado seguro.
     for (const env of [
       { VERCEL_ENV: "development" },
       { VERCEL: "1" },
@@ -90,7 +102,9 @@ describe("configuredMailer", () => {
   });
 
   it("espaço em branco não conta como configuração", () => {
-    expect(configuredMailer({ RESEND_API_KEY: "  ", RESEND_FROM: "  " } as unknown as NodeJS.ProcessEnv).name).toBe("console");
+    expect(
+      configuredMailer({ RESEND_API_KEY: "  ", RESEND_FROM: "  ", JHO_ENV: "local" } as unknown as NodeJS.ProcessEnv).name,
+    ).toBe("console");
   });
 
   it("com as duas variáveis, usa o Resend", () => {
@@ -102,7 +116,7 @@ describe("configuredMailer", () => {
   it("lê o ambiente a cada chamada", () => {
     // Valor capturado na importação tornaria a troca impossível de exercitar —
     // e impossível de corrigir sem reiniciar o processo.
-    expect(configuredMailer({} as unknown as NodeJS.ProcessEnv).name).toBe("console");
+    expect(configuredMailer({ JHO_ENV: "local" } as unknown as NodeJS.ProcessEnv).name).toBe("console");
     expect(configuredMailer({ RESEND_API_KEY: "k", RESEND_FROM: "f@x.test" } as unknown as NodeJS.ProcessEnv).name).toBe("resend");
   });
 });

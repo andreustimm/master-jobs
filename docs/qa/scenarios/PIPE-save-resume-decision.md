@@ -10,9 +10,9 @@ qa_status: pass
 bug_ids: BUG-20260910-application-edit-not-retained; BUG-20260917-transition-note-never-readable
 fix_status: fixed
 retest_status: pass
-fix_commits: f16c2b4; 916c531; fa1269d; 03ac0f6; 9bb7fc0
-evidence: docs/qa/evidence/2026-09-17T222310262016Z-5e419094-application-draft-on-rejected-transition/CH-save-resume-application-step3-reachable-stages.png
-last_report: docs/qa/reports/2026-09-18T202222983242Z-8870c32d-release-candidate-1.13.1-full.md
+fix_commits: f16c2b4; 916c531; fa1269d; 03ac0f6; 9bb7fc0; 5b70e2c
+evidence: docs/qa/evidence/2026-09-29T141040713402Z-531aac7a-recusa-transicao-legivel/persistencia.png
+last_report: docs/qa/reports/2026-09-29T141040713402Z-531aac7a-recusa-transicao-legivel.md
 overlaps:
 ---
 
@@ -61,3 +61,5 @@ Planejado para a migração PostgreSQL. Usar somente conta e vaga sintéticas em
 ambiente isolado; nenhuma candidatura real é enviada. O feedback imediato não
 basta: confirmar persistência no funil e na leitura pública da mesma identidade.
 Abandonar uma edição antes de salvar deve preservar a última decisão confirmada.
+
+Reteste #389 em 29/09: Pass sobre `5b70e2c`; observáveis e limitações no relatório atual.
