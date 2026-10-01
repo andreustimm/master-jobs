@@ -9,6 +9,12 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.32.11] - 2026-10-01
+
+### Corrigido
+
+- O vazio da busca por termo na tela Vagas escolhe a frase pelo acervo, não pelos filtros da URL: `loadJobsView` consulta `termExistsInOpenCorpus` (mesmo casamento de termo do quadro, sem fit, status, fonte, modalidade, trilha nem faixa) quando a lista vem vazia, e a tela diz "corresponde com os filtros atuais" se o termo existe em alguma vaga aberta ou "ausente do acervo" se não existe.
+
 ## [1.32.10] - 2026-10-01
 
 ### Corrigido

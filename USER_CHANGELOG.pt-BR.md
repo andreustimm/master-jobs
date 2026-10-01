@@ -34,6 +34,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.11] - 2026-10-01T21:02:30.000Z
+
+### Corrigido
+
+- Quando uma busca por termo não acha nada, a mensagem agora distingue os dois casos: se o termo existe no acervo e algum filtro (inclusive a nota mínima ou o status padrão) esconde as vagas, ela fala dos filtros atuais e orienta a ampliar a busca; se o termo não está em nenhuma vaga aberta, diz que o termo está ausente do acervo.
+
 ## [1.32.10] - 2026-10-01T20:27:30.000Z
 
 ### Corrigido

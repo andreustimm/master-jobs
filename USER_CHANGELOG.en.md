@@ -34,6 +34,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.11] - 2026-10-01T21:02:30.000Z
+
+### Fixed
+
+- When a term search finds nothing, the message now tells the two cases apart: if the term exists in the corpus and a filter (including the minimum score or the default status) hides the jobs, it mentions the current filters and how to broaden the search; if no open job has the term, it says the term is absent from the corpus.
+
 ## [1.32.10] - 2026-10-01T20:27:30.000Z
 
 ### Fixed
