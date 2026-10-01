@@ -1,6 +1,6 @@
 # BUG-20260921-long-term-cut-silently: termo colado acima de 60 caracteres é cortado e salvo sem aviso
 
-- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->
+- **Status:** fixed <!-- open | fixed | verified | wont-fix | invalid -->
 - **Impact (user-side):** Friction
 - **Severity:** Medium · **Priority:** P2
 - **Persona Affected:** Andreus em triagem
@@ -38,14 +38,12 @@ cria termo.
 
 <!-- filled when status moves to fixed -->
 - **Root cause:** o sintoma é o termo cortado sem aviso; a causa é o `maxlength` do campo, que impede o envio do texto inteiro e com ele a mensagem de termo longo que o servidor já tem.
-- **Fix commit:**
-- **Regression test:**
+- **Fix commit:** e6ff264 (`fix: validar termo longo sem corte`); 5e7a027 (`fix: manter o termo digitado na recusa e limpar só no sucesso`) — a correção de e6ff264 deixava a validação do servidor alcançável, mas o `MutationFeedbackForm` ainda reiniciava o campo em qualquer desfecho (React reseta formulário não controlado quando a action assenta); a pessoa recusada perdia o texto colado e tinha de colar e cortar de novo às cegas.
+- **Regression test:** `tests/mobile.test.ts` (o campo não corta antes da validação; localizado por `data-testid`, não por `name="term"` ser o primeiro atributo); `tests/e2e/ui/searches.mjs` (termo de 65 caracteres mostra `term_too_long`, **mantém os 65 caracteres no campo** depois da recusa, some do campo depois de um envio aceito, e não aparece — inteiro nem cortado em 60 — após recarregar).
 
 ## Verification
 
 <!-- filled when status moves to verified -->
-- **Retested:**
-- **Result:**
 
 ## Re-found (2026-09-29)
 
@@ -53,4 +51,3 @@ cria termo.
 - Mesmo sintoma reproduzido: colar 61 caracteres em Buscas corta para 60 e
   salva sem a mensagem de termo longo. `maxlength=60` continua no campo.
 - **Evidence:** `docs/qa/evidence/2026-09-29T035351654581Z-97f37e1c-full/CH-term-input-mistreated/01-61-chars-cortado-salvo.png`
-- Ainda `open` — sem fix aplicado entre 2026-09-21 e esta rodada.

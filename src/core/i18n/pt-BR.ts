@@ -161,6 +161,7 @@ export const ptBR = {
     capturesOff: "Capturas desligadas neste ambiente: os termos ficam salvos e nada é buscado.",
     dailyRepeatPaused: "A repetição diária está parada: nenhuma busca da varredura nas últimas 36 horas.",
     pendingPrimary: "Você ainda não tem perfil próprio. Salve o currículo para criar a trilha principal; até lá, nada recebe nota.",
+    pendingTermDiscarded: "O termo abaixo não foi salvo — complete o perfil acima e cole-o de novo:",
     saveTitle: "Salvar um termo",
     term: "Termo",
     track: "Trilha",
