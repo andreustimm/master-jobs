@@ -6,7 +6,7 @@
   marcado `pass` sem repercorrer os casos além do termo longo nem usar sessão
   nova.
 - **Cadence tier:** targeted
-- **Build:** `<FIXER_SHA>` · **Environment:** `pnpm test:e2e` (suíte completa),
+- **Build:** `5e7a027` · **Environment:** `pnpm test:e2e` (suíte completa),
   runner isolado local, PostgreSQL descartável, autenticação real. Sem sessão
   manual nesta rodada — ver "Human Verifications Needed".
 
@@ -24,7 +24,7 @@
 
 | # | Charter | Journey / Scenario | Persona | Tour | Status | Issue | Fix commit |
 |---|---|---|---|---|---|---|---|
-| 1 | — (automatizado, sem charter manual) | J-save-term-search / SRCH-term-validation | Andreus em triagem | — | Fixed (parcial) | BUG-20260921-long-term-cut-silently | `<FIXER_SHA>` |
+| 1 | — (automatizado, sem charter manual) | J-save-term-search / SRCH-term-validation | Andreus em triagem | — | Fixed (parcial) | BUG-20260921-long-term-cut-silently | `5e7a027` |
 
 Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human verify) | Blocked (human decision)`
 
@@ -60,7 +60,7 @@ Status legend: `Pending | Pass | Fail | Fixed | Skipped | Blocked (needs human v
 
 - **Symptom:** depois do fix de e6ff264, a recusa de termo longo passou a mostrar o aviso certo, mas apagava o texto digitado — a pessoa tinha de colar e cortar de novo às cegas.
 - **Root cause:** `MutationFeedbackForm` reiniciava o formulário não controlado em qualquer desfecho da action (sucesso ou recusa); faltava distinguir os dois.
-- **Fix:** `<FIXER_SHA>` adiciona `clearOnSuccess` ao `MutationFeedbackForm` (`app/mutation-feedback.tsx`) e o usa junto de `keepFields` só no formulário de termo (`app/searches/page.tsx`): a recusa mantém o texto, o sucesso limpa o campo.
+- **Fix:** `5e7a027` adiciona `clearOnSuccess` ao `MutationFeedbackForm` (`app/mutation-feedback.tsx`) e o usa junto de `keepFields` só no formulário de termo (`app/searches/page.tsx`): a recusa mantém o texto, o sucesso limpa o campo.
 - **Regression test:** `tests/e2e/ui/searches.mjs` (E2E-021, campo mantém 65 caracteres após a recusa — falhava antes, passa agora); `tests/mobile.test.ts` (passa a localizar o campo por `data-testid`, não por `name="term"` ser o primeiro atributo).
 - **Retested:** `pnpm test:e2e` completo, 433/433, sessão de browser nova.
 

@@ -10,7 +10,7 @@ qa_status: untested
 bug_ids: BUG-20260921-long-term-cut-silently
 fix_status: fixed
 retest_status: pending
-fix_commits: e6ff264; <FIXER_SHA>
+fix_commits: e6ff264; 5e7a027
 evidence: evidence/2026-09-21T175034729239Z-e901131e-qa-buscas/CH-term-input-mistreated-baseline-duplicado-toast.png; evidence/2026-09-21T175034729239Z-e901131e-qa-buscas/CH-term-input-mistreated-baseline-limite-21.png; evidence/2026-09-29T141200Z-codex390-termo-longo-sem-corte/CH-term-input-mistreated-02-too-long.png; evidence/2026-09-29T141200Z-codex390-termo-longo-sem-corte/CH-term-input-mistreated-03-after-refresh.png
 last_report: docs/qa/reports/2026-10-01T152245Z-fixer-termo-longo-sem-corte.md
 overlaps: SRCH-save-term-from-jobs
@@ -29,7 +29,7 @@ inteiro e responde `term_too_long`.
 2026-09-29 só reabriu a mesma sessão/aba (refresh, não sessão nova) e só andou
 o caso do termo longo — os quatro restantes (curto, caractere inválido,
 duplicata, limite de 20) não foram repercorridos naquela sessão, embora o
-cenário tivesse virado `pass` inteiro. A correção desta revisão (`<FIXER_SHA>`)
+cenário tivesse virado `pass` inteiro. A correção desta revisão (`5e7a027`)
 resolve, além disso, um defeito que o reteste anterior não via: a recusa
 apagava o termo do campo (o React reinicia formulário não controlado em
 qualquer desfecho), obrigando a pessoa a colar e cortar de novo às cegas; agora

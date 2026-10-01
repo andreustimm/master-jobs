@@ -38,7 +38,7 @@ cria termo.
 
 <!-- filled when status moves to fixed -->
 - **Root cause:** o sintoma é o termo cortado sem aviso; a causa é o `maxlength` do campo, que impede o envio do texto inteiro e com ele a mensagem de termo longo que o servidor já tem.
-- **Fix commit:** e6ff264 (`fix: validar termo longo sem corte`); `<FIXER_SHA>` (`fix: manter o termo digitado na recusa e limpar só no sucesso`) — a correção de e6ff264 deixava a validação do servidor alcançável, mas o `MutationFeedbackForm` ainda reiniciava o campo em qualquer desfecho (React reseta formulário não controlado quando a action assenta); a pessoa recusada perdia o texto colado e tinha de colar e cortar de novo às cegas.
+- **Fix commit:** e6ff264 (`fix: validar termo longo sem corte`); 5e7a027 (`fix: manter o termo digitado na recusa e limpar só no sucesso`) — a correção de e6ff264 deixava a validação do servidor alcançável, mas o `MutationFeedbackForm` ainda reiniciava o campo em qualquer desfecho (React reseta formulário não controlado quando a action assenta); a pessoa recusada perdia o texto colado e tinha de colar e cortar de novo às cegas.
 - **Regression test:** `tests/mobile.test.ts` (o campo não corta antes da validação; localizado por `data-testid`, não por `name="term"` ser o primeiro atributo); `tests/e2e/ui/searches.mjs` (termo de 65 caracteres mostra `term_too_long`, **mantém os 65 caracteres no campo** depois da recusa, some do campo depois de um envio aceito, e não aparece — inteiro nem cortado em 60 — após recarregar).
 
 ## Verification
