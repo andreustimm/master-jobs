@@ -9,6 +9,12 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.32.12] - 2026-10-01
+
+### Corrigido
+
+- `analyseGap` (`src/core/candidate.ts`) deixa de montar os termos com o `profile.yaml` da instalação para qualquer candidato. Termos e vagas passam a vir da mesma trilha principal do candidato, pelo perfil efetivo que o scorer usa (`trackScoringProfiles`): as `keywords` do alvo da principal e as notas dessa trilha (`scoreTrackFilter`). O perfil de matching gravado não entra, porque a fila o deriva do currículo (dono incluído) e as `keywords` dele já estão no CV, o que esvaziaria "faltante". Limite conhecido: a principal de quem nunca a editou também foi montada a partir do currículo, então a lista de faltantes dessa pessoa fica vazia até ela definir a busca. O dono continua com o vocabulário do `profile.yaml` enquanto a principal dele vier dele; editar ou promover a principal muda termos e vagas juntos; principal pendente (sem perfil próprio) devolve relatório vazio. Não muda o scorer nem `SCORER_VERSION`. Testes de banco com dono e convidada em `tests/cov-core-candidate-gap.test.ts` e área E2E `candidate-gap` (#427).
+
 ## [1.32.11] - 2026-10-01
 
 ### Corrigido

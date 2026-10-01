@@ -34,6 +34,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.12] - 2026-10-01T22:02:16.000Z
+
+### Fixed
+
+- The vocabulary gap analysis in the Candidate area now compares your CV with the terms of your primary search, no longer with the system owner's. Editing or switching your primary search changes the comparison; while your primary search is still the one the system built from your CV, the list of missing terms tends to stay empty, and it only points out gaps once you define what you are looking for. If you do not have a search profile yet, the section says there are no jobs to compare.
+
 ## [1.32.11] - 2026-10-01T21:02:30.000Z
 
 ### Fixed

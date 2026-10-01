@@ -34,6 +34,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.12] - 2026-10-01T22:02:16.000Z
+
+### Corrigido
+
+- A análise de lacunas de vocabulário na Área do candidato compara o seu currículo com os termos da sua busca principal, e não mais com os do dono do sistema. Editar ou trocar a busca principal muda a comparação; enquanto a sua busca principal ainda for a que o sistema montou a partir do currículo, a lista de termos que faltam tende a ficar vazia, e ela só passa a apontar lacunas quando você define o que procura. Se você ainda não tem um perfil de busca, a seção mostra que não há vagas para comparar.
+
 ## [1.32.11] - 2026-10-01T21:02:30.000Z
 
 ### Corrigido
