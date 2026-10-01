@@ -135,9 +135,13 @@ export async function createManualComparison(
     pages,
     extractionWarnings,
   });
-  if (!await scoreOne(candidateId, observed.jobId)) {
-    throw new ComparisonInputError("unexpected");
-  }
+  // O score é derivado e recalculável; a vaga persistida não. Um candidato
+  // sem perfil próprio retorna `null`, e uma falha transitória do scorer não
+  // pode transformar um cadastro bem-sucedido em falso erro para o usuário.
+  await scoreOne(candidateId, observed.jobId).catch(() => {
+    // A ficha mostra que o score ainda não existe e uma nova passada pode
+    // calculá-lo depois que o perfil da pessoa estiver disponível.
+  });
   return { jobId: observed.jobId };
 }
 

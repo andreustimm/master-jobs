@@ -152,9 +152,11 @@
         "app/theme-switch.tsx"
       ],
       "routes": [
+        "/admin/users",
         "/candidate",
         "/candidate/skills",
         "/jobs",
+        "/login",
         "/referrals"
       ]
     },
@@ -207,7 +209,8 @@
         "/login",
         "/pipeline",
         "/recruiter",
-        "/recruiter/[id]"
+        "/recruiter/[id]",
+        "/referrals"
       ]
     },
     {

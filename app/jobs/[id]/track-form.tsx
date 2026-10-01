@@ -12,6 +12,7 @@ import { runUndo, type UndoLabels } from "./undo";
 
 /** Tempo do aviso com "Desfazer": o dobro do aviso comum, para dar tempo de ler. */
 const UNDO_NOTICE_MS = 10_000;
+const REFUSAL_NOTICE_MS = 7_000;
 
 /** As opções do seletor, agrupadas como no domínio (`transitionGroups`). */
 export type TrackFormGroups = {
@@ -128,7 +129,11 @@ export function TrackForm({
       // para ele deixa a tela coerente com a lista que a revalidação traz; sem
       // isso a escolha recusada continuaria selecionada sobre uma lista nova.
       if (result.code === "illegal_transition") setStatus(result.from);
-      publishMutationFeedback({ kind: "error", message: messageFor(result, labels, statusLabels) });
+      publishMutationFeedback({
+        kind: "error",
+        message: messageFor(result, labels, statusLabels),
+        durationMs: REFUSAL_NOTICE_MS,
+      });
     } catch (error) {
       // Redirect e notFound viajam como exceção; engoli-los deixaria a sessão
       // vencida presa nesta tela. Só falha comum vira aviso — e o rascunho

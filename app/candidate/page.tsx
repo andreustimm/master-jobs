@@ -142,7 +142,12 @@ function VisibilityCard({
           {/* O aviso fica sempre visível, e não só quando `public` está
               marcado: quem já está público precisa lê-lo mais do que quem está
               prestes a ficar. */}
-          <p className="type-body-sm mt-1 text-[var(--warn)]">{t("visibility.publicWarning")}</p>
+          <p
+            className="type-body-sm mt-1 text-[var(--warn-text)]"
+            data-testid="visibility-public-warning"
+          >
+            {t("visibility.publicWarning")}
+          </p>
           <p className="type-meta text-muted-foreground">{t("visibility.neverShown")}</p>
 
           <div>

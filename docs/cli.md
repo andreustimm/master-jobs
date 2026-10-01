@@ -1289,6 +1289,13 @@ mudança manual — não há caminho paralelo.
 Referrals são ~7% dos candidatos e ~40% das contratações. Até esta área existir,
 `application.channel` era uma coluna que nada preenchia.
 
+A rede é do candidato ativo da CLI (o de slug `default`): `contacts`,
+`referrals` e `engage targets` leem e gravam só nela, e sem esse candidato
+recusam com "Candidato padrão não cadastrado" (`jho db seed` o cria). No
+dashboard, `/referrals` mostra só a rede do candidato da sessão (#379).
+Contatos gravados antes dessa mudança ficam sem dono e ocultos até o backfill
+da #405.
+
 ### `jho contacts seed`
 
 Carrega as 14 empresas onde Andreus já trabalhou ou entregou, a partir do

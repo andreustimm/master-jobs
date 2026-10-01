@@ -218,6 +218,13 @@
       "when": 1790687180767,
       "tag": "0030_quota_watch",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1790690278407,
+      "tag": "0031_contatos_por_candidato",
+      "breakpoints": true
     }
   ]
 }

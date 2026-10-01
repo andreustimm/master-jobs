@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import YAML from "yaml";
+import type { WorkflowEvent } from "../../scripts/github/fork-guard.ts";
 import { NON_BLOCKING_CI_JOBS } from "../../scripts/release/promotion-ci.ts";
+import { evaluateGithubActionsExpression } from "./expr-eval.ts";
 
 export type CiStep = {
   name?: string;
@@ -15,9 +17,62 @@ export type CiJob = {
   needs?: string | string[];
   "continue-on-error"?: unknown;
   strategy?: { matrix?: Record<string, unknown> };
+  "runs-on"?: string;
   steps: CiStep[];
 };
 export type CiWorkflow = { concurrency: { group: string }; jobs: Record<string, CiJob> };
+
+/**
+ * A única expressão aceita em `runs-on:` de qualquer job de `ci.yml` (issue
+ * #367, ADR 0030 decisões 1 e 4). `vars.CI_RUNS_ON` ausente ou vazia mantém
+ * `ubuntu-latest`; setada, troca o runner de todo job sem editar o arquivo. A
+ * primeira metade é a guarda de fork: uma PR cuja `head.repo` difere de
+ * `github.repository` sempre resolve para `ubuntu-latest`, mesmo com
+ * `CI_RUNS_ON` apontando para o runner próprio — a mesma comparação de
+ * `isForkPullRequest` (`scripts/github/fork-guard.ts`).
+ */
+export const CANONICAL_RUNS_ON =
+  "${{ github.event_name == 'pull_request' && " +
+  "github.event.pull_request.head.repo.full_name != github.repository && " +
+  "'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '\"ubuntu-latest\"') }}";
+
+/** Nome de todo job cujo `runs-on:` não é a expressão canônica — vazio quando conforme. */
+export function runsOnViolations(workflow: CiWorkflow): string[] {
+  return Object.entries(workflow.jobs)
+    .filter(([, job]) => job["runs-on"] !== CANONICAL_RUNS_ON)
+    .map(([name]) => name);
+}
+
+/**
+ * Resolve `CANONICAL_RUNS_ON` de verdade — avaliando a STRING (via
+ * `evaluateGithubActionsExpression`, `tests/support/expr-eval.ts`), não
+ * reimplementando a decisão do lado do teste. Isso é o que prova equivalência
+ * comportamental com `isForkPullRequest` sobre os MESMOS eventos de F2-03
+ * (3ª revisão L2 da PR #376, minor 1): se `CANONICAL_RUNS_ON` divergir do
+ * texto que `isForkPullRequest` implementa, é a expressão avaliada de
+ * verdade que vai discordar — chamar `isForkPullRequest` aqui dentro seria
+ * tautológico e não pegaria essa divergência.
+ */
+export function resolveCanonicalRunsOn(event: WorkflowEvent, ciRunsOn: string | undefined): unknown {
+  const context = {
+    github: {
+      event_name: event.eventName,
+      repository: event.repository,
+      event: {
+        pull_request:
+          event.pullRequestHeadRepoFullName === undefined
+            ? undefined
+            : { head: { repo: { full_name: event.pullRequestHeadRepoFullName } } },
+      },
+    },
+    vars: { CI_RUNS_ON: ciRunsOn },
+  };
+  return evaluateGithubActionsExpression(CANONICAL_RUNS_ON, context);
+}
+
+export function ciWorkflowFrom(yaml: string): CiWorkflow {
+  return YAML.parse(yaml) as CiWorkflow;
+}
 
 /** O CI roda os gates em jobs paralelos; `qualidade` é o agregador exigido. */
 export const AGGREGATOR = "qualidade";
