@@ -290,7 +290,7 @@ export function FilterBar({
               <TransitionLink
                 key={track.id}
                 href={href(base, state, { track: String(track.id), cluster: undefined })}
-                className={userChipClass(state.track === track.id)}
+                className={cn(userChipClass(state.track === track.id), "normal-case")}
                 aria-current={state.track === track.id ? "true" : undefined}
                 data-testid={`filter-track-${track.id}`}
                 data-user-content

@@ -73,6 +73,7 @@ export type FilterState = {
    * means today.
    */
   grouped: boolean;
+  dense?: boolean;
   sort?: string;
   status?: string;
   /** Track id, or every active track. Absent: the primary. */
@@ -141,6 +142,7 @@ export function readFilters(params: Record<string, string | string[] | undefined
     described: one("described") === "1",
     notApplied: one("notApplied") === "1",
     grouped: one("ungrouped") !== "1",
+    dense: one("dense") === "1",
     notices,
   };
 
@@ -265,6 +267,7 @@ export function toParams(state: FilterState): Array<[string, string]> {
   put("fitMax", state.fitMax);
   put("notApplied", state.notApplied);
   put("ungrouped", !state.grouped);
+  put("dense", state.dense);
   put("track", state.track);
   put("by", state.by);
   put("pay", state.pay?.min);
@@ -306,6 +309,7 @@ export function facetHref(state: FilterState, toggle: FacetToggle): Route {
     sources: state.sources,
     workMode: state.workMode,
     grouped: state.grouped,
+    dense: state.dense,
     [toggle]: true,
     notices: [],
   };

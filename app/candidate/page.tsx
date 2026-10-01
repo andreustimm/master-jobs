@@ -29,6 +29,7 @@ import { MutationFeedbackForm } from "../mutation-feedback";
 import { candidateScoreQueueStatus } from "../../src/core/scoring/queue.ts";
 import { ScoreQueueCard } from "../score-queue-card";
 import { VocabularyGapSection } from "../candidate-vocabulary-gap";
+import type { CvPdfError } from "../../src/core/pdf.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -302,7 +303,14 @@ export default async function CandidateArea() {
         action={importPdfAction}
         successMessage={t("feedback.success")}
         errorMessage={t("feedback.error")}
+        resultMessages={{
+          pdfMissing: t("onboarding.pdfMissing"),
+          pdfTooLarge: t("onboarding.pdfTooLarge"),
+          pdfNotPdf: t("onboarding.pdfNotPdf"),
+          pdfNoText: t("onboarding.pdfNoText"),
+        } satisfies Record<CvPdfError, string>}
         dismissLabel={t("feedback.dismiss")}
+        data-testid="candidate-pdf-form"
         className="mb-8 flex flex-wrap items-end gap-3 rounded-lg border border-[var(--color-hairline)] bg-[var(--color-cloud)] p-4"
       >
         <div className="grid gap-1.5">
@@ -310,13 +318,14 @@ export default async function CandidateArea() {
           <Input
             id="file"
             name="file"
+            data-testid="candidate-pdf-file"
             type="file"
             accept="application/pdf,.pdf"
             required
             className="max-w-[320px]"
           />
         </div>
-        <Button type="submit" variant="outline">
+        <Button type="submit" variant="outline" data-testid="candidate-pdf-submit">
           {t("candidate.extractText")}
         </Button>
         <p className="type-body-sm w-full text-muted-foreground">
@@ -371,9 +380,6 @@ export default async function CandidateArea() {
             </span>
           )}
         </div>
-        <p className="text-xs text-muted-foreground">
-          {t("copy.pdfUploadTodo", { fields: "format, source_filename" })}
-        </p>
       </MutationFeedbackForm>
 
       {gap && <VocabularyGapSection gap={gap} t={t} />}

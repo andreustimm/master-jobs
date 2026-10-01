@@ -154,3 +154,5 @@ export {
   type ComparisonField,
   type ManualComparisonInput,
 } from "./app/manual-comparison.ts";
+
+export { DIRECT_EMPLOYER_SOURCE_KIND, hasNamedEmployer } from "./domain/employer.ts";

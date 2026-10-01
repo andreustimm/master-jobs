@@ -144,6 +144,13 @@ export const ptBR = {
     notInterestedHint: "Tira a vaga das suas listas. Ela fica em “Arquivadas”, e dá para restaurar enquanto você não tiver aplicado.",
     restore: "restaurar",
     restoreHint: "Devolve a vaga às suas listas, no começo do funil.",
+    /** Período do salário exibido por vaga (ver `src/core/money.ts`). */
+    moneyPeriodMonth: "mês",
+    moneyPeriodWeek: "semana",
+    moneyPeriodDay: "dia",
+    moneyPeriodHour: "hora",
+    moneyProjectTotal: "total",
+    moneyProjectTotalWithDuration: "total ({count} meses)",
   },
   /** Tela Buscas: termos salvos e trilhas (term-search-target-tracks). */
   searches: {
@@ -1283,8 +1290,6 @@ export const ptBR = {
     pdfReviewFirst: "revise antes de confiar",
     pdfCaveat:
       "Extração de PDF erra com layout em colunas, e currículo digitalizado não tem texto nenhum para ler.",
-    pdfUploadTodo:
-      "Upload de PDF ainda não existe. Quando existir, o texto extraído entra aqui e o arquivo original fica recuperável — o schema já prevê ({fields}).",
     vocabularyWorking: "Vocabulário que já está funcionando",
     skillsLead:
       "Detectadas automaticamente no seu currículo, contra um catálogo global de 100 tecnologias e práticas.",

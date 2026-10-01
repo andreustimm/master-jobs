@@ -150,3 +150,15 @@ filtrado, então filtro novo entra sem precisar ser repetido na escolha.
 /jobs?notApplied=1                           esconde o que já foi enviado
 /jobs?ungrouped=1                            uma linha por publicação
 ```
+
+
+### Densidade e empregador direto
+
+`dense=1` seleciona linhas compactas e acompanha a ordem, os filtros, os
+formulários GET, a paginação e os presets. Não altera o conjunto de vagas.
+Sem esse parâmetro a lista é confortável.
+
+Em fontes `careers`, o rótulo configurado representa a empresa real. Por
+isso empresa igual ao rótulo continua nomeada no agrupamento, na lista e
+nas facetas. Em agregadores a igualdade continua indicando empregador
+oculto; não se deduz a identidade da empresa contratante.

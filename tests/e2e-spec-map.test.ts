@@ -101,7 +101,7 @@ describe("mapa de E2E — seleção", () => {
   });
 
   it("página seleciona as áreas que visitam a rota dela, com prefixo e segmento dinâmico", () => {
-    expect(selectE2E(MAP, ["app/searches/page.tsx"]).areas).toEqual(["mobile", "searches"]);
+    expect(selectE2E(MAP, ["app/searches/page.tsx"]).areas).toEqual(["track-selector", "mobile", "searches"]);
     const detail = selectE2E(MAP, ["app/jobs/[id]/page.tsx"]);
     expect(detail.areas).toContain("job-analysis");
     expect(detail.areas).toContain("a11y");
@@ -125,7 +125,7 @@ describe("mapa de E2E — seleção", () => {
   it("pnpm gates passa as áreas ao E2E, ou nada quando a suíte é inteira", () => {
     const impact = loadImpactMap(ROOT);
     const e2e = (paths: string[]) => planGates(impact, paths).gates.find((gate) => gate.id === "e2e")!;
-    expect(commandFor(e2e(["app/searches/page.tsx"]), ROOT, impact)).toEqual(["pnpm", "test:e2e", "--areas", "mobile,searches"]);
+    expect(commandFor(e2e(["app/searches/page.tsx"]), ROOT, impact)).toEqual(["pnpm", "test:e2e", "--areas", "track-selector,mobile,searches"]);
     expect(commandFor(e2e(["app/layout.tsx"]), ROOT, impact)).toEqual(["pnpm", "test:e2e"]);
   });
 });
