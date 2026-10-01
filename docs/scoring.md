@@ -601,6 +601,18 @@ A UI e o CLI traduzem no momento de exibir. Antes a frase era gravada pronta em
 português, e o efeito é que trocar o idioma da interface não mudava a explicação
 do score — o banco guardava a decisão **e** o idioma de quem a escreveu.
 
+Há um parâmetro que ainda é gravado como texto pronto: o `label` das mensagens
+de remuneração (`comp.ideal`, `comp.target`, `comp.range`, `comp.below`,
+`comp.noBasis`, `comp.projectNoDuration`), montado por `formatMoney` sem
+idioma — `$5,000/month`, `$30,000 total`, `$30,000 total (2 meses)`,
+`CA$5,000/month ≈ $43,800`. O scorer é domínio puro e não sabe quem vai ler.
+`renderScoreMessage` reconhece esses três sufixos e os troca pelas chaves
+`jobs.moneyPeriod*` e `jobs.moneyProject*` do dicionário; o número e o símbolo
+da moeda ficam como foram gravados (formato `en-US`). Os sufixos são, portanto,
+formato armazenado: mudá-los em `formatMoney` exige mudar o reconhecimento,
+aumentar `SCORER_VERSION` e repontuar. Prova:
+`tests/score-message-money.test.ts`.
+
 ## Que algoritmo é este, afinal
 
 **Não é similaridade de cosseno, não há embedding e não há vetor em lugar

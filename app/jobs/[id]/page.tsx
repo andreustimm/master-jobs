@@ -188,7 +188,7 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
               <Legend t={t} />
             </div>
 
-            <ul className="mt-4 list-disc pl-5 type-caption-sm text-muted-foreground">
+            <ul data-testid="score-reasons" className="mt-4 list-disc pl-5 type-caption-sm text-muted-foreground">
               {reasons.map((r, i) => (
                 <li key={i} className="mb-0.5">
                   {renderScoreMessage(r, t)}
