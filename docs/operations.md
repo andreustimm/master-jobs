@@ -218,8 +218,27 @@ fecha por ausência, e sem isso a vaga de nota baixa que saiu da janela ficava
 aberta para sempre. As acima do corte continuam na frente da fila; o teto de
 `reconferencia` é o que segura o volume novo.
 
-**Baseline de custo — medir em produção (pendente, passo humano).** Depois de
-24 h com a varredura fatiada ativa e esta versão em produção:
+**Baseline de custo, medido em produção em 01/10/2026** (varredura diária do
+Actions, antes da varredura fatiada; leitura de `production.request_budget`,
+sem escrita, só números e nomes de rotina):
+
+| Rotina | Dias medidos | Uso diário (mín–máx) | Teto | Recusas |
+|---|---:|---|---:|---:|
+| `sync` | 7 | 48 em todos os dias | sem teto | 0 |
+| `reconferencia` | 7 | 40–357 | 3.000 | 0 |
+| `captura` | 7 | 2–12 | 1.000 | 0 |
+
+Nenhum teto recusou nada em 7 dias. A reconferência usou no máximo 12 % do
+teto (357 de 3.000, em 30/09) e a captura 1,2 % (12 de 1.000). Os tetos ficam
+como estão: são trava de segurança, não previsão, e o uso de hoje vem de uma
+varredura que o teto de 90 minutos do Actions costuma cortar antes da
+reconferência terminar (6 das 7 últimas execuções foram canceladas pelo
+tempo). **Quando a varredura fatiada (#281) for ligada, meça de novo**: a
+fila da reconferência passa a drenar por inteiro, e o uso diário deve subir
+em direção ao teto.
+
+**Medição da varredura fatiada — pendente até a #281 ser ativada.** Depois de
+24 h com ela ativa e esta versão em produção:
 
 ```bash
 DATABASE_URL='<url de produção, role restrita>' pnpm jho ops telemetry --days 7 --json
