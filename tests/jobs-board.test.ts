@@ -303,6 +303,56 @@ describe("recorte implícito contra ausência no acervo (#402, achado da revisã
     expect(view.total).toBe(0);
     expect(view.filteredBeyondTerm).toBe(false);
   });
+
+  const emptyView = (params: Record<string, string>) =>
+    loadJobsView({
+      candidateId: owner,
+      params,
+      page: 1,
+      pageSize: 50,
+      prefetch: false,
+      schedule: () => undefined,
+      now: new Date(),
+    });
+
+  it("filtro explícito que zera um termo existente: frase de recorte", async () => {
+    const remote = await addJob({ title: "Laravel Developer", location: "Remote" });
+    await score(remote, 90);
+
+    const view = await emptyView({ q: "laravel", workMode: "onsite" });
+
+    expect(view.total).toBe(0);
+    expect(view.filteredBeyondTerm).toBe(true);
+  });
+
+  it("filtro explícito com termo de verdade ausente: frase de ausência (workMode)", async () => {
+    const remote = await addJob({ title: "Laravel Developer", location: "Remote" });
+    await score(remote, 90);
+
+    const view = await emptyView({ q: "zzqxunmatched", workMode: "onsite" });
+
+    expect(view.total).toBe(0);
+    expect(view.filteredBeyondTerm).toBe(false);
+  });
+
+  it("o card \"vagas abertas\" (fit=0, status=any, ungrouped=1) não conta como recorte quando o termo é ausente", async () => {
+    await addJob({ title: "Laravel Developer" });
+
+    const view = await emptyView({ q: "zzqxunmatched", fit: "0", status: "any", ungrouped: "1" });
+
+    expect(view.total).toBe(0);
+    expect(view.filteredBeyondTerm).toBe(false);
+  });
+
+  it("fora do vazio a frase não é consultada: com resultado, o sinal é falso", async () => {
+    const hit = await addJob({ title: "Laravel Developer" });
+    await score(hit, 90);
+
+    const view = await emptyView({ q: "laravel" });
+
+    expect(view.total).toBe(1);
+    expect(view.filteredBeyondTerm).toBe(false);
+  });
 });
 
 describe("brought by a saved term", () => {

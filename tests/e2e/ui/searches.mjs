@@ -355,9 +355,9 @@ export async function run(ctx) {
   );
 
   // Termo real no acervo, mas só numa vaga pontuada abaixo do corte padrão
-  // (45): sem filtro nenhum escolhido na URL, `hasFilterBeyondTerm` não vê o
-  // corte implícito. A tela tem de distinguir isso de ausência de verdade
-  // (EXISTS sem os demais filtros, #402, achado da revisão da PR #419).
+  // (45): sem filtro nenhum escolhido na URL, o corte implícito é o recorte. A
+  // tela tem de distinguir isso de ausência de verdade (EXISTS sem os demais
+  // filtros, #402, achado da revisão da PR #419).
   await page.goto(`${BASE}/jobs?q=zyxquantumcut`, { waitUntil: "networkidle" });
   const belowDefaultCut = await page.evaluate(() => ({
     empty: document.querySelector('[data-testid="jobs-empty"]')?.textContent ?? "",
@@ -901,6 +901,35 @@ export async function run(ctx) {
   const hiddenAfterClick = await eventually(rowGone, dismissRow);
   await page.reload({ waitUntil: "networkidle" });
   const hiddenAfterReload = (await page.locator(dismissRow).count()) === 0;
+  // Termo que só existe numa vaga arquivada (status padrão a esconde): o vazio
+  // diz recorte, não ausência — e continua dizendo depois de recarregar (#402,
+  // achado da revisão da PR #419). Ver também o EXISTS em `loadJobsView`.
+  const archivedOnlyEmpty = await page.evaluate(() => ({
+    empty: document.querySelector('[data-testid="jobs-empty"]')?.textContent ?? "",
+    total: document.querySelector('[data-testid="jobs-total"]')?.getAttribute("data-total") ?? "",
+  }));
+  await page.reload({ waitUntil: "networkidle" });
+  const archivedOnlyEmptyAfterReload = await page.evaluate(() => ({
+    empty: document.querySelector('[data-testid="jobs-empty"]')?.textContent ?? "",
+    total: document.querySelector('[data-testid="jobs-total"]')?.getAttribute("data-total") ?? "",
+  }));
+  const archivedOnlyPhrase = ptBR.jobs.emptyTermFiltered.replace("{term}", "Quokkaverse");
+  check(
+    "term-search E2E-023 termo só em vaga arquivada: o vazio explica o recorte, não a ausência, e a frase sobrevive à recarga",
+    archivedOnlyEmpty.total === "0" && archivedOnlyEmpty.empty === archivedOnlyPhrase
+      && archivedOnlyEmptyAfterReload.total === "0" && archivedOnlyEmptyAfterReload.empty === archivedOnlyPhrase,
+    JSON.stringify({ archivedOnlyEmpty, archivedOnlyEmptyAfterReload }),
+  );
+  // O card "vagas abertas" do cockpit leva ao acervo inteiro (`fit=0&status=any
+  // &ungrouped=1`): lá, um termo ausente é ausência de verdade — "remova
+  // filtros" não tem o que remover.
+  await page.goto(`${BASE}/jobs?q=zzqxunmatched&fit=0&status=any&ungrouped=1`, { waitUntil: "networkidle" });
+  const wholeCorpusAbsent = await page.evaluate(() => document.querySelector('[data-testid="jobs-empty"]')?.textContent ?? "");
+  check(
+    "term-search E2E-024 acervo inteiro (vagas abertas do cockpit) com termo ausente: o vazio afirma a ausência, não manda remover filtros",
+    wholeCorpusAbsent === ptBR.jobs.emptyTermAbsent.replace("{term}", "zzqxunmatched"),
+    JSON.stringify({ wholeCorpusAbsent }),
+  );
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
   await page.locator('[data-testid="preset-archived"]').click();
   await settle(/status=archived/);

@@ -2,22 +2,16 @@
 
 ### Corrigido
 
-- O vazio de busca por termo descreve os filtros aplicados, sem inferir ausência do termo em todo o acervo.
-- A mensagem de zero resultados agora distingue de fato "0 vagas com este filtro" de "termo ausente no acervo" (`hasFilterBeyondTerm`): a primeira correção trocara uma frase única por outra, ainda sem a distinção.
-- A distinção agora vale também quando o corte padrão de fit (45) ou o status padrão (esconde candidatura arquivada) é a causa do zero, sem filtro nenhum escolhido (`termExistsInOpenCorpus`).
+- O vazio da busca por termo na tela Vagas escolhe a frase pelo acervo, não pelos filtros da URL: `loadJobsView` consulta `termExistsInOpenCorpus` (mesmo casamento de termo do quadro, sem fit, status, fonte, modalidade, trilha nem faixa) quando a lista vem vazia, e a tela diz "corresponde com os filtros atuais" se o termo existe em alguma vaga aberta ou "ausente do acervo" se não existe.
 
 ## pt-BR
 
 ### Corrigido
 
-- Quando uma busca fica vazia, a mensagem esclarece que nenhum resultado corresponde aos filtros atuais e orienta como ampliar a busca.
-- Sem nenhum filtro escolhido, a mensagem passa a dizer que o termo não está no acervo, em vez de pedir para remover filtros que você não tinha.
-- Um termo que existe só numa vaga abaixo da nota padrão (ou só numa vaga arquivada) também mostra a mensagem de recorte, não a de ausência.
+- Quando uma busca por termo não acha nada, a mensagem agora distingue os dois casos: se o termo existe no acervo e algum filtro (inclusive a nota mínima ou o status padrão) esconde as vagas, ela fala dos filtros atuais e orienta a ampliar a busca; se o termo não está em nenhuma vaga aberta, diz que o termo está ausente do acervo.
 
 ## en
 
 ### Fixed
 
-- Empty search results now refer to the current filters and explain how to broaden the search.
-- With no filter chosen, the message now says the term is not in the corpus, instead of asking to remove filters you never set.
-- A term that only matches a job below the default fit cut (or only an archived one) also shows the narrowed-down message, not the absent one.
+- When a term search finds nothing, the message now tells the two cases apart: if the term exists in the corpus and a filter (including the minimum score or the default status) hides the jobs, it mentions the current filters and how to broaden the search; if no open job has the term, it says the term is absent from the corpus.

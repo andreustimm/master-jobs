@@ -25,7 +25,6 @@ import { loadRates } from "../../src/contexts/fx/index.ts";
 import type { StageTimer } from "../../src/core/observability.ts";
 import {
   defaultPay,
-  hasFilterBeyondTerm,
   payFilterActive,
   readFilters,
   resolvePayFilter,
@@ -61,7 +60,10 @@ export type JobsView = {
   near: { available: boolean; rows: NearRow[] } | null;
   /** Offer to search the platforms for the typed term; emphasized when few match. */
   offer: { term: string; emphasized: boolean } | null;
-  /** Há recorte além do termo buscado? Decide a frase do vazio (#402). */
+  /**
+   * Lista vazia com termo que EXISTE no acervo aberto (o recorte zerou) — não
+   * ausência do termo. Decide a frase do vazio (#402). Falso fora do vazio.
+   */
   filteredBeyondTerm: boolean;
 };
 
@@ -216,16 +218,17 @@ export async function loadJobsView(input: {
   // o teto de conexões da tela continua o mesmo.
   const near = filters.query ? await stage("near", () => nearMatches(candidateId, filters)) : null;
 
-  // `hasFilterBeyondTerm` só vê filtro ESCOLHIDO na URL. Zero vagas sem
-  // nenhum deles ainda pode ser o corte padrão de fit ou a candidatura
-  // arquivada escondida por padrão — não ausência do termo (#402, achado da
-  // revisão da PR #419). O EXISTS roda só quando a lista já veio vazia: é a
-  // única hora em que a distinção importa, e a única em que vale o
-  // round-trip extra.
-  let filteredBeyondTerm = hasFilterBeyondTerm(state);
-  if (!filteredBeyondTerm && total === 0 && filters.query) {
-    filteredBeyondTerm = await stage("term_exists", () => termExistsInOpenCorpus({ query: filters.query }));
-  }
+  // A frase do vazio sai SEMPRE do EXISTS, nunca de quais filtros estão na
+  // URL: filtro explícito, corte padrão de fit e status padrão são recorte do
+  // mesmo jeito, e `status=any` ou `fit=0` (o card "vagas abertas") não
+  // restringem nada — inferir pela URL dizia "remova filtros" a quem não tinha
+  // o que remover (#402, achados da revisão da PR #419). O EXISTS roda só
+  // quando a lista já veio vazia: é a única hora em que a distinção importa,
+  // e a única em que vale o round-trip extra.
+  const filteredBeyondTerm =
+    total === 0 && filters.query
+      ? await stage("term_exists", () => termExistsInOpenCorpus({ query: filters.query }))
+      : false;
 
   if (broughtBy && candidateId !== null && !input.prefetch) {
     const termId = broughtBy.id;

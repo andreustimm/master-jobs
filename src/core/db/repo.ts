@@ -961,12 +961,12 @@ async function readBoard(
  * arquivada, nem fonte, modalidade, trilha ou faixa salarial.
  *
  * Usada só quando a lista filtrada volta vazia, para decidir entre "termo
- * ausente no acervo" e "0 vagas com este recorte" (#402). `hasFilterBeyondTerm`
- * (`app/filter-state.ts`) só vê filtro ESCOLHIDO na URL: `/jobs?q=laravel` com
- * toda vaga do termo pontuada abaixo de 45, ou só em vaga arquivada, zerava a
- * lista sem nenhum filtro explícito e a tela afirmava ausência falsa — o
- * mesmo defeito do BUG-20260929-search-term-false-negative-laravel, agora pelo
- * corte implícito em vez da modalidade (achado da revisão da PR #419).
+ * ausente no acervo" e "0 vagas com este recorte" (#402). A decisão não pode
+ * sair de quais filtros a URL traz: `/jobs?q=laravel` com toda vaga do termo
+ * abaixo de 45, ou só em vaga arquivada, ou com `workMode=onsite`, zera a
+ * lista e a tela afirmaria ausência falsa — o defeito do
+ * BUG-20260929-search-term-false-negative-laravel (achados da revisão da PR
+ * #419).
  */
 export async function termExistsInOpenCorpus(opts: Pick<BoardFilters, "term" | "query">): Promise<boolean> {
   const matched = queryCondition(queryParts(opts));
