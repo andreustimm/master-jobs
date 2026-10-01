@@ -8,9 +8,9 @@ expected: Pedir a análise deixa a seção pendente mesmo após recarga; depois 
 entry_points: /jobs/<id>
 qa_status: blocked-verify
 bug_ids: BUG-20261001-analysis-provider-error-hides-cause
-fix_status: pending
-retest_status:
-fix_commits:
+fix_status: fixed
+retest_status: pending
+fix_commits: 908592fe
 evidence: docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-structured-analysis-first-read-pendente.png; docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-structured-analysis-first-read-falhou.png
 last_report: docs/qa/reports/2026-10-01-qa-223-verificacoes.md
 overlaps: JOBS-detail-owner-view-english
@@ -58,3 +58,15 @@ Pré-requisito para fechar: uma chave de provedor autorizada para pelo menos um
 modelo vivo (autorizar a chave NVIDIA na conta do dono, ou configurar outro
 provedor), e então `jho analysis run --yes [--model <id>]` sobre uma vaga com
 análise pendente.
+
+**2026-10-01, correção do diagnóstico (`908592fe`, #438).** O painel do admin
+passa a mostrar a causa da falha do provedor: na tentativa recusada com 410,
+"erro: provider_error (HTTP 410)" e "Modelo desligado: …", com o botão
+"Tentar após trocar o modelo"; a tentativa antiga, gravada só como
+`provider_error`, aparece como "Erro do provedor sem o status HTTP…". Os
+modelos NIM desligados saíram da semente, e a CLI, sem modelo vivo, diz
+"Nenhum modelo disponível: escolha um" em vez de gerar outra `provider_error`.
+Provado pela área E2E `job-analysis` (26/26, provedor falso, `reload` antes de
+cada leitura). Reteste de jornada pendente (`retest_status: pending`): a
+leitura da causa com o provedor real e o caminho de sucesso dependem da chave
+autorizada.

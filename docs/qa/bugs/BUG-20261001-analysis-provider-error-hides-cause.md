@@ -1,6 +1,6 @@
 # BUG-20261001-analysis-provider-error-hides-cause: a análise estruturada falha sempre com "provider_error" e nada diz que os modelos NIM do cadastro saíram do ar
 
-- **Status:** open
+- **Status:** fixed
 - **Impact (user-side):** Trust-Damage
 - **Severity:** High · **Priority:** P1
 - **Persona Affected:** Andreus em triagem (admin)
@@ -47,11 +47,41 @@ desligado.
 
 ## Fix
 
-<!-- Hipótese de causa, não confirmada por correção: `processNextAnalysis`
-(`src/core/llm/job-analysis.ts`) grava `provider_error` para todo `LlmError`
-que não seja 429 e descarta o status HTTP; o cadastro (`src/core/llm/registry.ts`)
-não tem como saber que um modelo foi desligado. -->
+- **Root cause:** duas. (1) `processNextAnalysis`
+  (`src/core/llm/job-analysis.ts`) gravava `provider_error` para todo
+  `LlmError` que não fosse 429 e descartava o status HTTP: a tela não tinha
+  como separar modelo desligado de chave sem permissão nem de provedor
+  instável. (2) O cadastro (`src/core/llm/registry.ts`) semeava os três
+  modelos NIM, já desligados pelo provedor, e `chooseModel` caía no primeiro
+  com chave (Kimi K2, em ordem alfabética) quando o padrão não tinha chave.
+- **Fix commit:** `908592fe`. Coluna `job_analysis.provider_status`
+  (migração `0032`, aditiva) com só o número do status; `failureCause` dá a
+  causa (404/410 modelo desligado, 401/403 chave sem permissão, 5xx/408/rede
+  provedor instável, outro 4xx recusado, `provider_error` sem status
+  desconhecida — as linhas antigas continuam legíveis); o painel do admin
+  mostra a causa pelo dicionário e o botão vira "Tentar após trocar o modelo"
+  quando repetir falharia de novo. `src/core/llm/model-retirement.ts` lista
+  os modelos desligados com status e data: a semente não os cadastra, a
+  `jho llm list` os sinaliza, `chooseModel` não os escolhe, `jho llm use`
+  recusa. Sem modelo vivo, a CLI diz "Nenhum modelo disponível: escolha um"
+  e não reivindica nada.
+- **Regression test:** `tests/job-analysis.test.ts` (410, 403, status
+  inválido e linha antiga), `tests/job-structure.test.ts` (`failureCause`,
+  `httpStatusOf`), `tests/llm-registry.test.ts` (seis casos de modelo
+  desligado), `tests/cov-cli-rede-llm.test.ts` e
+  `tests/cov-cli-analysis.test.ts` (saída da CLI), e a área E2E
+  `job-analysis` (seis verificações novas: causa 410, botão, linha antiga,
+  375 px).
+- **Fora do código:** a chave NVIDIA do dono recebe 403 nos modelos vivos;
+  autorizá-la (ou escolher outro provedor/modelo) é do dono. Sem isso, o
+  caminho de sucesso da análise segue sem observação.
 
 ## Verification
 
-<!-- pendente -->
+- **Retested:** 2026-10-01, `node tests/e2e/run-isolated.mjs --areas job-analysis`
+  26/26 (com `auth`): admin, depois de `reload`, lê "Modelo desligado…" na
+  tentativa recusada com 410 e "HTTP 410" na linha, o botão diz "Tentar após
+  trocar o modelo" e cabe em 375 px, a tentativa antiga sem status aparece
+  como causa desconhecida. Provedor falso na borda (nenhuma chamada real).
+- **Result:** pass no E2E; reteste de jornada com o provedor real pendente
+  da chave autorizada.
