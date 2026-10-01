@@ -7,12 +7,12 @@ journey: J-trust-the-filtered-board
 expected: Com a interface em inglês, a localização e o nome da vaga continuam como o anúncio escreveu — inclusive com acento — e nada da interface aparece em português
 entry_points: /jobs; /jobs/<id>; /jobs/<id>/paises
 qa_status: pass
-bug_ids: BUG-20260921-job-detail-labels-untranslated; BUG-20260929-jobs-list-english-ui-shows-portuguese; BUG-20260929-jobs-row-title-missing-user-content-mark
+bug_ids: BUG-20260921-job-detail-labels-untranslated; BUG-20260929-jobs-list-english-ui-shows-portuguese; BUG-20260929-jobs-row-title-missing-user-content-mark; BUG-20261001-score-pay-reason-period-english-in-pt
 fix_status: fixed
 retest_status: pass
-fix_commits: 23fa064; 52ba067; d433dcf5
-evidence: docs/qa/reports/2026-09-21-execucao-ingles-detalhe.md; tests/e2e/ui/i18n.mjs
-last_report: docs/qa/reports/2026-09-29T143300Z-d433dcf-vagas-idioma-395.md
+fix_commits: 23fa064; 52ba067; d433dcf5; e7000607
+evidence: docs/qa/reports/2026-09-21-execucao-ingles-detalhe.md; tests/e2e/ui/i18n.mjs; tests/score-message-money.test.ts
+last_report: docs/qa/reports/2026-10-01T165500Z-pr430-motivo-remuneracao-idioma-426.md
 overlaps: JOBS-country-hub; JOBS-group-repeated-countries
 ---
 
@@ -102,3 +102,34 @@ incluindo `lista de vagas em inglês mantém a rota e os nomes acessíveis`,
 `lista de vagas em inglês usa números e texto de paginação traduzidos` e
 `lista de vagas em pt-BR localiza o período do salário` (o caso do quarto
 literal, em `/jobs?...&cur=BRL&per=month`). `qa_status: pass`.
+
+## O sexto lugar, o espelho em pt-BR (#426, PR #430)
+
+O mesmo tipo de texto nasce em outro ponto: o scorer grava o rótulo de
+remuneração dos motivos `comp.*` já formatado e sem idioma (`$4,000/month`,
+`$30,000 total (2 meses)`), e a explicação do score em `/jobs/<id>` o mostrava
+como veio. Com a interface em pt-BR aparecia "/month"; em inglês, "total (2
+meses)", que quebra a promessa do cenário de que nada da interface fica em
+português (`BUG-20261001-score-pay-reason-period-english-in-pt`). A correção
+(e7000607) traduz o período em `renderScoreMessage`, na exibição; o scorer e o
+que ele grava não mudam. O cenário reseta para `untested` por regra 20 e volta
+a `pass` só com o reteste abaixo.
+
+A conferir em `/jobs/<id>` de uma vaga com motivo de remuneração, recarregando
+a página a cada idioma:
+
+- Em pt-BR, o bloco de motivos mostra `/mês` (e `N meses` em projeto de preço
+  fixo) e nenhum `/month`.
+- Em inglês, mostra `/month` (e `N months`) e nenhum `/mês` nem `meses`.
+- O valor convertido (`≈ $43,800`) e o valor anual, que não tem sufixo, passam
+  intactos.
+
+Reteste de 2026-10-01
+(`docs/qa/reports/2026-10-01T165500Z-pr430-motivo-remuneracao-idioma-426.md`):
+`node tests/e2e/run-isolated.mjs --areas i18n` (build de produção, PostgreSQL
+descartável) passou 17/17. Os casos novos de `tests/e2e/ui/i18n.mjs` abrem
+`/jobs/904000004` com `jho_locale=pt-BR` e depois `en`, em navegação nova, e
+leem `$4,000/mês` e `$4,000/month`. `total (N meses)` e a conversão têm só
+cobertura unitária (`tests/score-message-money.test.ts`). Não houve sessão
+manual de browser: ver "Human Verifications Needed" no relatório.
+`qa_status: pass` vale para o recorte automatizado.

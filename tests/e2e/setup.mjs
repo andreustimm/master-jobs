@@ -299,11 +299,15 @@ try {
     compPeriod: fixture.compPeriod ?? null,
     raw: { e2e: true },
   }))).onConflictDoNothing({ target: job.id });
+  // A vaga de salário baixo guarda o motivo de remuneração como o scorer o
+  // grava: rótulo pronto, sem idioma ("$4,000/month"). É o que a área `i18n`
+  // lê no detalhe para provar que o período segue o idioma da tela (#426).
+  const storedPayReasons = { 904000004: [{ code: "comp.below", params: { label: "$4,000/month" } }] };
   const fixtureScore = (jobId, trackId, fit) => ({
     candidateId, trackId, jobId, fit,
     titleScore: 10, keywordScore: 10, seniorityScore: 10, geoScore: 10, compScore: 4,
     freshnessScore: 5, benefitScore: 5, penalty: 0, cluster: "other",
-    matchedKeywords: [], missingKeywords: [], reasons: [], blockers: [],
+    matchedKeywords: [], missingKeywords: [], reasons: storedPayReasons[jobId] ?? [], blockers: [],
     scorerVersion: "e2e", profileHash: "e2e",
   });
   await getDb().insert(jobScore).values([
