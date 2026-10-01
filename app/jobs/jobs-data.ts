@@ -22,7 +22,15 @@ import {
 } from "../../src/contexts/matching/index.ts";
 import { loadRates } from "../../src/contexts/fx/index.ts";
 import type { StageTimer } from "../../src/core/observability.ts";
-import { defaultPay, readFilters, toBoardFilters, type FilterNotice, type FilterState } from "../filter-state";
+import {
+  defaultPay,
+  payFilterActive,
+  readFilters,
+  resolvePayFilter,
+  toBoardFilters,
+  type FilterNotice,
+  type FilterState,
+} from "../filter-state";
 
 /** Abaixo disto, a oferta de buscar o termo nas plataformas ganha destaque. */
 export const FEW_MATCHES = 10;
@@ -131,21 +139,23 @@ export async function loadJobsView(input: {
 
   const primary = tracks.find((track) => track.isPrimary);
   const defaults = defaultPay(primary?.target ?? null);
+  // `resolvePayFilter` já valida a moeda contra `fx` e escolhe a mesma
+  // principal (ativa, com alvo) que o cockpit — a faixa não pode responder
+  // perguntas diferentes nas duas telas.
+  const resolvedPay = resolvePayFilter(state, allTracks, fx);
   const currencies = fx
     ? [...new Set([fx.base, ...Object.keys(fx.rates)].map((code) => code.toUpperCase()))].sort()
     : [defaults.currency];
-  const currency =
-    state.pay?.currency && currencies.includes(state.pay.currency) ? state.pay.currency : defaults.currency;
   const pay: PayFilter = {
-    min: state.pay?.min,
-    max: state.pay?.max,
-    currency,
-    period: state.pay?.period ?? defaults.period,
-    disclosedOnly: state.pay?.disclosedOnly ?? false,
+    min: resolvedPay?.min,
+    max: resolvedPay?.max,
+    currency: resolvedPay?.currency ?? defaults.currency,
+    period: resolvedPay?.period ?? defaults.period,
+    disclosedOnly: resolvedPay?.disclosedOnly ?? false,
   };
   // Pay is normalized when the viewer set any pay control or sorts by pay;
   // otherwise the board stays as fast as before.
-  const payActive = state.pay !== undefined || state.sort === "comp";
+  const payActive = resolvedPay !== undefined;
 
   const filters: BoardFilters = {
     ...toBoardFilters(state),
@@ -164,17 +174,24 @@ export async function loadJobsView(input: {
   const { rows, total } = await stage("board", () =>
     listBoardPage(candidateId, { ...filters, limit: input.pageSize, offset: (input.page - 1) * input.pageSize }),
   );
-  // Com cache: paginar, reordenar ou trocar a faixa salarial não muda as
-  // facetas, e elas eram a leitura mais cara da tela. Ver `cachedBoardFacets`.
+  // Com cache: paginar, reordenar ou trocar os chips de recorte não muda a
+  // consulta; empresa e faixa salarial (quando ela de fato filtra — mín,
+  // máx ou só divulgados) mudam o universo contado e entram na chave.
+  // `sort=comp` sozinho só normaliza o valor exibido, não filtra nada, e por
+  // isso não entra aqui. Ver `cachedBoardFacets`.
+  const payFacet = payFilterActive(filters.pay);
   const facets = await stage("facets", () =>
     cachedBoardFacets(candidateId, {
       minFit: state.fit,
       keepUnscored: filters.keepUnscored,
       cluster,
       query: filters.query,
+      company: filters.company,
       sourceKinds: state.sources,
       workMode: state.workMode,
       track: scope ?? undefined,
+      pay: payFacet ? filters.pay : undefined,
+      rates: payFacet ? filters.rates : undefined,
       // Os chips têm de contar a MESMA coisa que o rodapé. Sem isto o rodapé
       // contava grupos e os chips contavam publicações, e um chip podia mostrar
       // número maior que o total exibido ao lado dele.

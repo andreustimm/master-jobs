@@ -21,6 +21,12 @@ const SELECT = "h-9 rounded-md border border-input bg-background px-2 type-body-
  * na própria tela. Limpar o parâmetro assim que o envio é aceito evita o
  * segundo clique acidental sem mudar o comportamento de quem nunca teve
  * `?term=` na URL.
+ *
+ * `keepFields` + `clearOnSuccess` (PR #411): a recusa preserva o que a
+ * pessoa digitou (sem `keepFields` o React reseta o formulário não
+ * controlado para o `defaultValue` a cada envio, inclusive numa recusa); o
+ * sucesso limpa o campo quando ele não tem `defaultValue` — o caso de quem
+ * digita sem vir da oferta.
  */
 export function SaveTermForm({
   requestedTerm,
@@ -55,6 +61,8 @@ export function SaveTermForm({
       action={action}
       {...feedback}
       resultLinkLabel={resultLinkLabel}
+      keepFields
+      clearOnSuccess
       className="grid gap-2 sm:flex sm:flex-wrap sm:items-end"
       data-testid="searches-save-form"
     >

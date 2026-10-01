@@ -3,11 +3,13 @@ import {
   clusterBreakdown,
   corpusStats,
   countBoard,
+  listCandidateTracks,
   listBoard,
   type BoardFilters,
 } from "../src/contexts/matching/index.ts";
+import { loadRates } from "../src/contexts/fx/index.ts";
 import { pipelineCounts } from "../src/contexts/pursuit/index.ts";
-import type { FilterState } from "./filter-state.ts";
+import { payFilterActive, resolvePayFilter, type FilterState } from "./filter-state.ts";
 
 /**
  * As leituras do cockpit, na ordem em que podem acontecer.
@@ -34,6 +36,21 @@ export async function loadCockpit(
     corpusStats(candidateId),
     pipelineCounts(candidateId),
   ]);
+  // A faixa salarial precisa da moeda/período da trilha principal e da mesma
+  // cotação que `/jobs` usa. Sem esta resolução o cockpit caía no acervo
+  // inteiro enquanto a lista aplicava a faixa da URL.
+  const payContext = state.pay !== undefined || state.sort === "comp"
+    ? await Promise.all([listCandidateTracks(candidateId), loadRates()])
+    : null;
+  // Mesma função que `/jobs` usa, com a mesma lista de trilhas e a mesma
+  // cotação: valida a moeda contra `rates` e escolhe a principal só entre
+  // trilhas ativas com alvo, para as duas telas concordarem.
+  const pay = resolvePayFilter(state, payContext?.[0] ?? [], payContext?.[1] ?? null);
+  const boardFilters: BoardFilters = {
+    ...filters,
+    pay,
+    rates: payContext?.[1],
+  };
   // A contagem do título vem de `countBoard`, com o conjunto COMPLETO de
   // filtros — não de `facets.total`.
   //
@@ -47,17 +64,24 @@ export async function loadCockpit(
   // pode ter duas respostas em duas telas.
   const [clusters, total] = await Promise.all([
     clusterBreakdown(candidateId, 45),
-    countBoard(candidateId, filters),
+    countBoard(candidateId, boardFilters),
   ]);
-  const top = await listBoard(candidateId, { ...filters, limit: 12 });
+  const top = await listBoard(candidateId, { ...boardFilters, limit: 12 });
+  // `sort=comp` sozinho normaliza o valor exibido, não filtra nada (ver
+  // `payFilterActive`, em `app/filter-state.ts`), então não entra na
+  // faceta — mesmo critério de `/jobs`.
+  const payFacet = payFilterActive(boardFilters.pay);
   const facets = await cachedBoardFacets(candidateId, {
     minFit: state.fit,
-    keepUnscored: filters.keepUnscored,
+    keepUnscored: boardFilters.keepUnscored,
     cluster: state.cluster,
-    query: filters.query,
+    query: boardFilters.query,
+    company: boardFilters.company,
     sourceKinds: state.sources,
     workMode: state.workMode,
-    groupRepeats: filters.groupRepeats,
+    pay: payFacet ? boardFilters.pay : undefined,
+    rates: payFacet ? boardFilters.rates : undefined,
+    groupRepeats: boardFilters.groupRepeats,
   });
   return { stats, counts, clusters, total, top, facets };
 }

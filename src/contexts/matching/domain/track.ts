@@ -264,28 +264,50 @@ export function suggestTrack(input: {
 
 /** A evidência que pode sustentar uma trilha — sempre a do próprio candidato. */
 export type OwnEvidence = {
-  /** Linhas de `evidence` do perfil da pessoa. */
-  lines: string[];
+  /**
+   * Linhas de `evidence` do perfil da pessoa. Termo que já está citado aqui é
+   * apoio dela mesma — o filtro de `growth` (regra 7) nunca se aplica a elas,
+   * nem quando o mesmo termo também aparece numa frase de `growth`.
+   */
+  ownLines: string[];
+  /**
+   * Linhas do CV corrente. Termo que só aparece em `growth` nunca vira apoio
+   * por aqui: o texto bruto do CV não é citação assistida (regra 7).
+   */
+  cvLines: string[];
   /** Nomes das skills que o candidato confirmou. */
   confirmedSkills: string[];
   /**
    * `evidence` herdada do perfil padrão (de outra pessoa) por derivação.
-   * Nesse caso as linhas não sustentam nada.
+   * Nesse caso `ownLines` não sustenta nada.
    */
   inherited: boolean;
+  /**
+   * `growth` do perfil da pessoa — lacuna honesta, nunca apoio (regra 7 do
+   * AGENTS.md), mesmo quando o termo aparece no texto bruto do CV. Vazio
+   * quando o perfil da pessoa é herdado: `growth` do padrão é lacuna de quem
+   * é dono dele, não da candidata que ainda não revisou o próprio perfil.
+   */
+  growth?: string[];
 };
 
 /**
  * Quais palavras-chave da trilha a evidência sustenta, e quais são lacuna.
  *
- * `growth` nunca sustenta: é lacuna assumida por definição (regra 7 do
- * AGENTS.md). O marcador nunca muda a nota.
+ * `growth` só bloqueia o CV: um termo citado em `evidence:` da própria pessoa
+ * é apoio dela mesma, mesmo que o mesmo termo apareça também numa frase de
+ * `growth` — bloquear `ownLines` apagaria uma evidência que a pessoa já
+ * revisou e confirmou por engano de outra seção do perfil (regra 7 do
+ * AGENTS.md é sobre inventar evidência pelo CV, não sobre descartar a que já
+ * existe). Skill confirmada sustenta sempre, pelo mesmo motivo.
  */
 export function evidenceSupport(
   target: TrackTarget,
   evidence: OwnEvidence,
 ): { supported: string[]; gaps: string[] } {
-  const lines = evidence.inherited ? [] : evidence.lines;
+  const ownLines = evidence.inherited ? [] : evidence.ownLines;
+  const cvLines = evidence.cvLines;
+  const growth = evidence.growth ?? [];
   const confirmed = new Set(evidence.confirmedSkills.map(termKey));
   const supported: string[] = [];
   const gaps: string[] = [];
@@ -294,7 +316,11 @@ export function evidenceSupport(
     const key = termKey(term);
     if (seen.has(key)) continue;
     seen.add(key);
-    const backed = confirmed.has(key) || lines.some((line) => matchesTerm(term, line));
+    const isGrowthOnly = growth.some((line) => matchesTerm(term, line));
+    const backed =
+      confirmed.has(key) ||
+      ownLines.some((line) => matchesTerm(term, line)) ||
+      (!isGrowthOnly && cvLines.some((line) => matchesTerm(term, line)));
     (backed ? supported : gaps).push(term);
   }
   return { supported, gaps };

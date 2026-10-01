@@ -232,6 +232,7 @@ export function MutationFeedbackForm({
   resultLinkLabel,
   dismissLabel,
   keepFields,
+  clearOnSuccess,
   children,
   ...props
 }: Omit<FormHTMLAttributes<HTMLFormElement>, "action"> & {
@@ -249,8 +250,17 @@ export function MutationFeedbackForm({
    * refused for one field would lose everything typed in the others.
    */
   keepFields?: boolean;
+  /**
+   * Com `keepFields`, limpa o formulário quando o resultado é sucesso (um
+   * campo sem `defaultValue`, como "novo termo", deve esvaziar para o
+   * próximo envio); a recusa continua preservando o que a pessoa digitou.
+   * Sem efeito se o campo tiver `defaultValue` — o reset nativo voltaria ao
+   * valor inicial, não ao recém-salvo.
+   */
+  clearOnSuccess?: boolean;
   children: ReactNode;
 }) {
+  const formRef = useRef<HTMLFormElement>(null);
   const [, formAction, pending] = useActionState(
     async (_previous: MutationFeedbackState, formData: FormData): Promise<MutationFeedbackState> => {
       try {
@@ -261,6 +271,7 @@ export function MutationFeedbackForm({
           message: specificMessage(result, resultMessages) ?? (kind === "success" ? successMessage : errorMessage),
           link: resultLink(result, resultLinkLabel),
         });
+        if (clearOnSuccess && kind === "success") formRef.current?.reset();
         return { status: kind };
       } catch (error) {
         // Next uses a thrown control-flow signal for redirect/notFound. Let it
@@ -285,6 +296,7 @@ export function MutationFeedbackForm({
   return (
     <form
       {...props}
+      ref={formRef}
       {...(keepFields ? { onSubmit: submitKeepingFields } : {})}
       action={formAction}
       aria-busy={pending || undefined}

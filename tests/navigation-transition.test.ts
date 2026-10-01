@@ -206,6 +206,14 @@ describe("App Router transition integration", () => {
     expect(layout).not.toMatch(/<NavigationTransition[^>]*\b(on\w+|children)=/);
   });
 
+  it("releases only the active generation at the login boundary", () => {
+    const boundary = readFileSync("app/login/transition-boundary.tsx", "utf8");
+    expect(boundary).toContain('"use client"');
+    expect(boundary).toContain("useRef<number | null | undefined>(undefined)");
+    expect(boundary).toContain('snapshot.phase === "idle" ? null : snapshot.generation');
+    expect(boundary).toContain("transitionStore.reset(generation.current)");
+  });
+
   it("IT-011 keeps theme and dynamic reduced-motion behavior in CSS without state restart", () => {
     const css = readFileSync("app/globals.css", "utf8");
     const presenter = readFileSync("app/navigation-transition.tsx", "utf8");

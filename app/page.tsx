@@ -1,3 +1,4 @@
+import { HeaderShortcut } from "./header-shortcut";
 import type { Route } from "next";
 import { Card } from "@/components/ui/card";
 import { TransitionLink } from "./transition-link";
@@ -73,6 +74,7 @@ export default async function Cockpit({
           {t("cockpit.leadTail")}
         </p>
       </header>
+      <HeaderShortcut label={t("nav.skipToHeader")} />
 
       {/* Sem nota ainda, a lista abaixo vem sem ordem de aderência (#279). */}
       {stats?.scored === false && (

@@ -46,6 +46,7 @@ export const en: Dictionary = {
     internal: "Internal improvements, no visible change.",
   },
   nav: {
+    skipToHeader: "Go to header",
     menu: "Menu",
     cockpit: "Cockpit",
     jobs: "Jobs",
@@ -556,6 +557,9 @@ export const en: Dictionary = {
     current: "current",
     chars: "characters",
     savedOn: "saved on",
+    noJobsForGap: "There are no scored jobs in this comparison. CV coverage cannot be assessed yet. Review your target tracks and ranking.",
+    queueNoUpdatesLabel: "No jobs recalculated",
+    queueNoUpdates: "Your search profile was kept: the new CV does not change scores until you edit the track. This result does not confirm CV coverage. Review your target tracks and ranking.",
     noRelevantGap:
       "No relevant gaps. The CV vocabulary covers what your target jobs ask for.",
     gapEmpty: "The gap analysis appears as soon as a CV is saved.",

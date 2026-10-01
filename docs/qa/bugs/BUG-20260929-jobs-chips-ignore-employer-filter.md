@@ -1,6 +1,6 @@
 # BUG-20260929-jobs-chips-ignore-employer-filter: chips de qualidade ignoram o filtro de empregador
 
-- **Status:** open
+- **Status:** verified
 - **Impact (user-side):** Trust-Damage
 - **Severity:** High · **Priority:** P1
 - **Persona Affected:** Andreus em triagem
@@ -36,12 +36,12 @@ concordar e não concordam.
 ## Fix
 
 <!-- filled when status moves to fixed -->
-- **Root cause:**
-- **Fix commit:**
-- **Regression test:**
+- **Root cause:** `boardFacets` recebia só o recorte da faceta e não o filtro de empresa, enquanto a lista usava o filtro completo.
+- **Fix commit:** `7bdacc7f7c323dfb6d3fa2f14b657b149487b8ac`
+- **Regression test:** `tests/jobs-board.test.ts` — IT-396-01 falhou antes e passa depois.
 
 ## Verification
 
 <!-- filled when status moves to verified -->
-- **Retested:**
-- **Result:**
+- **Retested:** 2026-09-29 · Andreus em triagem · `CH-filtered-board-numbers-agree` · sessão manual isolada e `/jobs?company=Aurora` após recarga.
+- **Result:** cockpit e lista mostram 1 vaga e o chip sem bloqueio mostra 1; o cenário está `pass`.

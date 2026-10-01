@@ -90,6 +90,28 @@
       ]
     },
     {
+      "id": "jobs-accessibility",
+      "modules": [
+        "tests/e2e/ui/jobs-accessibility.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/jobs",
+        "/login"
+      ]
+    },
+    {
+      "id": "slow-filters",
+      "modules": [
+        "tests/e2e/ui/slow-filters.mjs"
+      ],
+      "patterns": [],
+      "routes": [
+        "/jobs",
+        "/transition-test"
+      ]
+    },
+    {
       "id": "jobs-density",
       "modules": [
         "tests/e2e/ui/jobs-density.mjs"
@@ -158,6 +180,7 @@
         "/compare",
         "/jobs",
         "/jobs/[id]",
+        "/p/[slug]",
         "/pipeline",
         "/searches",
         "/searches/tracks/new"
@@ -576,6 +599,21 @@
         "/searches",
         "/searches/tracks/[id]",
         "/searches/tracks/new"
+      ]
+    },
+    {
+      "id": "stale-tab-login",
+      "modules": [
+        "tests/e2e/ui/stale-tab-login.mjs"
+      ],
+      "patterns": [
+        "app/login/transition-boundary.tsx"
+      ],
+      "routes": [
+        "/",
+        "/candidate",
+        "/jobs",
+        "/login"
       ]
     },
     {

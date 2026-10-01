@@ -510,6 +510,25 @@ export async function run(ctx) {
     JSON.stringify({ tooShort, techleadSaved, duplicate, techleadId }),
   );
 
+  const longTermInput = "LongTermInput".repeat(5);
+  const longTermFieldBefore = await page.locator('[data-testid="searches-term-input"]').inputValue();
+  const longTermNotice = await saveTermOnPage(longTermInput);
+  const longTermFieldAfterRefusal = await page.locator('[data-testid="searches-term-input"]').inputValue();
+  await page.reload({ waitUntil: "networkidle" });
+  check(
+    // Antes do defeito, o prefixo de 60 caracteres era gravado em silêncio;
+    // checar só o termo de 65 não distinguiria "nada criado" de "criado
+    // cortado". A #390 pede que nenhum dos dois exista.
+    "term-search E2E-021 termo acima de 60 caracteres chega à validação, mostra o aviso próprio, mantém o texto no campo para corrigir e não é criado (nem cortado) após recarregar",
+    longTermInput.length > 60
+      && longTermNotice.role === "alert"
+      && longTermNotice.text.includes(ptBR.searchFeedback.term_too_long)
+      && longTermFieldAfterRefusal === longTermInput
+      && (await page.evaluate(findTerm, longTermInput)) === null
+      && (await page.evaluate(findTerm, longTermInput.slice(0, 60))) === null,
+    JSON.stringify({ length: longTermInput.length, longTermNotice, longTermFieldBefore, longTermFieldAfterRefusal }),
+  );
+
   const pausedResult = await feedbackOf(() => page.locator(`[data-testid="term-toggle-${techleadId}"]`).click());
   const paused = {
     state: await eventually(termStateIs, [techleadId, "paused"]),
@@ -608,6 +627,9 @@ export async function run(ctx) {
   check(
     "term-search E2E-002 principal primeiro; a trilha aceita salva a palavra nova, a recusa mantém o digitado e Vagas avisa o recálculo com as notas anteriores",
     tracksBefore[0]?.primary === true
+      // O CV da fixture tem TypeScript e Python, mas não PHP: quem roda a
+      // suíte é o dono, cuja evidência própria (`profile.yaml`) cita PHP —
+      // o CV soma à evidência dele, não a substitui (#393, Major 1).
       && /php/i.test(evidence.supported)
       && /symfony/i.test(gapsAfterSave)
       && refusedEdit.role === "alert"
