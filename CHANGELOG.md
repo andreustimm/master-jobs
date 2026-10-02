@@ -9,6 +9,14 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.33.1] - 2026-10-02
+
+### Corrigido
+
+- `src/core/llm/registry.ts`: `keyPresent` e `portFor` leem a chave pela mesma função, aparada como `redactKey` já fazia. Uma variável só com espaços ou quebra de linha deixa de contar como chave presente: antes o banner dizia `ok` e o comando mostrava "(ausente)" e falhava com 401. O valor aparado é o que segue no cabeçalho.
+- `chooseModel` escolhe o padrão pela linha (id e provedor), não só pelo id: com o mesmo id em dois provedores, o padrão marcado em um não vira o outro. `jho llm list` marca "em uso" comparando também o provedor.
+- `jho jobs verify` e `staleCandidates` usam `DEFAULT_VERIFY_MIN_FIT` no lugar do 55 literal, e o texto de ajuda de `--min-fit` o cita; o teste de banco prova que a verificação global sem `minFit` conta só a vaga de nota 55 ou mais em `dueTotal` e `fetched`.
+
 ## [1.33.0] - 2026-10-02
 
 ### Adicionado

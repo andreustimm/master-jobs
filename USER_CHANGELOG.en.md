@@ -34,6 +34,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.33.1] - 2026-10-02T05:15:07.000Z
+
+### Fixed
+
+- `jho llm list` no longer marks two rows as "in use" when the same model exists under two providers, and a key made only of whitespace in `.env` now shows as missing instead of `ok`.
+
 ## [1.33.0] - 2026-10-02T03:45:46.000Z
 
 ### Added
