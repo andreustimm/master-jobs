@@ -172,6 +172,7 @@ function countsOfSync(result: SyncSourceResult): WorkOutcome {
           closed: result.closed,
           alive: null,
           inconclusive: null,
+          dueTotal: null,
         }
       : { ...UNKNOWN_COUNTS },
     completeness: result.completeness,
@@ -191,6 +192,8 @@ function countsOfVerify(result: VerifyResult): WorkOutcome {
       closed: result.gone,
       alive: result.alive,
       inconclusive: result.inconclusive,
+      // O total vencido vai para a linha: com `fetched`, é o "N de M" do detalhe (#447).
+      dueTotal: result.due,
     },
     // Cortada pelo `limit`, a verificação não cobriu a fonte inteira; a linha
     // diz isso em vez de parecer completa.

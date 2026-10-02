@@ -151,6 +151,8 @@ describe("IT-004 execução-filha gravada pelo sync", () => {
       closed: 1,
       alive: null,
       inconclusive: null,
+      // Total vencido é da verificação; captura grava nulo (#447).
+      dueTotal: null,
       completeness: "complete",
       configSnapshot: { sources: [expect.objectContaining({ id: "greenhouse:acme", kind: "greenhouse", revision: 1 })] },
     });
@@ -418,7 +420,7 @@ describe("IT-005 nova tentativa de todas e batimento", () => {
       async work() {
         // Outro processo dá a execução por morta enquanto ela trabalha.
         await db.update(sourceRunTable).set({ status: "interrupted" }).where(eq(sourceRunTable.id, pedido.runId));
-        return { ok: true, counts: { fetched: 1, inserted: 1, updated: 0, unchanged: 0, closed: 0, alive: null, inconclusive: null }, completeness: "complete" };
+        return { ok: true, counts: { fetched: 1, inserted: 1, updated: 0, unchanged: 0, closed: 0, alive: null, inconclusive: null, dueTotal: null }, completeness: "complete" };
       },
     };
     expect(await executeRun(pedido.runId, deps)).toEqual({ ok: false, code: "lost_lease" });
@@ -439,7 +441,7 @@ describe("IT-005 nova tentativa de todas e batimento", () => {
         const antes = (await sourceRun(pedido.runId))!.heartbeatAt;
         await new Promise((r) => setTimeout(r, 80));
         batimentos = [antes, (await sourceRun(pedido.runId))!.heartbeatAt];
-        return { ok: true, counts: { fetched: 0, inserted: 0, updated: 0, unchanged: 0, closed: 0, alive: null, inconclusive: null }, completeness: "complete" };
+        return { ok: true, counts: { fetched: 0, inserted: 0, updated: 0, unchanged: 0, closed: 0, alive: null, inconclusive: null, dueTotal: null }, completeness: "complete" };
       },
     };
     await executeRun(pedido.runId, deps);
@@ -473,7 +475,7 @@ describe("UT-008/IT-005 teto de filhas, órfãs e lease no pedido", () => {
         motivos.push((await db.select().from(sourceRunTable).where(eq(sourceRunTable.status, "queued"))).map((r) => r.errorCode));
         await new Promise((r) => setTimeout(r, 5));
         emVoo--;
-        return { ok: true, counts: { fetched: 0, inserted: 0, updated: 0, unchanged: 0, closed: 0, alive: null, inconclusive: null }, completeness: "complete" };
+        return { ok: true, counts: { fetched: 0, inserted: 0, updated: 0, unchanged: 0, closed: 0, alive: null, inconclusive: null, dueTotal: null }, completeness: "complete" };
       },
     });
     expect(pico).toBe(1);
@@ -521,7 +523,7 @@ describe("UT-008/IT-005 teto de filhas, órfãs e lease no pedido", () => {
 });
 
 describe("IT-005 execução de borda: sem linha, sem fonte, verificação global", () => {
-  const vazio = { fetched: 0, inserted: 0, updated: 0, unchanged: 0, closed: 0, alive: null, inconclusive: null };
+  const vazio = { fetched: 0, inserted: 0, updated: 0, unchanged: 0, closed: 0, alive: null, inconclusive: null, dueTotal: null };
   const deps = (extra: object = {}) => ({
     runs: store,
     now: () => new Date().toISOString(),

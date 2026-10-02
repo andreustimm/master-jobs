@@ -242,7 +242,13 @@ export async function checkAdminCatalog(browser, base, accounts, check) {
     check("E2E-003 verificação completa mostra a conferência completa, sem texto de captura",
       completeText.startsWith("conferência completa") && completeText.includes("da fonte")
         && !capturePhrase.test(completeText), completeText);
-    verifyRuns.push({ id: verifyRun, global: false, partial: false });
+    // #447: o total vencido é gravado, e a frase diz quantas de quantas.
+    const [completeRow] = await db.select().from(sourceRun).where(eq(sourceRun.id, verifyRun));
+    check("E2E-003 verificação completa grava o total vencido e mostra N de M",
+      completeRow?.dueTotal === 2 && completeRow?.fetched === 2 && completeText.includes("2 de 2 vagas")
+        && (await page.getByTestId("run-completeness").getAttribute("data-due-known")) === "true",
+      `${completeRow?.fetched}/${completeRow?.dueTotal} | ${completeText}`);
+    verifyRuns.push({ id: verifyRun, global: false, partial: false, count: "2 of 2" });
 
     // Reabre a vaga fechada para haver duas vagas vencidas e corta a conferência em uma.
     await db.update(job).set({ closedAt: null }).where(eq(job.sourceId, OK));
@@ -258,9 +264,36 @@ export async function checkAdminCatalog(browser, base, accounts, check) {
       cutRow?.completeness === "partial" && cutText.startsWith("conferência cortada pelo limite")
         && cutText.includes("da fonte") && !capturePhrase.test(cutText),
       `${cutRow?.completeness} | ${cutText}`);
+    check("E2E-003 verificação cortada pelo limite mostra N de M com o total gravado",
+      cutRow?.dueTotal === 2 && cutRow?.fetched === 1 && cutText.includes("1 de 2 vagas"),
+      `${cutRow?.fetched}/${cutRow?.dueTotal} | ${cutText}`);
     check("E2E-003 completude da verificação sobrevive a refresh e cabe em 375 px",
       (await completeness()) === cutText && (await fitsPhone(page)));
-    verifyRuns.push({ id: cutRun, global: false, partial: true });
+    verifyRuns.push({ id: cutRun, global: false, partial: true, count: "1 of 2" });
+
+    // Execução gravada antes da coluna `due_total` (#447): sem o total, a frase
+    // continua a de antes, sem número — desconhecido não vira "1 de 0".
+    const [legacy] = await db.insert(sourceRun).values({
+      scopeKind: "verify",
+      sourceId: OK,
+      idempotencyKey: `verify:${OK}@e2e-antiga`,
+      configSnapshot: { sources: [] },
+      status: "partial",
+      queuedAt: new Date().toISOString(),
+      finishedAt: new Date().toISOString(),
+      fetched: 1,
+      alive: 1,
+      closed: 0,
+      inconclusive: 0,
+      completeness: "partial",
+    }).returning({ id: sourceRun.id });
+    await page.goto(`${base}/admin/execucoes/${legacy.id}`, { waitUntil: "networkidle" });
+    const legacyText = await completeness();
+    check("E2E-003 execução antiga, sem total gravado, mantém a frase sem N de M",
+      legacyText === "conferência cortada pelo limite ou pelo orçamento de requisições: parte das vagas abertas da fonte com link público ficou sem checar"
+        && (await page.getByTestId("run-completeness").getAttribute("data-due-known")) === "false"
+        && (await fitsPhone(page)),
+      legacyText);
 
     // Verificação GLOBAL ("Atualizar status de todas"): sem fonte, vale o universo
     // das vagas elegíveis, e o texto não pode prometer "todas as vagas abertas".
@@ -283,15 +316,21 @@ export async function checkAdminCatalog(browser, base, accounts, check) {
         && globalCut.text.startsWith("conferência cortada pelo limite") && globalCut.text.includes("elegíveis")
         && !globalCut.text.includes("da fonte") && !capturePhrase.test(globalCut.text),
       `${globalCut.row?.completeness} | ${globalCut.text}`);
-    verifyRuns.push({ id: globalCut.id, global: true, partial: true });
+    check("E2E-003 verificação global cortada grava o total vencido e mostra N de M das elegíveis",
+      globalCut.row?.dueTotal === 2 && globalCut.row?.fetched === 1 && globalCut.text.includes("1 de 2 vagas elegíveis"),
+      `${globalCut.row?.fetched}/${globalCut.row?.dueTotal} | ${globalCut.text}`);
+    verifyRuns.push({ id: globalCut.id, global: true, partial: true, count: "1 of 2" });
     const globalFull = await runGlobal(50);
     check("E2E-003 verificação global completa fala das vagas elegíveis, sem texto de captura",
       globalFull.row?.completeness === "complete" && globalFull.text.startsWith("conferência completa")
         && globalFull.text.includes("elegíveis") && !globalFull.text.includes("da fonte") && !capturePhrase.test(globalFull.text),
       `${globalFull.row?.completeness} | ${globalFull.text}`);
+    check("E2E-003 verificação global completa mostra N de M das elegíveis",
+      globalFull.row?.dueTotal === 2 && globalFull.row?.fetched === 2 && globalFull.text.includes("2 de 2 vagas elegíveis"),
+      `${globalFull.row?.fetched}/${globalFull.row?.dueTotal} | ${globalFull.text}`);
     check("E2E-003 verificação global cabe em 375 px e a completude sobrevive a refresh",
       (await completeness()) === globalFull.text && (await fitsPhone(page)));
-    verifyRuns.push({ id: globalFull.id, global: true, partial: false });
+    verifyRuns.push({ id: globalFull.id, global: true, partial: false, count: "2 of 2" });
 
     await page.goto(`${base}/admin/execucoes/${captureRun}`, { waitUntil: "networkidle" });
     check("E2E-003 a captura segue com o texto da listagem da fonte",
@@ -328,10 +367,11 @@ export async function checkAdminCatalog(browser, base, accounts, check) {
       }
     }
     check("E2E-003 detalhes em inglês sem texto português fora do dado do usuário", leaks.length === 0, leaks.join(" | "));
-    check("E2E-003 verificação lida em inglês: plataforma e global, completa e cortada, cada uma com a sua frase",
+    check("E2E-003 verificação lida em inglês: plataforma e global, completa e cortada, cada uma com a sua frase e o N of M",
       verifyRuns.length === 4 && readings.every((r) =>
         r.shown.startsWith(r.partial ? "check cut by the limit" : "full check")
         && (r.global ? r.shown.includes("eligible") && !r.shown.includes("of the source") : r.shown.includes("of the source"))
+        && r.shown.includes(`${r.count} `)
         && !/absence|window|listing/i.test(r.shown)),
       readings.map((r) => r.shown).join(" | "));
   } finally {

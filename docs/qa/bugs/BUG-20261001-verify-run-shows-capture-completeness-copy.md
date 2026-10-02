@@ -58,9 +58,17 @@ pelo limite", sem falar de fechamento por ausência.
   ou mais, com link público)…"). `partial` é "cortada pelo limite ou pelo
   orçamento de requisições" (`checked < due` ou `budgetExhausted`). pt-BR e en.
   O que é gravado em `source_run.completeness` não muda; a captura mantém o
-  texto de antes. O "N de M" sugerido na issue não entrou: o total vencido
-  (`due`) não é gravado na execução e gravá-lo seria mudar o dado; fica na
-  issue #447.
+  texto de antes. O "N de M" sugerido na issue não entrou nesta correção: o
+  total vencido (`due`) não era gravado na execução e gravá-lo era mudar o
+  dado. Entrou depois, na #447 (commit `803f0b9b`, PR
+  `feat/verify-run-due-count`): coluna aditiva
+  `source_run.due_total` (migração 0033), gravada por `countsOfVerify` a partir
+  de `VerifyResult.due`; com ela, `completenessCopy` escolhe
+  `runs.verify{,All}{Complete,Partial}Count` ("…3 de 9 vagas abertas da fonte
+  com link público foram checadas"). Execução gravada antes da coluna fica com
+  `due_total` nulo e mantém a frase sem número. O piso da global passou a vir
+  de `DEFAULT_VERIFY_MIN_FIT` (`src/core/ingest/availability.ts`), interpolado
+  como `{minFit}` no dicionário, em vez do 55 literal duplicado.
 - **Regression test:** `tests/run-completeness.test.ts` (chaves por escopo, com
   `sourceId` preenchido e nulo; texto da verificação sem
   "ausência"/"janela"/"lista" e o global citando "55" e "elegíveis", nos dois
@@ -88,3 +96,12 @@ pelo limite", sem falar de fechamento por ausência.
   limit"), "eligible" na global e "of the source" na de plataforma, e que
   nenhum texto da interface vaza português. Não houve nova passada manual no
   navegador real com `lever:epoch-ai`.
+- **Retested (#447):** 2026-10-02, o mesmo `run-isolated.mjs --areas
+  admin-catalog`: PASS, 44/44. Além do acima, `source_run.due_total` gravado
+  (2) e a frase com "2 de 2" (completa) e "1 de 2" (cortada com `--limit` 1),
+  por plataforma e global ("1 de 2 vagas elegíveis"); em inglês "2 of 2" e
+  "1 of 2"; uma execução de verificação gravada sem o total mostra a frase sem
+  número (`data-due-known="false"`) e cabe em 375 px. Antes da mudança, os
+  testes novos reprovaram (7 falhas em `run-completeness`, `job-check-events`
+  e `source-run-due-total-upgrade`: coluna inexistente, função e chaves
+  ausentes). Releitura independente no navegador real continua pendente.

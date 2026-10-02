@@ -7,14 +7,15 @@ import { getTranslator } from "../../../i18n";
 import { MutationFeedbackForm } from "../../../mutation-feedback";
 import { TransitionLink } from "../../../transition-link";
 import { retryRunAction } from "../actions";
-import { completenessKey } from "../run-completeness";
+import { completenessCopy } from "../run-completeness";
 import { RunCounts, RunStatusBadge, reasonLabel, scopeLabel } from "../run-view";
 
 export const dynamic = "force-dynamic";
 
 /**
  * Uma execução: escopo, estado, contagens (desconhecido nunca vira zero),
- * completude, motivo e, na execução "todas", uma linha por fonte. Sobrevive a
+ * completude (na verificação, com o "N de M" quando o total vencido foi
+ * gravado), motivo e, na execução "todas", uma linha por fonte. Sobrevive a
  * refresh porque tudo vem da linha de `source_run`.
  */
 export default async function AdminRunPage({ params }: { params: Promise<{ id: string }> }) {
@@ -27,6 +28,7 @@ export default async function AdminRunPage({ params }: { params: Promise<{ id: s
   const children = run.scopeKind === "all" ? await sourceRunChildren(run.id) : [];
   const stamp = (value: string | null) => (value ? new Date(value).toLocaleString(locale) : "—");
   const reason = reasonLabel(run, t);
+  const completeness = completenessCopy(run);
 
   return (
     <main className="page-content-top" data-testid="route-admin-run">
@@ -62,8 +64,8 @@ export default async function AdminRunPage({ params }: { params: Promise<{ id: s
             </div>
             <div>
               <dt className="type-caption-sm text-muted-foreground">{t("runs.completeness")}</dt>
-              <dd className="type-body-md" data-testid="run-completeness">
-                {t(completenessKey(run.scopeKind, run.sourceId, run.completeness))}
+              <dd className="type-body-md" data-testid="run-completeness" data-due-known={run.dueTotal === null ? "false" : "true"}>
+                {t(completeness.key, completeness.values)}
               </dd>
             </div>
           </dl>
