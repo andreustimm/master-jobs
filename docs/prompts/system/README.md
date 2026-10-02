@@ -81,14 +81,16 @@ só enfileira o pedido de análise estruturada; quem chama o provedor é o
 ```
 Isto vai sair da sua máquina
   destino: anthropic (claude-sonnet-5)
-  chave:   sk-ant-…f4a2
+  chave:   sk-ant-… (108 caracteres) (de ANTHROPIC_API_KEY)
   envia:   o anúncio da vaga, ~7.400 caracteres
   NÃO envia: seu currículo, seu perfil, nem o funil
 ```
 
-Enter vazio é "não". A chave nunca aparece inteira, nem em erro — o próprio tipo
-`LlmError` redige antes de a mensagem existir, para que nenhum ponto de chamada
-possa esquecer.
+Enter vazio é "não". Da chave aparecem só o prefixo público do formato
+(`sk-ant-`, `sk-`, `nvapi-`; formato desconhecido vira `***`), o comprimento e
+o nome da variável de onde veio — nenhum caractere da parte secreta (`redactKey`,
+#441). Em erro, o próprio tipo `LlmError` redige antes de a mensagem existir,
+para que nenhum ponto de chamada possa esquecer.
 
 ### Trocar de provedor não toca em código
 

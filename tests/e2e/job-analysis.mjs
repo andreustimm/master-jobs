@@ -9,8 +9,9 @@
 // chave de provedor de verdade, e nenhum teste aponta para provedor real.
 import { eq } from "drizzle-orm";
 import { getDb } from "../../src/core/db/client.ts";
-import { job, source } from "../../src/core/db/schema.ts";
-import { processNextAnalysis } from "../../src/core/llm/job-analysis.ts";
+import { job, jobAnalysis, source } from "../../src/core/db/schema.ts";
+import { processNextAnalysis, requestJobAnalysis } from "../../src/core/llm/job-analysis.ts";
+import { LlmError } from "../../src/core/llm/port.ts";
 
 const TITLE = "Arquiteta de Soluções E2E Análise";
 const DESCRIPTION = "Contrato PJ com empresa de São Paulo. Trabalho 100% remoto.";
@@ -36,6 +37,15 @@ const fakePort = {
       outputTokens: 300,
       model: "fake-e2e",
     };
+  },
+};
+
+/** O provedor recusa como recusa um modelo desligado: HTTP 410 (#438). */
+const retiredPort = {
+  name: "fake",
+  model: "moonshotai/kimi-k2-instruct",
+  async complete() {
+    throw new LlmError("openai", 410, "model reached its end of life");
   },
 };
 
@@ -119,6 +129,39 @@ export async function checkJobAnalysis(browser, base, accounts, check) {
     await page.reload({ waitUntil: "networkidle" });
     check("E2E-006 texto alterado mostra o aviso de análise desatualizada",
       (await page.getByTestId("job-analysis-outdated").count()) === 1);
+
+    // #438: tentativa antiga, gravada só como `provider_error`, e uma nova
+    // recusada com 410 (modelo desligado). O admin lê a causa de cada uma.
+    const [legacy] = await db
+      .insert(jobAnalysis)
+      .values({
+        jobId, status: "failed", inputHash: "e2e-hash-antigo", promptVersion: "1", schemaVersion: "1",
+        providerSlug: "nvidia", modelId: "moonshotai/kimi-k2-instruct", errorCode: "provider_error",
+        finishedAt: new Date().toISOString(),
+      })
+      .returning({ id: jobAnalysis.id });
+    await requestJobAnalysis({ jobId, requestedBy: null, now: new Date().toISOString() });
+    const gone = await processNextAnalysis(
+      { port: retiredPort, providerSlug: "nvidia", modelId: "moonshotai/kimi-k2-instruct", inputCostPerMTok: 0, outputCostPerMTok: 0, maxOutputTokens: 1000 },
+      { now: () => new Date().toISOString() },
+    );
+    check("E2E-006 recusa 410 grava código e status", gone?.status === "failed" && gone?.providerStatus === 410, JSON.stringify(gone));
+    await page.reload({ waitUntil: "networkidle" });
+    const cause = page.getByTestId(`job-analysis-cause-${gone.id}`);
+    check("E2E-006 admin vê que o modelo foi desligado (HTTP 410), não só provider_error",
+      (await cause.getAttribute("data-cause")) === "model_unavailable"
+        && (await cause.innerText()).includes("Modelo desligado")
+        && (await page.getByTestId(`job-analysis-attempt-${gone.id}`).innerText()).includes("HTTP 410"));
+    // `textContent`: o botão é `uppercase`, e `innerText` devolve o texto em caixa alta.
+    const retry = page.getByTestId("job-analysis-retry");
+    const retryBox = await retry.boundingBox();
+    check("E2E-006 o botão não convida a repetir às cegas o que vai falhar",
+      (await retry.textContent()).includes("trocar o modelo"));
+    check("E2E-006 o botão de nova tentativa cabe em 375 px", retryBox !== null && retryBox.x + retryBox.width <= 375,
+      JSON.stringify(retryBox));
+    check("E2E-006 tentativa antiga, sem status, continua legível",
+      (await page.getByTestId(`job-analysis-cause-${legacy.id}`).getAttribute("data-cause")) === "unknown");
+    check("E2E-006 painel com a causa cabe em 375 px", await fitsPhone(page));
   } finally {
     await admin.context.close();
     // A vaga é desta verificação; as seguintes contam vagas do acervo. A

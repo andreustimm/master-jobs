@@ -87,12 +87,12 @@ describe("chooseModel", () => {
     // exportada na frente.
     await seedProviders();
     await db.update(llmModel).set({ isDefault: false });
-    process.env.NVIDIA_API_KEY = "nvapi-teste";
+    process.env.OPENCODE_ZEN_API_KEY = "oc-teste";
 
     const escolhido = await chooseModel();
 
     expect(escolhido).not.toBeNull();
-    expect(escolhido!.providerSlug).toBe("nvidia");
+    expect(escolhido!.providerSlug).toBe("opencode-zen");
     expect(escolhido!.keyPresent).toBe(true);
   });
 
@@ -100,7 +100,7 @@ describe("chooseModel", () => {
     // Trocar de provedor costuma ser apagar uma variável do `.env`. O padrão
     // antigo continua marcado no banco, e insistir nele é garantir um 401.
     await seedProviders();
-    expect(await setDefaultModel("claude-opus-5")).toBe(true);
+    expect(await setDefaultModel("claude-opus-5")).toBe("ok");
     process.env.OPENROUTER_API_KEY = "sk-or-teste";
 
     const escolhido = await chooseModel();
@@ -139,10 +139,10 @@ describe("chooseModel", () => {
 describe("portFor", () => {
   it("fala o protocolo da OpenAI com um serviço compatível, na base URL dele", async () => {
     // É o que dispensa um adapter por serviço: o formato de fio é o mesmo, só o
-    // host muda. Sem a base URL, a chave da NVIDIA seria enviada para a OpenAI.
+    // host muda. Sem a base URL, a chave do OpenRouter seria enviada para a OpenAI.
     await seedProviders();
-    process.env.NVIDIA_API_KEY = "nvapi-teste";
-    const modelo = (await listModels()).find((m) => m.providerSlug === "nvidia")!;
+    process.env.OPENROUTER_API_KEY = "sk-or-teste";
+    const modelo = (await listModels()).find((m) => m.providerSlug === "openrouter")!;
 
     const porta = portFor(modelo);
 
@@ -155,9 +155,9 @@ describe("portFor", () => {
     // Provedor adicionado à mão pode não ter base URL. O padrão da OpenAI é o
     // comportamento certo aí, e não um erro de cadastro.
     await seedProviders();
-    process.env.NVIDIA_API_KEY = "nvapi-teste";
-    await db.update(llmProvider).set({ baseUrl: null }).where(eq(llmProvider.slug, "nvidia"));
-    const modelo = (await listModels()).find((m) => m.providerSlug === "nvidia")!;
+    process.env.OPENROUTER_API_KEY = "sk-or-teste";
+    await db.update(llmProvider).set({ baseUrl: null }).where(eq(llmProvider.slug, "openrouter"));
+    const modelo = (await listModels()).find((m) => m.providerSlug === "openrouter")!;
 
     expect(modelo.baseUrl).toBeNull();
     expect(portFor(modelo).name).toBe("openai");
@@ -179,7 +179,7 @@ describe("setDefaultModel", () => {
     await seedProviders();
     await db.update(llmModel).set({ enabled: false }).where(eq(llmModel.modelId, "gpt-5"));
 
-    expect(await setDefaultModel("gpt-5")).toBe(true);
+    expect(await setDefaultModel("gpt-5")).toBe("ok");
 
     const [linha] = await db.select().from(llmModel).where(eq(llmModel.modelId, "gpt-5"));
     expect(linha!.enabled).toBe(true);

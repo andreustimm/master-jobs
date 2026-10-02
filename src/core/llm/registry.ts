@@ -20,6 +20,7 @@ import {
   type EffortLevel,
   type LlmKind,
 } from "../db/schema.ts";
+import { RETIRED_MODELS, retirementOf, type RetiredModel, type Retirement } from "./model-retirement.ts";
 import { anthropicProvider, openaiProvider } from "./providers.ts";
 import { ENV_KEYS, type LlmPort } from "./port.ts";
 
@@ -38,6 +39,8 @@ export type ModelChoice = {
   outputCostPerMTok: number | null;
   /** False when the env var this provider points at is not set. */
   keyPresent: boolean;
+  /** Desligado pelo provedor (#438): listado com a marca, nunca escolhido. */
+  retired: Retirement | null;
 };
 
 export function isEffort(value: string): value is EffortLevel {
@@ -61,8 +64,12 @@ export function isKind(value: string): value is LlmKind {
  *
  * Idempotent, and it never overwrites what the user edited — the whole point of
  * the registry is that their curation survives.
+ *
+ * Modelo que o provedor desligou não é cadastrado; `retired` devolve os de
+ * provedores semeados, para a CLI dizer o que ficou de fora e por quê (#438).
+ * Linha antiga desses modelos não é apagada: a leitura a marca (`retired`).
  */
-export async function seedProviders(): Promise<{ providers: number; models: number }> {
+export async function seedProviders(): Promise<{ providers: number; models: number; retired: RetiredModel[] }> {
   const db = getDb();
   const seed: Array<{
     slug: string;
@@ -122,11 +129,11 @@ export async function seedProviders(): Promise<{ providers: number; models: numb
       apiKeyEnv: "NVIDIA_API_KEY",
       baseUrl: "https://integrate.api.nvidia.com",
       notes: "Free tier do NVIDIA Developer Program, ~40 req/min. Chave começa com nvapi-.",
-      models: [
-        { modelId: "meta/llama-3.1-405b-instruct", label: "Llama 3.1 405B", reasoning: false, effort: null, out: 4096, inCost: 0, outCost: 0 },
-        { modelId: "qwen/qwen3-coder-480b-a35b-instruct", label: "Qwen3 Coder 480B", reasoning: false, effort: null, out: 4096, inCost: 0, outCost: 0 },
-        { modelId: "moonshotai/kimi-k2-instruct", label: "Kimi K2", reasoning: false, effort: null, out: 4096, inCost: 0, outCost: 0 },
-      ],
+      // Os três modelos que vinham aqui (Llama 3.1 405B, Qwen3 Coder 480B,
+      // Kimi K2) foram desligados pelo provedor: estão em `RETIRED_MODELS`,
+      // com status e data (#438). Escolher o substituto é de quem paga a
+      // chave: `jho llm add-model nvidia <id>`.
+      models: [],
     },
     {
       slug: "opencode-zen",
@@ -204,7 +211,8 @@ export async function seedProviders(): Promise<{ providers: number; models: numb
     }
   }
 
-  return { providers, models };
+  const seeded = new Set(seed.map((p) => p.slug));
+  return { providers, models, retired: RETIRED_MODELS.filter((m) => seeded.has(m.providerSlug)) };
 }
 
 export async function listModels(onlyEnabled = false): Promise<ModelChoice[]> {
@@ -246,9 +254,12 @@ export async function listModels(onlyEnabled = false): Promise<ModelChoice[]> {
       inputCostPerMTok: r.inputCostPerMTok,
       outputCostPerMTok: r.outputCostPerMTok,
       keyPresent: Boolean(process.env[r.apiKeyEnv]),
+      retired: retirementOf(r.providerSlug, r.modelId),
     }))
     .sort((a, b) => Number(b.keyPresent) - Number(a.keyPresent) || a.modelLabel.localeCompare(b.modelLabel));
 }
+
+const matches = (m: ModelChoice, explicit: string) => m.modelId === explicit || m.modelLabel === explicit;
 
 /**
  * The model a command should use.
@@ -257,13 +268,17 @@ export async function listModels(onlyEnabled = false): Promise<ModelChoice[]> {
  * model whose key is actually present. A model whose key is missing is never
  * chosen silently — that would fail at the API with an opaque 401 instead of
  * here with an explanation.
+ *
+ * Modelo desligado pelo provedor nunca é escolhido, nem pedido pelo nome nem
+ * marcado como padrão num cadastro antigo (#438): ele falharia sempre, como
+ * `provider_error`, depois de a pessoa esperar. `explainNoModel` diz por quê.
  */
 export async function chooseModel(explicit?: string): Promise<ModelChoice | null> {
-  const models = await listModels(true);
+  const models = (await listModels(true)).filter((m) => m.retired === null);
   if (models.length === 0) return null;
 
   if (explicit) {
-    const found = models.find((m) => m.modelId === explicit || m.modelLabel === explicit);
+    const found = models.find((m) => matches(m, explicit));
     return found ?? null;
   }
 
@@ -280,6 +295,31 @@ export async function chooseModel(explicit?: string): Promise<ModelChoice | null
   return models.find((m) => m.keyPresent) ?? null;
 }
 
+export type NoModelReason =
+  /** `--model` pediu um modelo que o provedor desligou. */
+  | { kind: "retired"; model: ModelChoice; retirement: Retirement }
+  /** `--model` pediu um modelo que não está cadastrado (ou está desabilitado). */
+  | { kind: "unknown_model"; explicit: string }
+  /** Há chave, mas só para modelos desligados: o caso do cadastro NIM antigo. */
+  | { kind: "only_retired"; retired: Array<{ model: ModelChoice; retirement: Retirement }> }
+  /** Nenhum modelo habilitado tem a chave no ambiente. */
+  | { kind: "no_key" };
+
+/**
+ * Por que `chooseModel` não devolveu nada — para a CLI dizer "nenhum modelo
+ * disponível: escolha um" com o motivo, em vez de deixar a pessoa descobrir
+ * por um `provider_error` (#438).
+ */
+export async function explainNoModel(explicit?: string): Promise<NoModelReason> {
+  const models = await listModels(true);
+  if (explicit) {
+    const asked = models.find((m) => matches(m, explicit));
+    return asked?.retired ? { kind: "retired", model: asked, retirement: asked.retired } : { kind: "unknown_model", explicit };
+  }
+  const retired = models.flatMap((model) => (model.retired && model.keyPresent ? [{ model, retirement: model.retired }] : []));
+  return retired.length > 0 ? { kind: "only_retired", retired } : { kind: "no_key" };
+}
+
 /** Builds the port for a chosen model. Throws when the key is absent. */
 export function portFor(choice: ModelChoice): LlmPort {
   const key = process.env[choice.apiKeyEnv];
@@ -294,17 +334,32 @@ export function portFor(choice: ModelChoice): LlmPort {
     : openaiProvider(key, choice.modelId, choice.baseUrl ?? undefined);
 }
 
-/** Exactly one default, enforced on write rather than hoped for on read. */
-export async function setDefaultModel(modelId: string): Promise<boolean> {
+/**
+ * Exactly one default, enforced on write rather than hoped for on read.
+ *
+ * Recusa (`retired`) tornar padrão um modelo que o provedor desligou: o
+ * padrão seria inalcançável, e o atual fica como está (#438).
+ *
+ * O mesmo id pode existir em dois provedores — desligado num, vivo noutro.
+ * Sem `providerSlug`, id que casa com mais de uma linha é `ambiguous`: escolher
+ * uma ao acaso recusaria o vivo ou marcaria a linha errada.
+ */
+export async function setDefaultModel(
+  modelId: string,
+  providerSlug?: string,
+): Promise<"ok" | "not_found" | "retired" | "ambiguous"> {
   const db = getDb();
-  const [target] = await db
-    .select({ id: llmModel.id })
+  const rows = await db
+    .select({ id: llmModel.id, providerSlug: llmProvider.slug })
     .from(llmModel)
-    .where(eq(llmModel.modelId, modelId))
-    .limit(1);
-  if (!target) return false;
+    .innerJoin(llmProvider, eq(llmProvider.id, llmModel.providerId))
+    .where(providerSlug ? and(eq(llmModel.modelId, modelId), eq(llmProvider.slug, providerSlug)) : eq(llmModel.modelId, modelId));
+  const [target] = rows;
+  if (!target) return "not_found";
+  if (rows.length > 1) return "ambiguous";
+  if (retirementOf(target.providerSlug, modelId)) return "retired";
 
   await db.update(llmModel).set({ isDefault: false });
   await db.update(llmModel).set({ isDefault: true, enabled: true }).where(eq(llmModel.id, target.id));
-  return true;
+  return "ok";
 }

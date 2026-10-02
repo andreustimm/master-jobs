@@ -1,0 +1,1 @@
+ALTER TABLE "production"."job_analysis" ADD COLUMN "provider_status" integer;

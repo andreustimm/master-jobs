@@ -56,6 +56,25 @@ async function vaga(): Promise<number> {
   return linha!.id;
 }
 
+/** Mais uma vaga na mesma fonte, com texto próprio (hash diferente). */
+async function outraVaga(externalId: string): Promise<number> {
+  const [linha] = await banco()
+    .insert(job)
+    .values({
+      sourceId: "manual:teste",
+      companyName: "Acme",
+      externalId,
+      title: `Staff Engineer ${externalId}`,
+      url: `https://exemplo.test/${externalId}`,
+      descriptionText: `${DESCRICAO} ${externalId}`,
+      fingerprint: `fp-${externalId}`,
+      contentHash: `ch-${externalId}`,
+      raw: {},
+    })
+    .returning({ id: job.id });
+  return linha!.id;
+}
+
 async function cadastrarModelo(): Promise<void> {
   await rodar("llm", "add-provider", "teste", "--label", "Provedor de Teste", "--key-env", VAR_CHAVE, "--base-url", "https://93.184.216.34");
   await rodar("llm", "add-model", "teste", "modelo-de-teste", "--label", "Modelo de Teste", "--in-cost", "3", "--out-cost", "15");
@@ -118,6 +137,83 @@ describe("jho analysis run", () => {
     expect(linhas).toEqual([{ status: "queued" }]);
   });
 
+  it("só modelo desligado com chave: erro claro, sem reivindicar nem chamar (#438)", async () => {
+    const id = await vaga();
+    await rodar("analysis", "queue", String(id));
+    await rodar("llm", "add-provider", "nvidia", "--label", "NVIDIA NIM", "--key-env", VAR_CHAVE, "--base-url", "https://93.184.216.34");
+    await rodar("llm", "add-model", "nvidia", "moonshotai/kimi-k2-instruct", "--label", "Kimi K2");
+    process.env[VAR_CHAVE] = CHAVE;
+    const chamadas: string[] = [];
+    vi.stubGlobal("fetch", provedor(chamadas));
+
+    const r = await rodar("analysis", "run", "--yes");
+
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("Nenhum modelo disponível: escolha um");
+    expect(r.out).toContain("desligado pelo provedor (HTTP 410, fim de vida em 2026-05-12)");
+    expect(r.out).not.toContain("provider_error");
+    expect(chamadas).toEqual([]);
+    const linhas = await banco().select({ status: jobAnalysis.status }).from(jobAnalysis);
+    expect(linhas).toEqual([{ status: "queued" }]);
+  });
+
+  it("recusa do provedor imprime o código e o status HTTP, sem a mensagem dele (#438)", async () => {
+    const id = await vaga();
+    await rodar("analysis", "queue", String(id));
+    await cadastrarModelo();
+    process.env[VAR_CHAVE] = CHAVE;
+    vi.stubGlobal("fetch", (async () =>
+      new Response(JSON.stringify({ error: { message: "Authorization failed MENSAGEM-DO-PROVEDOR" } }), {
+        status: 403,
+        headers: { "content-type": "application/json" },
+      })) as unknown as typeof fetch);
+
+    const r = await rodar("analysis", "run", "--yes");
+
+    expect(r.out).toContain('"status":"failed","errorCode":"provider_error","providerStatus":403');
+    expect(r.out).not.toContain("MENSAGEM-DO-PROVEDOR");
+    expect(r.out).not.toContain(CHAVE);
+  });
+
+  it.each([
+    ["410 (modelo desligado)", 410],
+    ["403 (chave sem permissão)", 403],
+  ])("recusa %s para na primeira vaga, sem gastar tentativa das outras", async (_caso, status) => {
+    const ids = [await vaga(), await outraVaga("v2"), await outraVaga("v3")];
+    for (const id of ids) await rodar("analysis", "queue", String(id));
+    await cadastrarModelo();
+    process.env[VAR_CHAVE] = CHAVE;
+    const chamadas: string[] = [];
+    vi.stubGlobal("fetch", (async (input: string | URL) => {
+      chamadas.push(String(input));
+      return new Response("", { status });
+    }) as unknown as typeof fetch);
+
+    const r = await rodar("analysis", "run", "--yes", "--max", "5");
+
+    expect(chamadas).toHaveLength(1);
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("Parado na primeira recusa que se repetiria");
+    const linhas = await banco().select({ status: jobAnalysis.status }).from(jobAnalysis).orderBy(jobAnalysis.id);
+    expect(linhas.map((l) => l.status)).toEqual(["failed", "queued", "queued"]);
+  });
+
+  it("provedor instável (503) não para a fila: a próxima pode passar", async () => {
+    for (const id of [await vaga(), await outraVaga("v2")]) await rodar("analysis", "queue", String(id));
+    await cadastrarModelo();
+    process.env[VAR_CHAVE] = CHAVE;
+    const chamadas: string[] = [];
+    vi.stubGlobal("fetch", (async (input: string | URL) => {
+      chamadas.push(String(input));
+      return new Response("", { status: 503 });
+    }) as unknown as typeof fetch);
+
+    const r = await rodar("analysis", "run", "--yes");
+
+    expect(chamadas).toHaveLength(2);
+    expect(r.code).toBeUndefined();
+  });
+
   it("fila vazia não pergunta nem chama nada", async () => {
     await cadastrarModelo();
     process.env[VAR_CHAVE] = CHAVE;
@@ -143,6 +239,11 @@ describe("jho analysis run", () => {
     expect(r.out).toContain("Isto vai sair da sua máquina");
     expect(r.out).toContain("NÃO envia: currículo, perfil, funil nem piso salarial");
     expect(r.out).not.toContain(CHAVE);
+    // Nem começo nem fim da parte secreta: só o prefixo do formato, o
+    // comprimento e o NOME da variável (#441, regra 16).
+    expect(r.out).toContain(`chave:   sk-… (${CHAVE.length} caracteres) (de ${VAR_CHAVE})`);
+    expect(r.out).not.toContain("cdef");
+    expect(r.out).not.toContain("sk-test");
     expect(r.out).toContain("Cancelado");
     expect(chamadas).toEqual([]);
   });

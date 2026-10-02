@@ -1500,6 +1500,13 @@ export const jobAnalysis = production.table(
     modelId: text("model_id"),
     result: json("result"),
     errorCode: text("error_code"),
+    /**
+     * Status HTTP com que o provedor recusou (#438): separa modelo desligado
+     * (404/410) de chave sem permissão (401/403) e de provedor instável (5xx).
+     * Só o número — nunca o corpo nem a mensagem. Nulo em sucesso, em erro sem
+     * resposta HTTP e nas tentativas gravadas antes desta coluna.
+     */
+    providerStatus: integer("provider_status"),
     inputTokens: integer("input_tokens"),
     outputTokens: integer("output_tokens"),
     costEstimate: doublePrecision("cost_estimate"),

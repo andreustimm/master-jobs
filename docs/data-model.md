@@ -1265,6 +1265,7 @@ o resultado. Nada aqui escreve em `application`, `job_score` nem `candidate`.
 | `provider_slug`, `model_id` | nunca a chave (G41) |
 | `result` | a estrutura depois de `bindEvidence()`: campo cujo trecho não está no texto vira desconhecido. O corpo da resposta do provedor nunca é gravado |
 | `error_code` | só código (`malformed_output`, `input_changed`, `quota`, `provider_error`, `network`, `lease_expired`), nunca mensagem |
+| `provider_status` | status HTTP da recusa do provedor (#438, migração `0032`, aditiva), só o número de 100 a 599. Nulo em sucesso, em erro sem resposta HTTP e nas tentativas anteriores à coluna. Com `error_code`, decide a causa que o admin lê (`failureCause`): 404/410 modelo desligado, 401/403 chave sem permissão, 5xx/408/`network` provedor instável, outro 4xx pedido recusado, `provider_error` sem status "sem detalhe" |
 | `input_tokens`, `output_tokens`, `cost_estimate` | só admin vê |
 | `claimed_at`, `heartbeat_at`, `finished_at` | lease de 10 min (`ANALYSIS_LEASE_MS`); `running` além dele vira `interrupted` na leitura seguinte e sai do índice de idempotência |
 
