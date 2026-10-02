@@ -181,6 +181,11 @@ describe("jho analysis run", () => {
     expect(r.out).toContain("Isto vai sair da sua máquina");
     expect(r.out).toContain("NÃO envia: currículo, perfil, funil nem piso salarial");
     expect(r.out).not.toContain(CHAVE);
+    // Nem começo nem fim da parte secreta: só o prefixo do formato, o
+    // comprimento e o NOME da variável (#441, regra 16).
+    expect(r.out).toContain(`chave:   sk-… (${CHAVE.length} caracteres) (de ${VAR_CHAVE})`);
+    expect(r.out).not.toContain("cdef");
+    expect(r.out).not.toContain("sk-test");
     expect(r.out).toContain("Cancelado");
     expect(chamadas).toEqual([]);
   });
