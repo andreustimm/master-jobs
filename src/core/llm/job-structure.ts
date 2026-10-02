@@ -259,6 +259,39 @@ export function decideAnalysisRequest(attempts: readonly AttemptRow[], now: stri
   return { kind: "create", retryOf: latest.id };
 }
 
+/* --------------------------- causa da falha (#438) -------------------------- */
+
+/**
+ * Por que o provedor falhou, no que a pessoa pode fazer a respeito:
+ *
+ * - `model_unavailable` (404/410): o modelo foi desligado ou não existe —
+ *   repetir com ele falha sempre; troca-se o modelo;
+ * - `unauthorized` (401/403): a chave não tem permissão — repetir não resolve;
+ *   autoriza-se a chave ou troca-se o modelo;
+ * - `unstable` (5xx, 408 ou sem resposta): costuma passar; tentar mais tarde;
+ * - `rejected`: outro 4xx, o pedido foi recusado;
+ * - `unknown`: `provider_error` sem status, das tentativas gravadas antes de o
+ *   status ser guardado. Legível, sem inventar a causa.
+ */
+export const FAILURE_CAUSES = ["model_unavailable", "unauthorized", "unstable", "rejected", "unknown"] as const;
+export type FailureCause = (typeof FAILURE_CAUSES)[number];
+
+/** O status só vale se for um código HTTP inteiro; qualquer outro número vira nulo. */
+export function httpStatusOf(status: number): number | null {
+  return Number.isInteger(status) && status >= 100 && status <= 599 ? status : null;
+}
+
+/** Causa de uma falha gravada; nulo quando a falha não é do provedor (cota tem estado próprio). */
+export function failureCause(errorCode: string | null, providerStatus: number | null): FailureCause | null {
+  if (errorCode === "network") return "unstable";
+  if (errorCode !== "provider_error") return null;
+  if (providerStatus === null) return "unknown";
+  if (providerStatus === 404 || providerStatus === 410) return "model_unavailable";
+  if (providerStatus === 401 || providerStatus === 403) return "unauthorized";
+  if (providerStatus >= 500 || providerStatus === 408) return "unstable";
+  return "rejected";
+}
+
 /** Admin tenta de novo só o que terminou sem sucesso completo. */
 export function canRetry(status: AnalysisStatus): boolean {
   return RETRYABLE_ANALYSIS.includes(status);

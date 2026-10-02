@@ -22,9 +22,12 @@ import {
   canRetry,
   decideAnalysisRequest,
   estimateCost,
+  failureCause,
+  httpStatusOf,
   interpretOutput,
   structureInputHash,
   type AnalysisStatus,
+  type FailureCause,
   type JobStructure,
   type JobStructureSource,
 } from "./job-structure.ts";
@@ -222,6 +225,8 @@ export type AnalysisFinish =
   | {
       status: "failed" | "paused_quota";
       errorCode: string;
+      /** Status HTTP da recusa do provedor (#438); só o número. */
+      providerStatus?: number | null;
       providerSlug: string | null;
       modelId: string | null;
       inputTokens?: number | null;
@@ -245,6 +250,7 @@ export async function finishJobAnalysis(
       status: finish.status,
       result: finish.status === "succeeded" || finish.status === "partial" ? finish.result : null,
       errorCode: finish.status === "failed" || finish.status === "paused_quota" ? finish.errorCode : null,
+      providerStatus: finish.status === "failed" || finish.status === "paused_quota" ? (finish.providerStatus ?? null) : null,
       providerSlug: finish.providerSlug,
       modelId: finish.modelId,
       inputTokens: finish.inputTokens ?? null,
@@ -273,12 +279,15 @@ export type ProcessorModel = {
  * Texto da vaga diferente do pedido: falha com `input_changed` SEM chamar o
  * provedor — analisar outro texto sob o hash antigo mentiria na tela, e a
  * chamada seria paga à toa. 429 do provedor é cota: `paused_quota`, que admite
- * nova tentativa. Nenhum corpo de resposta ou mensagem do provedor é gravado.
+ * nova tentativa. Nenhum corpo de resposta ou mensagem do provedor é gravado;
+ * do erro do provedor fica o código e o status HTTP (#438), que é o que separa
+ * modelo desligado de chave sem permissão e de provedor instável — e volta
+ * para quem rodou a CLI, que assim não precisa abrir a tela para saber.
  */
 export async function processNextAnalysis(
   model: ProcessorModel,
   opts: { now: () => string; root?: string },
-): Promise<{ id: number; status: AnalysisStatus } | null> {
+): Promise<ProcessedAnalysis | null> {
   // Antes de reivindicar: prompt ausente é defeito de instalação, e falhar
   // aqui deixa a fila intacta em vez de gastar a tentativa de alguém.
   const system = await loadSystemPrompt("job-structure", opts.root);
@@ -325,9 +334,16 @@ export async function processNextAnalysis(
   } catch (error) {
     const quota = error instanceof LlmError && error.status === 429;
     const code = quota ? "quota" : error instanceof LlmError ? "provider_error" : "network";
-    return settle({ status: quota ? "paused_quota" : "failed", errorCode: code, ...meta });
+    // Só o número: a mensagem do provedor pode ecoar a chave ou o anúncio.
+    const providerStatus = error instanceof LlmError ? httpStatusOf(error.status) : null;
+    const settled = await settle({ status: quota ? "paused_quota" : "failed", errorCode: code, providerStatus, ...meta });
+    return settled.status === "interrupted" ? settled : { ...settled, errorCode: code, providerStatus };
   }
 }
+
+export type ProcessedAnalysis =
+  | { id: number; status: AnalysisStatus }
+  | { id: number; status: "failed" | "paused_quota"; errorCode: string; providerStatus: number | null };
 
 /* --------------------------------- leitura --------------------------------- */
 
@@ -346,6 +362,10 @@ export type AnalysisView = {
 export type AdminAnalysisView = AnalysisView & {
   retryOf: number | null;
   errorCode: string | null;
+  /** Status HTTP da recusa do provedor; nulo nas tentativas anteriores a #438. */
+  providerStatus: number | null;
+  /** O que a falha significa para quem vai decidir tentar de novo. */
+  cause: FailureCause | null;
   providerSlug: string | null;
   modelId: string | null;
   inputTokens: number | null;
@@ -390,6 +410,8 @@ export async function jobAnalysisPanel(jobId: number, opts: { admin: boolean }):
     ...base(row),
     retryOf: row.retryOf,
     errorCode: row.errorCode,
+    providerStatus: row.providerStatus,
+    cause: failureCause(row.errorCode, row.providerStatus),
     providerSlug: row.providerSlug,
     modelId: row.modelId,
     inputTokens: row.inputTokens,

@@ -8,6 +8,7 @@ import {
   STRUCTURE_FIELDS,
   type AnalysisStatus,
   type AnalyzedField,
+  type FailureCause,
   type JobStructure,
   type Provenance,
   type StructureField,
@@ -40,6 +41,16 @@ const PROVENANCE_KEY: Record<Provenance, TranslationKey> = {
   unknown: "jobAnalysis.provenanceUnknown",
   conflict: "jobAnalysis.provenanceConflict",
 };
+// Por que o provedor falhou (#438), no que o admin pode fazer a respeito.
+const CAUSE_KEY: Record<FailureCause, TranslationKey> = {
+  model_unavailable: "jobAnalysis.causeModelUnavailable",
+  unauthorized: "jobAnalysis.causeUnauthorized",
+  unstable: "jobAnalysis.causeUnstable",
+  rejected: "jobAnalysis.causeRejected",
+  unknown: "jobAnalysis.causeUnknown",
+};
+/** Repetir com o mesmo modelo e a mesma chave falha de novo. */
+const PERMANENT_CAUSES: readonly FailureCause[] = ["model_unavailable", "unauthorized"];
 
 type Props = { jobId: number; admin: boolean; t: Translator["t"] };
 
@@ -128,14 +139,33 @@ export async function JobAnalysisSection({ jobId, admin, t }: Props) {
                         {t("jobAnalysis.adminCost", { cost: attempt.costEstimate.toFixed(4) })}
                       </span>
                     )}
-                    {attempt.errorCode !== null && <> · {t("jobAnalysis.adminError", { code: attempt.errorCode })}</>}
+                    {attempt.errorCode !== null && (
+                      <>
+                        {" · "}
+                        {attempt.providerStatus === null
+                          ? t("jobAnalysis.adminError", { code: attempt.errorCode })
+                          : t("jobAnalysis.adminErrorStatus", { code: attempt.errorCode, status: attempt.providerStatus })}
+                      </>
+                    )}
                   </p>
+                  {attempt.cause !== null && (
+                    <p
+                      className="type-caption-sm break-words"
+                      data-testid={`job-analysis-cause-${attempt.id}`}
+                      data-cause={attempt.cause}
+                    >
+                      {t(CAUSE_KEY[attempt.cause])}
+                    </p>
+                  )}
                   {/* Só a mais recente: tentar de novo uma antiga duplicaria a cadeia. */}
                   {index === 0 && RETRYABLE_ANALYSIS.includes(attempt.status) && (
                     <form action={retryJobAnalysisAction}>
                       <input type="hidden" name="analysisId" value={attempt.id} />
                       <Button type="submit" size="sm" variant="outline" data-testid="job-analysis-retry">
-                        {t("jobAnalysis.adminRetry")}
+                        {/* Falha que se repete com o mesmo modelo ou chave: o botão diz o que fazer antes. */}
+                        {attempt.cause !== null && PERMANENT_CAUSES.includes(attempt.cause)
+                          ? t("jobAnalysis.adminRetryAfterFix")
+                          : t("jobAnalysis.adminRetry")}
                       </Button>
                     </form>
                   )}

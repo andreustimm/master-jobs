@@ -89,6 +89,20 @@ async function cadastrarModelo(
   await rodar(...args);
 }
 
+/**
+ * O cadastro de antes de #438: provedor `nvidia` com o Kimi K2, que o provedor
+ * desligou. A chave é a sintética deste arquivo, não a `NVIDIA_API_KEY`.
+ */
+async function cadastrarKimiAntigo(): Promise<void> {
+  await rodar(
+    "llm", "add-provider", "nvidia",
+    "--label", "NVIDIA NIM",
+    "--key-env", VAR_CHAVE,
+    "--base-url", "https://93.184.216.34",
+  );
+  await rodar("llm", "add-model", "nvidia", "moonshotai/kimi-k2-instruct", "--label", "Kimi K2");
+}
+
 /** Vaga com descrição suficiente — é o pré-requisito que `analyze` exige. */
 async function semearVagaComDescricao(descricao = DESCRICAO): Promise<number> {
   const db = banco();
@@ -211,6 +225,49 @@ describe("jho llm list", () => {
     expect(r.out).toContain("sim");
   });
 
+  it("sinaliza o modelo desligado pelo provedor e nunca o marca como em uso (#438)", async () => {
+    await cadastrarKimiAntigo();
+    process.env[VAR_CHAVE] = CHAVE;
+
+    const r = await rodar("llm", "list");
+
+    expect(r.out).toContain("Kimi K2");
+    expect(r.out).toContain("desligado pelo provedor (HTTP 410, fim de vida em 2026-05-12)");
+    expect(r.out).not.toContain("→ Kimi K2");
+    expect(r.out).toContain("Nenhum modelo disponível: escolha um");
+  });
+
+  it("`use` recusa tornar padrão um modelo desligado", async () => {
+    await cadastrarKimiAntigo();
+
+    const r = await rodar("llm", "use", "moonshotai/kimi-k2-instruct");
+
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("desligado pelo provedor (HTTP 410, fim de vida em 2026-05-12)");
+  });
+
+  it("`use` com o mesmo id em dois provedores pede --provider e o respeita", async () => {
+    await cadastrarKimiAntigo();
+    await rodar("llm", "add-provider", "outro", "--label", "Outro", "--key-env", VAR_CHAVE);
+    await rodar("llm", "add-model", "outro", "moonshotai/kimi-k2-instruct", "--label", "Kimi K2 (outro)");
+
+    const ambiguo = await rodar("llm", "use", "moonshotai/kimi-k2-instruct");
+    const vivo = await rodar("llm", "use", "moonshotai/kimi-k2-instruct", "--provider", "outro");
+
+    expect(ambiguo.code).toBe(1);
+    expect(ambiguo.err).toContain("existe em mais de um provedor: diga qual com --provider");
+    expect(vivo.out).toContain("padrão: moonshotai/kimi-k2-instruct");
+  });
+
+  it("`seed` diz quais modelos desligados ficaram de fora, com status e data", async () => {
+    const r = await rodar("llm", "seed");
+
+    expect(r.out).toContain("Desligados pelo provedor, fora do cadastro");
+    expect(r.out).toContain("NVIDIA NIM · Kimi K2 (moonshotai/kimi-k2-instruct): desligado pelo provedor (HTTP 410, fim de vida em 2026-05-12)");
+    expect(r.out).toContain("Qwen3 Coder 480B (qwen/qwen3-coder-480b-a35b-instruct): desligado pelo provedor (HTTP 410, fim de vida em 2026-06-11)");
+    expect(r.out).toContain("Llama 3.1 405B (meta/llama-3.1-405b-instruct): desligado pelo provedor (HTTP 404, visto em 2026-10-01)");
+  });
+
   it("`--all` é o que revela o que foi desabilitado", async () => {
     await cadastrarModelo();
     await banco().update(llmModel).set({ enabled: false });
@@ -235,9 +292,44 @@ describe("jho analyze <id>", () => {
     // Escolher um modelo sem chave levaria a um 401 opaco lá na frente. Falhar
     // aqui é a diferença entre "defina X no .env" e "HTTP 401".
     expect(r.code).toBe(1);
-    expect(r.err).toContain("Nenhum modelo disponível com chave configurada");
+    expect(r.err).toContain("Nenhum modelo disponível: escolha um");
+    expect(r.out).toContain("Nenhum modelo habilitado tem a chave no ambiente");
     expect(r.out).toContain("jho llm seed");
     expect(r.out).toContain("ANTHROPIC_API_KEY");
+  });
+
+  it("com chave só para modelo desligado, diz qual e por quê — e não chama o provedor (#438)", async () => {
+    await cadastrarKimiAntigo();
+    process.env[VAR_CHAVE] = CHAVE;
+    await syncCandidateFromProfile();
+    const vagaId = await semearVagaComDescricao();
+    const chamadas: string[] = [];
+    vi.stubGlobal("fetch", (async (input: string | URL) => {
+      chamadas.push(String(input));
+      return new Response("{}", { status: 410 });
+    }) as unknown as typeof fetch);
+
+    const r = await rodar("analyze", String(vagaId), "--yes");
+
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("Nenhum modelo disponível: escolha um");
+    expect(r.out).toContain("Kimi K2");
+    expect(r.out).toContain("desligado pelo provedor (HTTP 410, fim de vida em 2026-05-12)");
+    expect(r.out).toContain("jho llm use <modelo>");
+    expect(chamadas).toEqual([]);
+  });
+
+  it("`--model` de um modelo desligado recusa dizendo que foi desligado", async () => {
+    await cadastrarKimiAntigo();
+    process.env[VAR_CHAVE] = CHAVE;
+    await syncCandidateFromProfile();
+    const vagaId = await semearVagaComDescricao();
+
+    const r = await rodar("analyze", String(vagaId), "--model", "moonshotai/kimi-k2-instruct");
+
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("Nenhum modelo disponível: escolha um");
+    expect(r.out).toContain("moonshotai/kimi-k2-instruct foi desligado pelo provedor (HTTP 410");
   });
 
   it("`--model` de um modelo que não existe também recusa, sem cair no padrão", async () => {

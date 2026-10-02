@@ -38,6 +38,29 @@ async function keyNeverEscapes<T>(apiKey: string, call: () => Promise<T>): Promi
 }
 
 /**
+ * A recusa do provedor, sempre como `LlmError` com o status (#438).
+ *
+ * O status é o que separa modelo desligado (404/410) de chave sem permissão
+ * (401/403) e de provedor instável. Ler o corpo como JSON antes de olhar o
+ * status perdia essa informação quando o corpo era vazio, texto ou HTML de
+ * gateway: o `SyntaxError` virava erro comum, gravado como `network`, e a tela
+ * dizia "provedor instável" a quem tinha um modelo desligado. Aqui o corpo é
+ * lido com tolerância e só a `error.message` de um JSON bem-formado é
+ * aproveitada; corpo cru nunca vira mensagem — pode trazer a chave ecoada ou
+ * página inteira. Corpo que nem se deixa ler fica no status.
+ */
+async function refusal(provider: string, res: Response): Promise<LlmError> {
+  const body = await res.text().catch(() => "");
+  let message: unknown;
+  try {
+    message = (JSON.parse(body) as { error?: { message?: unknown } } | null)?.error?.message;
+  } catch {
+    // Não é JSON: o status basta.
+  }
+  return new LlmError(provider, res.status, typeof message === "string" && message ? message : `HTTP ${res.status}`);
+}
+
+/**
  * Thinking budget per effort level, in tokens.
  *
  * Anthropic bills thinking tokens as output, so these are the user's money —
@@ -95,11 +118,8 @@ export function anthropicProvider(apiKey: string, model?: string, baseUrl?: stri
         }),
       });
 
+      if (!res.ok) throw await refusal("anthropic", res);
       const json = (await res.json()) as Record<string, unknown>;
-      if (!res.ok) {
-        const error = json.error as { message?: string } | undefined;
-        throw new LlmError("anthropic", res.status, error?.message ?? `HTTP ${res.status}`);
-      }
 
       // With thinking enabled the response carries thinking blocks too; only
       // the text blocks are the answer.
@@ -144,11 +164,8 @@ export function openaiProvider(apiKey: string, model?: string, baseUrl?: string)
         }),
       });
 
+      if (!res.ok) throw await refusal("openai", res);
       const json = (await res.json()) as Record<string, unknown>;
-      if (!res.ok) {
-        const error = json.error as { message?: string } | undefined;
-        throw new LlmError("openai", res.status, error?.message ?? `HTTP ${res.status}`);
-      }
 
       const choices = (json.choices ?? []) as Array<{ message?: { content?: string } }>;
       const usage = (json.usage ?? {}) as { prompt_tokens?: number; completion_tokens?: number };
