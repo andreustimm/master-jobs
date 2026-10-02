@@ -34,6 +34,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.33.0] - 2026-10-02T03:45:46.000Z
+
+### Adicionado
+
+- O detalhe de uma execução de "Atualizar status" diz quantas vagas foram checadas de quantas havia para checar, por exemplo "3 de 9 vagas abertas da fonte com link público foram checadas". Execuções anteriores continuam com a frase sem número.
+
 ## [1.32.15] - 2026-10-02T02:32:08.000Z
 
 ### Corrigido

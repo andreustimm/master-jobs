@@ -9,6 +9,16 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.33.0] - 2026-10-02
+
+### Adicionado
+
+- `source_run.due_total` (migração 0033, aditiva e anulável): a execução de verificação grava quantas vagas estavam vencidas antes do `limit` (`VerifyResult.due`, repassado por `countsOfVerify` em `RunCounts.dueTotal`). O detalhe de `/admin/execucoes/[id]` usa `completenessCopy` para mostrar "N de M" (`runs.verify{,All}{Complete,Partial}Count`); execução antiga, com o total nulo, mantém a frase sem número. Captura grava nulo.
+
+### Alterado
+
+- O piso de fit da verificação global vira a constante `DEFAULT_VERIFY_MIN_FIT` (`src/core/ingest/availability.ts`), usada por `verifyJobs` e interpolada como `{minFit}` no texto da completude, em vez do 55 literal repetido no dicionário.
+
 ## [1.32.15] - 2026-10-02
 
 ### Corrigido
