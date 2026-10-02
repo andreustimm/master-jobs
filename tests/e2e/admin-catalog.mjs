@@ -14,7 +14,7 @@
 // tem credencial de disparo nem permissão de ingestão, e nenhum teste fala com
 // board real. A sondagem pela tela, por isso, responde com a recusa do
 // ambiente — que é a mensagem que um preview de verdade mostraria.
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, notInArray } from "drizzle-orm";
 import { executeSourceRun } from "../../src/contexts/operations/index.ts";
 import { getDb } from "../../src/core/db/client.ts";
 import { job, source, sourceRun } from "../../src/core/db/schema.ts";
@@ -78,7 +78,10 @@ async function execute(runId, fixtures, opts = {}) {
   setHttpPort(fixtureHttp(fixtures));
   if (opts.fetchImpl) globalThis.fetch = opts.fetchImpl;
   try {
-    return await executeSourceRun(runId, { concurrency: 2, verify: { limit: 20 } });
+    // A verificação global usa o piso de fit padrão; as vagas desta suíte não têm
+    // nota, então quem quer vê-las passa `verifyMinFit: 0` (o que a CLI faz com --min-fit).
+    const verify = { limit: opts.verifyLimit ?? 20, ...(opts.verifyMinFit === undefined ? {} : { minFit: opts.verifyMinFit }) };
+    return await executeSourceRun(runId, { concurrency: 2, verify });
   } finally {
     resetHttpPort();
     globalThis.fetch = saved.fetch;
@@ -100,6 +103,22 @@ const board = {
 
 const runIdOf = (page) => Number(new URL(page.url()).pathname.split("/").pop());
 
+/**
+ * A verificação global olha as vagas abertas de TODAS as fontes. Para não sondar
+ * nem alterar vagas de outras áreas do E2E (que moram no mesmo banco e têm URL
+ * por nome de host), as alheias ficam fechadas só enquanto `body` roda e voltam
+ * a abertas depois, sem terem sido tocadas.
+ */
+const PARKED = "e2e-admin-catalog-estacionada";
+async function withOnlyOwnJobsOpen(db, ownSourceIds, body) {
+  await db.update(job).set({ closedAt: PARKED }).where(and(isNull(job.closedAt), notInArray(job.sourceId, ownSourceIds)));
+  try {
+    return await body();
+  } finally {
+    await db.update(job).set({ closedAt: null }).where(eq(job.closedAt, PARKED));
+  }
+}
+
 export async function checkAdminCatalog(browser, base, accounts, check) {
   const db = getDb();
   const detail = `${base}/admin/plataformas/${encodeURIComponent(OK)}`;
@@ -107,6 +126,8 @@ export async function checkAdminCatalog(browser, base, accounts, check) {
   /* ------------------------------ E2E-001 ------------------------------ */
   const admin = await login(browser, base, accounts.admin.email, accounts.admin.password);
   let captureRun = null;
+  // Execuções de verificação vistas em pt-BR, relidas depois em inglês (#439).
+  const verifyRuns = [];
   try {
     const { page } = admin;
     await page.goto(`${base}/admin/plataformas`, { waitUntil: "networkidle" });
@@ -212,6 +233,70 @@ export async function checkAdminCatalog(browser, base, accounts, check) {
       (await page.getByTestId(`run-count-${verifyRun}-alive`).innerText()).trim() === "1"
         && (await page.getByTestId(`run-count-${verifyRun}-closed`).innerText()).trim() === "1");
 
+    // #439: a completude de uma verificação não é a da captura. Completa, diz que
+    // conferiu tudo; cortada pelo limite, diz isso — nenhuma das duas fala de
+    // "fechar por ausência", que a verificação nunca faz (só 404 e 410 fecham).
+    const completeness = async () => (await page.getByTestId("run-completeness").innerText()).trim();
+    const capturePhrase = /aus[eê]ncia|janela|lista completa/i;
+    const completeText = await completeness();
+    check("E2E-003 verificação completa mostra a conferência completa, sem texto de captura",
+      completeText.startsWith("conferência completa") && completeText.includes("da fonte")
+        && !capturePhrase.test(completeText), completeText);
+    verifyRuns.push({ id: verifyRun, global: false, partial: false });
+
+    // Reabre a vaga fechada para haver duas vagas vencidas e corta a conferência em uma.
+    await db.update(job).set({ closedAt: null }).where(eq(job.sourceId, OK));
+    await page.goto(detail, { waitUntil: "networkidle" });
+    await page.getByTestId("platform-verify").click();
+    await page.waitForURL((url) => /\/admin\/execucoes\/\d+$/.test(url.pathname) && Number(url.pathname.split("/").pop()) !== verifyRun);
+    const cutRun = runIdOf(page);
+    await execute(cutRun, {}, { fetchImpl: async () => new Response(null, { status: 200 }), verifyLimit: 1 });
+    await page.reload({ waitUntil: "networkidle" });
+    const [cutRow] = await db.select().from(sourceRun).where(eq(sourceRun.id, cutRun));
+    const cutText = await completeness();
+    check("E2E-003 verificação cortada pelo limite diz isso, sem texto de captura",
+      cutRow?.completeness === "partial" && cutText.startsWith("conferência cortada pelo limite")
+        && cutText.includes("da fonte") && !capturePhrase.test(cutText),
+      `${cutRow?.completeness} | ${cutText}`);
+    check("E2E-003 completude da verificação sobrevive a refresh e cabe em 375 px",
+      (await completeness()) === cutText && (await fitsPhone(page)));
+    verifyRuns.push({ id: cutRun, global: false, partial: true });
+
+    // Verificação GLOBAL ("Atualizar status de todas"): sem fonte, vale o universo
+    // das vagas elegíveis, e o texto não pode prometer "todas as vagas abertas".
+    // As vagas alheias ficam estacionadas só durante a execução.
+    const runGlobal = async (verifyLimit) => {
+      await page.goto(`${base}/admin/execucoes`, { waitUntil: "networkidle" });
+      const before = new Set((await db.select({ id: sourceRun.id }).from(sourceRun)).map((row) => row.id));
+      await page.getByTestId("runs-verify-all").click();
+      await page.waitForURL((url) => /\/admin\/execucoes\/\d+$/.test(url.pathname) && !before.has(Number(url.pathname.split("/").pop())));
+      const id = runIdOf(page);
+      await withOnlyOwnJobsOpen(db, [OK, BROKEN], () =>
+        execute(id, {}, { fetchImpl: async () => new Response(null, { status: 200 }), verifyLimit, verifyMinFit: 0 }));
+      await page.reload({ waitUntil: "networkidle" });
+      const [row] = await db.select().from(sourceRun).where(eq(sourceRun.id, id));
+      return { id, row, text: await completeness() };
+    };
+    const globalCut = await runGlobal(1);
+    check("E2E-003 verificação global cortada pelo limite fala das vagas elegíveis, sem texto de captura",
+      globalCut.row?.scopeKind === "verify" && globalCut.row?.sourceId === null && globalCut.row?.completeness === "partial"
+        && globalCut.text.startsWith("conferência cortada pelo limite") && globalCut.text.includes("elegíveis")
+        && !globalCut.text.includes("da fonte") && !capturePhrase.test(globalCut.text),
+      `${globalCut.row?.completeness} | ${globalCut.text}`);
+    verifyRuns.push({ id: globalCut.id, global: true, partial: true });
+    const globalFull = await runGlobal(50);
+    check("E2E-003 verificação global completa fala das vagas elegíveis, sem texto de captura",
+      globalFull.row?.completeness === "complete" && globalFull.text.startsWith("conferência completa")
+        && globalFull.text.includes("elegíveis") && !globalFull.text.includes("da fonte") && !capturePhrase.test(globalFull.text),
+      `${globalFull.row?.completeness} | ${globalFull.text}`);
+    check("E2E-003 verificação global cabe em 375 px e a completude sobrevive a refresh",
+      (await completeness()) === globalFull.text && (await fitsPhone(page)));
+    verifyRuns.push({ id: globalFull.id, global: true, partial: false });
+
+    await page.goto(`${base}/admin/execucoes/${captureRun}`, { waitUntil: "networkidle" });
+    check("E2E-003 a captura segue com o texto da listagem da fonte",
+      (await completeness()) === "lista completa: fecha por ausência");
+
     await page.goto(`${base}/admin/execucoes`, { waitUntil: "networkidle" });
     check("E2E-003 lista de execuções paginada cabe em 375 px",
       (await page.getByTestId("runs-page").count()) === 1 && (await fitsPhone(page)));
@@ -230,7 +315,25 @@ export async function checkAdminCatalog(browser, base, accounts, check) {
         if (ACCENT.test(text) || portuguese.has(text.toLowerCase())) leaks.push(`${path}: ${text.slice(0, 40)}`);
       }
     }
+    // As quatro frases novas da verificação, lidas em inglês: cada execução mostra a
+    // chave certa do escopo e do estado, e nenhuma vaza português.
+    const readings = [];
+    for (const run of verifyRuns) {
+      const path = `${base}/admin/execucoes/${run.id}`;
+      await page.goto(path, { waitUntil: "networkidle" });
+      const shown = (await page.getByTestId("run-completeness").innerText()).trim();
+      readings.push({ ...run, shown });
+      for (const text of await interfaceTexts(page)) {
+        if (ACCENT.test(text) || portuguese.has(text.toLowerCase())) leaks.push(`${path}: ${text.slice(0, 40)}`);
+      }
+    }
     check("E2E-003 detalhes em inglês sem texto português fora do dado do usuário", leaks.length === 0, leaks.join(" | "));
+    check("E2E-003 verificação lida em inglês: plataforma e global, completa e cortada, cada uma com a sua frase",
+      verifyRuns.length === 4 && readings.every((r) =>
+        r.shown.startsWith(r.partial ? "check cut by the limit" : "full check")
+        && (r.global ? r.shown.includes("eligible") && !r.shown.includes("of the source") : r.shown.includes("of the source"))
+        && !/absence|window|listing/i.test(r.shown)),
+      readings.map((r) => r.shown).join(" | "));
   } finally {
     await english.context.close();
   }

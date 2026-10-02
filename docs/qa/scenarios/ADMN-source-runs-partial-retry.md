@@ -8,9 +8,9 @@ expected: A execução de todas fica parcial com uma linha por fonte, a que falh
 entry_points: /admin/execucoes
 qa_status: pass
 bug_ids: BUG-20261001-verify-run-shows-capture-completeness-copy
-fix_status: pending
+fix_status: fixed
 retest_status:
-fix_commits:
+fix_commits: 38805d7d
 evidence: docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-admin-source-catalog-first-walk-todas-na-fila.png; docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-admin-source-catalog-first-walk-todas-parcial.png; docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-admin-source-catalog-first-walk-todas-parcial-375px.png; docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-admin-source-catalog-first-walk-nova-tentativa.png; docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-admin-source-catalog-first-walk-execucoes-pagina-1-375px.png; docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-admin-source-catalog-first-walk-execucoes-pagina-2-375px.png
 last_report: docs/qa/reports/2026-10-01-qa-223-verificacoes.md
 overlaps: ADMN-source-catalog-operate
@@ -52,5 +52,14 @@ ambas cadastradas e habilitadas pela tela:
 permitia uma única fonte real), então o pai fica parcial com 1 sucesso e 1
 falha, e não "uma falhando entre várias que sucedem"; "Tentar de novo" do pai
 (refaz as duas fontes) não foi acionado, para não repetir a chamada à fonte
-real. O texto da completude de uma execução de verificação é o da captura:
-`BUG-20261001-verify-run-shows-capture-completeness-copy` (Friction, aberto).
+real. O texto da completude de uma execução de verificação era o da captura:
+`BUG-20261001-verify-run-shows-capture-completeness-copy` (Friction).
+
+**Correção (#439):** o detalhe de uma execução de verificação passou a dizer
+"conferência completa…" ou "conferência cortada pelo limite ou pelo orçamento
+de requisições…", sem falar de fechar por ausência, e diz o universo: as vagas
+abertas da fonte (por plataforma) ou as elegíveis, nota 55 ou mais (verificação
+de todas); a captura mantém o texto da listagem da fonte. Coberto por
+`tests/run-completeness.test.ts` e por E2E-003 em `tests/e2e/admin-catalog.mjs`
+(39/39, com as variantes global e em inglês). Falta a releitura independente no navegador real, que fica para a
+próxima passada da charter.

@@ -297,7 +297,7 @@ por termo continua em `term_capture` e não entra aqui.
 | `status` | `queued`, `running`, `succeeded`, `partial`, `failed`, `cancelled`, `interrupted` (`nextRunStatus`) |
 | `heartbeat_at`, `queued_at`, `started_at`, `finished_at` | `running` sem batimento por 15 min vira `interrupted` (`isStale`, a mesma regra da análise de vaga) |
 | `fetched`, `inserted`, `updated`, `unchanged`, `closed`, `alive`, `inconclusive` | **nulo = desconhecido**, nunca zero. No pai, a soma só é conhecida quando toda filha contou |
-| `completeness` | o que o adapter declarou (`complete`/`partial`); janela parcial registra `closed = 0` |
+| `completeness` | o que o adapter declarou (`complete`/`partial`); janela parcial registra `closed = 0`. Em execução de verificação (`scope_kind = verify`), `partial` é a conferência que parou antes de checar tudo o que devia: o `limit` cortou (`checked < due`) ou o orçamento de requisições acabou (`budgetExhausted`). O detalhe a mostra sem falar de fechar por ausência, e o universo muda com o escopo: por plataforma (`source_id` preenchido) são as vagas abertas dela com link público (`minFit: 0`); global (`source_id` nulo), as vagas elegíveis, com o piso de fit padrão (55) e link público. O total vencido (`due`) não é gravado |
 | `error_code`, `error_detail` | código estável (`no_token`, `waiting_slot`, `dispatch_rejected`, `work_failed`, `children_failed`, `lease_expired`); em linha ativa é o motivo da espera. Detalhe com até 500 caracteres, redigido por `redactDetail` |
 
 Linha terminal é imutável: toda escrita de progresso filtra os estados ativos,
