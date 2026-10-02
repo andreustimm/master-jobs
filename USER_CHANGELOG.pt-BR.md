@@ -34,6 +34,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.15] - 2026-10-02T02:32:08.000Z
+
+### Corrigido
+
+- A execução de "Atualizar status" não diz mais "janela parcial: não fecha por ausência": mostra "conferência completa" ou "conferência cortada pelo limite ou pelo orçamento de requisições", dizendo se o universo é o da fonte ou o das vagas elegíveis (nota 55 ou mais, com link público) na verificação de todas.
+
 ## [1.32.14] - 2026-10-02T00:45:25.000Z
 
 ### Corrigido

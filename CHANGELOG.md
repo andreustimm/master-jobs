@@ -9,6 +9,12 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.32.15] - 2026-10-02
+
+### Corrigido
+
+- O detalhe de uma execução de verificação (`/admin/execucoes/[id]`) escolhe o texto de completude pelo escopo e pela fonte (`completenessKey(scopeKind, sourceId, completeness)`): captura segue com o texto da listagem da fonte; verificação por plataforma usa `runs.verifyComplete`/`runs.verifyPartial` (vagas abertas da fonte com link público) e a global, `runs.verifyAllComplete`/`runs.verifyAllPartial` (vagas elegíveis, fit 55 ou mais), sem falar de fechar por ausência. O valor gravado em `source_run.completeness` não muda.
+
 ## [1.32.14] - 2026-10-02
 
 ### Corrigido
