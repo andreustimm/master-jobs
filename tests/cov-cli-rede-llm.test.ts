@@ -189,6 +189,33 @@ describe("jho llm list", () => {
     expect(r.out).toContain("Trocar: jho llm use");
   });
 
+  it("chave só com espaços conta como ausente: a lista mostra a variável, não `ok` nem `→`", async () => {
+    await cadastrarModelo();
+    process.env[VAR_CHAVE] = "   ";
+
+    const r = await rodar("llm", "list");
+
+    expect(r.out).toContain(VAR_CHAVE);
+    expect(r.out).not.toContain("→ Modelo de Teste");
+    expect(r.out).toContain("Nenhum modelo disponível: escolha um");
+  });
+
+  it("mesmo id em dois provedores: só a linha do provedor padrão leva `→`", async () => {
+    await cadastrarModelo();
+    await rodar("llm", "add-provider", "outro", "--label", "Outro", "--key-env", VAR_CHAVE);
+    await rodar("llm", "add-model", "outro", "modelo-de-teste", "--label", "Zeta");
+    process.env[VAR_CHAVE] = CHAVE;
+
+    const uso = await rodar("llm", "use", "modelo-de-teste", "--provider", "outro");
+    const r = await rodar("llm", "list");
+
+    expect(uso.out).toContain("padrão: modelo-de-teste");
+    // Antes, as duas linhas com o id levavam a marca: ela comparava só o modelo.
+    expect(r.out).toContain("→ Zeta");
+    expect(r.out).not.toContain("→ Modelo de Teste");
+    expect(r.out.match(/→ /g)?.length).toBe(2); // a linha marcada e a legenda
+  });
+
   it("modelo sem custo cadastrado mostra travessão, não `undefined`", async () => {
     await cadastrarModelo();
 

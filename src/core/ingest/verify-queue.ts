@@ -29,7 +29,7 @@ import { publicApplyUrl } from "../job-url.ts";
 import type { LookupHost } from "../remote-url.ts";
 import type { ReopenDecision } from "./lifecycle.ts";
 import { probe, type ProbeVerdict } from "./probe.ts";
-import { probeEvidence } from "./availability.ts";
+import { DEFAULT_VERIFY_MIN_FIT, probeEvidence } from "./availability.ts";
 import { applyVerdict } from "./verdict.ts";
 import type { RequestBudget } from "./request-budget.ts";
 import { drizzleRequestBudget } from "./request-budget-store.ts";
@@ -141,7 +141,7 @@ type StaleOptions = { minFit?: number; limit?: number; olderThanDays?: number; u
  * limitado pelo orçamento diário da reconferência.
  */
 export function staleCandidates(opts: StaleOptions = {}) {
-  const minFit = opts.minFit ?? 55;
+  const minFit = opts.minFit ?? DEFAULT_VERIFY_MIN_FIT;
   const now = clock().now();
   const cutoff = new Date(now - (opts.olderThanDays ?? 7) * 86_400_000).toISOString();
   const unseenBefore = new Date(now - (opts.unseenDays ?? 3) * 86_400_000).toISOString();

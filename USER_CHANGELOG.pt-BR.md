@@ -34,6 +34,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.33.1] - 2026-10-02T05:15:07.000Z
+
+### Corrigido
+
+- `jho llm list` não marca mais duas linhas como "em uso" quando o mesmo modelo existe em dois provedores, e uma chave só com espaços no `.env` passa a aparecer como ausente em vez de `ok`.
+
 ## [1.33.0] - 2026-10-02T03:45:46.000Z
 
 ### Adicionado
