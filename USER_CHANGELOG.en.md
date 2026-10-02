@@ -34,6 +34,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.15] - 2026-10-02T02:32:08.000Z
+
+### Fixed
+
+- A status-refresh run no longer reads "partial window: never closes by absence": it shows "full check" or "check cut by the limit or the request budget", saying whether the scope is the source's jobs or the eligible jobs (score 55 or higher, public link) when all sources are checked.
+
 ## [1.32.14] - 2026-10-02T00:45:25.000Z
 
 ### Fixed
