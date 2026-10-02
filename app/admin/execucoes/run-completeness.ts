@@ -1,3 +1,4 @@
+import { DEFAULT_VERIFY_MIN_FIT } from "../../../src/core/ingest/availability.ts";
 import type { TranslationKey } from "../../../src/core/i18n/index.ts";
 
 /**
@@ -25,4 +26,41 @@ export function completenessKey(scopeKind: string, sourceId: string | null, comp
   if (completeness === "complete") return "platforms.snapshotComplete";
   if (completeness === "partial") return "platforms.snapshotPartial";
   return "platforms.snapshotUnknown";
+}
+
+/** O que a frase da completude precisa da linha de `source_run`. */
+export type CompletenessRun = {
+  scopeKind: string;
+  sourceId: string | null;
+  completeness: string | null;
+  fetched: number | null;
+  dueTotal: number | null;
+};
+
+/** Chave e valores para `t(key, values)`. */
+export type CompletenessCopy = { key: TranslationKey; values: Record<string, number> };
+
+const COUNTED = {
+  "runs.verifyComplete": "runs.verifyCompleteCount",
+  "runs.verifyPartial": "runs.verifyPartialCount",
+  "runs.verifyAllComplete": "runs.verifyAllCompleteCount",
+  "runs.verifyAllPartial": "runs.verifyAllPartialCount",
+} as const satisfies Partial<Record<TranslationKey, TranslationKey>>;
+
+/**
+ * A frase da completude com o "N de M" quando a linha sabe os dois números
+ * (#447): `fetched` é quantas vagas a verificação checou e `dueTotal` quantas
+ * estavam vencidas antes do `limit`. Execução gravada antes da coluna existir
+ * tem `dueTotal` nulo e mantém a frase sem número — desconhecido não vira zero
+ * (US-009.EC-2). O piso da global vem de `DEFAULT_VERIFY_MIN_FIT`, o mesmo que
+ * `verifyJobs` usa.
+ */
+export function completenessCopy(run: CompletenessRun): CompletenessCopy {
+  const key = completenessKey(run.scopeKind, run.sourceId, run.completeness);
+  const values = { minFit: DEFAULT_VERIFY_MIN_FIT };
+  if (!(key in COUNTED) || run.fetched === null || run.dueTotal === null) return { key, values };
+  return {
+    key: COUNTED[key as keyof typeof COUNTED],
+    values: { ...values, checked: run.fetched, due: run.dueTotal },
+  };
 }

@@ -24,6 +24,14 @@ export type CheckEvent = { checkedAt: string; id: number; verdict: ProbeVerdict 
 export const AVAILABILITY_STALE_MS = 14 * 86_400_000;
 
 /**
+ * Piso de fit da verificação sem fonte (`verifyJobs` sem `minFit`): só se
+ * confere o link de quem alguém pode clicar. O detalhe da execução global cita
+ * este número ao dizer quais vagas eram elegíveis — uma constante só, para o
+ * texto não divergir do que a verificação faz.
+ */
+export const DEFAULT_VERIFY_MIN_FIT = 55;
+
+/**
  * O motivo que o veredito sustenta. `gone` só existe para 404/410 (`classify`
  * em `probe.ts`), então é o único que carrega `closed`; o resto — vivo,
  * bloqueio de robô, 5xx, rede — não prova motivo nenhum.
