@@ -202,6 +202,8 @@ export type RunCounts = {
   closed: number | null;
   alive: number | null;
   inconclusive: number | null;
+  /** Verificação: o total vencido antes do `limit`; com `fetched`, o "N de M" (#447). */
+  dueTotal: number | null;
 };
 
 export const UNKNOWN_COUNTS: RunCounts = {
@@ -212,6 +214,7 @@ export const UNKNOWN_COUNTS: RunCounts = {
   closed: null,
   alive: null,
   inconclusive: null,
+  dueTotal: null,
 };
 
 /**

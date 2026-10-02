@@ -28,7 +28,7 @@ import { publicApplyUrl } from "../job-url.ts";
 import type { LookupHost } from "../remote-url.ts";
 import { guardIngestion } from "./guard.ts";
 import { probe } from "./probe.ts";
-import { probeEvidence } from "./availability.ts";
+import { DEFAULT_VERIFY_MIN_FIT, probeEvidence } from "./availability.ts";
 import { applyVerdict } from "./verdict.ts";
 import type { RequestBudget } from "./request-budget.ts";
 import { drizzleRequestBudget } from "./request-budget-store.ts";
@@ -70,7 +70,7 @@ export async function verifyJobs(
 
   const db = getDb();
   const limit = opts.limit ?? 200;
-  const minFit = opts.minFit ?? 55;
+  const minFit = opts.minFit ?? DEFAULT_VERIFY_MIN_FIT;
 
   // Verify what the user might actually click. Checking 6.000 links to police
   // rows nobody will ever see would be rude to the boards and pointless here.

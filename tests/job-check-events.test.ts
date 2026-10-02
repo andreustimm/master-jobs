@@ -246,6 +246,30 @@ describe("IT-008 caminho único e execução de verificação", () => {
     expect(await db.select().from(jobCheckEvent)).toHaveLength(3);
   });
 
+  it("execução de verificação grava o total vencido: cortada pelo limite, N de M; global também (#447)", async () => {
+    await vaga("/t1");
+    await vaga("/t2");
+    await vaga("/t3");
+    await vaga("/t4", "greenhouse:beta");
+    const original = globalThis.fetch;
+    globalThis.fetch = porCaminho({});
+    try {
+      const fonte = await requestSourceRun({ kind: "verify", sourceId: "lever:acme" }, null);
+      if (!fonte.ok) throw new Error("recusado");
+      await executeSourceRun(fonte.runId, { verify: { limit: 2 } });
+      expect(await sourceRun(fonte.runId)).toMatchObject({ status: "succeeded", completeness: "partial", fetched: 2, dueTotal: 3 });
+
+      // Global sem nota: as vagas desta suíte não têm fit, então o piso vai a 0
+      // (o que a CLI faz com --min-fit); as quatro, das duas fontes, estão vencidas.
+      const global = await requestSourceRun({ kind: "verify", sourceId: null }, null);
+      if (!global.ok) throw new Error("recusado");
+      await executeSourceRun(global.runId, { verify: { limit: 50, minFit: 0 } });
+      expect(await sourceRun(global.runId)).toMatchObject({ status: "succeeded", completeness: "complete", fetched: 4, dueTotal: 4 });
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
   it("interrupção deixa as não verificadas como estavam; nada vencido dá zero", async () => {
     await vaga("/um");
     await vaga("/dois");

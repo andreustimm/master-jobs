@@ -1316,6 +1316,13 @@ export const sourceRun = production.table(
     /** Verificação: links vivos. Nulo em execução de captura. */
     alive: integer("alive"),
     inconclusive: integer("inconclusive"),
+    /**
+     * Verificação: quantas vagas estavam vencidas para checar antes do `limit`
+     * (`VerifyResult.due`); `fetched` diz quantas foram checadas, e os dois
+     * juntos são o "N de M" do detalhe (#447). Nulo em captura e nas execuções
+     * gravadas antes da coluna existir: desconhecido, nunca zero.
+     */
+    dueTotal: integer("due_total"),
     /** O que o adapter declarou (`SourceSnapshot.completeness`). */
     completeness: text("completeness"),
     /** Código estável; em `queued`, o motivo da espera (ex.: `no_token`). */

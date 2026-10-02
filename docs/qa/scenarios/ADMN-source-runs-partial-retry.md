@@ -10,7 +10,7 @@ qa_status: pass
 bug_ids: BUG-20261001-verify-run-shows-capture-completeness-copy
 fix_status: fixed
 retest_status:
-fix_commits: 38805d7d
+fix_commits: 38805d7d; 803f0b9b
 evidence: docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-admin-source-catalog-first-walk-todas-na-fila.png; docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-admin-source-catalog-first-walk-todas-parcial.png; docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-admin-source-catalog-first-walk-todas-parcial-375px.png; docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-admin-source-catalog-first-walk-nova-tentativa.png; docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-admin-source-catalog-first-walk-execucoes-pagina-1-375px.png; docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-admin-source-catalog-first-walk-execucoes-pagina-2-375px.png
 last_report: docs/qa/reports/2026-10-01-qa-223-verificacoes.md
 overlaps: ADMN-source-catalog-operate
@@ -63,3 +63,15 @@ de todas); a captura mantém o texto da listagem da fonte. Coberto por
 `tests/run-completeness.test.ts` e por E2E-003 em `tests/e2e/admin-catalog.mjs`
 (39/39, com as variantes global e em inglês). Falta a releitura independente no navegador real, que fica para a
 próxima passada da charter.
+
+**N de M (#447):** a execução de verificação passou a gravar o total vencido
+(`source_run.due_total`), e a frase da completude diz quantas de quantas foram
+checadas: "conferência cortada pelo limite ou pelo orçamento de requisições: 3
+de 9 vagas abertas da fonte com link público foram checadas" (por plataforma)
+ou "…1 de 2 vagas elegíveis (nota 55 ou mais, com link público)…" (global); a
+completa diz "N de N". Execução gravada antes da coluna mantém a frase sem
+número. Ao percorrer de novo com `lever:epoch-ai` e `--limit 3`, o esperado é
+"3 de 9". Coberto por `tests/run-completeness.test.ts`,
+`tests/job-check-events.test.ts`, `tests/source-run-due-total-upgrade.test.ts`
+e E2E-003 (44/44, inclusive inglês "1 of 2" e a execução antiga sem número).
+A releitura no navegador real segue pendente.

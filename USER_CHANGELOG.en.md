@@ -34,6 +34,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.33.0] - 2026-10-02T03:45:46.000Z
+
+### Added
+
+- A status-refresh run now says how many jobs were checked out of how many were due, for example "3 of 9 open jobs of the source with a public link were checked". Earlier runs keep the sentence without numbers.
+
 ## [1.32.15] - 2026-10-02T02:32:08.000Z
 
 ### Fixed
