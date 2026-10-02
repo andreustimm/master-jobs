@@ -63,7 +63,7 @@ export default async function AdminRunPage({ params }: { params: Promise<{ id: s
             <div>
               <dt className="type-caption-sm text-muted-foreground">{t("runs.completeness")}</dt>
               <dd className="type-body-md" data-testid="run-completeness">
-                {t(completenessKey(run.scopeKind, run.completeness))}
+                {t(completenessKey(run.scopeKind, run.sourceId, run.completeness))}
               </dd>
             </div>
           </dl>

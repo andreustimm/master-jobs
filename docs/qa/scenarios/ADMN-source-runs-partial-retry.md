@@ -56,8 +56,10 @@ real. O texto da completude de uma execução de verificação era o da captura:
 `BUG-20261001-verify-run-shows-capture-completeness-copy` (Friction).
 
 **Correção (#439):** o detalhe de uma execução de verificação passou a dizer
-"conferência completa…" ou "conferência cortada pelo limite…", sem falar de
-fechar por ausência; a captura mantém o texto da listagem da fonte. Coberto por
+"conferência completa…" ou "conferência cortada pelo limite ou pelo orçamento
+de requisições…", sem falar de fechar por ausência, e diz o universo: as vagas
+abertas da fonte (por plataforma) ou as elegíveis, nota 55 ou mais (verificação
+de todas); a captura mantém o texto da listagem da fonte. Coberto por
 `tests/run-completeness.test.ts` e por E2E-003 em `tests/e2e/admin-catalog.mjs`
-(35/35). Falta a releitura independente no navegador real, que fica para a
+(39/39, com as variantes global e em inglês). Falta a releitura independente no navegador real, que fica para a
 próxima passada da charter.

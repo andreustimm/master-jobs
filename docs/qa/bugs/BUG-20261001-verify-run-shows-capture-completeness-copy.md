@@ -49,21 +49,29 @@ pelo limite", sem falar de fechamento por ausência.
   é o mesmo na captura e na verificação, mas só na captura ele fala da
   listagem da fonte (e de fechar por ausência).
 - **Fix commit:** `38805d7d` (PR `fix/verify-run-completeness-copy`, `Closes #439`).
-  `completenessKey(scopeKind, completeness)` em
-  `app/admin/execucoes/run-completeness.ts` escolhe a chave; para `verify`
-  saem `runs.verifyComplete` ("conferência completa: todas as vagas abertas da
-  fonte foram checadas") e `runs.verifyPartial` ("conferência cortada pelo
-  limite: parte das vagas abertas ficou sem checar"), em pt-BR e en. O que é
-  gravado em `source_run.completeness` não muda; a captura mantém o texto de
-  antes. O "N de M" do texto sugerido na issue não entrou: o total vencido
-  (`due`) não é gravado na execução, e gravá-lo seria mudar o dado.
-- **Regression test:** `tests/run-completeness.test.ts` (chaves por escopo e
-  texto da verificação sem "ausência"/"janela"/"lista", nos dois idiomas) e
-  `tests/e2e/admin-catalog.mjs` (E2E-003: verificação completa, verificação
-  cortada com `--limit` 1 sobre duas vagas abertas, sobrevive a refresh, cabe
-  em 375 px, e a captura segue com o texto da listagem). O E2E reprovou sem a
-  correção ("lista completa: fecha por ausência" e "janela parcial: não fecha
-  por ausência" no detalhe da verificação) e passou com ela.
+  `completenessKey(scopeKind, sourceId, completeness)` em
+  `app/admin/execucoes/run-completeness.ts` escolhe a chave. Para `verify` o
+  universo depende do escopo: por plataforma (`sourceId` preenchido, `minFit:
+  0`) saem `runs.verifyComplete`/`runs.verifyPartial` ("…vagas abertas da fonte
+  com link público…"); global (`sourceId` nulo, piso de fit 55) saem
+  `runs.verifyAllComplete`/`runs.verifyAllPartial` ("…vagas elegíveis (nota 55
+  ou mais, com link público)…"). `partial` é "cortada pelo limite ou pelo
+  orçamento de requisições" (`checked < due` ou `budgetExhausted`). pt-BR e en.
+  O que é gravado em `source_run.completeness` não muda; a captura mantém o
+  texto de antes. O "N de M" sugerido na issue não entrou: o total vencido
+  (`due`) não é gravado na execução e gravá-lo seria mudar o dado; fica na
+  issue #447.
+- **Regression test:** `tests/run-completeness.test.ts` (chaves por escopo, com
+  `sourceId` preenchido e nulo; texto da verificação sem
+  "ausência"/"janela"/"lista" e o global citando "55" e "elegíveis", nos dois
+  idiomas) e `tests/e2e/admin-catalog.mjs` (E2E-003: verificação por plataforma
+  completa e cortada com `--limit` 1 sobre duas vagas abertas; verificação
+  global completa e cortada, com as vagas de outras áreas estacionadas
+  enquanto roda; refresh e 375 px; a captura segue com o texto da listagem).
+  A primeira versão do E2E reprovou sem a correção ("lista completa: fecha por
+  ausência" e "janela parcial: não fecha por ausência" no detalhe da
+  verificação); as variantes globais e a leitura em inglês foram acrescentadas
+  depois, na revisão, e passam com a correção.
 
 ## Verification
 
@@ -71,8 +79,12 @@ pelo limite", sem falar de fechamento por ausência.
   admin-catalog` (build standalone, Postgres descartável, pt-BR, viewport
   375 × 812), com o executor rodando em processo a mesma `executeSourceRun` que
   `jho jobs verify --run` chama.
-- **Result:** PASS: 35/35 verificações. O detalhe da execução de verificação
-  mostra "conferência completa…" e, cortada pelo limite, "conferência cortada
-  pelo limite…", sem falar de fechamento por ausência; o texto sobrevive a
-  `reload`, cabe em 375 px e o detalhe em inglês não vaza português. Não houve
-  nova passada manual no navegador real com `lever:epoch-ai`.
+- **Result:** PASS: 39/39 verificações. O detalhe da execução de verificação
+  mostra "conferência completa…" e, cortada, "conferência cortada pelo limite
+  ou pelo orçamento…", por plataforma ("da fonte") e global ("elegíveis"), sem
+  falar de fechamento por ausência; o texto sobrevive a `reload` e cabe em
+  375 px. Em inglês, o E2E abre as quatro execuções (plataforma e global,
+  completa e cortada), confere o início ("full check" ou "check cut by the
+  limit"), "eligible" na global e "of the source" na de plataforma, e que
+  nenhum texto da interface vaza português. Não houve nova passada manual no
+  navegador real com `lever:epoch-ai`.
