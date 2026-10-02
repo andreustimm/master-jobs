@@ -7,6 +7,7 @@ import { getTranslator } from "../../../i18n";
 import { MutationFeedbackForm } from "../../../mutation-feedback";
 import { TransitionLink } from "../../../transition-link";
 import { retryRunAction } from "../actions";
+import { completenessKey } from "../run-completeness";
 import { RunCounts, RunStatusBadge, reasonLabel, scopeLabel } from "../run-view";
 
 export const dynamic = "force-dynamic";
@@ -62,13 +63,7 @@ export default async function AdminRunPage({ params }: { params: Promise<{ id: s
             <div>
               <dt className="type-caption-sm text-muted-foreground">{t("runs.completeness")}</dt>
               <dd className="type-body-md" data-testid="run-completeness">
-                {t(
-                  run.completeness === "complete"
-                    ? "platforms.snapshotComplete"
-                    : run.completeness === "partial"
-                      ? "platforms.snapshotPartial"
-                      : "platforms.snapshotUnknown",
-                )}
+                {t(completenessKey(run.scopeKind, run.completeness))}
               </dd>
             </div>
           </dl>

@@ -1,6 +1,6 @@
 # BUG-20261001-verify-run-shows-capture-completeness-copy: o detalhe de uma execução de verificação diz "janela parcial: não fecha por ausência"
 
-- **Status:** open
+- **Status:** fixed
 - **Impact (user-side):** Friction
 - **Severity:** Medium · **Priority:** P2
 - **Persona Affected:** Andreus em triagem (admin)
@@ -43,11 +43,36 @@ pelo limite", sem falar de fechamento por ausência.
 
 ## Fix
 
-<!-- Hipótese de causa, não confirmada por correção:
-`app/admin/execucoes/[id]/page.tsx` traduz `run.completeness` sempre por
-`platforms.snapshotComplete`/`platforms.snapshotPartial`, qualquer que seja o
-escopo da execução. -->
+- **Root cause:** `app/admin/execucoes/[id]/page.tsx` traduzia
+  `run.completeness` sempre por `platforms.snapshotComplete` e
+  `platforms.snapshotPartial`, qualquer que fosse o escopo da execução. O campo
+  é o mesmo na captura e na verificação, mas só na captura ele fala da
+  listagem da fonte (e de fechar por ausência).
+- **Fix commit:** esta PR (`fix/verify-run-completeness-copy`, `Closes #439`).
+  `completenessKey(scopeKind, completeness)` em
+  `app/admin/execucoes/run-completeness.ts` escolhe a chave; para `verify`
+  saem `runs.verifyComplete` ("conferência completa: todas as vagas abertas da
+  fonte foram checadas") e `runs.verifyPartial` ("conferência cortada pelo
+  limite: parte das vagas abertas ficou sem checar"), em pt-BR e en. O que é
+  gravado em `source_run.completeness` não muda; a captura mantém o texto de
+  antes. O "N de M" do texto sugerido na issue não entrou: o total vencido
+  (`due`) não é gravado na execução, e gravá-lo seria mudar o dado.
+- **Regression test:** `tests/run-completeness.test.ts` (chaves por escopo e
+  texto da verificação sem "ausência"/"janela"/"lista", nos dois idiomas) e
+  `tests/e2e/admin-catalog.mjs` (E2E-003: verificação completa, verificação
+  cortada com `--limit` 1 sobre duas vagas abertas, sobrevive a refresh, cabe
+  em 375 px, e a captura segue com o texto da listagem). O E2E reprovou sem a
+  correção ("lista completa: fecha por ausência" e "janela parcial: não fecha
+  por ausência" no detalhe da verificação) e passou com ela.
 
 ## Verification
 
-<!-- pendente -->
+- **Retested:** 2026-10-01, `node tests/e2e/run-isolated.mjs --areas
+  admin-catalog` (build standalone, Postgres descartável, pt-BR, viewport
+  375 × 812), com o executor rodando em processo a mesma `executeSourceRun` que
+  `jho jobs verify --run` chama.
+- **Result:** PASS: 35/35 verificações. O detalhe da execução de verificação
+  mostra "conferência completa…" e, cortada pelo limite, "conferência cortada
+  pelo limite…", sem falar de fechamento por ausência; o texto sobrevive a
+  `reload`, cabe em 375 px e o detalhe em inglês não vaza português. Não houve
+  nova passada manual no navegador real com `lever:epoch-ai`.

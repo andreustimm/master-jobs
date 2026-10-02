@@ -78,7 +78,7 @@ async function execute(runId, fixtures, opts = {}) {
   setHttpPort(fixtureHttp(fixtures));
   if (opts.fetchImpl) globalThis.fetch = opts.fetchImpl;
   try {
-    return await executeSourceRun(runId, { concurrency: 2, verify: { limit: 20 } });
+    return await executeSourceRun(runId, { concurrency: 2, verify: { limit: opts.verifyLimit ?? 20 } });
   } finally {
     resetHttpPort();
     globalThis.fetch = saved.fetch;
@@ -211,6 +211,35 @@ export async function checkAdminCatalog(browser, base, accounts, check) {
     check("E2E-003 Atualizar status conta vivas e fechadas da fonte",
       (await page.getByTestId(`run-count-${verifyRun}-alive`).innerText()).trim() === "1"
         && (await page.getByTestId(`run-count-${verifyRun}-closed`).innerText()).trim() === "1");
+
+    // #439: a completude de uma verificação não é a da captura. Completa, diz que
+    // conferiu tudo; cortada pelo limite, diz isso — nenhuma das duas fala de
+    // "fechar por ausência", que a verificação nunca faz (só 404 e 410 fecham).
+    const completeness = async () => (await page.getByTestId("run-completeness").innerText()).trim();
+    const capturePhrase = /aus[eê]ncia|janela|lista completa/i;
+    const completeText = await completeness();
+    check("E2E-003 verificação completa mostra a conferência completa, sem texto de captura",
+      completeText.startsWith("conferência completa") && !capturePhrase.test(completeText), completeText);
+
+    // Reabre a vaga fechada para haver duas vagas vencidas e corta a conferência em uma.
+    await db.update(job).set({ closedAt: null }).where(eq(job.sourceId, OK));
+    await page.goto(detail, { waitUntil: "networkidle" });
+    await page.getByTestId("platform-verify").click();
+    await page.waitForURL((url) => /\/admin\/execucoes\/\d+$/.test(url.pathname) && Number(url.pathname.split("/").pop()) !== verifyRun);
+    const cutRun = runIdOf(page);
+    await execute(cutRun, {}, { fetchImpl: async () => new Response(null, { status: 200 }), verifyLimit: 1 });
+    await page.reload({ waitUntil: "networkidle" });
+    const [cutRow] = await db.select().from(sourceRun).where(eq(sourceRun.id, cutRun));
+    const cutText = await completeness();
+    check("E2E-003 verificação cortada pelo limite diz isso, sem texto de captura",
+      cutRow?.completeness === "partial" && cutText.startsWith("conferência cortada pelo limite") && !capturePhrase.test(cutText),
+      `${cutRow?.completeness} | ${cutText}`);
+    check("E2E-003 completude da verificação sobrevive a refresh e cabe em 375 px",
+      (await completeness()) === cutText && (await fitsPhone(page)));
+
+    await page.goto(`${base}/admin/execucoes/${captureRun}`, { waitUntil: "networkidle" });
+    check("E2E-003 a captura segue com o texto da listagem da fonte",
+      (await completeness()) === "lista completa: fecha por ausência");
 
     await page.goto(`${base}/admin/execucoes`, { waitUntil: "networkidle" });
     check("E2E-003 lista de execuções paginada cabe em 375 px",

@@ -842,6 +842,8 @@ export const en: Dictionary = {
     actorAdmin: "administrator",
     actorScheduler: "scheduler or CLI",
     completeness: "Completeness",
+    verifyComplete: "full check: every open job of the source was checked",
+    verifyPartial: "check cut by the limit: some open jobs were left unchecked",
     children: "Per source",
     retryOf: "New attempt of run",
     reasonNoToken: "Waiting: no dispatch credential (GITHUB_DISPATCH_TOKEN). The run does not vanish: the next request tries again, or run it from the CLI with jho jobs sync --run (verification: jho jobs verify --run).",

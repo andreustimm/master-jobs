@@ -52,5 +52,12 @@ ambas cadastradas e habilitadas pela tela:
 permitia uma única fonte real), então o pai fica parcial com 1 sucesso e 1
 falha, e não "uma falhando entre várias que sucedem"; "Tentar de novo" do pai
 (refaz as duas fontes) não foi acionado, para não repetir a chamada à fonte
-real. O texto da completude de uma execução de verificação é o da captura:
-`BUG-20261001-verify-run-shows-capture-completeness-copy` (Friction, aberto).
+real. O texto da completude de uma execução de verificação era o da captura:
+`BUG-20261001-verify-run-shows-capture-completeness-copy` (Friction).
+
+**Correção (#439):** o detalhe de uma execução de verificação passou a dizer
+"conferência completa…" ou "conferência cortada pelo limite…", sem falar de
+fechar por ausência; a captura mantém o texto da listagem da fonte. Coberto por
+`tests/run-completeness.test.ts` e por E2E-003 em `tests/e2e/admin-catalog.mjs`
+(35/35). Falta a releitura independente no navegador real, que fica para a
+próxima passada da charter.

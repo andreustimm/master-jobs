@@ -862,6 +862,8 @@ export const ptBR = {
     actorAdmin: "administrador",
     actorScheduler: "agendador ou CLI",
     completeness: "Completude",
+    verifyComplete: "conferência completa: todas as vagas abertas da fonte foram checadas",
+    verifyPartial: "conferência cortada pelo limite: parte das vagas abertas ficou sem checar",
     children: "Por fonte",
     retryOf: "Nova tentativa da execução",
     reasonNoToken: "Aguardando: sem credencial de disparo (GITHUB_DISPATCH_TOKEN). A execução não some: o próximo pedido tenta de novo, ou rode-a pela CLI com jho jobs sync --run (verificação: jho jobs verify --run).",
