@@ -1257,7 +1257,7 @@ const recheck = jobs
 recheck
   .command("queue")
   .description("Enfileira as vagas há mais tempo sem conferência")
-  .option("--min-fit <n>", "só acima deste fit", "55")
+  .option("--min-fit <n>", "só acima deste fit", String(DEFAULT_VERIFY_MIN_FIT))
   .option("--limit <n>", "quantas enfileirar", "200")
   .option("--older-than <days>", "só as conferidas há mais de N dias", "7")
   .action(async (opts: { minFit: string; limit: string; olderThan: string }) => {

@@ -24,7 +24,8 @@ export type CheckEvent = { checkedAt: string; id: number; verdict: ProbeVerdict 
 export const AVAILABILITY_STALE_MS = 14 * 86_400_000;
 
 /**
- * Piso de fit da verificação sem fonte (`verifyJobs` sem `minFit`): só se
+ * Piso de fit da verificação sem fonte (`verifyJobs` sem `minFit`) e da fila
+ * da varredura periódica (`staleCandidates`, `jho jobs recheck queue`): só se
  * confere o link de quem alguém pode clicar. O detalhe da execução global cita
  * este número ao dizer quais vagas eram elegíveis — uma constante só, para o
  * texto não divergir do que a verificação faz.
