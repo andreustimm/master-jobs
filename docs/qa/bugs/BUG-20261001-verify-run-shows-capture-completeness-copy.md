@@ -60,7 +60,8 @@ pelo limite", sem falar de fechamento por ausência.
   O que é gravado em `source_run.completeness` não muda; a captura mantém o
   texto de antes. O "N de M" sugerido na issue não entrou nesta correção: o
   total vencido (`due`) não era gravado na execução e gravá-lo era mudar o
-  dado. Entrou depois, na #447 (PR `feat/verify-run-due-count`): coluna aditiva
+  dado. Entrou depois, na #447 (commit `803f0b9b`, PR
+  `feat/verify-run-due-count`): coluna aditiva
   `source_run.due_total` (migração 0033), gravada por `countsOfVerify` a partir
   de `VerifyResult.due`; com ela, `completenessCopy` escolhe
   `runs.verify{,All}{Complete,Partial}Count` ("…3 de 9 vagas abertas da fonte
