@@ -9,6 +9,13 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.32.14] - 2026-10-02
+
+### Corrigido
+
+- Análise estruturada (#438): `processNextAnalysis` grava o status HTTP da recusa do provedor em `job_analysis.provider_status` (migração `0032_job_analysis_provider_status`, aditiva: uma coluna `integer` anulável), só o número, nunca a mensagem nem o corpo. `failureCause` (puro, em `job-structure.ts`) traduz código e status em causa: 404/410 modelo desligado, 401/403 chave sem permissão, 5xx/408/`network` provedor instável, outro 4xx pedido recusado; `provider_error` sem status (como as tentativas antigas) vira causa desconhecida e continua legível. Os adapters (`providers.ts`) passam a olhar o status antes do corpo: recusa com corpo vazio, texto ou HTML de gateway vira sempre `LlmError` com o status, em vez de `SyntaxError` gravado como `network` ("provedor instável"); o corpo cru nunca vira mensagem. `jho analysis run` imprime `errorCode` e `providerStatus` quando o provedor recusa ou não responde, e para na primeira recusa permanente (modelo desligado ou chave sem permissão), sem gastar tentativa do resto da fila.
+- Cadastro de LLM (#438): `src/core/llm/model-retirement.ts` lista os modelos que o provedor desligou, com status e data — os três NIM da semente (Kimi K2 410 em 2026-05-12, Qwen3 Coder 480B 410 em 2026-06-11, Llama 3.1 405B 404). A semente não os cadastra mais e diz quais pulou; `listModels` marca `retired`; `chooseModel` nunca devolve um deles, nem por `--model` nem como padrão gravado; `setDefaultModel(modelId, providerSlug?)` devolve `"ok" | "not_found" | "retired" | "ambiguous"`, recusa o desligado e o id que existe em mais de um provedor sem `--provider` (`jho llm use <modelo> --provider <slug>`). Sem modelo vivo com chave, `jho analyze` e `jho analysis run` dizem "Nenhum modelo disponível: escolha um" com o motivo (`explainNoModel`) e não reivindicam nada; `jho llm list` sinaliza o desligado.
+
 ## [1.32.13] - 2026-10-02
 
 ### Segurança
