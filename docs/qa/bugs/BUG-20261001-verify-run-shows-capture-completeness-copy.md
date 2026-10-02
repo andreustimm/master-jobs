@@ -48,7 +48,7 @@ pelo limite", sem falar de fechamento por ausência.
   `platforms.snapshotPartial`, qualquer que fosse o escopo da execução. O campo
   é o mesmo na captura e na verificação, mas só na captura ele fala da
   listagem da fonte (e de fechar por ausência).
-- **Fix commit:** esta PR (`fix/verify-run-completeness-copy`, `Closes #439`).
+- **Fix commit:** `38805d7d` (PR `fix/verify-run-completeness-copy`, `Closes #439`).
   `completenessKey(scopeKind, completeness)` em
   `app/admin/execucoes/run-completeness.ts` escolhe a chave; para `verify`
   saem `runs.verifyComplete` ("conferência completa: todas as vagas abertas da

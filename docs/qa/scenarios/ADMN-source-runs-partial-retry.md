@@ -8,9 +8,9 @@ expected: A execução de todas fica parcial com uma linha por fonte, a que falh
 entry_points: /admin/execucoes
 qa_status: pass
 bug_ids: BUG-20261001-verify-run-shows-capture-completeness-copy
-fix_status: pending
+fix_status: fixed
 retest_status:
-fix_commits:
+fix_commits: 38805d7d
 evidence: docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-admin-source-catalog-first-walk-todas-na-fila.png; docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-admin-source-catalog-first-walk-todas-parcial.png; docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-admin-source-catalog-first-walk-todas-parcial-375px.png; docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-admin-source-catalog-first-walk-nova-tentativa.png; docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-admin-source-catalog-first-walk-execucoes-pagina-1-375px.png; docs/qa/evidence/2026-10-01-qa-223-verificacoes/CH-admin-source-catalog-first-walk-execucoes-pagina-2-375px.png
 last_report: docs/qa/reports/2026-10-01-qa-223-verificacoes.md
 overlaps: ADMN-source-catalog-operate
