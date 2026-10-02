@@ -34,6 +34,12 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.13] - 2026-10-02T00:17:17.000Z
+
+### Security
+
+- The notice shown before sending a job to the AI provider now shows only which variable the key comes from, its type and length, with no part of the key itself.
+
 ## [1.32.12] - 2026-10-01T22:02:16.000Z
 
 ### Fixed

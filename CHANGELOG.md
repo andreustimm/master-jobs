@@ -9,6 +9,12 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.32.13] - 2026-10-02
+
+### Segurança
+
+- `redactKey` (`src/core/llm/port.ts`) não devolve mais nenhum caractere da parte secreta da chave de API (#441, regra 16): o banner de `jho analyze` e `jho analysis run` mostra só o prefixo público do formato (`sk-ant-`, `sk-`, `nvapi-`) e o comprimento — `nvapi-… (70 caracteres)` —, ou `***` para formato desconhecido e chave curta, sempre ao lado do nome da variável. A máscara anterior mostrava 7 caracteres do começo e 4 do fim (5 reais numa chave `nvapi-`). Mede a chave aparada, a mesma do cabeçalho. `redactText` e `redactSecret` seguem cobrindo chave ecoada em erro.
+
 ## [1.32.12] - 2026-10-01
 
 ### Corrigido

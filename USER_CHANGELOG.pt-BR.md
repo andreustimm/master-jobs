@@ -34,6 +34,12 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.32.13] - 2026-10-02T00:17:17.000Z
+
+### Segurança
+
+- O aviso antes de enviar uma vaga ao provedor de IA mostra só de qual variável vem a chave, o tipo e o tamanho dela, sem nenhum trecho da chave.
+
 ## [1.32.12] - 2026-10-01T22:02:16.000Z
 
 ### Corrigido
