@@ -339,16 +339,24 @@ export function portFor(choice: ModelChoice): LlmPort {
  *
  * Recusa (`retired`) tornar padrão um modelo que o provedor desligou: o
  * padrão seria inalcançável, e o atual fica como está (#438).
+ *
+ * O mesmo id pode existir em dois provedores — desligado num, vivo noutro.
+ * Sem `providerSlug`, id que casa com mais de uma linha é `ambiguous`: escolher
+ * uma ao acaso recusaria o vivo ou marcaria a linha errada.
  */
-export async function setDefaultModel(modelId: string): Promise<"ok" | "not_found" | "retired"> {
+export async function setDefaultModel(
+  modelId: string,
+  providerSlug?: string,
+): Promise<"ok" | "not_found" | "retired" | "ambiguous"> {
   const db = getDb();
-  const [target] = await db
+  const rows = await db
     .select({ id: llmModel.id, providerSlug: llmProvider.slug })
     .from(llmModel)
     .innerJoin(llmProvider, eq(llmProvider.id, llmModel.providerId))
-    .where(eq(llmModel.modelId, modelId))
-    .limit(1);
+    .where(providerSlug ? and(eq(llmModel.modelId, modelId), eq(llmProvider.slug, providerSlug)) : eq(llmModel.modelId, modelId));
+  const [target] = rows;
   if (!target) return "not_found";
+  if (rows.length > 1) return "ambiguous";
   if (retirementOf(target.providerSlug, modelId)) return "retired";
 
   await db.update(llmModel).set({ isDefault: false });

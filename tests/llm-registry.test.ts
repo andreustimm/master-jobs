@@ -269,6 +269,31 @@ describe("setDefaultModel", () => {
   it("reports an unknown model instead of silently doing nothing", async () => {
     await seedProviders();
     expect(await setDefaultModel("nao-existe")).toBe("not_found");
+    expect(await setDefaultModel("claude-opus-5", "openai")).toBe("not_found");
+  });
+
+  it("mesmo id em dois provedores: recusa a ambiguidade e aceita o provedor (#438)", async () => {
+    // O id desligado na NVIDIA pode estar vivo noutro provedor. Escolher a linha
+    // por `limit(1)` sem ordem recusaria o vivo ou marcaria a linha errada.
+    await seedProviders();
+    await cadastroAntigoComKimiPadrao();
+    const [openrouter] = await db.select({ id: llmProvider.id }).from(llmProvider).where(eq(llmProvider.slug, "openrouter"));
+    await db.insert(llmModel).values({ providerId: openrouter!.id, modelId: "moonshotai/kimi-k2-instruct", label: "Kimi K2 (via OR)" });
+    await db.update(llmModel).set({ isDefault: false });
+    await db.update(llmModel).set({ isDefault: true }).where(eq(llmModel.modelId, "claude-sonnet-5"));
+
+    expect(await setDefaultModel("moonshotai/kimi-k2-instruct")).toBe("ambiguous");
+    expect(await setDefaultModel("moonshotai/kimi-k2-instruct", "nvidia")).toBe("retired");
+    const antes = (await db.select().from(llmModel)).filter((m) => m.isDefault).map((m) => m.modelId);
+    expect(antes).toEqual(["claude-sonnet-5"]);
+
+    expect(await setDefaultModel("moonshotai/kimi-k2-instruct", "openrouter")).toBe("ok");
+    const padrao = await db
+      .select({ provider: llmProvider.slug, modelId: llmModel.modelId })
+      .from(llmModel)
+      .innerJoin(llmProvider, eq(llmProvider.id, llmModel.providerId))
+      .where(eq(llmModel.isDefault, true));
+    expect(padrao).toEqual([{ provider: "openrouter", modelId: "moonshotai/kimi-k2-instruct" }]);
   });
 });
 

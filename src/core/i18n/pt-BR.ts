@@ -1299,7 +1299,7 @@ export const ptBR = {
     causeRejected:
       "O provedor recusou o pedido. Confira o modelo e o provedor cadastrados (jho llm list) antes de tentar de novo.",
     causeUnknown:
-      "Erro do provedor sem o status HTTP: esta tentativa foi gravada antes de o status ser guardado. Confira o modelo em uso (jho llm list) antes de tentar de novo.",
+      "Erro do provedor sem o status HTTP registrado, então a causa não é conhecida. Confira o modelo em uso (jho llm list) antes de tentar de novo.",
   },
   copy: {
     candidateLead:

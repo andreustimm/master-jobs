@@ -76,7 +76,7 @@ rtk pnpm jho auth login <email>          # link de uso único → /login/callbac
 # LLM opcional (BYOK — sua chave, seu custo)
 rtk pnpm jho llm seed            # cadastra provedores conhecidos (sem os modelos desligados)
 rtk pnpm jho llm list            # modelos, esforço, custo, quais têm chave e quais o provedor desligou
-rtk pnpm jho llm use <modelo>    # define o padrão (recusa modelo desligado)
+rtk pnpm jho llm use <modelo> [--provider <slug>]   # define o padrão (recusa desligado; id em dois provedores pede --provider)
 rtk pnpm jho llm add-provider <slug> --label X --key-env VAR [--kind compatible --base-url URL]
 rtk pnpm jho llm add-model <provedor> <modelo> --label X [--reasoning --effort high]
 rtk pnpm jho analyze <id>        # leitura qualitativa da vaga; pede confirmação antes de enviar
@@ -1407,8 +1407,12 @@ chave desligados pelo provedor (cada um com o status HTTP e a data). Com fila,
 diz o que vai sair da máquina — destino, chave redigida, quantos anúncios e
 quantos caracteres — e espera confirmação (Enter vazio é "não"; `--yes` pula).
 Imprime só `{"id", "status"}` por análise, mais `errorCode` e `providerStatus`
-(o status HTTP, só o número) quando falha: nem texto da vaga, nem resposta do
-provedor.
+(o status HTTP, só o número; nulo sem resposta) quando o provedor recusa ou não
+responde — `input_changed` e `malformed_output` saem só com `id` e `status`.
+Nem texto da vaga, nem resposta do provedor. Na primeira recusa que se
+repetiria em toda vaga (modelo desligado ou chave sem permissão), para, deixa
+o resto da fila intacto e sai com código 1: seguir gastaria uma das três
+tentativas de cada vaga. Provedor instável não para a fila.
 
 | Flag | Default | Efeito |
 |---|---|---|
@@ -1419,9 +1423,10 @@ provedor.
 Texto da vaga alterado depois do pedido: a análise falha com `input_changed`
 sem chamar o provedor. 429 do provedor vira `paused_quota`. Outra recusa do
 provedor vira `provider_error` com o status HTTP gravado em `provider_status`,
-e a tela da vaga mostra ao admin o que ele significa: 404/410 é modelo
-desligado, 401/403 é chave sem permissão, 5xx ou falta de resposta é provedor
-instável.
+mesmo quando o corpo da recusa é vazio, texto ou HTML de gateway (o corpo
+nunca é gravado), e a tela da vaga mostra ao admin o que ele significa:
+404/410 é modelo desligado, 401/403 é chave sem permissão, 5xx ou falta de
+resposta é provedor instável.
 
 ### Modelos desligados pelo provedor
 
@@ -1437,7 +1442,9 @@ cadastrava — `moonshotai/kimi-k2-instruct` (410, fim de vida em 2026-05-12),
 - num cadastro antigo, que já tem a linha, `jho llm list` mostra a marca
   "desligado pelo provedor (HTTP …)" e nunca a seta de "em uso"; sem nenhum
   modelo vivo com chave, diz "Nenhum modelo disponível: escolha um";
-- `jho llm use <modelo>` recusa torná-lo padrão;
+- `jho llm use <modelo>` recusa torná-lo padrão; se o mesmo id existe em mais
+  de um provedor (desligado num, vivo noutro), recusa a ambiguidade e pede
+  `--provider <slug>`;
 - `jho analyze` e `jho analysis run` não o escolhem, nem por `--model`.
 
 Nada disso escreve no banco: a marca é lida do catálogo na hora.

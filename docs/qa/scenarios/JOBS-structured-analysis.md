@@ -63,7 +63,7 @@ análise pendente.
 passa a mostrar a causa da falha do provedor: na tentativa recusada com 410,
 "erro: provider_error (HTTP 410)" e "Modelo desligado: …", com o botão
 "Tentar após trocar o modelo"; a tentativa antiga, gravada só como
-`provider_error`, aparece como "Erro do provedor sem o status HTTP…". Os
+`provider_error`, aparece como "Erro do provedor sem o status HTTP registrado…". Os
 modelos NIM desligados saíram da semente, e a CLI, sem modelo vivo, diz
 "Nenhum modelo disponível: escolha um" em vez de gerar outra `provider_error`.
 Provado pela área E2E `job-analysis` (26/26, provedor falso, `reload` antes de

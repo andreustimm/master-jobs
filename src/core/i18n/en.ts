@@ -1275,7 +1275,7 @@ export const en: Dictionary = {
     causeRejected:
       "The provider rejected the request. Check the registered model and provider (jho llm list) before retrying.",
     causeUnknown:
-      "Provider error without an HTTP status: this attempt was recorded before the status was kept. Check the model in use (jho llm list) before retrying.",
+      "Provider error with no HTTP status recorded, so the cause is unknown. Check the model in use (jho llm list) before retrying.",
   },
   copy: {
     candidateLead:

@@ -10,7 +10,7 @@
  * Fronteira FORA: o provedor de LLM (porta falsa). O prompt é o arquivo real.
  */
 import { eq, sql } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ensureCandidate, saveDocument } from "../src/core/candidate.ts";
 import type { DB } from "../src/core/db/client.ts";
 import { deleteClosedJobsWithoutApplication } from "../src/core/db/retention.ts";
@@ -25,6 +25,7 @@ import {
 } from "../src/core/llm/job-analysis.ts";
 import { ANALYSIS_LEASE_MS } from "../src/core/llm/job-structure.ts";
 import { LlmError, type LlmPort, type LlmRequest } from "../src/core/llm/port.ts";
+import { openaiProvider } from "../src/core/llm/providers.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 
 let db: DB;
@@ -193,6 +194,25 @@ describe("IT-011 fila, idempotência, cota e vaga alterada", () => {
     const other = await jobAnalysisPanel(jobId, { admin: false });
     expect(other.latest).not.toHaveProperty("providerStatus");
     expect(other.latest).not.toHaveProperty("cause");
+  });
+
+  it.each([
+    ["404 em texto puro", 404, "404 page not found", "model_unavailable"],
+    ["410 com corpo vazio", 410, "", "model_unavailable"],
+    ["403 em HTML", 403, "<html><h1>403 Forbidden</h1></html>", "unauthorized"],
+  ])("pelo adapter real, recusa %s grava o status e a causa certa, não 'instável'", async (_caso, status, body, cause) => {
+    vi.stubGlobal("fetch", async () => new Response(body, { status, headers: { "content-type": "text/html" } }));
+    try {
+      await requestJobAnalysis({ jobId, requestedBy: null, now: T0 });
+      const port = openaiProvider("nvapi-SINTETICA-0000000000", "moonshotai/kimi-k2-instruct", "https://integrate.api.nvidia.com");
+      const processed = await processNextAnalysis(model(port), { now: () => at(1000) });
+      expect(processed).toMatchObject({ status: "failed", errorCode: "provider_error", providerStatus: status });
+      const admin = await jobAnalysisPanel(jobId, { admin: true });
+      expect(admin.admin && admin.attempts[0]).toMatchObject({ errorCode: "provider_error", providerStatus: status, cause });
+      expect(JSON.stringify(await allRows())).not.toContain("Forbidden");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("403 é chave sem permissão; status fora de HTTP não é gravado", async () => {

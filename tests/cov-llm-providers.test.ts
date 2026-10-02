@@ -299,3 +299,70 @@ describe("openaiProvider", () => {
     await expect(openaiProvider("sk-x").complete(pedido)).rejects.toThrow("HTTP 500");
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Recusa com corpo que não é JSON (#438, Major 1 da revisão L2 da PR #444)    */
+/* -------------------------------------------------------------------------- */
+
+/** Responde com o corpo cru, como um gateway, um CDN ou um 404 de roteador. */
+function responderCru(status: number, body: BodyInit | null, contentType = "text/plain"): void {
+  vi.stubGlobal("fetch", async (input: string | URL, init: RequestInit = {}) => {
+    chamadas.push({ url: String(input), init });
+    return new Response(body, { status, headers: { "content-type": contentType } });
+  });
+}
+
+/** Corpo cuja leitura falha no meio, como uma conexão que cai depois do status. */
+function corpoQueQuebra(): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      controller.error(new Error("conexão caiu"));
+    },
+  });
+}
+
+describe.each([
+  ["anthropic", (k: string) => anthropicProvider(k)],
+  ["openai", (k: string) => openaiProvider(k, "moonshotai/kimi-k2-instruct", "https://integrate.api.nvidia.com")],
+] as const)("%s: recusa com corpo que não é JSON vira LlmError com o status", (provider, porta) => {
+  const CHAVE = "nvapi-SINTETICA-de-teste-0000000000";
+
+  it.each([
+    ["404 em texto puro", 404, "404 page not found", "text/plain"],
+    ["410 com corpo vazio", 410, "", "text/plain"],
+    ["403 em HTML de gateway", 403, `<html><body><h1>403 Forbidden</h1><p>${CHAVE}</p></body></html>`, "text/html"],
+    ["502 em HTML", 502, "<html>Bad Gateway</html>", "text/html"],
+  ])("%s", async (_caso, status, body, contentType) => {
+    responderCru(status, body, contentType);
+
+    const erro = await porta(CHAVE).complete(pedido).catch((e: unknown) => e);
+
+    expect(erro).toBeInstanceOf(LlmError);
+    expect((erro as LlmError).status).toBe(status);
+    expect((erro as LlmError).provider).toBe(provider);
+    // O corpo cru nunca vira mensagem: só o status, e nada da chave.
+    expect((erro as LlmError).message).toBe(`HTTP ${status}`);
+  });
+
+  it.each([
+    ["mensagem que não é texto", { error: { message: { aninhada: true } } }],
+    ["mensagem vazia", { error: { message: "" } }],
+    ["JSON nulo", null],
+  ])("JSON de erro com %s cai no status", async (_caso, body) => {
+    responder(410, body);
+
+    const erro = await porta(CHAVE).complete(pedido).catch((e: unknown) => e);
+
+    expect(erro).toBeInstanceOf(LlmError);
+    expect((erro as LlmError).message).toBe("HTTP 410");
+  });
+
+  it("corpo que falha na leitura ainda vira LlmError com o status", async () => {
+    responderCru(410, corpoQueQuebra());
+
+    const erro = await porta(CHAVE).complete(pedido).catch((e: unknown) => e);
+
+    expect(erro).toBeInstanceOf(LlmError);
+    expect((erro as LlmError).status).toBe(410);
+  });
+});

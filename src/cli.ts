@@ -2523,12 +2523,18 @@ llm
 llm
   .command("use <model>")
   .description("Definir o modelo padrão")
-  .action(async (model: string) => {
+  .option("--provider <slug>", "provedor do modelo, quando o mesmo id existe em mais de um")
+  .action(async (model: string, opts: { provider?: string }) => {
     await withDb(async () => {
       const { setDefaultModel } = await import("./core/llm/registry.ts");
       const { RETIRED_MODELS, describeRetirement } = await import("./core/llm/model-retirement.ts");
-      const result = await setDefaultModel(model);
-      if (result === "retired") {
+      const result = await setDefaultModel(model, typeof opts.provider === "string" ? opts.provider : undefined);
+      if (result === "ambiguous") {
+        console.error(
+          c.red(`\n  Modelo "${model}" existe em mais de um provedor: diga qual com --provider <slug>. Veja: jho llm list\n`),
+        );
+        process.exitCode = 1;
+      } else if (result === "retired") {
         // `retired` só sai quando o id está no catálogo de desligados.
         const retired = RETIRED_MODELS.find((m) => m.modelId === model)!;
         console.error(c.red(`\n  Modelo "${model}" foi ${describeRetirement(retired)}: escolha outro. Veja: jho llm list\n`));
@@ -2833,11 +2839,28 @@ analysis
         maxOutputTokens: choice.maxOutputTokens,
         effort: choice.supportsReasoning ? (choice.effort ?? undefined) : undefined,
       };
+      const { failureCause } = await import("./core/llm/job-structure.ts");
       for (let done = 0; done < max; done++) {
         const processed = await processNextAnalysis(model, { now: () => clock().iso() });
         if (!processed) break;
-        // Só id e estado: nada do texto da vaga nem da resposta vai para o log.
+        // Id e estado, mais código e status HTTP quando o provedor recusou ou
+        // não respondeu: nada do texto da vaga nem da resposta vai para o log.
         console.log(JSON.stringify(processed));
+        // Modelo desligado ou chave sem permissão se repetem em toda vaga da
+        // fila: seguir gastaria uma das três tentativas de cada uma (#438).
+        const refused = "errorCode" in processed ? processed : null;
+        const cause = refused ? failureCause(refused.errorCode, refused.providerStatus) : null;
+        if (refused && (cause === "model_unavailable" || cause === "unauthorized")) {
+          console.error(
+            c.red(
+              `\n  Parado na primeira recusa que se repetiria (HTTP ${refused.providerStatus}): ` +
+                (cause === "model_unavailable" ? "o modelo foi desligado ou não existe." : "a chave não tem permissão para este modelo."),
+            ),
+          );
+          console.log(c.dim("  O resto da fila ficou intacto. Troque o modelo (jho llm use <modelo>) ou autorize a chave e rode de novo.\n"));
+          process.exitCode = 1;
+          break;
+        }
       }
     });
   });

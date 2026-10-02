@@ -246,6 +246,19 @@ describe("jho llm list", () => {
     expect(r.err).toContain("desligado pelo provedor (HTTP 410, fim de vida em 2026-05-12)");
   });
 
+  it("`use` com o mesmo id em dois provedores pede --provider e o respeita", async () => {
+    await cadastrarKimiAntigo();
+    await rodar("llm", "add-provider", "outro", "--label", "Outro", "--key-env", VAR_CHAVE);
+    await rodar("llm", "add-model", "outro", "moonshotai/kimi-k2-instruct", "--label", "Kimi K2 (outro)");
+
+    const ambiguo = await rodar("llm", "use", "moonshotai/kimi-k2-instruct");
+    const vivo = await rodar("llm", "use", "moonshotai/kimi-k2-instruct", "--provider", "outro");
+
+    expect(ambiguo.code).toBe(1);
+    expect(ambiguo.err).toContain("existe em mais de um provedor: diga qual com --provider");
+    expect(vivo.out).toContain("padrão: moonshotai/kimi-k2-instruct");
+  });
+
   it("`seed` diz quais modelos desligados ficaram de fora, com status e data", async () => {
     const r = await rodar("llm", "seed");
 

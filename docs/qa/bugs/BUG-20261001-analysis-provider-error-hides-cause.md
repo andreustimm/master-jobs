@@ -65,7 +65,17 @@ desligado.
   `jho llm list` os sinaliza, `chooseModel` não os escolhe, `jho llm use`
   recusa. Sem modelo vivo, a CLI diz "Nenhum modelo disponível: escolha um"
   e não reivindica nada.
-- **Regression test:** `tests/job-analysis.test.ts` (410, 403, status
+- **Revisão L2 da PR #444 (Major 1):** os dois adapters
+  (`src/core/llm/providers.ts`) liam o corpo como JSON antes de olhar o
+  status; recusa com corpo vazio, texto ou HTML virava `SyntaxError`, gravada
+  como `network` e mostrada como "provedor instável". Agora a recusa é sempre
+  `LlmError` com o status, e o corpo cru nunca vira mensagem. Na mesma
+  rodada, `jho analysis run` para na primeira recusa permanente e
+  `jho llm use` recusa id ambíguo entre provedores.
+- **Regression test:** `tests/cov-llm-providers.test.ts` (404 em texto, 410
+  vazio, 403 e 502 em HTML, corpo que quebra na leitura, nos dois adapters),
+  `tests/job-analysis.test.ts` (as mesmas recusas pelo adapter real gravam
+  status e causa certa; 410, 403, status
   inválido e linha antiga), `tests/job-structure.test.ts` (`failureCause`,
   `httpStatusOf`), `tests/llm-registry.test.ts` (seis casos de modelo
   desligado), `tests/cov-cli-rede-llm.test.ts` e
