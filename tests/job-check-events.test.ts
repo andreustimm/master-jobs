@@ -11,11 +11,13 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { executeSourceRun, requestSourceRun, sourceRun } from "../src/contexts/operations/index.ts";
 import type { DB } from "../src/core/db/client.ts";
-import { application, applicationEvent, candidate, job, jobCheckEvent, source } from "../src/core/db/schema.ts";
+import { application, applicationEvent, candidate, job, jobCheckEvent, jobScore, source } from "../src/core/db/schema.ts";
+import { DEFAULT_VERIFY_MIN_FIT } from "../src/core/ingest/availability.ts";
 import { applyVerdict, jobAvailability } from "../src/core/ingest/verdict.ts";
 import { verifyJobs } from "../src/core/ingest/verify.ts";
 import { enqueueVerify, runVerifyQueue } from "../src/core/ingest/verify-queue.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
+import { primaryTrackId } from "./support/tracks.ts";
 
 let db: DB;
 const IP = "93.184.216.34";
@@ -259,8 +261,10 @@ describe("IT-008 caminho único e execução de verificação", () => {
       await executeSourceRun(fonte.runId, { verify: { limit: 2 } });
       expect(await sourceRun(fonte.runId)).toMatchObject({ status: "succeeded", completeness: "partial", fetched: 2, dueTotal: 3 });
 
-      // Global sem nota: as vagas desta suíte não têm fit, então o piso vai a 0
-      // (o que a CLI faz com --min-fit); as quatro, das duas fontes, estão vencidas.
+      // Estas vagas não têm nota, então o piso vai a 0 (o que a CLI faz com
+      // --min-fit 0) para as quatro, das duas fontes, estarem vencidas. Aqui NÃO
+      // se prova o "nota 55 ou mais" da frase: o piso padrão da global é provado
+      // no teste seguinte, com vagas notadas dos dois lados do corte.
       const global = await requestSourceRun({ kind: "verify", sourceId: null }, null);
       if (!global.ok) throw new Error("recusado");
       await executeSourceRun(global.runId, { verify: { limit: 50, minFit: 0 } });
@@ -268,6 +272,52 @@ describe("IT-008 caminho único e execução de verificação", () => {
     } finally {
       globalThis.fetch = original;
     }
+  });
+
+  it("execução global sem `minFit` respeita o piso padrão: só a vaga de nota 55 ou mais conta em total e conferidas (#447)", async () => {
+    const [pessoa] = await db.insert(candidate).values({ slug: "ana", name: "Ana", isDefault: true }).returning({ id: candidate.id });
+    const trackId = await primaryTrackId(db, pessoa!.id);
+    const pontua = (jobId: number, fit: number) =>
+      db.insert(jobScore).values({
+        candidateId: pessoa!.id,
+        trackId,
+        jobId,
+        fit,
+        titleScore: fit,
+        keywordScore: 0,
+        seniorityScore: 0,
+        geoScore: 0,
+        compScore: 0,
+        freshnessScore: 0,
+        benefitScore: 0,
+        penalty: 0,
+        cluster: "architect",
+        matchedKeywords: [],
+        missingKeywords: [],
+        detectedBenefits: [],
+        ageDays: null,
+        reasons: [],
+        blockers: [],
+        scorerVersion: "teste",
+      });
+    const alta = await vaga("/alta");
+    const baixa = await vaga("/baixa", "greenhouse:beta");
+    await pontua(alta, DEFAULT_VERIFY_MIN_FIT);
+    await pontua(baixa, DEFAULT_VERIFY_MIN_FIT - 1);
+
+    const global = await requestSourceRun({ kind: "verify", sourceId: null }, null);
+    if (!global.ok) throw new Error("recusado");
+    const original = globalThis.fetch;
+    globalThis.fetch = porCaminho({});
+    try {
+      await executeSourceRun(global.runId, { verify: { limit: 50 } });
+    } finally {
+      globalThis.fetch = original;
+    }
+
+    expect(await sourceRun(global.runId)).toMatchObject({ status: "succeeded", completeness: "complete", fetched: 1, dueTotal: 1 });
+    expect((await eventos(alta)).map((e) => e.runId)).toEqual([global.runId]);
+    expect(await eventos(baixa)).toEqual([]);
   });
 
   it("interrupção deixa as não verificadas como estavam; nada vencido dá zero", async () => {

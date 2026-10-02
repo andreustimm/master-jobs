@@ -215,6 +215,17 @@ export async function seedProviders(): Promise<{ providers: number; models: numb
   return { providers, models, retired: RETIRED_MODELS.filter((m) => seeded.has(m.providerSlug)) };
 }
 
+/**
+ * A chave da variável de ambiente, aparada; `undefined` quando falta ou só tem
+ * espaço. É a mesma leitura de `redactKey` ("(ausente)" para chave só com
+ * espaços): sem ela, o banner dizia `ok` e o comando mostrava "(ausente)" e
+ * falhava com 401. `keyPresent` e `portFor` leem por aqui, então concordam.
+ */
+function keyFromEnv(name: string): string | undefined {
+  const value = process.env[name]?.trim();
+  return value ? value : undefined;
+}
+
 export async function listModels(onlyEnabled = false): Promise<ModelChoice[]> {
   const db = getDb();
   const rows = await db
@@ -253,7 +264,7 @@ export async function listModels(onlyEnabled = false): Promise<ModelChoice[]> {
       maxOutputTokens: r.maxOutputTokens,
       inputCostPerMTok: r.inputCostPerMTok,
       outputCostPerMTok: r.outputCostPerMTok,
-      keyPresent: Boolean(process.env[r.apiKeyEnv]),
+      keyPresent: keyFromEnv(r.apiKeyEnv) !== undefined,
       retired: retirementOf(r.providerSlug, r.modelId),
     }))
     .sort((a, b) => Number(b.keyPresent) - Number(a.keyPresent) || a.modelLabel.localeCompare(b.modelLabel));
@@ -284,12 +295,16 @@ export async function chooseModel(explicit?: string): Promise<ModelChoice | null
 
   const db = getDb();
   const [defaultRow] = await db
-    .select({ modelId: llmModel.modelId })
+    .select({ modelId: llmModel.modelId, providerSlug: llmProvider.slug })
     .from(llmModel)
+    .innerJoin(llmProvider, eq(llmProvider.id, llmModel.providerId))
     .where(and(eq(llmModel.isDefault, true), eq(llmModel.enabled, true)))
     .limit(1);
 
-  const preferred = defaultRow ? models.find((m) => m.modelId === defaultRow.modelId) : undefined;
+  // O mesmo id pode existir em dois provedores: o padrão é a linha, não o id.
+  const preferred = defaultRow
+    ? models.find((m) => m.modelId === defaultRow.modelId && m.providerSlug === defaultRow.providerSlug)
+    : undefined;
   if (preferred?.keyPresent) return preferred;
 
   return models.find((m) => m.keyPresent) ?? null;
@@ -322,7 +337,7 @@ export async function explainNoModel(explicit?: string): Promise<NoModelReason> 
 
 /** Builds the port for a chosen model. Throws when the key is absent. */
 export function portFor(choice: ModelChoice): LlmPort {
-  const key = process.env[choice.apiKeyEnv];
+  const key = keyFromEnv(choice.apiKeyEnv);
   if (!key) {
     throw new Error(
       `${choice.providerLabel} está cadastrado, mas ${choice.apiKeyEnv} não está definida no .env.`,

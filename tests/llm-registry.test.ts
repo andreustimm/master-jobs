@@ -167,6 +167,31 @@ describe("chooseModel", () => {
     await db.update(llmModel).set({ enabled: false });
     expect(await chooseModel()).toBeNull();
   });
+
+  it("chave só com espaços é ausente, como `redactKey` a mostra (#438)", async () => {
+    await seedProviders();
+    process.env.ANTHROPIC_API_KEY = "   \n";
+    expect((await listModels()).find((m) => m.providerSlug === "anthropic")!.keyPresent).toBe(false);
+    expect(await chooseModel()).toBeNull();
+    expect(await explainNoModel()).toEqual({ kind: "no_key" });
+
+    // Com espaço em volta do valor, a chave existe: é a aparada que vale.
+    process.env.ANTHROPIC_API_KEY = "  sk-ant-test \n";
+    expect((await listModels()).find((m) => m.providerSlug === "anthropic")!.keyPresent).toBe(true);
+    expect((await chooseModel())!.providerSlug).toBe("anthropic");
+  });
+
+  it("mesmo id em dois provedores: o padrão é a linha marcada, não o primeiro com o id (#438)", async () => {
+    await seedProviders();
+    const [openrouter] = await db.select({ id: llmProvider.id }).from(llmProvider).where(eq(llmProvider.slug, "openrouter"));
+    await db.insert(llmModel).values({ providerId: openrouter!.id, modelId: "claude-sonnet-5", label: "Sonnet 5 (via OR)" });
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+    process.env.OPENROUTER_API_KEY = "sk-or-test";
+    expect((await chooseModel())!.providerSlug).toBe("anthropic");
+
+    expect(await setDefaultModel("claude-sonnet-5", "openrouter")).toBe("ok");
+    expect((await chooseModel())!.providerSlug).toBe("openrouter");
+  });
 });
 
 /**
@@ -302,6 +327,14 @@ describe("portFor", () => {
     await seedProviders();
     const models = await listModels();
     const model = models.find((m) => m.providerSlug === "anthropic")!;
+    expect(() => portFor(model)).toThrow(/ANTHROPIC_API_KEY/);
+  });
+
+  it("chave só com espaços falha aqui, dizendo a variável, igual ao banner (#438)", async () => {
+    await seedProviders();
+    process.env.ANTHROPIC_API_KEY = "  \t";
+    const model = (await listModels()).find((m) => m.providerSlug === "anthropic")!;
+    expect(model.keyPresent).toBe(false);
     expect(() => portFor(model)).toThrow(/ANTHROPIC_API_KEY/);
   });
 

@@ -54,6 +54,7 @@ import {
   requestSourceRun,
   sourceRun,
 } from "./contexts/operations/index.ts";
+import { DEFAULT_VERIFY_MIN_FIT } from "./core/ingest/availability.ts";
 import { verifyJobs } from "./core/ingest/verify.ts";
 import { loadProfile } from "./core/profile/load.ts";
 import {
@@ -1126,7 +1127,10 @@ jobs
 jobs
   .command("verify")
   .description("Check that top-ranked postings still exist — closes the ones that 404")
-  .option("--min-fit <n>", "only verify above this fit (default 55; with --source, 0 unless given)")
+  .option(
+    "--min-fit <n>",
+    `only verify above this fit (default ${DEFAULT_VERIFY_MIN_FIT}; with --source, 0 unless given)`,
+  )
   .option("--limit <n>", "how many to check", "100")
   .option("--dry-run", "report without closing anything")
   .option("--source <kind:handle>", "verify only this source's open jobs, recording a run")
@@ -1152,7 +1156,7 @@ jobs
       }
       let last = 0;
       const r = await verifyJobs({
-        minFit: Number(opts.minFit ?? "55"),
+        minFit: opts.minFit === undefined ? DEFAULT_VERIFY_MIN_FIT : Number(opts.minFit),
         limit: Number(opts.limit),
         dryRun: opts.dryRun,
         onProgress: (done, total) => {
@@ -2498,7 +2502,8 @@ llm
           m.inputCostPerMTok === null
             ? "—"
             : `$${m.inputCostPerMTok}/$${m.outputCostPerMTok ?? "?"}`;
-        const isActive = active?.modelId === m.modelId;
+        // O mesmo id pode existir em dois provedores: em uso é a linha, não o id.
+        const isActive = active?.modelId === m.modelId && active.providerSlug === m.providerSlug;
         const name = `${isActive ? "→ " : "  "}${m.modelLabel}`;
         console.log(
           (isActive ? c.green : (x: string) => x)(

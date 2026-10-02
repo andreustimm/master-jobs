@@ -80,6 +80,8 @@ async function execute(runId, fixtures, opts = {}) {
   try {
     // A verificação global usa o piso de fit padrão; as vagas desta suíte não têm
     // nota, então quem quer vê-las passa `verifyMinFit: 0` (o que a CLI faz com --min-fit).
+    // Com piso 0 o "nota 55 ou mais" da frase global NÃO fica provado aqui: o corte
+    // padrão é provado em tests/job-check-events.test.ts (vagas dos dois lados do corte).
     const verify = { limit: opts.verifyLimit ?? 20, ...(opts.verifyMinFit === undefined ? {} : { minFit: opts.verifyMinFit }) };
     return await executeSourceRun(runId, { concurrency: 2, verify });
   } finally {
@@ -297,7 +299,8 @@ export async function checkAdminCatalog(browser, base, accounts, check) {
 
     // Verificação GLOBAL ("Atualizar status de todas"): sem fonte, vale o universo
     // das vagas elegíveis, e o texto não pode prometer "todas as vagas abertas".
-    // As vagas alheias ficam estacionadas só durante a execução.
+    // As vagas alheias ficam estacionadas só durante a execução. O "N de M" abaixo
+    // conta as vagas sem nota (piso 0), não as de "nota 55 ou mais" da frase.
     const runGlobal = async (verifyLimit) => {
       await page.goto(`${base}/admin/execucoes`, { waitUntil: "networkidle" });
       const before = new Set((await db.select({ id: sourceRun.id }).from(sourceRun)).map((row) => row.id));
