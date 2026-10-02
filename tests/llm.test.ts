@@ -1,8 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { ENV_KEYS, LlmError, redactKey, redactText } from "../src/core/llm/port.ts";
+import { ENV_KEYS, LlmError, redactKey, redactSecret, redactText } from "../src/core/llm/port.ts";
 import { resolveLlm } from "../src/core/llm/providers.ts";
 import { buildAnalysisInput, loadSystemPrompt } from "../src/core/llm/analyze.ts";
 import type { Dossier } from "../src/core/apply/dossier.ts";
+
+/**
+ * Parte secreta sintética, feita só de maiúsculas: nenhuma delas aparece no
+ * molde da máscara (`… (N caracteres)`), então qualquer uma na saída é
+ * caractere do segredo que vazou (#441, regra 16).
+ */
+const SEGREDO = "QWERTYUIOPASDFGHJKLZXCVBNMQWERTYUIOPASDFGHJKLZXCVBNMQWERTY";
+
+function caracteresDoSegredo(shown: string, prefixo: string): string[] {
+  const resto = shown.startsWith(prefixo) ? shown.slice(prefixo.length) : shown;
+  return [...resto].filter((ch) => SEGREDO.includes(ch));
+}
 
 describe("key handling", () => {
   it("never shows a whole key", () => {
@@ -10,6 +22,29 @@ describe("key handling", () => {
     const shown = redactKey(key);
     expect(shown).not.toContain("abcdefghij");
     expect(shown).toContain("…");
+  });
+
+  it.each([
+    ["nvapi-", `nvapi-${SEGREDO}`],
+    ["sk-ant-", `sk-ant-${SEGREDO}`],
+    ["sk-", `sk-${SEGREDO}`],
+  ])("mostra só o prefixo %s e o comprimento, nenhum caractere do segredo (#441)", (prefixo, key) => {
+    const shown = redactKey(key);
+    expect(shown).toBe(`${prefixo}… (${key.length} caracteres)`);
+    expect(caracteresDoSegredo(shown, prefixo)).toEqual([]);
+  });
+
+  it("formato desconhecido não mostra prefixo nenhum, só o comprimento", () => {
+    const key = `opencode-${SEGREDO}`;
+    const shown = redactKey(key);
+    expect(shown).toBe(`*** (${key.length} caracteres)`);
+    expect(shown).not.toContain("opencode");
+    expect(caracteresDoSegredo(shown, "")).toEqual([]);
+  });
+
+  it("espaço ou quebra de linha do .env não muda o prefixo nem o comprimento", () => {
+    const key = `nvapi-${SEGREDO}`;
+    expect(redactKey(`  ${key}\n`)).toBe(`nvapi-… (${key.length} caracteres)`);
   });
 
   it("masks a short key entirely rather than revealing most of it", () => {
@@ -32,6 +67,12 @@ describe("key handling", () => {
     // So no caller can forget.
     const err = new LlmError("anthropic", 401, "invalid key sk-ant-api03-LEAKED0000000000");
     expect(err.message).not.toContain("LEAKED");
+  });
+
+  it("redactSecret segue apagando pelo valor uma chave nvapi- ecoada no erro", () => {
+    const key = `nvapi-${SEGREDO}`;
+    const limpo = redactSecret(`401 Unauthorized: bad key ${key}`, key);
+    expect(limpo).toBe("401 Unauthorized: bad key ***");
   });
 });
 

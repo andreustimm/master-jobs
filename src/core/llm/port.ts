@@ -62,16 +62,36 @@ export const ENV_KEYS: Record<Provider, string> = {
 };
 
 /**
+ * Prefixos públicos de formato de chave, do mais longo ao mais curto (`sk-ant-`
+ * antes de `sk-`). São a marca do emissor, iguais em toda chave dele: não
+ * carregam nada do segredo.
+ */
+const KEY_FORMAT_PREFIXES = ["sk-ant-", "nvapi-", "sk-"] as const;
+
+/**
  * Masks a key for display.
+ *
+ * Não devolve NENHUM caractere da parte secreta (#441, regra 16): só o prefixo
+ * conhecido do formato e o comprimento — `nvapi-… (70 caracteres)` —, ou `***`
+ * quando o formato é desconhecido ou a chave é curta. A máscara anterior
+ * mostrava 7 do começo e 4 do fim, o que numa chave `nvapi-` são 5 caracteres
+ * reais em transcritos de agente, terminais compartilhados e logs de CI. Quem
+ * precisa saber DE ONDE vem a chave lê o nome da variável, que o banner imprime
+ * ao lado.
+ *
+ * Mede a chave aparada, a mesma que vai no cabeçalho: espaço ou quebra de linha
+ * no fim do `.env` não muda o que se vê.
  *
  * Never log a raw key, including on the error path — an API that rejects a key
  * often echoes it back, and a stack trace in a terminal is a stack trace in
  * someone's scrollback.
  */
 export function redactKey(key: string | undefined): string {
-  if (!key) return "(ausente)";
-  if (key.length <= 12) return "***";
-  return `${key.slice(0, 7)}…${key.slice(-4)}`;
+  const value = key?.trim();
+  if (!value) return "(ausente)";
+  if (value.length <= 12) return "***";
+  const prefix = KEY_FORMAT_PREFIXES.find((p) => value.startsWith(p));
+  return `${prefix ? `${prefix}…` : "***"} (${value.length} caracteres)`;
 }
 
 /** Strips anything that looks like a key out of arbitrary text. */

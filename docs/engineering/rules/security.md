@@ -382,6 +382,13 @@ ambiente**, jamais a chave. Banco é copiado, versionado em backup e aberto por
 outros processos — chave dentro dele viaja junto. BYOK só é promessa cumprida
 se for estrutural. Nada imprime a chave: nem log, nem erro, nem saída de CLI.
 
+**Banner da CLI.** `jho analyze` e `jho analysis run` dizem com qual chave vão
+enviar pelo **nome da variável**; ao lado, `redactKey` mostra no máximo o
+prefixo público do formato (`sk-ant-`, `sk-`, `nvapi-`) e o comprimento — ex.
+`nvapi-… (70 caracteres)` —, ou `***`. Nenhum caractere da parte secreta, nem
+do começo nem do fim: a saída vai para transcrito de agente, terminal
+compartilhado e log de CI (#441).
+
 **Quem apaga.** O adapter que assina a requisição conhece a chave e a apaga
 pelo VALOR de todo erro que sai dele (`redactSecret`). Regex de formato
 (`redactText`, peneira do Sentry) é segunda linha: não reconhece `nvapi-…` nem
@@ -392,7 +399,8 @@ sentinela pelo caminho real, procurada no erro, no evento do Sentry, na saída
 da CLI, em todas as tabelas e no painel da análise; e testes asserindo que
 nenhuma coluna guarda chave e que nada a imprime
 (`tests/cov-cli-posicionamento.test.ts`, `tests/cov-cli-rede-llm.test.ts`,
-`tests/llm-registry.test.ts`). O gate estrutural de `tests/architecture.test.ts`
+`tests/cov-cli-analysis.test.ts`, `tests/llm-registry.test.ts`); a máscara do
+banner, por `tests/llm.test.ts` (nenhum caractere da parte secreta na saída). O gate estrutural de `tests/architecture.test.ts`
 isenta `apiKeyEnv` por ocorrência, nunca por arquivo.
 
 <a id="g36"></a>

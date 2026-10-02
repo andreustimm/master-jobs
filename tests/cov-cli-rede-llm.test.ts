@@ -297,9 +297,11 @@ describe("jho analyze <id>", () => {
     expect(r.code).toBeUndefined();
     expect(r.out).toContain("Isto vai sair da sua máquina");
     expect(r.out).toContain("Provedor de Teste");
-    // `redactKey`: começo e fim, nunca o miolo.
-    expect(r.out).toContain("sk-test…ghij");
+    // `redactKey`: só o prefixo do formato e o comprimento; a origem é o NOME
+    // da variável (#441, regra 16).
+    expect(r.out).toContain(`sk-… (${CHAVE.length} caracteres) (de ${VAR_CHAVE})`);
     expect(r.out).not.toContain(CHAVE);
+    expect(r.out).not.toContain("ghij");
     expect(r.out).toContain("NÃO envia: seu currículo, seu perfil, nem o funil");
     expect(r.out).toContain("Cancelado");
     expect(chamadas).toEqual([]);
