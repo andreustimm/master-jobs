@@ -22,7 +22,18 @@ const DATABASE_VARIABLES = [
   "POSTGRES_URL_NON_POOLING",
 ];
 
-/** Motivo da recusa, ou `null` quando o ambiente é seguro para o setup. */
+/**
+ * Motivo da recusa, ou `null` quando o ambiente é seguro para o e2e.
+ *
+ * Vale para `setup.mjs`, `ui.mjs` e `a11y.mjs`: o navegador também escreve
+ * (conta, vaga, visibilidade), então o alvo HTTP passa pela mesma lista de
+ * permissão que o banco (#435).
+ *
+ * Lacuna registrada (#435): banco no loopback com qualquer nome ainda passa.
+ * Restringir a `jho_test_*`, como `setup-manual.ts`, impediria rodar
+ * `test:e2e:external` contra o ambiente local de desenvolvimento, e é decisão
+ * do dono.
+ */
 export function isolationRefusal(env) {
   for (const name of DATABASE_VARIABLES) {
     const value = env[name];
@@ -37,6 +48,22 @@ export function isolationRefusal(env) {
       return `${name} inválida`;
     }
     if (!LOOPBACK.has(host)) return `${name} aponta para ${host}, fora do loopback`;
+  }
+  // Vazia conta como ausente, como nas variáveis de banco acima.
+  const testDatabase = env.JHO_TEST_DATABASE_URL;
+  if (testDatabase !== undefined && testDatabase !== "" && testDatabase !== env.DATABASE_URL) {
+    return "JHO_TEST_DATABASE_URL difere de DATABASE_URL";
+  }
+  // Ausente, `ui.mjs` e `a11y.mjs` usam http://127.0.0.1:3000. Vazia não cai no
+  // padrão (eles leem com `??`), então é recusada como inválida.
+  if (env.E2E_BASE !== undefined) {
+    let host;
+    try {
+      host = new URL(env.E2E_BASE).hostname;
+    } catch {
+      return "E2E_BASE inválida";
+    }
+    if (!LOOPBACK.has(host)) return `E2E_BASE aponta para ${host}, fora do loopback`;
   }
   const email = env.E2E_EMAIL;
   if (email !== undefined && !/@local\.test$/i.test(email.trim())) {
