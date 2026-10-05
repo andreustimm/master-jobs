@@ -115,8 +115,18 @@ stop_isolated_dockerd() {
 # ação padrão de SIGTERM/SIGINT ao PID 1 sem handler, então sem este trap o
 # `docker stop` do host esperava o timeout (10 s) e terminava com SIGKILL,
 # sem o `run.sh` nem o dockerd verem sinal nenhum. SIGINT também vira SIGTERM
-# para o filho: processo em segundo plano de shell não interativo herda SIGINT
-# ignorado, e o `run.sh` do runner (que trata TERM, não INT) nunca o veria.
+# para o filho, que é o sinal que o `run.sh` trata.
+#
+# O `run.sh` do GitHub só instala o próprio trap (`trap 'kill -INT -$PID' INT
+# TERM`, que manda SIGINT ao grupo do Runner.Listener) quando
+# `RUNNER_MANUALLY_TRAP_SIG` está definida; sem ela ele roda o helper em
+# primeiro plano, sem trap, e o SIGTERM mataria só o bash — o Listener e o
+# Worker ficariam órfãos até o SIGKILL do kernel ao PID 1 sair. Por isso
+# `launch_runner_process` define a variável. E o filho em segundo plano de um
+# shell não interativo herda SIGINT IGNORADO (sinal ignorado na entrada não
+# pode ser tratado nem reativado, e o helper herdaria o "ignorado"): por isso
+# `supervise_runner` lança o filho com job control (`set -m`), que restaura o
+# SIGINT padrão e o põe em grupo de processos próprio.
 # Se o runner ainda não nasceu, sai direto (o trap de EXIT limpa o dockerd).
 # Código de saída: 128 + sinal recebido (143/130). Nunca 75, para o controller
 # não ler "nenhum job foi pego" quando na verdade pediram para parar.
@@ -137,8 +147,9 @@ on_termination_signal() {
 # entre os dois e o repasse dependia de a versão do `su` encaminhar o sinal.
 # `setpriv` vem do util-linux, já instalado na imagem (Dockerfile).
 #
-# m1 (re-revisão) — `env -i` constrói o ambiente do zero (só as quatro
-# variáveis abaixo), sem depender do que `su` preserva ou não sem `--login`.
+# m1 (re-revisão) — `env -i` constrói o ambiente do zero (só as cinco
+# variáveis abaixo; `RUNNER_MANUALLY_TRAP_SIG` está explicada no repasse de
+# sinal), sem depender do que `su` preserva ou não sem `--login`.
 #
 # Roda em subshell em segundo plano (chamador usa `&`); o `cd` e o `exec` não
 # vazam para o shell principal.
@@ -148,6 +159,7 @@ launch_runner_process() {
     "JIT_CONFIG=${JIT_CONFIG}" \
     "PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-/opt/ms-playwright}" \
     "HOME=/home/runner" \
+    "RUNNER_MANUALLY_TRAP_SIG=1" \
     "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
     setpriv --reuid=runner --regid=runner --init-groups \
     ./run.sh --jitconfig "$JIT_CONFIG"
@@ -159,8 +171,10 @@ launch_runner_process() {
 # existe mais (um zumbi ainda existe para `kill -0`, então o próximo `wait`
 # colhe o status real). Se um sinal de término chegou, sai aqui com 128+sinal.
 supervise_runner() {
+  set -m
   launch_runner_process &
   RUNNER_PID=$!
+  set +m
   while true; do
     wait "$RUNNER_PID" && RUN_STATUS=0 || RUN_STATUS=$?
     kill -0 "$RUNNER_PID" 2>/dev/null || break

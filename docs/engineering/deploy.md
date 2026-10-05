@@ -776,7 +776,14 @@ contêiner:
   runner sair, para o dockerd interno e termina com 143 (130 no SIGINT) —
   nunca com 75, para o controller não ler uma parada como "nenhum job". Sem o
   trap, o PID 1 ignorava o sinal e o `docker stop` só terminava no SIGKILL
-  do timeout.
+  do timeout. Para o sinal chegar ao Runner.Listener (e ao Worker), o
+  entrypoint define `RUNNER_MANUALLY_TRAP_SIG=1` (só com ela o `run.sh` do
+  GitHub instala `trap 'kill -INT -$PID' INT TERM` e repassa SIGINT ao grupo
+  do helper) e lança o `run.sh` com job control (`set -m`), porque filho em
+  segundo plano de shell não interativo herda SIGINT ignorado e o helper
+  nunca o veria. O teste usa uma cópia fiel do `run.sh` do upstream
+  (`tests/fixtures/runner-upstream/run.sh`); o Runner.Listener real não foi
+  exercitado.
 - **`scripts/runner/runner-controller.sh`** roda no HOST, como o serviço
   systemd `master-jobs-runner-controller.service` (instalado por
   `provision-vps.sh`, com `Requires=docker.service`). Para cada job, ele pede

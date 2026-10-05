@@ -7,7 +7,16 @@
 //   dado (YAML), e `scripts/github/fork-guard.ts`, executado de verdade
 // Boundary OUT: o motor de expressões do GitHub Actions e o runner real
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -244,6 +253,11 @@ describe("Minor SIGTERM (issue #367) — o entrypoint repassa o sinal de parada 
     expect(code).toMatch(/setpriv --reuid=runner/);
   });
 
+  it("liga o trap do run.sh (RUNNER_MANUALLY_TRAP_SIG) e lança o filho com job control", () => {
+    expect(code).toContain('"RUNNER_MANUALLY_TRAP_SIG=1"');
+    expect(code).toMatch(/^\s*set -m\s*\n\s*launch_runner_process &\s*\n\s*RUNNER_PID=\$!\s*\n\s*set \+m\s*$/m);
+  });
+
   it("o código 75 só sai depois de run.sh status 0 e ausência do log de Worker", () => {
     const sentinelExits = codeLines.filter((line) => line.includes('exit "$NO_JOB_PICKED_UP_EXIT_CODE"'));
     expect(sentinelExits).toHaveLength(1);
@@ -343,5 +357,103 @@ describe("Minor SIGTERM (issue #367) — o entrypoint repassa o sinal de parada 
       expect(await run.done).toBe(130);
       expect(existsSync(join(run.dir, "received-term"))).toBe(true);
     }, 15_000);
+  });
+
+  describe("com o run.sh de verdade do GitHub (cópia fiel do upstream) e um helper que só termina com SIGINT", () => {
+    // O `run.sh` do upstream só repassa o sinal ao grupo do helper
+    // (`kill -INT -$PID`) com RUNNER_MANUALLY_TRAP_SIG, e o helper só vê o
+    // SIGINT se o entrypoint não o deixou ignorado ao lançar o filho. O helper
+    // aqui imita o Runner.Listener: ignora SIGTERM direto, sai só com SIGINT.
+    // O único trecho trocado do `launch_runner_process` real é o `setpriv`
+    // (precisa de root e do usuário `runner`).
+    const helperTemplate = [
+      "#!/bin/bash",
+      "trap 'echo int > got-int; exit 0' INT",
+      "trap 'echo term > got-term' TERM",
+      "echo $$ > helper-pid",
+      "echo ready > ready",
+      "while :; do sleep 0.05; done",
+      "",
+    ].join("\n");
+
+    const realLaunchHarness = [
+      "set -euo pipefail",
+      'source "$ENTRYPOINT"',
+      'RUNNER_RUNTIME="$TEST_RUNTIME"',
+      "prepare_writable_runtime_copy() { :; }",
+      "start_isolated_dockerd() { :; }",
+      'body="$(declare -f launch_runner_process)"',
+      'eval "${body//setpriv --reuid=runner --regid=runner --init-groups/}"',
+      "main",
+    ].join("\n");
+
+    async function runRealRunSh(signal: "SIGTERM" | "SIGINT") {
+      const dir = mkdtempSync(join(tmpdir(), "entrypoint-real-"));
+      const runtime = join(dir, "runtime");
+      mkdirSync(runtime);
+      copyFileSync(join(process.cwd(), "tests/fixtures/runner-upstream/run.sh"), join(runtime, "run.sh"));
+      chmodSync(join(runtime, "run.sh"), 0o755);
+      // O run.sh copia o template com `cp -f`, que preserva o modo: precisa ser executável.
+      writeFileSync(join(runtime, "run-helper.sh.template"), helperTemplate, { mode: 0o755 });
+      const child = spawn("bash", ["-c", realLaunchHarness], {
+        env: {
+          ...process.env,
+          ENTRYPOINT: join(process.cwd(), "scripts/runner/entrypoint.sh"),
+          JIT_CONFIG: "jit-de-mentira",
+          TEST_RUNTIME: runtime,
+        },
+        stdio: "ignore",
+      });
+      const done = new Promise<number | null>((resolve) => child.on("close", (exitCode) => resolve(exitCode)));
+      try {
+        await waitForFile(join(runtime, "ready"));
+        const helperPid = Number(readFileSync(join(runtime, "helper-pid"), "utf8").trim());
+        child.kill(signal);
+        const exitCode = await Promise.race([
+          done,
+          new Promise<"travou">((resolve) => setTimeout(() => resolve("travou"), 8_000)),
+        ]);
+        return { exitCode, helperPid, runtime };
+      } finally {
+        child.kill("SIGKILL");
+        try {
+          const pid = Number(readFileSync(join(runtime, "helper-pid"), "utf8").trim());
+          process.kill(-pid, "SIGKILL");
+        } catch {
+          // já saiu: é o caso esperado
+        }
+      }
+    }
+
+    function isAlive(pid: number) {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    async function waitForFile(path: string) {
+      for (let attempt = 0; attempt < 200; attempt++) {
+        if (existsSync(path)) return;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      throw new Error(`arquivo não apareceu: ${path}`);
+    }
+
+    it("SIGTERM no entrypoint vira SIGINT no helper, que sai; o entrypoint termina com 143", async () => {
+      const { exitCode, helperPid, runtime } = await runRealRunSh("SIGTERM");
+      expect(exitCode).toBe(143);
+      expect(existsSync(join(runtime, "got-int"))).toBe(true);
+      expect(isAlive(helperPid)).toBe(false);
+    }, 20_000);
+
+    it("SIGINT no entrypoint chega ao helper do mesmo jeito e termina com 130", async () => {
+      const { exitCode, helperPid, runtime } = await runRealRunSh("SIGINT");
+      expect(exitCode).toBe(130);
+      expect(existsSync(join(runtime, "got-int"))).toBe(true);
+      expect(isAlive(helperPid)).toBe(false);
+    }, 20_000);
   });
 });
