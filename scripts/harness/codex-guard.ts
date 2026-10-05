@@ -7,11 +7,16 @@
 // espera a pessoa aprovar, no Codex espera a pessoa rodar. Falha fecha —
 // entrada ilegível ou política ausente bloqueiam aqui; o processo que nem
 // chega a responder bloqueia pelo `|| exit 2` do comando em `.codex/hooks.json`.
+//
+// Shell (#461): a mesma política do hook do Claude Code e do plugin do
+// OpenCode (`.claude/hooks/shell-policy.mjs`) — composto recusado com a mesma
+// mensagem, e o risco do classificador somado à lista pela decisão mais forte.
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { decideCommand, decidePath, parseRules, type Decision, type Rule } from "./permissions.ts";
+import { blockMessage, judgeShell } from "../../.claude/hooks/shell-policy.mjs";
+import { bashRules, decideCommand, decidePath, parseRules, type Decision, type Rule } from "./permissions.ts";
 
 export type HookInput = {
   tool_name?: unknown;
@@ -19,7 +24,10 @@ export type HookInput = {
   cwd?: unknown;
 };
 
-export type Verdict = { decision: Decision | null; target: string };
+/** `message` vem da política de shell (composto ou classificador) e substitui o texto da lista. */
+export type Verdict = { decision: Decision | null; target: string; message?: string };
+
+const STRENGTH: Record<Decision, number> = { allow: 0, ask: 1, deny: 2 };
 
 /** Caminhos que um patch do Codex cria, altera, apaga ou para onde move. */
 export function patchPaths(patch: string): string[] {
@@ -48,7 +56,13 @@ export function judge(input: HookInput, rules: readonly Rule[], context: { root:
     }
     return { decision: worst, target };
   }
-  return { decision: decideCommand(rules, command), target: command };
+  const shell = judgeShell(command, bashRules(rules), { root: context.root, cwd, home: context.home });
+  if (shell?.kind === "compound") return { decision: "deny", target: command, message: blockMessage(shell, "Codex") };
+  const listed = decideCommand(rules, command);
+  if (shell && STRENGTH[shell.decision] > STRENGTH[listed]) {
+    return { decision: shell.decision, target: command, message: blockMessage(shell, "Codex") };
+  }
+  return { decision: listed, target: command };
 }
 
 export function hookResponse(verdict: Verdict): string | null {
@@ -61,7 +75,7 @@ export function hookResponse(verdict: Verdict): string | null {
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
       permissionDecision: "deny",
-      permissionDecisionReason: `${why}: ${verdict.target}`,
+      permissionDecisionReason: verdict.message ? `${verdict.message} Comando: ${verdict.target}` : `${why}: ${verdict.target}`,
     },
   });
 }
@@ -81,7 +95,12 @@ export function run(stdin: string, root: string, home: string): string | null {
   } catch (error) {
     return hookResponse({ decision: "deny", target: `guarda sem política legível (${(error as Error).message})` });
   }
-  return hookResponse(judge(input, rules, { root, home }));
+  try {
+    return hookResponse(judge(input, rules, { root, home }));
+  } catch (error) {
+    // Falha fecha também na decisão: a guarda que cai deixaria o comando passar.
+    return hookResponse({ decision: "deny", target: `guarda não conseguiu julgar o comando (${(error as Error).message})` });
+  }
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {

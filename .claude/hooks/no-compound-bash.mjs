@@ -1,57 +1,62 @@
 #!/usr/bin/env node
-// PreToolUse (Bash): recusa comando composto. A lista de permissão do Claude
-// Code casa pelo prefixo; `a && b`, `a | b`, `a; b`, `$(...)` e comandos em
-// várias linhas caem em aprovação manual e travam o terminal. Um comando por
-// chamada. Separadores dentro de aspas simples ou duplas não contam
-// (ex.: `--jq ".[] | .name"`), exceto substituição de comando, que o shell
-// expande também entre aspas duplas.
+// PreToolUse (Bash) do Claude Code: aplica a política de shell compartilhada
+// (`shell-policy.mjs`, #461) — a mesma que a guarda do Codex e o plugin do
+// OpenCode chamam.
+//
+// - Comando composto: recusa com saída 2 e o motivo no stderr. A lista de
+//   permissão casa pelo prefixo; `a && b`, `a; b`, `$(...)` e várias linhas
+//   cairiam em aprovação manual e travariam o terminal.
+// - Risco (`classifyRisk`) e comando de laço fora da lista: imprime o JSON de
+//   PreToolUse com `permissionDecision` `ask` ou `deny` e sai 0. Vale qualquer
+//   que seja a forma que o Claude Code use para casar a lista — com ou sem o
+//   `rtk` que o hook global acrescenta —, porque o classificador tira o
+//   prefixo antes de julgar.
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
+import { bashRulesFromSettings, compoundMessage, findCompound, isReadOnlyStage, judgeShell } from "./shell-policy.mjs";
 
-export function findCompound(command) {
-  let single = false;
-  let double = false;
-  for (let i = 0; i < command.length; i++) {
-    const c = command[i];
-    const next = command[i + 1];
-    if (single) {
-      if (c === "'") single = false;
-      continue;
-    }
-    if (c === "\\") {
-      i++;
-      continue;
-    }
-    if (c === "`") return "crase (substituição de comando)";
-    if (c === "$" && next === "(") return "$(...) (substituição de comando)";
-    if (double) {
-      if (c === '"') double = false;
-      continue;
-    }
-    if (c === "'") { single = true; continue; }
-    if (c === '"') { double = true; continue; }
-    if (c === "&" && next === "&") return "&&";
-    if (c === "|" && next === "|") return "||";
-    if (c === "|") return "| (pipe)";
-    if (c === ";") return ";";
-    if (c === "\n") return "quebra de linha (vários comandos)";
-    if (c === "&") {
-      const prev = command[i - 1];
-      // `2>&1`, `>&2` e `&>` são redirecionamento, não segundo plano.
-      if (prev === ">" || next === ">") continue;
-      return "& (segundo plano)";
-    }
+export { findCompound, isReadOnlyStage };
+
+const SETTINGS = new URL("../settings.json", import.meta.url);
+
+/** Regras `Bash(...)` do `.claude/settings.json` ao lado do hook; ilegível → `null` (laço pergunta). */
+export function loadRules(path = SETTINGS) {
+  try {
+    return bashRulesFromSettings(JSON.parse(readFileSync(path, "utf8")));
+  } catch {
+    return null;
   }
-  return null;
 }
 
 /**
- * Heredoc e `$(...)` continuam recusados de propósito, mesmo em mensagem de
- * commit: uma recusa custa uma nova tentativa, um prompt de aprovação trava
- * o dono. Só esses dois motivos ganham a sugestão de escrever a mensagem com
- * a ferramenta Write e usar `git commit -F <arquivo>` (ou vários `-m`).
+ * O que o hook responde para o comando: saída 2 com motivo (composto), JSON de
+ * PreToolUse com `ask`/`deny` (risco) ou nada.
+ * @param {string} command
+ * @param {import("./shell-policy.mjs").BashRules | null} rules
+ * @param {import("./shell-policy.mjs").ShellEnv} [env] raiz do projeto, cwd e diretório pessoal
+ * @returns {{ exit: 0 | 2, stdout?: string, stderr?: string }}
  */
-const SUGGESTS_COMMIT_FILE = new Set(["quebra de linha (vários comandos)", "$(...) (substituição de comando)"]);
+export function hookOutcome(command, rules, env = {}) {
+  let verdict;
+  try {
+    verdict = judgeShell(command, rules, env);
+  } catch (error) {
+    // Falha fecha na decisão: o hook que cai deixaria o comando passar.
+    verdict = { decision: "ask", reason: `a política de shell não conseguiu julgar o comando (${error?.message ?? error})`, kind: "risk" };
+  }
+  if (!verdict) return { exit: 0 };
+  if (verdict.kind === "compound") return { exit: 2, stderr: `${compoundMessage(verdict.reason)}\n` };
+  const output = {
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: verdict.decision,
+      permissionDecisionReason: `Política de shell do projeto (${verdict.decision}): ${verdict.reason}.`,
+    },
+  };
+  return { exit: 0, stdout: `${JSON.stringify(output)}\n` };
+}
 
 function main() {
   let input;
@@ -62,20 +67,14 @@ function main() {
   }
   const command = input?.tool_input?.command;
   if (typeof command !== "string") process.exit(0);
-  const found = findCompound(command.trim());
-  if (!found) process.exit(0);
-  const suggestion = SUGGESTS_COMMIT_FILE.has(found)
-    ? " Mensagem de commit com corpo ou heredoc: escreva com a ferramenta Write e rode " +
-      "`git commit -F <arquivo>`, ou use vários `-m`."
-    : "";
-  process.stderr.write(
-    `Comando composto recusado (${found}). Regra: um comando por chamada de shell — ` +
-      "sem &&, ||, ;, |, &, $(...), crase ou várias linhas fora de aspas. " +
-      "Divida em chamadas separadas (independentes podem ir em paralelo na mesma resposta); " +
-      "para filtrar saída use a opção do próprio comando (--jq, --json, grep com arquivo) ou um script em arquivo." +
-      `${suggestion}\n`,
-  );
-  process.exit(2);
+  // A árvore do projeto é `$CLAUDE_PROJECT_DIR` (o worktree fica dentro dela);
+  // sem ele, o diretório da sessão. Escrita fora dela pergunta.
+  const cwd = typeof input?.cwd === "string" && isAbsolute(input.cwd) ? input.cwd : undefined;
+  const root = process.env.CLAUDE_PROJECT_DIR || cwd;
+  const outcome = hookOutcome(command, loadRules(), { root, cwd, home: homedir() });
+  if (outcome.stdout) process.stdout.write(outcome.stdout);
+  if (outcome.stderr) process.stderr.write(outcome.stderr);
+  process.exit(outcome.exit);
 }
 
 // `pathToFileURL` resolve `process.argv[1]` relativo ao cwd, como o `node`

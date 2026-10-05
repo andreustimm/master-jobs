@@ -8,6 +8,8 @@
 // (regras por domínio sob demanda). Espelhos gerados: `opencode.json`, `.codex/hooks.json`,
 // `.codex/agents/*.toml` e `.opencode/agents/*.md`. O que é idêntico entre os
 // harnesses continua por symlink — ver `scripts/rules/check-instructions.ts`.
+// O plugin do OpenCode (`.opencode/plugins/shell-guard.js`) é escrito à mão e
+// só conferido: precisa existir e importar a política de shell compartilhada.
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -26,6 +28,24 @@ export const OPENCODE_CONFIG = "opencode.json";
 
 /** Guarda do Codex: aplica a lista do Claude a cada comando e patch. */
 export const CODEX_GUARD = "scripts/harness/codex-guard.ts";
+
+/**
+ * Política de shell única (#461) e o plugin que a leva ao OpenCode. O plugin é
+ * escrito à mão (não há o que gerar), mas é conferido: sem ele o OpenCode
+ * perderia, calado, a recusa de composto e o classificador de risco.
+ */
+export const SHELL_POLICY = ".claude/hooks/shell-policy.mjs";
+export const OPENCODE_GUARD = ".opencode/plugins/shell-guard.js";
+
+export function checkOpenCodeGuard(root: string): string[] {
+  const path = join(root, OPENCODE_GUARD);
+  if (!existsSync(path)) return [`${OPENCODE_GUARD}: ausente — o OpenCode ficaria sem a política de shell (${SHELL_POLICY})`];
+  const source = readFileSync(path, "utf8");
+  const errors: string[] = [];
+  if (!source.includes(`../../${SHELL_POLICY}`)) errors.push(`${OPENCODE_GUARD}: não importa ${SHELL_POLICY}`);
+  if (!source.includes('"tool.execute.before"')) errors.push(`${OPENCODE_GUARD}: sem o gancho "tool.execute.before"`);
+  return errors;
+}
 
 /** Campos de frontmatter que um comando pode ter e os dois harnesses leem igual. */
 const COMMAND_FIELDS = new Set(["description"]);
@@ -192,7 +212,7 @@ export function checkHarness(root: string): string[] {
   for (const path of orphans(root, expected)) {
     errors.push(`${path}: órfão — o agente não existe em ${CLAUDE_AGENTS}/`);
   }
-  return [...errors, ...checkCommands(root)];
+  return [...errors, ...checkOpenCodeGuard(root), ...checkCommands(root)];
 }
 
 export function syncHarness(root: string): string[] {
