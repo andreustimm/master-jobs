@@ -25,6 +25,7 @@ export type FacetQuery = Pick<
   | "cluster"
   | "term"
   | "query"
+  | "synonyms"
   | "sourceKinds"
   | "company"
   | "workMode"

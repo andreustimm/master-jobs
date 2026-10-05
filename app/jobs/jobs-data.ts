@@ -192,6 +192,7 @@ export async function loadJobsView(input: {
       keepUnscored: filters.keepUnscored,
       cluster,
       query: filters.query,
+      synonyms: filters.synonyms,
       company: filters.company,
       sourceKinds: state.sources,
       workMode: state.workMode,
@@ -227,7 +228,7 @@ export async function loadJobsView(input: {
   // e a única em que vale o round-trip extra.
   const filteredBeyondTerm =
     total === 0 && filters.query
-      ? await stage("term_exists", () => termExistsInOpenCorpus({ query: filters.query }))
+      ? await stage("term_exists", () => termExistsInOpenCorpus({ query: filters.query, synonyms: filters.synonyms }))
       : false;
 
   if (broughtBy && candidateId !== null && !input.prefetch) {

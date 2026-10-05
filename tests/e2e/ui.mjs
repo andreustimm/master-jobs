@@ -17,7 +17,8 @@
  *
  * `pnpm test:e2e` owns an isolated build, server and database. To target an
  * already-running environment deliberately, set E2E_BASE, DATABASE_URL and
- * DATABASE_MIGRATION_URL, then run `pnpm test:e2e:external`.
+ * DATABASE_MIGRATION_URL, then run `pnpm test:e2e:external`. All of them must
+ * point to loopback: `database-guard.mjs` refuses anything else (#435).
  *
  * Este arquivo monta o navegador, a sessão e o relatório; as verificações moram
  * nas áreas de `./ui/`, uma por arquivo, na ordem de `./ui/index.mjs` (#320).
@@ -26,6 +27,14 @@ import { chromium } from "playwright";
 import { readFile } from "node:fs/promises";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
 import { selectAreas } from "./ui/index.mjs";
+import { isolationRefusal } from "./database-guard.mjs";
+
+// Antes do navegador e do `finally` que apaga `job`. Ver `database-guard.mjs`.
+const refusal = isolationRefusal(process.env);
+if (refusal) {
+  console.error(`e2e ui recusado: ${refusal}`);
+  process.exit(1);
+}
 
 const BASE = process.env.E2E_BASE ?? "http://127.0.0.1:3000";
 

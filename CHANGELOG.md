@@ -9,6 +9,30 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.34.0] - 2026-10-05
+
+### Documentação
+
+- Seção "Desativação e rollback": protocolo auditado de pausa, desabilitação de flags, rotação de credenciais e validação
+- Seção "Auditoria periódica": comandos de leitura sem efeito, inspeção de regras nativas, verificação de republication e histórico de workflows
+- Atualização de "Sequência de ativação em #191": apontamento para novas seções, modelo de registro de evidência com links de runs, piloto e tarefas
+- Roteiro do dono para apagar as contas do E2E que ficaram no banco de produção (toda conta `@local.test` e todo candidato `e2e-%` do run de 20/08, não só os candidatos 2 e 3 e o usuário 4 já vistos), com contenção imediata das contas que entram com a senha publicada do E2E, e deixar um único candidato com `is_default`: `docs/engineering/runbooks/435-contas-e2e-producao.md`. Ninguém o executou.
+
+### Adicionado
+
+- Busca de Vagas: dicionário bilíngue de sinônimos pt-BR/en (`config/search-synonyms.yaml`, validado por Zod em `src/core/synonyms.ts`) que expande cada termo solto da consulta em um grupo `OU` no filtro (`queryCondition`, `fieldMatches`, grupo de proximidade, `EXISTS` do vazio e facetas). Frase entre aspas continua literal. Atrás de `SEARCH_SYNONYMS_ENABLED`, desligada por padrão: sem a flag o SQL e a ordem são os de antes. Sem migração, sem mudança no scorer. A linha diz qual sinônimo casou (`matchedSynonyms`). Refs #370 (Fase 0); as fases de vetor e a emenda A7 ao ADR-001 seguem pendentes do dono.
+
+### Corrigido
+
+- Guarda do E2E (#435): `tests/e2e/database-guard.mjs` passa a recusar `E2E_BASE` fora do loopback ou inválida, e `JHO_TEST_DATABASE_URL` diferente de `DATABASE_URL`. `ui.mjs` e `a11y.mjs` consultam a guarda antes de abrir o navegador e antes do `finally` que apaga vagas; antes, só o `setup.mjs` a consultava. Assim, `pnpm test:e2e:external` não roda mais contra o site publicado.
+
+## [1.33.2] - 2026-10-05
+
+### Corrigido
+
+- Runner self-hosted (#367, ADR 0030): `scripts/runner/entrypoint.sh`, PID 1 do contêiner, passa a repassar SIGTERM/SIGINT ao `run.sh` (que roda em segundo plano, direto no usuário `runner` por `setpriv`, sem a camada do `su`), espera o runner sair, para o dockerd interno e termina com 143/130 — nunca com 75. Antes o `docker stop` esperava o timeout e acabava em SIGKILL. Para o sinal chegar ao Runner.Listener, o entrypoint define `RUNNER_MANUALLY_TRAP_SIG=1` (sem ela o `run.sh` do GitHub não repassa sinal ao helper) e lança o filho com job control (`set -m`), que restaura o SIGINT que o shell não interativo deixaria ignorado. O contrato anterior se mantém: status do `run.sh` ≠ 0 propaga, status 0 sem `_diag/Worker_*.log` sai com 75, com o log sai com 0.
+- `tests/ci-runner-selection.test.ts` cobre o trap (estático) e o comportamento com um runner de mentira em bash puro, sem root nem docker, e com uma cópia do `run.sh` do upstream (`tests/fixtures/runner-upstream/run.sh`) sobre um helper que só termina com SIGINT.
+
 ## [1.33.1] - 2026-10-02
 
 ### Corrigido

@@ -61,7 +61,9 @@ inteiro" — é como eles acabam incluídos, e é frágil.
 `JHO_PROFILE_PATH` e `JHO_SOURCES_PATH` existem e permitem apontar para outro
 lugar. Enquanto os dois arquivos forem versionados, o padrão funciona. A rota
 da varredura fatiada não depende da sorte: `next.config.ts` inclui
-`config/sources.yaml` explicitamente no pacote de `/api/cron/varredura`.
+`config/sources.yaml` explicitamente no pacote de `/api/cron/varredura`. O mesmo
+vale para `config/search-synonyms.yaml` (lido por caminho só com
+`SEARCH_SYNONYMS_ENABLED` ligada): `next.config.ts` o inclui em `/**`.
 
 ## Variáveis
 
@@ -72,6 +74,7 @@ da varredura fatiada não depende da sorte: `next.config.ts` inclui
 | `DATABASE_MIGRATION_URL` | migration/CI | URL PostgreSQL com privilégio de DDL |
 | `POSTGRES_URL_NON_POOLING` | Vercel (integração) | usada na migration quando não há a de cima |
 | `DATABASE_CA_CERT` | CI/Vercel | o PEM da CA **ou** o caminho de um arquivo |
+| `SEARCH_SYNONYMS_ENABLED` | Vercel (opcional; **desligada por padrão**) | `1` ou `true` liga os sinônimos bilíngues da busca de Vagas (`config/search-synonyms.yaml`, #370, Fase 0). Ligar em Preview ou Production é decisão do dono depois de revisar a lista; desligar devolve exatamente a busca de antes. Não é segredo |
 | `SUPABASE_CRAWL_ENABLED` | Actions produção | `true` somente após os gates de quota/retensão |
 | `RESEND_API_KEY` | Vercel | e-mail transacional; sem ela ou sem `RESEND_FROM`, nada é enviado e o log só alerta |
 | `RESEND_FROM` | Vercel | remetente de domínio verificado |
@@ -769,7 +772,21 @@ contêiner:
   o usuário não-root `runner` sobre uma CÓPIA gravável e descartável do
   binário, com o bit de escrita restaurado para o novo dono (M1 — a origem
   em `/opt/actions-runner` continua sem bit de escrita para ninguém depois
-  do build da imagem).
+  do build da imagem). O entrypoint é o PID 1 do contêiner e roda o
+  `run.sh` em segundo plano, direto no usuário `runner` por `setpriv` (sem a
+  camada do `su`, que não repassa sinal de forma confiável): um `docker stop`
+  (SIGTERM) ou SIGINT vira SIGTERM para o `run.sh`, o entrypoint espera o
+  runner sair, para o dockerd interno e termina com 143 (130 no SIGINT) —
+  nunca com 75, para o controller não ler uma parada como "nenhum job". Sem o
+  trap, o PID 1 ignorava o sinal e o `docker stop` só terminava no SIGKILL
+  do timeout. Para o sinal chegar ao Runner.Listener (e ao Worker), o
+  entrypoint define `RUNNER_MANUALLY_TRAP_SIG=1` (só com ela o `run.sh` do
+  GitHub instala `trap 'kill -INT -$PID' INT TERM` e repassa SIGINT ao grupo
+  do helper) e lança o `run.sh` com job control (`set -m`), porque filho em
+  segundo plano de shell não interativo herda SIGINT ignorado e o helper
+  nunca o veria. O teste usa uma cópia fiel do `run.sh` do upstream
+  (`tests/fixtures/runner-upstream/run.sh`); o Runner.Listener real não foi
+  exercitado.
 - **`scripts/runner/runner-controller.sh`** roda no HOST, como o serviço
   systemd `master-jobs-runner-controller.service` (instalado por
   `provision-vps.sh`, com `Requires=docker.service`). Para cada job, ele pede

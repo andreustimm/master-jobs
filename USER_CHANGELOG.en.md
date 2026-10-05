@@ -32,7 +32,17 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 <!-- sem-nota-usuario: 1.32.0 - 2026-09-29T15:11:03.000Z -->
 
+<!-- sem-nota-usuario: 1.33.2 - 2026-10-05T17:47:35.000Z -->
+
 ## [Unreleased]
+
+## [1.34.0] - 2026-10-05T18:11:37.000Z
+
+### Documentation
+
+- Section "Desativação e rollback" (Deactivation and rollback): audited protocol for pause, flag disablement, credential rotation, and validation
+- Section "Auditoria periódica" (Periodic audit): read-only commands, native rule inspection, republication verification, and workflow history
+- Update to "Sequência de ativação em #191": references to new sections, evidence registration template with run links, pilot tasks, and real tasks
 
 ## [1.33.1] - 2026-10-02T05:15:07.000Z
 

@@ -1,0 +1,31 @@
+# Sinônimos bilíngues da busca de Vagas (#370, Fase 0).
+#
+# Cada grupo lista termos equivalentes entre si: quem busca um deles também
+# acha vaga que só usa outro. Só entra em vigor com SEARCH_SYNONYMS_ENABLED=1
+# (desligada por padrão); esvaziar `groups` desliga a expansão sem mexer em código.
+#
+# Regras de curadoria:
+# - A expansão é por TERMO INTEIRO digitado ("engenheiro de dados" só expande se
+#   a frase inteira estiver aqui) e nunca dentro de aspas, que significam literal.
+# - Só amplia o conjunto: a vaga inelegível continua com o bloqueador no score.
+# - Um termo aparece em um único grupo; termo inválido ou repetido faz a carga falhar.
+# - Fora de propósito: "vaga"/"job" (aparece em quase toda descrição e afoga a
+#   lista) e termos de uma letra ou genéricos demais. Os pares "dados"/"data" e
+#   "gerente"/"manager" são os mais amplos daqui; o dono decide se o ruído vale.
+groups:
+  - [engenheiro, engenheira, engineer]
+  - [desenvolvedor, desenvolvedora, programador, developer]
+  - [remoto, remote]
+  - [dados, data]
+  - [arquiteto, arquiteta, architect]
+  - [líder técnico, lider tecnico, tech lead, technical lead]
+  - [sênior, senior]
+  - [pleno, mid-level]
+  - [júnior, junior]
+  - [gerente, manager]
+  - [analista, analyst]
+  - [engenheiro de dados, data engineer]
+  - [engenheiro de software, software engineer]
+  - [cientista de dados, data scientist]
+  - [estágio, estagio, internship, intern]
+  - [híbrido, hibrido, hybrid]

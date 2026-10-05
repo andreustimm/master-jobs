@@ -179,6 +179,17 @@ da issue. Estado, prioridade, assignee, dependências e claim vêm do remoto.
 O backlog antigo fica como histórico ou referência; uma lista editável local
 não vira outra fila operacional.
 
+A memória dos agentes (preferências do dono, decisões e lições entre sessões)
+fica em `.claude/memory/` da checkout principal, um arquivo por fato e o
+índice em `MEMORY.md`. A pasta não é versionada: `.git/info/exclude` a ignora,
+assim como os symlinks `.codex/memory` e `.opencode/memory`, que apontam para
+ela. O Claude Code a carrega pelo symlink
+`~/.claude/projects/<raiz-do-repo>/memory`, inclusive em worktree, porque
+resolve pela raiz principal. Codex e OpenCode a leem quando o `AGENTS.md`
+manda. Numa worktree, a pasta não existe; ela fica em `.claude/memory/` ao
+lado do diretório que `git rev-parse --git-common-dir` devolve. Memória dá
+contexto e nunca substitui o estado remoto da issue.
+
 Para obter uma projeção identificada de issue, subtarefas e grafo:
 
 ```bash

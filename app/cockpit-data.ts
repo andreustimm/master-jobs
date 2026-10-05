@@ -76,6 +76,8 @@ export async function loadCockpit(
     keepUnscored: boardFilters.keepUnscored,
     cluster: state.cluster,
     query: boardFilters.query,
+    // Os chips e os cartões contam a MESMA pergunta que a lista e o total.
+    synonyms: boardFilters.synonyms,
     company: boardFilters.company,
     sourceKinds: state.sources,
     workMode: state.workMode,
