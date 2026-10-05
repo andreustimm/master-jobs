@@ -7,7 +7,13 @@
 // comando novo; uma lista e dois tradutores só divergem se o tradutor quebrar,
 // e isso o teste vê.
 //
-// Funções puras: sem disco, sem rede, sem relógio.
+// Funções puras: sem disco, sem rede, sem relógio. A leitura de `Bash(...)`
+// e das palavras reservadas mora em `.claude/hooks/shell-policy.mjs`, que o
+// hook do Claude Code e o plugin do OpenCode importam sem strip-types (#461).
+
+import { bashSpecifierMatches, commandWords, escapeRegex, type BashRules } from "../../.claude/hooks/shell-policy.mjs";
+
+export { bashSpecifierMatches };
 
 export type Decision = "allow" | "ask" | "deny";
 
@@ -34,21 +40,19 @@ export function parseRules(permissions: ClaudePermissions): Rule[] {
   return rules;
 }
 
-function escapeRegex(text: string): string {
-  return text.replace(/[.+?^${}()|[\]\\/-]/g, "\\$&");
+/** As regras `Bash(...)` no formato da política de shell compartilhada. */
+export function bashRules(rules: readonly Rule[]): BashRules {
+  const out: BashRules = { allow: [], ask: [], deny: [] };
+  for (const rule of rules) if (rule.tool === "Bash") out[rule.decision].push(rule.specifier);
+  return out;
 }
 
-/** `Bash(prefixo:*)`, `Bash(com * curinga)` ou `Bash(exato)`, como o Claude Code lê. */
-export function bashSpecifierMatches(specifier: string, command: string): boolean {
-  if (specifier.endsWith(":*")) {
-    const prefix = specifier.slice(0, -2);
-    return command === prefix || command.startsWith(`${prefix} `);
-  }
-  if (specifier.includes("*")) {
-    const pattern = specifier.split("*").map(escapeRegex).join(".*");
-    return new RegExp(`^${pattern}$`, "s").test(command);
-  }
-  return command === specifier;
+/**
+ * O trecho sem palavras reservadas à esquerda (`do echo x` → `echo x`); `done`,
+ * `fi` e o cabeçalho de `for`/`case` viram texto vazio — estrutura, não comando.
+ */
+function withoutReserved(part: string): string {
+  return commandWords(part.split(/\s+/).filter((token) => token !== "")).join(" ");
 }
 
 /**
@@ -172,7 +176,10 @@ export function commandSegments(command: string, depth = 0): string[] {
   // `git push origin 'main'` e `cat <.env` precisam cair em `* main` e
   // `* .env` como a forma nua. Texto com espaço entre aspas continua texto.
   const bare = segments.map((segment) => segment.replace(/(['"])([^\s'"]*)\1/g, "$2").replace(/[<>]/g, " "));
-  return [...new Set([...segments, ...segments.map(unwrap), ...bare, ...bare.map(unwrap), ...nested])];
+  // `then sudo ls` e `do git push origin main` precisam cair em `sudo *` e
+  // `git push * main` como a forma sem palavra reservada.
+  const plain = [...segments, ...bare].map(withoutReserved).filter((segment) => segment !== "");
+  return [...new Set([...segments, ...segments.map(unwrap), ...bare, ...bare.map(unwrap), ...plain, ...plain.map(unwrap), ...nested])];
 }
 
 /**
@@ -224,7 +231,10 @@ const BUILTIN_ALLOWED = new Set(["cd"]);
  * Claude, onde o padrão é perguntar. Isso fecha, de uma vez, toda forma de
  * esconder um comando atrás de outro (invólucro, shell, `eval`, palavra
  * reservada, aspas `$'…'`): o que a leitura não reconhece como liberado,
- * pergunta. O prefixo `rtk` sai antes de conferir o allow (G63).
+ * pergunta. O prefixo `rtk` sai antes de conferir o allow (G63). Em laço
+ * (#461), a palavra reservada sai antes do allow: `do echo $f` é julgado como
+ * `echo $f`, `while docker ps` como `docker ps`, e `done`/`fi`/cabeçalho de
+ * `for` são estrutura — `Bash(for:*)` libera a forma, não o corpo.
  */
 export function decideCommand(rules: readonly Rule[], command: string): Decision {
   const bash = rules.filter((rule) => rule.tool === "Bash");
@@ -237,7 +247,9 @@ export function decideCommand(rules: readonly Rule[], command: string): Decision
     if (matches && strength(rule.decision) > strength(found)) found = rule.decision;
   }
   if (found !== null) return found;
-  const allowed = (part: string): boolean => {
+  const allowed = (whole: string): boolean => {
+    const part = withoutReserved(whole);
+    if (part === "") return true;
     const candidates = [part, part.replace(/^rtk\s+(?:proxy\s+)?/, "")];
     if (BUILTIN_ALLOWED.has(candidates[1]!.split(/\s+/)[0]!)) return true;
     return bash.some(
@@ -409,8 +421,9 @@ export function toOpenCodePermission(permissions: ClaudePermissions): OpenCodePe
           place(entry, pattern, decision);
           // O OpenCode recebe `rtk sudo ls` (G63); restrição ancorada no
           // início precisa valer também depois do prefixo. Allow não ganha a
-          // variante: alargar o que é liberado não é tradução.
-          if (decision !== "allow" && !pattern.startsWith("*")) {
+          // variante: alargar o que é liberado não é tradução. Padrão que já
+          // começa por `rtk ` veio escrito com o prefixo na fonte.
+          if (decision !== "allow" && !pattern.startsWith("*") && !pattern.startsWith("rtk ")) {
             place(entry, `rtk ${pattern}`, decision);
             place(entry, `rtk proxy ${pattern}`, decision);
           }

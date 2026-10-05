@@ -626,6 +626,7 @@ formato chega por espelho **gerado** — nunca escrito à mão.
 | Comandos | `.claude/commands/` | nativo | sem suporte de projeto — peça pelo nome e leia o arquivo | `.opencode/commands` (symlink) |
 | Agentes | `.claude/agents/*.md` | nativo | `.codex/agents/*.toml` (gerado) | `.opencode/agents/*.md` (gerado) |
 | Permissões | `.claude/settings.json` | nativo | `.codex/hooks.json` (gerado) → `scripts/harness/codex-guard.ts` | `opencode.json > permission` (gerado) |
+| Política de shell (composto e risco) | `.claude/hooks/shell-policy.mjs` | `.claude/hooks/no-compound-bash.mjs` (hook `PreToolUse`) | `scripts/harness/codex-guard.ts` (importa) | `.opencode/plugins/shell-guard.js` (plugin, conferido) |
 
 Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
 
@@ -647,10 +648,13 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   mantém a precedência do Claude Code (deny > ask > allow) dentro da regra do
   OpenCode (a última que casa vence) e alarga padrão de arquivo em vez de
   estreitar. No Codex, que não tem lista por padrão de texto, o hook aplica a
-  própria lista do Claude a cada comando e `apply_patch`; `ask` vira
+  própria lista do Claude a cada comando e `apply_patch`, somada à política
+  de shell pela decisão mais forte; `ask` vira
   bloqueio, porque o hook do Codex não sabe perguntar — o que no Claude espera
   aprovação, no Codex espera a pessoa rodar; se o processo da guarda falhar, o
-  hook sai com código 2 e bloqueia. A guarda decide como o Claude Code:
+  hook sai com código 2 e bloqueia. No OpenCode, o plugin também só sabe
+  bloquear: composto, `ask` e `deny` da política viram `Error` com o motivo.
+  A guarda decide como o Claude Code:
   comando composto só passa quando **todo** trecho é liberado por uma regra
   `allow` (ou é `cd`), e trecho que nenhuma regra libera é `ask` — isso fecha
   de uma vez invólucro, shell aninhado, `eval`, palavra reservada e aspas
@@ -661,35 +665,84 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   a camada de projeto sobrescreveria também a escolha pessoal mais estrita. O
   Codex só carrega hooks e agentes de projeto confiável (`trust_level` no
   `~/.codex/config.toml`).
-- **O que pergunta (#461).** A rotina de desenvolvimento passa direto:
-  leitura, edição no projeto, `git`, `gh`, `pnpm`/`npm`/`npx`, `rm` sem
-  recursão, `chmod`, `kill` e utilitários de texto e arquivo. Pergunta só o
-  que perde trabalho (push forçado, `reset --hard`, `clean`, `restore`,
-  `checkout -- `, `stash drop`, `worktree remove --force`), reescreve
-  histórico (`filter-branch`, `update-ref -d`, `reflog expire`), apaga em
-  massa (`rm -r`, `find -delete`, `xargs rm`), escreve segredo (`gh secret`,
-  `vercel env add/rm`, `supabase secrets`), sai do projeto (`ssh`, `scp`,
-  `rsync`, `brew`, `chown`) ou toca produção (`vercel --prod`, `promote`,
-  `rollback`, `supabase db push/reset`, `db query --linked`). Push direto
-  para `main`/`staging`/`dev`, `.env*`, chaves, `sudo` e `chmod 777` são
-  negados. Os padrões de `ask` e `deny` são ancorados no comando (`git …` e
-  `git -C * …`); `*` à esquerda casaria qualquer texto com "git", inclusive
-  toda URL `github.com`, e no Codex o falso positivo vira bloqueio.
-- **Prefixo `rtk`.** Codex e OpenCode escrevem `rtk sudo ls` (G63); no Claude
-  Code o hook do rtk reescreve depois da decisão. Por isso a guarda do Codex
-  tira `rtk` antes de conferir o allow e julga cada trecho também sem `rtk`,
-  sem invólucro (`env`, `timeout`…), sem o caminho do executável (`/bin/rm`)
-  e com o corpo de `sh -c` — para que o deny apareça como deny. O comando só
-  é cortado fora do texto literal entre aspas (simples, e duplas fora de
-  `$(…)` e crase) e de heredoc com delimitador entre aspas; redirecionamento
-  com `&` (`2>&1`) não corta. O OpenCode recebe cada padrão ancorado de
-  `ask`/`deny` também como `rtk <padrão>` e `rtk proxy <padrão>`.
+- **Política de shell única (#461).** `.claude/hooks/shell-policy.mjs` é
+  JavaScript puro, sem dependência, e tem três chamadores: o hook
+  `PreToolUse` do Claude Code (`no-compound-bash.mjs`, em `node` sem
+  strip-types), a guarda do Codex (`codex-guard.ts`) e o plugin do OpenCode
+  (`.opencode/plugins/shell-guard.js`, no Bun do OpenCode; em
+  `tool.execute.before`, lançar `Error` bloqueia). Ele exporta
+  `findCompound` (G63), `classifyRisk` e `judgeShell`, que junta os dois e,
+  em laço, julga cada comando do corpo contra o `allow` do
+  `.claude/settings.json` — `Bash(for:*)` libera a forma, não o corpo. O
+  `pnpm check:harness` reprova o plugin ausente ou que não importa a
+  política; ele não é gerado, porque não há o que traduzir.
+- **O classificador é a fonte do risco de shell.** `classifyRisk` julga por
+  token, não por texto: corta em todo separador fora de aspas (inclusive
+  corpo de laço, `$(…)`, crase e `sh -c '…'`), tira `rtk`/`rtk proxy`,
+  atribuição, invólucro (`env`, `command`, `nohup`, `time`, `nice`,
+  `timeout`…), lançador (`npx [-y]`, `npm exec [--]`, `pnpm exec`,
+  `pnpm dlx`, `bunx`), o payload de `xargs` e de `find -exec/-execdir/-ok`
+  e as opções globais do git (`-C`, `-c`, `--git-dir`, `--work-tree`,
+  `--no-pager`, `-P`…) antes de olhar subcomando e flags. Por isso
+  `git -c x=y push origin main` e `find . -exec git push -f origin main \;`
+  são push para `main`, e `git -C /wt commit -m "chore: restore foo"` não é
+  `restore`. A rotina passa direto: leitura, edição no projeto, `git`, todo
+  `gh` (decisão do dono: nenhum `gh` pergunta), `pnpm`/`npm`/`npx`, `rm` sem
+  recursão, `chmod`, `kill` e utilitários de texto e arquivo.
+  - **Pergunta (`ask`):** perda de trabalho (push forçado ou `+ref`,
+    `--mirror`, `--all`, `--prune`, `--no-verify`, push sem refspec ou com
+    refspec variável; `reset --hard/--merge`; `clean`; `checkout -- <caminho>`,
+    `checkout .`, `checkout <ref> <caminho>`, `checkout -f/-B`;
+    `switch -f/--discard-changes/-C`; `restore` fora de `--staged`;
+    `stash drop/clear`; `worktree remove --force`; `git rm -r/-f`), reescrita de
+    histórico (`filter-branch`, `filter-repo`, `update-ref -d`,
+    `reflog expire`, `gc --prune`, `prune`, `-c core.hooksPath`, alias `!`),
+    apagamento em massa (`rm` recursivo em qualquer ordem de flags,
+    `find -delete`, `rm` atrás de `xargs`/`find -exec`), saída do projeto
+    (`ssh`, `scp`, `sftp`, `rsync`, `brew`, `chown`), edição da própria
+    política pela shell e **produção** por qualquer lançador: `vercel --prod`
+    (`--target production`), `promote`, `rollback`, `remove`, `redeploy`,
+    `alias`, `domains`, `dns`, `env add/rm/update`; `supabase db push/reset`,
+    `db query`/`migration up` com `--linked`/`--db-url`, `migration repair`,
+    `secrets`, `functions deploy/delete`, `projects delete`; e os scripts
+    `db:import-production*` e `perf:producao*` (por `pnpm`, `npm run` ou o
+    arquivo direto no `node`).
+  - **Nega (`deny`):** push para `main`/`staging`/`dev` por qualquer refspec
+    (`HEAD:main`, `refs/heads/main`, `:main`), `.env*` e
+    `.linkedin.token.json` em qualquer palavra (`cat .env*`, `curl -d @.env`,
+    `-F f=@.env`, `--env-file=.env`, `< .env`, cabeçalho de laço), `sudo`/
+    `doas`/`su`, `chmod` que deixa gravável por todos (`777`, `0777`,
+    `a+rwx`, `o+w`) e `rm` recursivo na raiz ou no diretório pessoal.
+- **O que fica no `.claude/settings.json`.** `allow` da rotina (com
+  `Bash(for:*)`, `while`, `until`, `if`, `case`); `ask` só para editar a
+  própria política (`.claude/settings.json`, `.claude/hooks/**`,
+  `scripts/harness/**`, `opencode.json`, `.codex/**`, `.opencode/plugins/**`),
+  que o classificador de shell não vê; e `deny` ancorado de reserva — push
+  protegido, `.env`, `sudo`, `chmod 777`, `rm -rf /` — escrito também como
+  `rtk <padrão>` e `rtk proxy <padrão>`, para valer se o hook não rodar e
+  qualquer que seja a forma que o Claude Code use para casar a lista (antes
+  ou depois de o `rtk hook claude` reescrever). Nenhum `ask` de shell
+  repete o classificador; `tests/shell-policy.test.ts` prova que todo deny
+  de reserva também é deny do classificador.
+- **Prefixo `rtk`.** Codex e OpenCode escrevem `rtk sudo ls` (G63). O
+  classificador tira o prefixo antes de julgar, nos três harnesses. A guarda
+  do Codex, além disso, tira `rtk` antes de conferir o allow e julga cada
+  trecho também sem `rtk`, sem invólucro, sem o caminho do executável, sem
+  palavra reservada de laço e com o corpo de `sh -c`. O comando só é cortado
+  fora do texto literal entre aspas e de heredoc com delimitador entre
+  aspas; redirecionamento com `&` (`2>&1`) não corta. O OpenCode recebe cada
+  padrão ancorado de `deny` também como `rtk <padrão>` e
+  `rtk proxy <padrão>`, salvo o que a fonte já escreve com `rtk`.
 - **Limites conhecidos.** Comandos de `.claude/commands/` no Codex (sem
   comando de projeto; o agente lê o arquivo); ferramenta por agente no Codex
   (só `sandbox_mode` distingue leitura de escrita — não há lista de
   ferramentas por agente); regra `WebFetch`/`WebSearch` com domínio (a
   tradução recusa em vez de perder o deny, e a guarda do Codex só julga shell e
-  patch) são diferenças do harness, não da política.
+  patch) são diferenças do harness, não da política. O classificador não vê
+  alias do git definido em config, script de shell chamado por arquivo
+  (`bash x.sh`) nem código passado a `node -e`/`python -c`; `Bash(node:*)`,
+  `Bash(npx:*)` e `Bash(rtk proxy:*)` liberam código arbitrário por desenho, e
+  o classificador só pega neles o risco que reconhece.
 - **Instruções.** Os três carregam só o `AGENTS.md`; as regras por domínio são
   lidas sob demanda pelo roteador da entrada. Carregar os seis arquivos de
   `docs/engineering/rules/` em `opencode.json > instructions` custaria ~26 mil
@@ -698,12 +751,19 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
 
 Prova: `pnpm check:harness` (no `pnpm check` e no CI) reprova espelho
 ausente, divergente ou órfão, `.opencode/agents` como symlink, agente fora do
-contrato ou com modelo diferente da política, e comando com campo de um
-harness só. `tests/harness-parity.test.ts`
-prova que a tradução do OpenCode nunca é mais permissiva que o Claude Code e
-que a guarda do Codex nega o que ele nega e bloqueia o que ele perguntaria —
-inclusive com o prefixo `rtk`, em comando composto, atrás de invólucro ou
-shell aninhado e em trecho que nenhuma regra libera.
+contrato ou com modelo diferente da política, comando com campo de um
+harness só e o plugin do OpenCode ausente ou sem a política de shell.
+`tests/harness-parity.test.ts` modela o Claude Code ao pé da letra (a regra
+casa o comando inteiro, sem tirar `rtk` nem invólucro) somado ao hook, e
+prova, sobre o `.claude/settings.json` real, que Codex (guarda) e OpenCode
+(`opencode.json` + plugin) decidem igual ou mais forte que o Claude Code em
+todos os achados da revisão da #462 — com e sem `rtk`/`rtk proxy` —, que a
+rotina passa sem pergunta nos três e que o composto é recusado nos três com a
+mesma mensagem. `tests/shell-policy.test.ts` cobre o classificador em cada
+forma (pura, `rtk`, `git -C`, `git -c`, laço, `sh -c`, `xargs`,
+`find -exec`, invólucro e lançador). O plugin foi carregado no runtime do
+OpenCode (Bun 1.3.14) e `opencode debug config` o lista entre os plugins do
+projeto.
 
 <a id="g63"></a>
 ### G63 — RTK por harness; um comando por chamada
@@ -719,48 +779,60 @@ leia o log bruto quando o resultado importa.
 **Um comando de shell por chamada**, sem `&&`, `||` ou `;`. A lista de
 permissão do Claude Code (`.claude/settings.json`) casa pelo prefixo do
 comando: um composto não casa com o `allow` e cai em aprovação manual, e o dono
-vira fila. A exceção (#461) é o pipe em que **todo** estágio só lê —
-`cat`, `head`, `tail`, `wc`, `grep`, `rg`, `jq`, `sort`, `uniq`, `cut`, `tr`,
-`column`, `nl` e `git status/diff/log/show/rev-parse/ls-files` sem `--output`
-nem `--ext-diff` —, casado pelo nome do executável, nunca por substring
-(`catamaran` não é `cat`). Checar só o primeiro estágio não basta: `head f |
-sh` começa lendo e termina executando. A guarda do Codex (G85) avalia cada segmento, mas a regra é a mesma
-nos três harnesses, para que o hábito não dependa de onde se roda. Filtre saída
-com a flag do próprio programa (`--jq`, `--format`) e ponha etapas múltiplas
-num script que roda com um comando.
+vira fila. Duas exceções (#461):
 
-**Gate no Claude Code (#380).** `.claude/hooks/no-compound-bash.mjs`
-(`findCompound`, exportado e testado por `tests/no-compound-bash.test.ts`) é
-registrado em `.claude/settings.json` → `hooks.PreToolUse` com matcher `Bash` e
-caminho relativo ao projeto (`$CLAUDE_PROJECT_DIR`): recusa (saída 2) `&&`,
-`||`, `;`, pipe com estágio fora da leitura, `&` de segundo plano, `$(...)`,
-crase e quebra de linha fora de aspas, mesmo quando cada trecho isolado seria
-`allow` — fecha o composto ANTES
-da aprovação manual, sem depender de hook global do usuário. Prova:
-`pnpm check:harness` roda como sempre e não muda, porque `hooks` não é
-traduzido pelo `pnpm harness:sync` (ele só espelha `permissions`).
+- **Pipe em que todo estágio só lê** — `cat`, `head`, `tail`, `wc`, `grep`,
+  `rg`, `jq`, `sort`, `uniq`, `cut`, `tr`, `column`, `nl`, `ls`, e
+  `git status/diff/log/show/rev-parse/ls-files`, `git worktree list` e
+  `git branch` só listando —, casado pelo nome do executável, nunca por
+  substring (`catamaran` não é `cat`); `rtk`/`rtk proxy` à frente não mudam o
+  estágio, e executável com caminho só conta se vier de `/bin`, `/usr/bin` ou
+  `/opt/homebrew/bin`. O estágio deixa de ser leitura quando escreve ou
+  executa: redirecionamento de saída (fora `/dev/null`), atribuição
+  (`PAGER=sh`), `sort -o`, `uniq entrada saída`, `rg --pre`,
+  `git -c …`, `git diff --output/--ext-diff/--textconv`, `git branch -d/-D/-m`
+  ou com nome novo. Checar só o primeiro estágio não basta: `head f | sh`
+  começa lendo e termina executando.
+- **Laço `for`/`while`/`until`/`if`/`case`** é um comando para o shell: `;` e
+  quebra de linha entre a abertura e o fechamento são aceitos. O corpo
+  continua julgado comando a comando — `&&`, `||`, `&`, subshell, heredoc,
+  substituição, pipe fora da leitura e qualquer comando depois do `done`
+  seguem recusados, o classificador de risco vê cada comando do corpo, e cada
+  um precisa estar no `allow` como se rodasse sozinho (`Bash(for:*)` libera a
+  forma, não o corpo).
+
+Filtre saída com a flag do próprio programa (`--jq`, `--format`) e ponha
+etapas múltiplas num script que roda com um comando.
+
+**Gate nos três harnesses (#380, #461).** A recusa é **uma** função,
+`findCompound` em `.claude/hooks/shell-policy.mjs`, com três chamadores e a
+mesma mensagem (`compoundMessage`):
+
+- **Claude Code:** `.claude/hooks/no-compound-bash.mjs`, registrado em
+  `.claude/settings.json` → `hooks.PreToolUse` com matcher `Bash` e caminho
+  relativo ao projeto (`$CLAUDE_PROJECT_DIR`), recusa com saída 2 — fecha o
+  composto ANTES da aprovação manual, sem depender de hook global do usuário.
+  O mesmo hook devolve o risco do classificador (G85) como JSON de
+  `PreToolUse` com `permissionDecision` `ask` ou `deny`.
+- **Codex:** `scripts/harness/codex-guard.ts` (G85) recusa o composto antes de
+  olhar a lista — antes, ele liberava o composto quando todo trecho era
+  `allow` (`git ls-files | xargs wc -l`) e tratava heredoc de commit como
+  texto.
+- **OpenCode:** o plugin `.opencode/plugins/shell-guard.js`, em
+  `tool.execute.before`, lança `Error` com a mesma mensagem. O OpenCode tem
+  hook de plugin (`.opencode/plugins/*.js`), e é por ele que a regra chega lá.
+
+Prova: `tests/no-compound-bash.test.ts` (função e processo real do hook),
+`tests/shell-policy.test.ts` (pipe, laço e classificador) e
+`tests/harness-parity.test.ts` (composto recusado nos três com a mesma
+mensagem).
 
 **Heredoc e `$(...)` são recusados de propósito**, inclusive dentro de
 mensagem de commit (`git commit -m "$(cat <<'EOF' ... EOF)"`): uma recusa
 custa uma nova tentativa, um prompt de aprovação trava o dono. Mensagem com
 corpo ou heredoc escreve com a ferramenta de arquivo e roda `git commit -F
 <arquivo>` (ou vários `-m`); a própria mensagem de recusa sugere isso quando o
-motivo é `$(...)` ou quebra de linha.
-
-**Lacuna nos outros dois harnesses.** O OpenCode não tem mecanismo de hook —
-só o DSL declarativo de `opencode.json > permission` — e não há como expressar
-"recusar todo composto fora de aspas" sem reescrever o parser em padrão de
-texto; nenhum espelho foi gerado para ele. O Codex tem hook PreToolUse
-equivalente (`.codex/hooks.json`), mas o que já roda ali (`codex-guard.ts`,
-G85) é mais permissivo nesse ponto: libera o composto quando **todo** trecho
-casa com uma regra `allow` (`git ls-files | xargs wc -l` passa se ambos forem
-liberados) e trata heredoc de commit como texto — mascara o corpo em vez de
-recusar (`permissions.ts`, `maskQuotedHeredocs`), então `git commit -m
-"$(cat <<'EOF' ...)"` passa no Codex. Estender o Codex para a mesma recusa
-incondicional mudaria comportamento hoje documentado e coberto por teste
-(`tests/harness-parity.test.ts`); decisão registrada como lacuna aberta em vez
-de feita às pressas — segue para o dono decidir em issue separada se vale
-alinhar.
+motivo é `$(...)`, heredoc ou quebra de linha — nos três harnesses.
 
 <a id="g64"></a>
 ### G64 — O bloco gerado pelo Next fica intacto

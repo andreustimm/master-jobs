@@ -1,97 +1,53 @@
 #!/usr/bin/env node
-// PreToolUse (Bash): recusa comando composto. A lista de permissão do Claude
-// Code casa pelo prefixo; `a && b`, `a | b`, `a; b`, `$(...)` e comandos em
-// várias linhas caem em aprovação manual e travam o terminal. Um comando por
-// chamada. Separadores dentro de aspas simples ou duplas não contam
-// (ex.: `--jq ".[] | .name"`), exceto substituição de comando, que o shell
-// expande também entre aspas duplas.
+// PreToolUse (Bash) do Claude Code: aplica a política de shell compartilhada
+// (`shell-policy.mjs`, #461) — a mesma que a guarda do Codex e o plugin do
+// OpenCode chamam.
 //
-// Exceção: pipe em que TODO estágio é leitura conhecida (`git log | head`),
-// casada pelo nome do executável, nunca por substring. Checar só o primeiro
-// estágio não basta: `head f | sh` começa lendo e termina executando.
+// - Comando composto: recusa com saída 2 e o motivo no stderr. A lista de
+//   permissão casa pelo prefixo; `a && b`, `a; b`, `$(...)` e várias linhas
+//   cairiam em aprovação manual e travariam o terminal.
+// - Risco (`classifyRisk`) e comando de laço fora da lista: imprime o JSON de
+//   PreToolUse com `permissionDecision` `ask` ou `deny` e sai 0. Vale qualquer
+//   que seja a forma que o Claude Code use para casar a lista — com ou sem o
+//   `rtk` que o hook global acrescenta —, porque o classificador tira o
+//   prefixo antes de julgar.
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { bashRulesFromSettings, compoundMessage, findCompound, isReadOnlyStage, judgeShell } from "./shell-policy.mjs";
 
-const READ_ONLY = new Set(["cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "jq", "sort", "uniq", "cut", "tr", "column", "nl"]);
-const READ_ONLY_GIT = /^git\s+(?:-C\s+\S+\s+)?(?:status|diff|log|show|rev-parse|ls-files|branch\s+--show-current|worktree\s+list)(?:\s|$)/;
-// Opção que faz o `git` escrever arquivo ou chamar programa externo.
-const GIT_SIDE_EFFECT = /(?:^|\s)--(?:output|ext-diff)(?:=|\s|$)/;
+export { findCompound, isReadOnlyStage };
 
-/** Estágio de pipe somente leitura: `rtk` e o caminho do executável não mudam o que ele faz. */
-export function isReadOnlyStage(stage) {
-  const text = stage.trim().replace(/^rtk\s+/, "");
-  const name = (text.split(/\s+/)[0] ?? "").split("/").pop();
-  if (READ_ONLY.has(name)) return true;
-  if (name !== "git") return false;
-  const git = text.replace(/^\S*git/, "git");
-  return READ_ONLY_GIT.test(git) && !GIT_SIDE_EFFECT.test(git);
-}
+const SETTINGS = new URL("../settings.json", import.meta.url);
 
-export function findCompound(command) {
-  const verdict = scan(command);
-  if (verdict?.reason !== "| (pipe)") return verdict?.reason ?? null;
-  const stages = [];
-  let start = 0;
-  for (const cut of verdict.pipes) {
-    stages.push(command.slice(start, cut));
-    start = cut + 1;
+/** Regras `Bash(...)` do `.claude/settings.json` ao lado do hook; ilegível → `null` (laço pergunta). */
+export function loadRules(path = SETTINGS) {
+  try {
+    return bashRulesFromSettings(JSON.parse(readFileSync(path, "utf8")));
+  } catch {
+    return null;
   }
-  stages.push(command.slice(start));
-  return stages.every(isReadOnlyStage) ? null : "| (pipe) com estágio fora da leitura";
 }
 
 /**
- * Primeiro separador fora de aspas que não seja pipe, ou a lista de posições
- * dos pipes quando eles são os únicos separadores.
+ * O que o hook responde para o comando: saída 2 com motivo (composto), JSON de
+ * PreToolUse com `ask`/`deny` (risco) ou nada.
+ * @param {string} command
+ * @param {import("./shell-policy.mjs").BashRules | null} rules
+ * @returns {{ exit: 0 | 2, stdout?: string, stderr?: string }}
  */
-function scan(command) {
-  let single = false;
-  let double = false;
-  const pipes = [];
-  for (let i = 0; i < command.length; i++) {
-    const c = command[i];
-    const next = command[i + 1];
-    if (single) {
-      if (c === "'") single = false;
-      continue;
-    }
-    if (c === "\\") {
-      i++;
-      continue;
-    }
-    if (c === "`") return { reason: "crase (substituição de comando)" };
-    if (c === "$" && next === "(") return { reason: "$(...) (substituição de comando)" };
-    if (double) {
-      if (c === '"') double = false;
-      continue;
-    }
-    if (c === "'") { single = true; continue; }
-    if (c === '"') { double = true; continue; }
-    if (c === "&" && next === "&") return { reason: "&&" };
-    if (c === "|" && next === "|") return { reason: "||" };
-    if (c === "|") {
-      pipes.push(i);
-      continue;
-    }
-    if (c === ";") return { reason: ";" };
-    if (c === "\n") return { reason: "quebra de linha (vários comandos)" };
-    if (c === "&") {
-      const prev = command[i - 1];
-      // `2>&1`, `>&2` e `&>` são redirecionamento, não segundo plano.
-      if (prev === ">" || next === ">") continue;
-      return { reason: "& (segundo plano)" };
-    }
-  }
-  return pipes.length > 0 ? { reason: "| (pipe)", pipes } : null;
+export function hookOutcome(command, rules) {
+  const verdict = judgeShell(command, rules);
+  if (!verdict) return { exit: 0 };
+  if (verdict.kind === "compound") return { exit: 2, stderr: `${compoundMessage(verdict.reason)}\n` };
+  const output = {
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: verdict.decision,
+      permissionDecisionReason: `Política de shell do projeto (${verdict.decision}): ${verdict.reason}.`,
+    },
+  };
+  return { exit: 0, stdout: `${JSON.stringify(output)}\n` };
 }
-
-/**
- * Heredoc e `$(...)` continuam recusados de propósito, mesmo em mensagem de
- * commit: uma recusa custa uma nova tentativa, um prompt de aprovação trava
- * o dono. Só esses dois motivos ganham a sugestão de escrever a mensagem com
- * a ferramenta Write e usar `git commit -F <arquivo>` (ou vários `-m`).
- */
-const SUGGESTS_COMMIT_FILE = new Set(["quebra de linha (vários comandos)", "$(...) (substituição de comando)"]);
 
 function main() {
   let input;
@@ -102,21 +58,10 @@ function main() {
   }
   const command = input?.tool_input?.command;
   if (typeof command !== "string") process.exit(0);
-  const found = findCompound(command.trim());
-  if (!found) process.exit(0);
-  const suggestion = SUGGESTS_COMMIT_FILE.has(found)
-    ? " Mensagem de commit com corpo ou heredoc: escreva com a ferramenta Write e rode " +
-      "`git commit -F <arquivo>`, ou use vários `-m`."
-    : "";
-  process.stderr.write(
-    `Comando composto recusado (${found}). Regra: um comando por chamada de shell — ` +
-      "sem &&, ||, ;, &, $(...), crase ou várias linhas fora de aspas, e pipe só quando todo " +
-      "estágio é leitura (cat, head, tail, grep, rg, jq, sort, wc, git status/diff/log/show). " +
-      "Divida em chamadas separadas (independentes podem ir em paralelo na mesma resposta); " +
-      "para filtrar saída use a opção do próprio comando (--jq, --json, grep com arquivo) ou um script em arquivo." +
-      `${suggestion}\n`,
-  );
-  process.exit(2);
+  const outcome = hookOutcome(command, loadRules());
+  if (outcome.stdout) process.stdout.write(outcome.stdout);
+  if (outcome.stderr) process.stderr.write(outcome.stderr);
+  process.exit(outcome.exit);
 }
 
 // `pathToFileURL` resolve `process.argv[1]` relativo ao cwd, como o `node`
