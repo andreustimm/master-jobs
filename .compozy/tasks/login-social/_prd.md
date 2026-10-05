@@ -108,7 +108,7 @@ links and disabled accounts.
   account and profile and signs in.
 - Nothing is created until the final step succeeds; validation problems keep
   the other fields filled.
-- Product-wide cap on self-created accounts per rolling hour.
+- Per-IP cap on self-created accounts per rolling hour (configurable).
 
 ### F3. Email confirmation code (manual sign-up)
 
@@ -147,6 +147,12 @@ links and disabled accounts.
 
 - Public pages, readable without an account, in Portuguese and English,
   linked from the sign-up screen.
+- Content: an original draft following the standard structure of terms of
+  use and of a privacy policy under Brazil's LGPD (purpose, data collected —
+  including the provider identifier and verified email —, legal basis,
+  retention, sharing, data-subject rights, contact `contato@mastertimm.com.br`).
+  Text is never copied from another site; the owner reviews it before
+  production.
 
 ### Interactions
 
@@ -183,10 +189,11 @@ links and disabled accounts.
 - Recruiter accounts start with zero linked candidates (G25, #465).
 - Terms of Use and Privacy Policy acceptance is mandatory; the accepted
   versions and time are recorded.
-- Cap: at most **20** self-created accounts (social and confirmed manual
-  together) in any rolling 60-minute window, product-wide; reaching it pauses
-  sign-up with a message; sign-in is unaffected; administrator-created
-  accounts do not count.
+- Cap: at most **3** self-created accounts (social and confirmed manual
+  together) per client IP address in any rolling 60-minute window. The value
+  is configurable through an environment variable (default 3). Reaching it
+  refuses further sign-ups from that address with a message; sign-in is
+  unaffected; administrator-created accounts do not count.
 - A social sign-up between consent and final submit is valid for **15
   minutes** and can be completed once.
 - Password sign-in and magic link never create accounts.
@@ -332,8 +339,8 @@ links and disabled accounts.
 - **Environments:** social sign-in only in production and local (ADR-005);
   manual sign-up works everywhere, with a development email sink outside
   production.
-- **Email sending:** a sender domain under the owner's control with the DNS
-  records the email service requires.
+- **Email sending:** through Resend, from `contato@mastertimm.com.br`; the
+  `mastertimm.com.br` domain carries the DNS records Resend requires.
 - **Rules 9/10/11:** dictionary text, theme tokens, 375 px; new public routes
   registered in the E2E route list.
 - **Privacy:** honor Google and LinkedIn terms; delete identity data on
@@ -367,9 +374,7 @@ links and disabled accounts.
 
 ## Open Questions
 
-- Who writes the Terms of Use and Privacy Policy text? The product needs the
-  pages; the content is the owner's (legal) decision.
-- Which sender address and domain do the emails use (for example
-  `no-reply@mastertimm.com.br`), and who configures its DNS records?
-- Should the self-sign-up cap (20 per hour) be configurable by the
-  administrator, or is a fixed default enough?
+- None blocking. Resolved by the owner on 2026-10-05: terms and privacy start
+  from an original standard draft reviewed by the owner; emails go through
+  Resend from `contato@mastertimm.com.br`; sign-up cap is 3 per IP per hour,
+  configurable by environment variable.

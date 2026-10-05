@@ -224,17 +224,20 @@ Acceptance criteria:
 
 - AC-1: Given an unknown identity without a verified email, when I finish
   consent, then I see the US-003.AC-1 message and nothing is created.
-- AC-2: Given 20 accounts were self-created in the last 60 minutes, when
-  another person reaches the choice page and chooses a role, then they see
-  "Sign-ups are paused for a moment, try again later" and nothing is created;
-  existing members keep signing in normally.
+- AC-2: Given 3 accounts were self-created from my IP address in the last 60
+  minutes (default, configurable by environment variable), when I submit
+  another sign-up, then I see "Too many sign-ups from this network, try again
+  later" and nothing is created; existing members keep signing in normally,
+  and people on other IP addresses can still sign up.
 
 Edge cases:
 
-- EC-1: Two people choose at the same time when 19 sign-ups exist → at most one
-  of them gets the 20th slot; the other sees the paused message.
+- EC-1: Two sign-ups from the same IP finish at the same time when 2 exist →
+  at most one gets the 3rd slot; the other sees the limit message.
 - EC-2: The cap counts only self-created accounts; accounts created by
   administrators do not consume it.
+- EC-5: The environment variable is missing or invalid → the default 3
+  applies.
 - EC-3: Password sign-in and magic-link flows never create accounts, whatever
   the email; only the sign-up screen does.
 - EC-4: The cap counts confirmed manual sign-ups and social sign-ups together;
@@ -461,7 +464,7 @@ Edge cases:
 - EC-5: Submit twice → one pending sign-up and one code email.
 - EC-6: 5 codes already sent to this email in the last hour → "Too many codes
   requested, try again later"; nothing sent.
-- EC-7: Product-wide sign-up cap reached (US-006.AC-2) → paused message at
+- EC-7: Per-IP sign-up cap reached (US-006.AC-2) → limit message at
   confirmation time.
 - EC-8: CV problems → same messages as US-004.EC-7/EC-8/EC-10, before any
   code is sent.
@@ -578,7 +581,9 @@ Policy before accepting, **so that** I know how my data is used.
 Acceptance criteria:
 
 - AC-1: The sign-up screen links to public Terms of Use and Privacy Policy
-  pages, readable without an account, in Portuguese and English.
+  pages, readable without an account, in Portuguese and English, with an
+  original text in the standard LGPD structure that names
+  `contato@mastertimm.com.br` as the contact.
 - AC-2: Submitting without accepting is refused (US-004.EC-9).
 - AC-3: The account records which versions were accepted and when; the
   account page shows them.
