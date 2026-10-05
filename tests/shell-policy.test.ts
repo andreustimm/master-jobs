@@ -109,6 +109,26 @@ const GIT: readonly [string, Expected][] = [
   ["git checkout src/", "ask"],
   ["git checkout ./Makefile", "ask"],
   ["git checkout ..", "ask"],
+  // Revisão da #462 (terceira rodada): encanamento do push com a mesma proteção.
+  ["git send-pack --force git@github.com:o/r.git HEAD:refs/heads/dev", "deny"],
+  ["git send-pack origin main", "deny"],
+  ["git send-pack --force origin fix/x", "ask"],
+  ["git send-pack --all origin", "ask"],
+  ["git send-pack --mirror origin", "ask"],
+  ["git send-pack --stdin origin", "ask"],
+  ["git http-push https://x.test/r.git main", "deny"],
+  ["git http-push --force https://x.test/r.git fix/x", "ask"],
+  ["git receive-pack /tmp/r.git", "ask"],
+  // Branch protegida local reescrita ou apagada.
+  ["git branch -f dev HEAD~1", "ask"],
+  ["git branch -M main", "ask"],
+  ["git branch -m main velha", "ask"],
+  ["git branch -D staging", "ask"],
+  ["git branch --force main x", "ask"],
+  ["git branch --delete refs/heads/dev", "ask"],
+  ["git update-ref refs/heads/main HEAD~1", "ask"],
+  ["git update-ref HEAD HEAD~1", "ask"],
+  ["git symbolic-ref HEAD refs/heads/main", "ask"],
 ];
 
 /** O resto dos achados, sem `git` à frente. */
@@ -200,6 +220,38 @@ const OTHER: readonly [string, Expected][] = [
   ["vercel --prod=1", "ask"],
   ["supabase storage rm ss:///x -r", "ask"],
   ["supabase branches delete x", "ask"],
+  // Revisão da #462 (terceira rodada): o `node` do pnpm/yarn julgado como `node`.
+  ["pnpm node scripts/migration/production.ts --source snapshot.db --apply", "ask"],
+  ["pnpm node --no-warnings scripts/perf/medir-producao.ts", "ask"],
+  ["pnpm node --run db:import-production", "ask"],
+  ["pnpm node node_modules/.bin/vercel --prod", "ask"],
+  ["yarn node scripts/migration/production.ts", "ask"],
+  ["pnpm exec node scripts/migration/production.ts --apply", "ask"],
+  ["pnpm dlx node scripts/migration/production.ts", "ask"],
+  ["npx node scripts/migration/production.ts", "ask"],
+  // `rm` recursivo: raiz e diretório de sistema negam; subdiretório pergunta.
+  ["rm -rf /usr", "deny"],
+  ["rm -rf /etc/", "deny"],
+  ["rm -rf /Users/*", "deny"],
+  ["rm -rf ~/", "deny"],
+  ["rm -rf /*", "deny"],
+  ["rm -rf /tmp/cache", "ask"],
+  ["rm -rf ~/www", "ask"],
+  // Escrita fora do projeto ou na configuração pessoal (sem raiz informada).
+  ["echo payload > ~/.zshrc", "ask"],
+  ["echo payload >> $HOME/.zshrc", "ask"],
+  ["echo x > /etc/hosts", "ask"],
+  ["echo x >& ~/.zshrc", "ask"],
+  ["echo x > ../../x", "ask"],
+  ["echo x > $SAIDA", "ask"],
+  ["tee ~/.ssh/authorized_keys", "ask"],
+  ["tee -a ~/.claude/settings.json", "ask"],
+  ["cp a ~/.config/x", "ask"],
+  ["cp -t ~/.codex a", "ask"],
+  ["mv a /usr/local/bin/x", "ask"],
+  ["ln -s a /usr/local/bin/x", "ask"],
+  ["install a ~/bin/x", "ask"],
+  ["dd if=a of=/etc/x", "ask"],
 ];
 
 const LAUNCHERS = ["npx", "npx -y", "npx --yes", "npm exec", "npm exec --", "pnpm exec", "pnpm dlx", "bunx", "pnpm"];
@@ -406,6 +458,28 @@ describe("classifyRisk: a mesma operação, a mesma decisão, em qualquer forma"
     "env -i PATH=/usr/bin ls",
     "script -q /dev/null ls",
     "sh -s <<< 'echo ok'",
+    // Revisão da #462 (terceira rodada): reescrever commit local é rotina
+    // (G85) — o portão é o push forçado; temporário e projeto são graváveis.
+    "git commit --amend --no-edit",
+    "git rebase origin/dev",
+    "git branch -D feat/x",
+    "git branch -f feat/x HEAD~1",
+    "git branch -c main feat/copia",
+    "git symbolic-ref HEAD",
+    "git update-ref refs/heads/feat/x HEAD",
+    "git send-pack origin feat/x",
+    "pnpm node scripts/migration/rehearse-production.ts",
+    "pnpm node scripts/harness/sync.ts",
+    "echo x > /tmp/y",
+    "echo x > /private/tmp/claude-501/scratchpad/y",
+    "echo x > $TMPDIR/y",
+    "echo x > ./out.txt",
+    "echo x > out/a.txt",
+    "echo x 2> /dev/null",
+    "echo x >&2",
+    "cp a /tmp/b",
+    "tee out.txt",
+    "dd if=a of=/tmp/b",
   ])("rotina não pergunta: %s", (command) => {
     expect(classifyRisk(command)).toBeNull();
   });
@@ -488,7 +562,11 @@ describe("uma fonte de verdade para o risco de shell", () => {
     "chmod 777 x",
     "chmod -R 777 x",
     "rm -rf /",
+    "rm -rf / x",
     "rm -rf ~",
+    "rm -rf ~/",
+    "rm -rf $HOME",
+    "rm -fr /",
     "sudo ls",
     "cat .env",
     "cat app/.env.local",
@@ -500,6 +578,17 @@ describe("uma fonte de verdade para o risco de shell", () => {
       expect(classifyRisk(command)?.decision, `${command}: classificador`).toBe("deny");
     }
   });
+
+  it.each(["rm -rf /tmp/cache", "rm -rf ~/www", "rm -fr /tmp/cache", "rm -rf ./build"])(
+    "a reserva de `rm` não nega subdiretório, que o classificador pergunta: %s",
+    (base) => {
+      for (const command of [base, `rtk ${base}`, `rtk proxy ${base}`]) {
+        const literal = REAL_BASH.deny.some((spec) => spec === null || bashSpecifierMatches(spec, command));
+        expect(literal, `${command}: deny ancorado`).toBe(false);
+        expect(classifyRisk(command)?.decision, `${command}: classificador`).toBe("ask");
+      }
+    },
+  );
 
   it("os scripts de produção conferem com o `package.json`", () => {
     const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { scripts: Record<string, string> };
@@ -535,6 +624,39 @@ describe("uma fonte de verdade para o risco de shell", () => {
   it("embutido não libera o resto do corpo", () => {
     expect(judgeShell("while read l; do docker rm $l; done < f", REAL_BASH)).toMatchObject({ decision: "ask", kind: "body" });
     expect(judgeShell("if [ -f x ]; then git push origin main; fi", REAL_BASH)).toMatchObject({ decision: "deny" });
+  });
+});
+
+describe("escrita fora da árvore do projeto, com a raiz informada pelo chamador", () => {
+  const env = { root: "/repo", cwd: "/repo/.claude/worktrees/wt", home: "/home/eu" };
+
+  it.each([
+    "echo x > /repo/out.txt",
+    "echo x > out.txt",
+    "echo x > ../../../src/x.ts",
+    "tee /repo/.claude/worktrees/wt/log.txt",
+    "cp a /tmp/b",
+    "echo x > /var/folders/ab/T/x",
+    "for f in a; do echo $f > out.txt; done",
+  ])("dentro do projeto ou no temporário passa: %s", (command) => {
+    expect(classifyRisk(command, env)).toBeNull();
+  });
+
+  it.each([
+    "echo x > ../../../../x",
+    "echo x > /home/eu/notas.txt",
+    "echo x > ~/.zshrc",
+    "echo x > /home/eu/.claude/settings.json",
+    "cp a ~/.ssh/config",
+    "mv a /opt/x",
+    "for f in a; do echo $f > ~/.zshrc; done",
+  ])("fora do projeto ou configuração pessoal pergunta: %s", (command) => {
+    expect(classifyRisk(command, env)?.decision).toBe("ask");
+  });
+
+  it("o diretório pessoal absoluto conta como `~` no `rm` recursivo", () => {
+    expect(classifyRisk("rm -rf /home/eu", env)?.decision).toBe("deny");
+    expect(classifyRisk("rm -rf /home/eu/www", env)?.decision).toBe("ask");
   });
 });
 

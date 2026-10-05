@@ -249,7 +249,7 @@ function claudeList(command: string): Decision {
 
 /** O hook do projeto: saída 2 bloqueia (conta como deny); o JSON traz ask/deny. */
 function claudeHook(command: string): Decision {
-  const outcome = hookOutcome(command, REAL_BASH);
+  const outcome = hookOutcome(command, REAL_BASH, { root: context.root, cwd: context.root, home: context.home });
   if (outcome.exit === 2) return "deny";
   if (!outcome.stdout) return "allow";
   return (JSON.parse(outcome.stdout) as { hookSpecificOutput: { permissionDecision: Decision } }).hookSpecificOutput.permissionDecision;
@@ -261,7 +261,7 @@ const claude = (command: string): Decision => stronger(claudeList(command), clau
 /** Codex: a guarda (lista + política de shell); `ask` vira bloqueio. */
 const codex = (command: string): Decision => judge({ tool_name: "Bash", tool_input: { command } }, REAL_RULES, context).decision ?? "allow";
 
-const openCodeGuard = ShellGuard();
+const openCodeGuard = ShellGuard({ directory: context.root, worktree: context.root });
 
 /** O plugin do OpenCode lança Error para bloquear; o texto diz se era ask ou deny. */
 async function openCodePlugin(command: string): Promise<Decision> {
@@ -465,6 +465,52 @@ const ROUTINE: readonly string[] = [
   "git push origin --delete feat/x",
   "git config user.name x",
   "node --run build",
+  // Revisão da #462 (terceira rodada): reescrever commit local é rotina (G85),
+  // escrita no temporário e no projeto passa, e todo `gh` passa (dono).
+  'git -C /wt commit -m "chore: restore x"',
+  "git commit --amend --no-edit",
+  "git rebase -i HEAD~3",
+  "git push -u origin feat/x",
+  "echo x > /tmp/y",
+  "echo x > ./out.txt",
+  "for f in a; do echo $f; done",
+  "gh pr merge 466 --repo andreustimm/master-jobs --merge --delete-branch",
+  "gh pr merge 1 --repo o/r --squash --delete-branch",
+  "gh repo view andreustimm/master-jobs",
+  "gh pr view https://github.com/o/r/pull/1 --json title",
+];
+
+/**
+ * Corpus comum (#461): os três harnesses dão exatamente a mesma decisão —
+ * estrutura (`case`, `if`/`while`/`for`, pipe de leitura com executável do
+ * sistema) e os achados da terceira revisão da #462.
+ */
+const SAME: readonly [string, Decision][] = [
+  ["case $x in a|b) echo a;; esac", "allow"],
+  ["ls | /bin/cat", "allow"],
+  ["git log | /usr/bin/head -5", "allow"],
+  ["if true; then echo a; fi", "allow"],
+  ["while false; do echo a; done", "allow"],
+  ["for f in a b; do echo $f; done", "allow"],
+  ["for f in a b; do echo $f; done | /usr/bin/grep a", "allow"],
+  ["for f in a; do docker rm $f; done", "ask"],
+  ["case $x in a|b) docker ps;; esac", "ask"],
+  ["pnpm node scripts/migration/production.ts --source snapshot.db --apply", "ask"],
+  ["pnpm node --run db:import-production", "ask"],
+  ["git send-pack --force git@github.com:o/r.git HEAD:refs/heads/dev", "deny"],
+  ["git send-pack --mirror origin", "ask"],
+  ["git branch -f dev HEAD~1", "ask"],
+  ["git update-ref refs/heads/main HEAD~1", "ask"],
+  ["git symbolic-ref HEAD refs/heads/main", "ask"],
+  ["echo payload > ~/.zshrc", "ask"],
+  ["echo x > /etc/hosts", "ask"],
+  ["tee -a ~/.claude/settings.json < x", "ask"],
+  ["cp a ~/.ssh/config", "ask"],
+  ["rm -rf /tmp/cache", "ask"],
+  ["rm -rf ~/www", "ask"],
+  ["rm -rf /", "deny"],
+  ["rm -rf ~", "deny"],
+  ["rm -rf /usr", "deny"],
 ];
 
 /** Composto: recusado nos três, mesmo quando cada parte seria liberada. */
@@ -495,6 +541,12 @@ describe("decisão real nos três harnesses (#461)", () => {
     expect(claude(command), "Claude Code").toBe("allow");
     expect(codex(command), "Codex").toBe("allow");
     expect(await openCode(command), "OpenCode").toBe("allow");
+  });
+
+  it.each(SAME)("mesma decisão nos três: %s -> %s", async (command, expected) => {
+    expect(claude(command), "Claude Code").toBe(expected);
+    expect(codex(command), "Codex").toBe(expected);
+    expect(await openCode(command), "OpenCode").toBe(expected);
   });
 
   it.each(COMPOUND)("composto recusado nos três, com a mesma mensagem: %s", async (command) => {

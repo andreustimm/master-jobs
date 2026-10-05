@@ -13,11 +13,14 @@
 // Este módulo exporta só o plugin: o OpenCode trata cada função exportada
 // como um plugin.
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { bashRulesFromSettings, blockMessage, judgeShell } from "../../.claude/hooks/shell-policy.mjs";
 
 const SETTINGS = new URL("../../.claude/settings.json", import.meta.url);
 
-export const ShellGuard = async () => ({
+// `worktree` é a raiz do projeto e `directory` o diretório da sessão: escrita
+// fora da árvore pergunta (vira bloqueio).
+export const ShellGuard = async ({ directory, worktree } = {}) => ({
   "tool.execute.before": async (input, output) => {
     if (input?.tool !== "bash") return;
     const command = output?.args?.command;
@@ -30,7 +33,9 @@ export const ShellGuard = async () => ({
     } catch {
       rules = null;
     }
-    const verdict = judgeShell(command, rules);
+    // Fora de repositório git o OpenCode dá `worktree` "/": aí a raiz é o diretório.
+    const root = worktree && worktree !== "/" ? worktree : directory;
+    const verdict = judgeShell(command, rules, { root, cwd: directory, home: homedir() });
     if (verdict) throw new Error(blockMessage(verdict, "OpenCode"));
   },
 });

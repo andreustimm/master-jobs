@@ -655,8 +655,12 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   hook sai com código 2 e bloqueia. No OpenCode, o plugin também só sabe
   bloquear: composto, `ask` e `deny` da política viram `Error` com o motivo.
   A guarda decide como o Claude Code:
-  comando composto só passa quando **todo** trecho é liberado por uma regra
-  `allow` (ou é `cd`), e trecho que nenhuma regra libera é `ask` — isso fecha
+  composto e estrutura (`case`, laço, pipe de leitura) ficam com `judgeShell`,
+  e o `allow` confere cada comando simples que a política extrai
+  (`simpleCommands`, com `/bin/cat` valendo como `cat`) — por isso os três
+  dão a mesma decisão; comando só passa quando **todo** comando simples é
+  liberado por uma regra
+  `allow` (ou é `cd`), e o que nenhuma regra libera é `ask` — isso fecha
   de uma vez invólucro, shell aninhado, `eval`, palavra reservada e aspas
   `$'…'`, porque o que a leitura não reconhece como liberado pergunta. Edição
   por `apply_patch` fora das regras de caminho é a exceção: fica com o sandbox
@@ -693,7 +697,10 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   são push para `main`, e `git -C /wt commit -m "chore: restore foo"` não é
   `restore`. A rotina passa direto: leitura, edição no projeto, `git`, todo
   `gh` (decisão do dono: nenhum `gh` pergunta), `pnpm`/`npm`/`npx`, `rm` sem
-  recursão, `chmod`, `kill` e utilitários de texto e arquivo.
+  recursão, `chmod`, `kill` e utilitários de texto e arquivo. Reescrever
+  commit local (`commit --amend`, `rebase`, `rebase -i` em branch de
+  trabalho) também é rotina, por decisão do dono: o portão da reescrita é o
+  push forçado, que pergunta.
   - **Pergunta (`ask`):** perda de trabalho (push forçado ou `+ref`,
     `--mirror`, `--all`, `--prune`, `--no-verify`, push sem refspec ou com
     refspec variável; `reset --hard/--merge`; `clean`; `checkout -- <caminho>`,
@@ -701,7 +708,18 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     `switch -f/--discard-changes/-C`; `restore` fora de `--staged`;
     `stash drop/clear`; `worktree remove --force`; `git rm -r/-f`), reescrita de
     histórico (`filter-branch`, `filter-repo`, `update-ref -d`,
-    `reflog expire`, `gc --prune`, `prune`), git que executa programa ou
+    `reflog expire`, `gc --prune`, `prune`), branch protegida local reescrita
+    (`branch -f/-M/-m/-D/-d/--force main|staging|dev`, `update-ref` em
+    `refs/heads/main|staging|dev` ou `HEAD`, `symbolic-ref HEAD <ref>`),
+    encanamento do push (`send-pack` e `http-push` com o julgamento de
+    `push`, `send-pack --stdin`, `receive-pack`), escrita fora da árvore do
+    projeto ou na configuração pessoal (`>`, `>>`, `>&`, `tee`, `cp`/`ln`/
+    `install` no destino, `mv`, `dd of=` para `~`, `$HOME`, `/etc`,
+    `~/.zshrc`, `~/.ssh`, `~/.claude`, `~/.codex`, `~/.config` ou caminho que
+    sai do projeto; `/tmp`, `/private/tmp`, `$TMPDIR` e `/var/folders`
+    passam — o chamador passa a raiz: `$CLAUDE_PROJECT_DIR`, o `cwd` do Codex,
+    o `worktree` do OpenCode; sem raiz, absoluto fora do temporário pergunta),
+    git que executa programa ou
     pula hook (`-c` ou `git config` com `core.pager`, `core.editor`,
     `core.sshCommand`, `core.fsmonitor`, `core.hooksPath`, `diff.external`,
     `*.textconv`, `sequence.editor`, `credential.helper`, `gpg.program`;
@@ -719,7 +737,8 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     `secrets`, `functions deploy/delete`, `projects delete`, `storage rm`,
     `branches delete`; e os scripts
     `db:import-production*` e `perf:producao*` (por `pnpm`, `npm run` ou o
-    arquivo direto no `node`).
+    arquivo direto no `node`, inclusive `pnpm node`, `yarn node`,
+    `pnpm exec node` e `npx node`).
   - **Nega (`deny`):** push para `main`/`staging`/`dev` por qualquer refspec
     (`HEAD:main`, `refs/heads/main`, `heads/main`, `:main`, `$'\x6dain'`),
     `.env*` e `.linkedin.token.json` em qualquer palavra (`cat .env*`,
@@ -727,14 +746,18 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     laço) ou por curinga fora de aspas que o shell pode expandir para eles
     (`.en?`, `./.en[v]`, `.e*`), `sudo`/
     `doas`/`su`, `chmod` que deixa gravável por todos (`777`, `0777`,
-    `a+rwx`, `o+w`) e `rm` recursivo na raiz ou no diretório pessoal.
+    `a+rwx`, `o+w`) e `rm` recursivo na raiz, num diretório de sistema de
+    primeiro nível (`/usr`, `/etc`, `/Users`…) ou no diretório pessoal;
+    subdiretório (`rm -rf /tmp/cache`, `rm -rf ~/www`) pergunta.
 - **O que fica no `.claude/settings.json`.** `allow` da rotina (com
   `Bash(for:*)`, `while`, `until`, `if`, `case`); `ask` só para editar a
   própria política (`.claude/settings.json`, `.claude/hooks/**`,
   `scripts/harness/**`, `opencode.json`, `.codex/**`, `.opencode/plugins/**`,
   com `**/` à frente para valer também dentro de `.claude/worktrees/<wt>/`),
   que o classificador de shell não vê; e `deny` ancorado de reserva — push
-  protegido, `.env`, `sudo`, `chmod 777`, `rm -rf /` — escrito também como
+  protegido, `.env`, `sudo`, `chmod 777`, `rm -rf /`, `rm -rf / *`,
+  `rm -rf ~`, `rm -rf ~/`, `rm -rf $HOME` (sem curinga depois de `/` ou `~`,
+  que negaria `rm -rf /tmp/cache`) — escrito também como
   `rtk <padrão>` e `rtk proxy <padrão>`, para valer se o hook não rodar e
   qualquer que seja a forma que o Claude Code use para casar a lista (antes
   ou depois de o `rtk hook claude` reescrever). Nenhum `ask` de shell

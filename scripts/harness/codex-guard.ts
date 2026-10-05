@@ -56,7 +56,7 @@ export function judge(input: HookInput, rules: readonly Rule[], context: { root:
     }
     return { decision: worst, target };
   }
-  const shell = judgeShell(command, bashRules(rules));
+  const shell = judgeShell(command, bashRules(rules), { root: context.root, cwd, home: context.home });
   if (shell?.kind === "compound") return { decision: "deny", target: command, message: blockMessage(shell, "Codex") };
   const listed = decideCommand(rules, command);
   if (shell && STRENGTH[shell.decision] > STRENGTH[listed]) {

@@ -12,6 +12,8 @@
 //   `rtk` que o hook global acrescenta —, porque o classificador tira o
 //   prefixo antes de julgar.
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
 import { bashRulesFromSettings, compoundMessage, findCompound, isReadOnlyStage, judgeShell } from "./shell-policy.mjs";
 
@@ -33,12 +35,13 @@ export function loadRules(path = SETTINGS) {
  * PreToolUse com `ask`/`deny` (risco) ou nada.
  * @param {string} command
  * @param {import("./shell-policy.mjs").BashRules | null} rules
+ * @param {import("./shell-policy.mjs").ShellEnv} [env] raiz do projeto, cwd e diretório pessoal
  * @returns {{ exit: 0 | 2, stdout?: string, stderr?: string }}
  */
-export function hookOutcome(command, rules) {
+export function hookOutcome(command, rules, env = {}) {
   let verdict;
   try {
-    verdict = judgeShell(command, rules);
+    verdict = judgeShell(command, rules, env);
   } catch (error) {
     // Falha fecha na decisão: o hook que cai deixaria o comando passar.
     verdict = { decision: "ask", reason: `a política de shell não conseguiu julgar o comando (${error?.message ?? error})`, kind: "risk" };
@@ -64,7 +67,11 @@ function main() {
   }
   const command = input?.tool_input?.command;
   if (typeof command !== "string") process.exit(0);
-  const outcome = hookOutcome(command, loadRules());
+  // A árvore do projeto é `$CLAUDE_PROJECT_DIR` (o worktree fica dentro dela);
+  // sem ele, o diretório da sessão. Escrita fora dela pergunta.
+  const cwd = typeof input?.cwd === "string" && isAbsolute(input.cwd) ? input.cwd : undefined;
+  const root = process.env.CLAUDE_PROJECT_DIR || cwd;
+  const outcome = hookOutcome(command, loadRules(), { root, cwd, home: homedir() });
   if (outcome.stdout) process.stdout.write(outcome.stdout);
   if (outcome.stderr) process.stderr.write(outcome.stderr);
   process.exit(outcome.exit);

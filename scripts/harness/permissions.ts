@@ -11,7 +11,16 @@
 // e das palavras reservadas mora em `.claude/hooks/shell-policy.mjs`, que o
 // hook do Claude Code e o plugin do OpenCode importam sem strip-types (#461).
 
-import { bashSpecifierMatches, commandWords, escapeRegex, isLoop, LOOP_BUILTINS, type BashRules } from "../../.claude/hooks/shell-policy.mjs";
+import {
+  bashSpecifierMatches,
+  commandWords,
+  escapeRegex,
+  isLoop,
+  listText,
+  LOOP_BUILTINS,
+  simpleCommands,
+  type BashRules,
+} from "../../.claude/hooks/shell-policy.mjs";
 
 export { bashSpecifierMatches };
 
@@ -264,7 +273,9 @@ export function decideCommand(rules: readonly Rule[], command: string): Decision
         (rule.specifier === null || candidates.some((candidate) => bashSpecifierMatches(rule.specifier!, candidate))),
     );
   };
-  const parts = splitParts(command.trim());
+  // O allow confere os comandos que a política de shell extrai (#461): padrão
+  // de `case`, cabeçalho de laço e `/bin/cat` saem como nos outros harnesses.
+  const parts = simpleCommands(command.trim()).map(listText);
   return parts.length > 0 && parts.every(allowed) ? "allow" : "ask";
 }
 
