@@ -1,0 +1,90 @@
+{
+  "coletado_em": "2026-10-05T16:37:24Z",
+  "repositorio": "andreustimm/master-jobs",
+  "commit_verificado": "46e3268fc241ea65167bbbba8a4d6353c0f335ce",
+  "metodo": "gh api (GET), sessão andreustimm; nenhum valor de secret lido; nenhuma escrita remota. Campos condensados à mão a partir das respostas: regras reduzidas ao tipo e aos parâmetros relevantes; ids, datas e bypass copiados literalmente",
+  "rulesets": [
+    {
+      "id": 23854305,
+      "name": "permanentes: sem exclusão nem force-push",
+      "enforcement": "active",
+      "include": ["refs/heads/main", "refs/heads/staging", "refs/heads/dev"],
+      "rules": ["deletion", "non_fast_forward"],
+      "bypass_actors": [],
+      "updated_at": "2026-09-22T22:13:54.762-03:00"
+    },
+    {
+      "id": 23854306,
+      "name": "main: CI obrigatório",
+      "enforcement": "active",
+      "include": ["refs/heads/main"],
+      "rules": [
+        {
+          "type": "required_status_checks",
+          "strict": false,
+          "contexts": ["qualidade", "schema-e-migracao"],
+          "integration_id": 15368
+        }
+      ],
+      "bypass_actors": [],
+      "updated_at": "2026-09-22T22:13:55.639-03:00"
+    },
+    {
+      "id": 23854307,
+      "name": "main: produção por PR aprovada",
+      "enforcement": "active",
+      "include": ["refs/heads/main"],
+      "rules": [
+        {
+          "type": "pull_request",
+          "required_approving_review_count": 1,
+          "dismiss_stale_reviews_on_push": true,
+          "require_last_push_approval": false
+        }
+      ],
+      "bypass_actors": [{ "actor_type": "RepositoryRole", "actor_id": 5, "bypass_mode": "pull_request" }],
+      "updated_at": "2026-09-22T22:13:56.698-03:00"
+    }
+  ],
+  "regras_efetivas_por_branch": {
+    "main": ["required_status_checks", "pull_request", "deletion", "non_fast_forward"],
+    "staging": ["deletion", "non_fast_forward"],
+    "dev": ["deletion", "non_fast_forward"]
+  },
+  "ambientes": {
+    "Production": {
+      "can_admins_bypass": false,
+      "protection_rules": ["branch_policy"],
+      "deployment_branch_policy": { "protected_branches": false, "custom_branch_policies": true },
+      "deployment_branch_policies": ["main"],
+      "updated_at": "2026-09-23T01:14:27Z"
+    },
+    "Preview": {
+      "can_admins_bypass": true,
+      "protection_rules": [],
+      "deployment_branch_policy": null
+    }
+  },
+  "actions_workflow_permissions": {
+    "default_workflow_permissions": "write",
+    "can_approve_pull_request_reviews": true
+  },
+  "actions_variables_nomes": ["JHO_SOURCE_ALLOWLIST", "SUPABASE_CRAWL_ENABLED"],
+  "tasks_enforcement_definida": false,
+  "deployments_production": {
+    "ultimo_registrado_por_vercel_bot": { "sha": "a3350b6a", "criado_em": "2026-09-23T14:38:44Z" },
+    "mais_recentes_criados_por_andreustimm": ["2026-10-05T12:59:41Z", "2026-10-04T13:19:26Z", "2026-10-04T11:30:07Z"],
+    "contagem_nos_100_mais_recentes": { "andreustimm": 59, "vercel[bot]": 41 }
+  },
+  "verificador_local": {
+    "comando": "node scripts/github/verify-protections.ts",
+    "saida": ["ok permanentes: sem exclusão nem force-push", "ok main: CI obrigatório", "ok main: produção por PR aprovada", "ok ambiente Production"]
+  },
+  "prs_de_producao_recentes": [
+    { "numero": 452, "versao": "1.33.1", "autor": "github-actions[bot]", "mesclada_por": "andreustimm", "mesclada_em": "2026-10-02T05:35:19Z", "reviewDecision": "REVIEW_REQUIRED" },
+    { "numero": 450, "versao": "1.33.0", "autor": "github-actions[bot]", "mesclada_por": "andreustimm", "mesclada_em": "2026-10-02T04:08:18Z", "reviewDecision": "REVIEW_REQUIRED" },
+    { "numero": 448, "versao": "1.32.15", "autor": "github-actions[bot]", "mesclada_por": "andreustimm", "mesclada_em": "2026-10-02T02:55:30Z", "reviewDecision": "REVIEW_REQUIRED" },
+    { "numero": 445, "versao": "1.32.14", "autor": "github-actions[bot]", "mesclada_por": "andreustimm", "mesclada_em": "2026-10-02T01:05:40Z", "reviewDecision": "REVIEW_REQUIRED" },
+    { "numero": 443, "versao": "1.32.12", "autor": "github-actions[bot]", "mesclada_por": "andreustimm", "mesclada_em": "2026-10-01T23:58:15Z", "reviewDecision": "REVIEW_REQUIRED" }
+  ]
+}
