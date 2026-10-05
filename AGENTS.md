@@ -239,8 +239,9 @@ commit. [[G62](docs/engineering/rules/delivery.md#g62)]
   [[G86](docs/engineering/rules/orchestration.md#g86), [G87](docs/engineering/rules/orchestration.md#g87)]
 - Com `rtk` instalado, Codex e OpenCode prefixam cada comando com `rtk` (no
   Claude Code, um hook reescreve); sem ele, rode o comando puro. Um comando por
-  chamada de shell, sem `&&`, `|` ou `;`: a lista de permissão do Claude Code
-  casa pelo prefixo, e composto cai em aprovação manual. No Claude Code o gate
+  chamada de shell, sem `&&`, `||` ou `;`, e pipe só quando todo estágio é
+  leitura (`git log | head`): a lista de permissão do Claude Code casa pelo
+  prefixo, e composto cai em aprovação manual. No Claude Code o gate
   é `.claude/hooks/no-compound-bash.mjs`, registrado em `.claude/settings.json`
   (`hooks.PreToolUse`, matcher `Bash`); Codex e OpenCode ainda dependem do
   hábito — lacuna registrada, não fechada por hook lá. Heredoc e `$(...)` são

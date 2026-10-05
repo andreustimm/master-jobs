@@ -1,8 +1,9 @@
 // Suite: gate de comando composto do Claude Code (#380, G63)
 // Invariant: `findCompound` aceita comando único, inclusive com separador
-//   dentro de aspas ou redirecionamento com `&`, e recusa todo comando
-//   composto fora de aspas — a lista de permissão casa pelo prefixo e um
-//   composto liberado em parte cai em aprovação manual, travando o terminal.
+//   dentro de aspas ou redirecionamento com `&`, e pipe em que todo estágio é
+//   leitura conhecida (#461); recusa todo outro composto fora de aspas — a
+//   lista de permissão casa pelo prefixo e um composto liberado em parte cai
+//   em aprovação manual, travando o terminal.
 // Boundary IN: `.claude/hooks/no-compound-bash.mjs`, versionado e citado em
 //   `.claude/settings.json` (hooks.PreToolUse, matcher Bash)
 // Boundary OUT: o comportamento do próprio Claude Code ao rodar o hook — o
@@ -25,9 +26,25 @@ describe("findCompound: um comando de shell por chamada", () => {
     ['git commit -m "fix: a && b"', null],
     ["cmd &> log", null],
     ["echo 'a\nb'", null],
+    // Pipe em que todo estágio só lê: passa (#461).
+    ["cat x | grep y", null],
+    ["git log --oneline | head -20", null],
+    ["git -C /repo diff --stat | tail -5", null],
+    ["rtk git status --short | wc -l", null],
+    ["rg -n foo src | sort | uniq -c", null],
+    ["/usr/bin/grep -r x . | head", null],
+    // Algum estágio executa, escreve ou não é leitura conhecida: recusa.
+    ["head -1 f | sh", "| (pipe) com estágio fora da leitura"],
+    ["cat x | xargs rm", "| (pipe) com estágio fora da leitura"],
+    ["git log | tee out.txt", "| (pipe) com estágio fora da leitura"],
+    ["git push origin x | cat", "| (pipe) com estágio fora da leitura"],
+    ["git log --output=/tmp/x | head", "| (pipe) com estágio fora da leitura"],
+    ["catamaran x | head", "| (pipe) com estágio fora da leitura"],
+    ["cat x | grep y && rm z", "&&"],
+    ["cat x | grep y; rm z", ";"],
+    ["cat x |& grep y", "& (segundo plano)"],
     ["git add . && git commit", "&&"],
     ["a || b", "||"],
-    ["cat x | grep y", "| (pipe)"],
     ["cd x; ls", ";"],
     ["gh run watch $(gh run list)", "$(...) (substituição de comando)"],
     ['echo "$(date)"', "$(...) (substituição de comando)"],

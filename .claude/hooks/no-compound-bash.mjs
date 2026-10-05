@@ -5,12 +5,49 @@
 // chamada. Separadores dentro de aspas simples ou duplas não contam
 // (ex.: `--jq ".[] | .name"`), exceto substituição de comando, que o shell
 // expande também entre aspas duplas.
+//
+// Exceção: pipe em que TODO estágio é leitura conhecida (`git log | head`),
+// casada pelo nome do executável, nunca por substring. Checar só o primeiro
+// estágio não basta: `head f | sh` começa lendo e termina executando.
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
+const READ_ONLY = new Set(["cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "jq", "sort", "uniq", "cut", "tr", "column", "nl"]);
+const READ_ONLY_GIT = /^git\s+(?:-C\s+\S+\s+)?(?:status|diff|log|show|rev-parse|ls-files|branch\s+--show-current|worktree\s+list)(?:\s|$)/;
+// Opção que faz o `git` escrever arquivo ou chamar programa externo.
+const GIT_SIDE_EFFECT = /(?:^|\s)--(?:output|ext-diff)(?:=|\s|$)/;
+
+/** Estágio de pipe somente leitura: `rtk` e o caminho do executável não mudam o que ele faz. */
+export function isReadOnlyStage(stage) {
+  const text = stage.trim().replace(/^rtk\s+/, "");
+  const name = (text.split(/\s+/)[0] ?? "").split("/").pop();
+  if (READ_ONLY.has(name)) return true;
+  if (name !== "git") return false;
+  const git = text.replace(/^\S*git/, "git");
+  return READ_ONLY_GIT.test(git) && !GIT_SIDE_EFFECT.test(git);
+}
+
 export function findCompound(command) {
+  const verdict = scan(command);
+  if (verdict?.reason !== "| (pipe)") return verdict?.reason ?? null;
+  const stages = [];
+  let start = 0;
+  for (const cut of verdict.pipes) {
+    stages.push(command.slice(start, cut));
+    start = cut + 1;
+  }
+  stages.push(command.slice(start));
+  return stages.every(isReadOnlyStage) ? null : "| (pipe) com estágio fora da leitura";
+}
+
+/**
+ * Primeiro separador fora de aspas que não seja pipe, ou a lista de posições
+ * dos pipes quando eles são os únicos separadores.
+ */
+function scan(command) {
   let single = false;
   let double = false;
+  const pipes = [];
   for (let i = 0; i < command.length; i++) {
     const c = command[i];
     const next = command[i + 1];
@@ -22,27 +59,30 @@ export function findCompound(command) {
       i++;
       continue;
     }
-    if (c === "`") return "crase (substituição de comando)";
-    if (c === "$" && next === "(") return "$(...) (substituição de comando)";
+    if (c === "`") return { reason: "crase (substituição de comando)" };
+    if (c === "$" && next === "(") return { reason: "$(...) (substituição de comando)" };
     if (double) {
       if (c === '"') double = false;
       continue;
     }
     if (c === "'") { single = true; continue; }
     if (c === '"') { double = true; continue; }
-    if (c === "&" && next === "&") return "&&";
-    if (c === "|" && next === "|") return "||";
-    if (c === "|") return "| (pipe)";
-    if (c === ";") return ";";
-    if (c === "\n") return "quebra de linha (vários comandos)";
+    if (c === "&" && next === "&") return { reason: "&&" };
+    if (c === "|" && next === "|") return { reason: "||" };
+    if (c === "|") {
+      pipes.push(i);
+      continue;
+    }
+    if (c === ";") return { reason: ";" };
+    if (c === "\n") return { reason: "quebra de linha (vários comandos)" };
     if (c === "&") {
       const prev = command[i - 1];
       // `2>&1`, `>&2` e `&>` são redirecionamento, não segundo plano.
       if (prev === ">" || next === ">") continue;
-      return "& (segundo plano)";
+      return { reason: "& (segundo plano)" };
     }
   }
-  return null;
+  return pipes.length > 0 ? { reason: "| (pipe)", pipes } : null;
 }
 
 /**
@@ -70,7 +110,8 @@ function main() {
     : "";
   process.stderr.write(
     `Comando composto recusado (${found}). Regra: um comando por chamada de shell — ` +
-      "sem &&, ||, ;, |, &, $(...), crase ou várias linhas fora de aspas. " +
+      "sem &&, ||, ;, &, $(...), crase ou várias linhas fora de aspas, e pipe só quando todo " +
+      "estágio é leitura (cat, head, tail, grep, rg, jq, sort, wc, git status/diff/log/show). " +
       "Divida em chamadas separadas (independentes podem ir em paralelo na mesma resposta); " +
       "para filtrar saída use a opção do próprio comando (--jq, --json, grep com arquivo) ou um script em arquivo." +
       `${suggestion}\n`,

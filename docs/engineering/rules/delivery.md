@@ -661,6 +661,20 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   a camada de projeto sobrescreveria também a escolha pessoal mais estrita. O
   Codex só carrega hooks e agentes de projeto confiável (`trust_level` no
   `~/.codex/config.toml`).
+- **O que pergunta (#461).** A rotina de desenvolvimento passa direto:
+  leitura, edição no projeto, `git`, `gh`, `pnpm`/`npm`/`npx`, `rm` sem
+  recursão, `chmod`, `kill` e utilitários de texto e arquivo. Pergunta só o
+  que perde trabalho (push forçado, `reset --hard`, `clean`, `restore`,
+  `checkout -- `, `stash drop`, `worktree remove --force`), reescreve
+  histórico (`filter-branch`, `update-ref -d`, `reflog expire`), apaga em
+  massa (`rm -r`, `find -delete`, `xargs rm`), escreve segredo (`gh secret`,
+  `vercel env add/rm`, `supabase secrets`), sai do projeto (`ssh`, `scp`,
+  `rsync`, `brew`, `chown`) ou toca produção (`vercel --prod`, `promote`,
+  `rollback`, `supabase db push/reset`, `db query --linked`). Push direto
+  para `main`/`staging`/`dev`, `.env*`, chaves, `sudo` e `chmod 777` são
+  negados. Os padrões de `ask` e `deny` são ancorados no comando (`git …` e
+  `git -C * …`); `*` à esquerda casaria qualquer texto com "git", inclusive
+  toda URL `github.com`, e no Codex o falso positivo vira bloqueio.
 - **Prefixo `rtk`.** Codex e OpenCode escrevem `rtk sudo ls` (G63); no Claude
   Code o hook do rtk reescreve depois da decisão. Por isso a guarda do Codex
   tira `rtk` antes de conferir o allow e julga cada trecho também sem `rtk`,
@@ -702,10 +716,15 @@ economia de saída, não proteção. `rtk proxy <comando>` só quando a saída b
 é necessária — o resumo do `rtk` já escondeu erro de ferramenta uma vez, então
 leia o log bruto quando o resultado importa.
 
-**Um comando de shell por chamada**, sem `&&`, `||`, `|` ou `;`. A lista de
+**Um comando de shell por chamada**, sem `&&`, `||` ou `;`. A lista de
 permissão do Claude Code (`.claude/settings.json`) casa pelo prefixo do
 comando: um composto não casa com o `allow` e cai em aprovação manual, e o dono
-vira fila. A guarda do Codex (G85) avalia cada segmento, mas a regra é a mesma
+vira fila. A exceção (#461) é o pipe em que **todo** estágio só lê —
+`cat`, `head`, `tail`, `wc`, `grep`, `rg`, `jq`, `sort`, `uniq`, `cut`, `tr`,
+`column`, `nl` e `git status/diff/log/show/rev-parse/ls-files` sem `--output`
+nem `--ext-diff` —, casado pelo nome do executável, nunca por substring
+(`catamaran` não é `cat`). Checar só o primeiro estágio não basta: `head f |
+sh` começa lendo e termina executando. A guarda do Codex (G85) avalia cada segmento, mas a regra é a mesma
 nos três harnesses, para que o hábito não dependa de onde se roda. Filtre saída
 com a flag do próprio programa (`--jq`, `--format`) e ponha etapas múltiplas
 num script que roda com um comando.
@@ -714,8 +733,9 @@ num script que roda com um comando.
 (`findCompound`, exportado e testado por `tests/no-compound-bash.test.ts`) é
 registrado em `.claude/settings.json` → `hooks.PreToolUse` com matcher `Bash` e
 caminho relativo ao projeto (`$CLAUDE_PROJECT_DIR`): recusa (saída 2) `&&`,
-`||`, `;`, `|`, `&` de segundo plano, `$(...)`, crase e quebra de linha fora de
-aspas, mesmo quando cada trecho isolado seria `allow` — fecha o composto ANTES
+`||`, `;`, pipe com estágio fora da leitura, `&` de segundo plano, `$(...)`,
+crase e quebra de linha fora de aspas, mesmo quando cada trecho isolado seria
+`allow` — fecha o composto ANTES
 da aprovação manual, sem depender de hook global do usuário. Prova:
 `pnpm check:harness` roda como sempre e não muda, porque `hooks` não é
 traduzido pelo `pnpm harness:sync` (ele só espelha `permissions`).

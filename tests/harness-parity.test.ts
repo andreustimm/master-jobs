@@ -164,6 +164,46 @@ describe("regras do Claude Code lidas como o Claude Code lê", () => {
     expect(decideCommand(real, 'git commit -m "limpa o .env de exemplo"')).toBe("deny");
   });
 
+  // #461: confirmação só no que perde trabalho, reescreve histórico, apaga em
+  // massa, sai do projeto ou toca produção; o resto da rotina passa direto.
+  it.each<[string, Decision]>([
+    ["gh pr view https://github.com/andreustimm/master-jobs/pull/1 --json title --jq '.title' # restore clean", "allow"],
+    ["git log --grep clean --oneline", "allow"],
+    ["git checkout -b fix/x-foo origin/dev", "allow"],
+    ["git -C /repo worktree remove .claude/worktrees/x", "allow"],
+    ["git push -u origin fix/x", "allow"],
+    ["rm -f /tmp/x.txt", "allow"],
+    ["chmod +x scripts/a.sh", "allow"],
+    ["kill 1234", "allow"],
+    ["curl -sS http://127.0.0.1:3000/api/health", "allow"],
+    ["npx drizzle-kit generate", "allow"],
+    ["vercel logs https://x.vercel.app", "allow"],
+    ["git -C /repo push --force origin fix/x", "ask"],
+    ["git reset --hard origin/dev", "ask"],
+    ["git -C /repo clean -fd", "ask"],
+    ["git restore src/a.ts", "ask"],
+    ["git stash drop", "ask"],
+    ["rm -rf build", "ask"],
+    ["rm -R build", "ask"],
+    ["find . -name '*.tmp' -delete", "ask"],
+    ["gh api --method DELETE repos/x/y/git/refs/heads/z", "ask"],
+    ["gh secret set X", "ask"],
+    ["vercel --prod", "ask"],
+    ["vercel deploy --prod --yes", "ask"],
+    ["vercel env rm X production", "ask"],
+    ["npx vercel --prod", "ask"],
+    ["supabase db push", "ask"],
+    ["supabase db query --linked 'delete from job'", "ask"],
+    ["ssh host", "ask"],
+    ["git push origin dev", "deny"],
+    ["git -C /repo push origin main", "deny"],
+    ["git push origin HEAD:staging", "deny"],
+    ["chmod 777 x", "deny"],
+    ["rm -rf /", "deny"],
+  ])("lista real decide %s -> %s", (command, expected) => {
+    expect(decideCommand(parseRules(REAL_SETTINGS.permissions), command)).toBe(expected);
+  });
+
   it("aspas e redirecionamento em volta do alvo não escapam do deny", () => {
     const real = parseRules(REAL_SETTINGS.permissions);
     for (const command of ["git push origin 'main'", 'git push origin "main"', 'cat ".env"', "cat '.env'", "cat <.env"]) {
@@ -281,9 +321,10 @@ describe("OpenCode: tradução gerada de `.claude/settings.json`", () => {
     },
   );
 
-  it("leitura comum liberada; escrita pergunta, como no Claude Code sem Edit liberado", () => {
+  it("leitura e escrita no projeto liberadas, segredo negado e fora do projeto pergunta (#461)", () => {
     expect(openCodeDecide(permission, "read", "/repo/src/cli.ts")).toBe("allow");
-    expect(openCodeDecide(permission, "edit", "/repo/src/cli.ts")).toBe("ask");
+    expect(openCodeDecide(permission, "edit", "/repo/src/cli.ts")).toBe("allow");
+    expect(openCodeDecide(permission, "edit", "/repo/.env.local")).toBe("deny");
     expect(permission.external_directory).toBe("ask");
   });
 
@@ -440,7 +481,7 @@ describe("guarda do Codex", () => {
       const denied = JSON.parse(run(JSON.stringify({ tool_name: "Bash", tool_input: { command: "sudo ls" } }), root, "/h")!);
       expect(denied.hookSpecificOutput).toMatchObject({ hookEventName: "PreToolUse", permissionDecision: "deny" });
       expect(denied.hookSpecificOutput.permissionDecisionReason).toContain("deny");
-      const asked = JSON.parse(run(JSON.stringify({ tool_name: "Bash", tool_input: { command: "rm x" } }), root, "/h")!);
+      const asked = JSON.parse(run(JSON.stringify({ tool_name: "Bash", tool_input: { command: "rm -rf x" } }), root, "/h")!);
       expect(asked.hookSpecificOutput.permissionDecisionReason).toContain("peça à pessoa para rodar");
       expect(run(JSON.stringify({ tool_name: "Bash", tool_input: { command: "ls" } }), root, "/h")).toBeNull();
       expect(run("não é json", root, "/h")).toContain("guarda sem política legível");
