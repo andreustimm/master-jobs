@@ -231,6 +231,72 @@ depois"; registrar na issue do corte (#190) print ou texto com o estado lido e
 o horário. Uma regra religada entre a conferência e o `unpause` invalida a
 conferência: repita-a.
 
+## Desativação e rollback
+
+Interrupção do serviço segue protocolo auditado.
+
+1. **Pausa auditada:** Executar pausa com motivo documentado:
+   ```sh
+   rtk pnpm tasks pause --reason 'Desativação do escritor' --operation <uuid>
+   ```
+   Confirmação com código **0** permite prosseguir.
+
+2. **Desabilitação de flags:** Ação do dono.
+   - Definir `TASKS_WRITER_ENABLED=false` (GitHub Actions Secrets)
+   - Definir `TASKS_ENFORCEMENT=false` (GitHub Actions Variables)
+   - Remover `Vínculo da tarefa / canonical-task` dos checks exigidos na
+     proteção de branch de `dev`
+
+3. **Rotação de credenciais:** Ação do dono.
+   - Revogar ou expirar `PROJECTS_TOKEN` (PAT com escopo Project, issues, PRs,
+     checks, deployments)
+   - Rotacionar `TASKS_WRITER_PRIVATE_KEY` (chave privada Ed25519)
+   - Atualizar `writerPublicKey` em `config/tasks-project.json` via PR em `dev`
+
+4. **Validação:** GitHub permanece como autoridade; nenhum fallback local
+   republica snapshots. Comprove sem escrever:
+   ```sh
+   rtk pnpm tasks preflight --json
+   rtk git grep -n -E "compozy/tasks|projections|tasks refresh" -- .github scripts package.json
+   ```
+
+## Auditoria periódica
+
+Sem instrumentação local, a integridade depende de leitura de acesso e
+registros remotos.
+
+**Comandos de auditoria (leitura apenas):**
+
+```sh
+gh secret list
+gh variable list
+rtk pnpm tasks preflight --json
+```
+
+**Inspeção de regras nativas do Project 3:**
+Abrir Project 3 → ⋯ → Workflows e conferir cada linha contra a coluna
+"Configurado depois" na tabela de "Setup e corte". Guardar print e horário.
+
+**Audit de republication:**
+Garantir que nenhum mecanismo está ativo republicando estado local para a
+autoridade remota (GitHub). O comando que cumpre esse critério é:
+
+```sh
+rtk git grep -n -E "compozy/tasks|projections|tasks refresh" -- .github scripts package.json
+```
+
+Resultado esperado hoje (5 de outubro de 2026):
+- `scripts/tasks/projection.ts:176` — Comentário de geração, arquivo ignorado
+  pelo Git (`.compozy/projections/` em `.gitignore`)
+- `.github/workflows/ci.yml:40` — Comentário descritivo, não republicação
+
+Nenhuma outra ocorrência indica republication ativa.
+
+**Últimos runs do workflow:**
+Consultar histórico de runs do workflow `Coordenador do GitHub Project` em
+[Actions](https://github.com/andreustimm/master-jobs/actions) para confirmar
+sucesso de inicialização e ciclo operacional.
+
 Sequência de ativação em [#191](https://github.com/andreustimm/master-jobs/issues/191):
 
 1. Concluir revisão/gates e integrar ferramenta e regras em dev.
@@ -243,6 +309,23 @@ Sequência de ativação em [#191](https://github.com/andreustimm/master-jobs/is
    antiga, pausar/retomar e reconciliar resposta perdida. Guardar links dos runs.
 6. Habilitar enforcement e proteção de branch, executar preflight e comprovar
    tarefa real com PR em dev. Só então aceitar #191 e o épico.
+
+**Registro de evidência da ativação:** Comentário na issue #191 com o modelo:
+
+```markdown
+Entrega aceita:
+
+- Initialize workflow: [link do run em main, SHA e horário]
+- Piloto #189: [link da PR ou run, worktrees disputadas]
+- Corte #190: [link da execução, horário de conferência de regras]
+- Tarefa real em dev: [link de branch/PR concluída]
+- Verificação em produção: [link de deployment bem-sucedido]
+```
+
+Nenhum passo fica marcado como concluído até confirmação remota e aceite
+explícito do dono. Consulte "[Desativação e rollback](#desativação-e-rollback)"
+e "[Auditoria periódica](#auditoria-periódica)" para plano de interrupção e
+observabilidade contínua.
 
 `preflight` verifica acesso/campos, assinatura do controle, escritor habilitado e
 run de inicialização bem-sucedido na branch/SHA registrados. Nome de secret
