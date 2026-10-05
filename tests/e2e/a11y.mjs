@@ -6,6 +6,14 @@
 import AxeBuilder from "@axe-core/playwright";
 import { chromium } from "playwright";
 import { AXE_SWEEP } from "./routes.mjs";
+import { isolationRefusal } from "./database-guard.mjs";
+
+// Antes do navegador: o login e a varredura só rodam no ambiente descartável.
+const refusal = isolationRefusal(process.env);
+if (refusal) {
+  console.error(`e2e a11y recusado: ${refusal}`);
+  process.exit(1);
+}
 
 const BASE = process.env.E2E_BASE ?? "http://127.0.0.1:3000";
 const EMAIL = process.env.E2E_EMAIL ?? "e2e@local.test";

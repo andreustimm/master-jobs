@@ -155,10 +155,15 @@ A correção:
   primeira conta da instalação (tabela vazia), nunca troca
   vínculo gravado e perdeu
   `--candidate`. `seedOwner` recusa um segundo e-mail sobre o candidato do dono.
-- **E2E:** `tests/e2e/database-guard.mjs` recusa o setup se qualquer URL de
-  banco que `src/core/db/config.ts` consulta (`DATABASE_URL`,
-  `DATABASE_MIGRATION_URL`, `POSTGRES_URL`, `POSTGRES_URL_NON_POOLING`) sair do
-  loopback, e `E2E_EMAIL` que não seja `@local.test`.
+- **E2E:** `tests/e2e/database-guard.mjs` recusa `setup.mjs`, `ui.mjs` e
+  `a11y.mjs` se qualquer URL de banco que `src/core/db/config.ts` consulta
+  (`DATABASE_URL`, `DATABASE_MIGRATION_URL`, `POSTGRES_URL`,
+  `POSTGRES_URL_NON_POOLING`) sair do loopback, se `E2E_BASE` (o site que o
+  navegador abre) sair do loopback, se `JHO_TEST_DATABASE_URL` diferir de
+  `DATABASE_URL`, ou se `E2E_EMAIL` não for `@local.test`. Banco no loopback
+  com qualquer nome ainda passa (#435). As contas que uma execução de agosto
+  deixou em produção têm roteiro de limpeza em
+  [435-contas-e2e-producao.md](engineering/runbooks/435-contas-e2e-producao.md).
 - **Estrutural:** a migration `0009` cria o índice único parcial
   `auth_user_candidate_idx`.
 - **Dono do perfil:** `isOwner` passou a ser o candidato padrão de slug

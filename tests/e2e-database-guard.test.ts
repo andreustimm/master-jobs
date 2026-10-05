@@ -36,6 +36,34 @@ describe("isolationRefusal", () => {
     expect(isolationRefusal({ DATABASE_URL: "não é url" })).toMatch(/inválida/);
   });
 
+  // #435: o navegador também escreve (conta, vaga, visibilidade). Rodado contra
+  // o site publicado, cria dados em produção mesmo com o banco local declarado.
+  it("recusa alvo HTTP fora do loopback e aceita o padrão local", () => {
+    expect(isolationRefusal({ DATABASE_URL: LOCAL, E2E_BASE: "https://jobs.mastertimm.com.br" })).toMatch(
+      /E2E_BASE.*fora do loopback/,
+    );
+    expect(isolationRefusal({ DATABASE_URL: LOCAL, E2E_BASE: "http://127.0.0.1:3000" })).toBeNull();
+    expect(isolationRefusal({ DATABASE_URL: LOCAL, E2E_BASE: "http://[::1]:3101" })).toBeNull();
+    // Ausente, `ui.mjs` e `a11y.mjs` caem em http://127.0.0.1:3000.
+    expect(isolationRefusal({ DATABASE_URL: LOCAL })).toBeNull();
+  });
+
+  it("recusa alvo HTTP com URL inválida, inclusive vazia", () => {
+    expect(isolationRefusal({ DATABASE_URL: LOCAL, E2E_BASE: "jobs.mastertimm.com.br" })).toMatch(
+      /E2E_BASE inválida/,
+    );
+    // `ui.mjs` lê com `??`: vazio não cai no padrão, vira base relativa.
+    expect(isolationRefusal({ DATABASE_URL: LOCAL, E2E_BASE: "" })).toMatch(/E2E_BASE inválida/);
+  });
+
+  it("recusa JHO_TEST_DATABASE_URL diferente do banco que o setup usa", () => {
+    const other = "postgresql://jho:jho@127.0.0.1:5432/jho";
+    expect(isolationRefusal({ DATABASE_URL: LOCAL, JHO_TEST_DATABASE_URL: other })).toMatch(
+      /JHO_TEST_DATABASE_URL/,
+    );
+    expect(isolationRefusal({ DATABASE_URL: LOCAL, JHO_TEST_DATABASE_URL: LOCAL })).toBeNull();
+  });
+
   it("recusa conta de e2e com e-mail de uma pessoa", () => {
     expect(isolationRefusal({ DATABASE_URL: LOCAL, E2E_EMAIL: "alguem@gmail.com" })).toMatch(/E2E_EMAIL/);
   });
@@ -60,5 +88,14 @@ describe("isolationRefusal", () => {
     const guard = setup.indexOf("isolationRefusal(process.env)");
     expect(guard).toBeGreaterThan(-1);
     expect(guard).toBeLessThan(setup.indexOf("await runMigrations()"));
+  });
+
+  it("ui.mjs e a11y.mjs consultam a guarda antes de abrir o navegador", () => {
+    for (const file of ["tests/e2e/ui.mjs", "tests/e2e/a11y.mjs"]) {
+      const source = readFileSync(file, "utf8");
+      const guard = source.indexOf("isolationRefusal(process.env)");
+      expect(guard, file).toBeGreaterThan(-1);
+      expect(guard, file).toBeLessThan(source.indexOf("chromium.launch("));
+    }
   });
 });

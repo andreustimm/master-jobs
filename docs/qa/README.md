@@ -153,6 +153,8 @@ São perguntas diferentes, e nenhuma das quatro camadas responde a da outra.
 O job `e2e-navegador` roda em todo PR e push das três branches, sem segredo
 nenhum: o próprio harness sobe um `postgres:17` descartável no loopback do
 runner, com senha aleatória, e `database-guard.mjs` recusa qualquer outro banco.
+`pnpm test:e2e:external` passa pela mesma guarda: banco e `E2E_BASE` só no
+loopback, nunca o site publicado.
 O build descartável também não recebe nenhum `.env*` além do molde
 `.env.example` — antes, um checkout com `.env.production` levava a configuração
 de produção para o servidor do E2E. Dado de produção nunca entra na fixture: a
