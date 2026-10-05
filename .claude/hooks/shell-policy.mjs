@@ -1086,12 +1086,40 @@ function judgeRun(rest, value, context) {
   return eachReading(rest, { value, flag: LAUNCHER_FLAG }, context, (start) => scriptRisk(rest[start]));
 }
 
+/**
+ * `npm`/`pnpm`/`yarn config set|delete|edit` (e `npm set`, `pnpm set`) grava no
+ * arquivo do usuário, que vale para todo projeto: o padrão das três
+ * ferramentas, então só `--location=project` (sem `--global`/`-g`) fica livre.
+ * `get`, `list` e `ls` leem.
+ */
+const TOOL_CONFIG_WRITE = new Set(["set", "delete", "rm", "edit"]);
+const TOOL_CONFIG_READ = new Set(["get", "list", "ls"]);
+
+function judgeToolConfig(tool, args, start) {
+  const rest = args.slice(start + 1);
+  let location = null;
+  let global = false;
+  for (let k = 0; k < args.length; k++) {
+    const arg = args[k];
+    if (arg === "-g" || arg === "--global") global = true;
+    else if (arg === "--location" || arg === "-L") location = args[++k] ?? "";
+    else if (arg.startsWith("--location=")) location = arg.slice("--location=".length);
+  }
+  const positional = rest.filter((arg) => !arg.startsWith("-"));
+  // `<ferramenta> set` é `config set`; em `config`, a ação é a primeira palavra de leitura ou gravação.
+  const action = args[start] === "set" ? "set" : positional.find((arg) => TOOL_CONFIG_READ.has(arg) || TOOL_CONFIG_WRITE.has(arg));
+  if (!action || !TOOL_CONFIG_WRITE.has(action) || (args[start] !== "set" && TOOL_CONFIG_READ.has(positional[0]))) return null;
+  if (location === "project" && !global) return null;
+  return ask(`${tool} config ${action} grava na configuração do usuário (use --location=project)`);
+}
+
 function judgeNpm(args, context) {
   return eachReading(args, { value: NPM_VALUE, flag: LAUNCHER_FLAG }, context, (start) => {
     const sub = args[start];
     const rest = args.slice(start + 1);
     if (sub === "exec" || sub === "x") return judgeLaunched(rest, context);
     if (sub === "run" || sub === "run-script" || sub === "rum" || sub === "urn") return judgeRun(rest, NPM_VALUE, context);
+    if (sub === "config" || sub === "c" || sub === "set") return judgeToolConfig("npm", args, start);
     return null;
   });
 }
@@ -1105,6 +1133,7 @@ function judgePnpm(args, context) {
     if (sub === "run" || sub === "run-script") return judgeRun(rest, PNPM_VALUE, context);
     // `pnpm node <arquivo>` é o `node` do pnpm: arquivo, `--run` e `node_modules/.bin` julgados igual.
     if (sub === "node") return judgeNode(rest, deeper(context));
+    if (sub === "config" || sub === "c" || sub === "set") return judgeToolConfig("pnpm", args, start);
     if (PNPM_BUILTINS.has(sub)) return null;
     return stronger(scriptRisk(sub), judgeWords([sub, ...rest], deeper(context)));
   });
@@ -1414,7 +1443,7 @@ function judgeGitSubcommand(sub, rest, context) {
     case "bisect":
       return rest[0] === "run" ? gitShellPayload(rest.slice(1), context) : null;
     case "config":
-      return judgeGitConfig(rest);
+      return judgeGitConfig(rest, context);
     case "commit":
       return judgeCommit(rest);
     case "reset":
@@ -1495,14 +1524,19 @@ const CONFIG_WRITE = new Set(["--add", "--replace-all", "--unset", "--unset-all"
  * `core.hooksPath`…) ou qualquer `alias.*`: o efeito persiste depois da
  * chamada. Leitura (`--get`, `--list`, `get`, `list`) não pergunta.
  */
-function judgeGitConfig(rest) {
+function judgeGitConfig(rest, context) {
   const positional = [];
+  const files = [];
   let write = false;
+  let personal = null;
   for (let k = 0; k < rest.length; k++) {
     const arg = rest[k];
     if (arg === "-e" || arg === "--edit") return ask("git config --edit grava qualquer chave");
     if (CONFIG_READ.has(arg)) return null;
-    if (CONFIG_WRITE.has(arg)) write = true;
+    if (arg === "--global" || arg === "--system") personal = arg;
+    else if (arg.startsWith("--file=")) files.push(arg.slice("--file=".length));
+    else if (arg === "-f" || arg === "--file") files.push(rest[++k] ?? "");
+    else if (CONFIG_WRITE.has(arg)) write = true;
     else if (CONFIG_VALUE.has(arg)) k++;
     else if (!arg.startsWith("-")) positional.push(arg);
   }
@@ -1512,6 +1546,11 @@ function judgeGitConfig(rest) {
   const key = (subcommand ? positional[1] : positional[0])?.toLowerCase();
   // `git config chave` sozinho lê.
   if (!key || !(write || subcommand || positional.length >= 2)) return null;
+  // Gravar em `--global`/`--system` ou em arquivo fora do projeto é configuração pessoal.
+  if (personal) return ask(`git config ${personal} grava na configuração pessoal ou do sistema`);
+  for (const file of files) {
+    if (outsideWrite(joinPath(context.place ?? null, file), context.env ?? NO_ENV)) return ask(`git config --file grava fora do projeto (${file})`);
+  }
   if (GIT_EXEC_KEY.test(key)) return ask(`git config ${key} executa programa ou desliga os hooks`);
   if (key.startsWith("alias.") || key === "alias") return ask("git config alias.* cria comando do git");
   return null;

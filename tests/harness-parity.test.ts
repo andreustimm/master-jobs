@@ -543,6 +543,26 @@ const SAME: readonly [string, Decision][] = [
   ["echo x >| ~/.zshrc", "ask"],
   ["echo x >| ./out.txt", "allow"],
   ["touch ~/.zshrc", "allow"],
+  // Revisão da #462 (quinta rodada): gravar configuração pessoal pergunta; local e leitura passam.
+  ["git config --global user.name Agent", "ask"],
+  ["git config --system core.autocrlf false", "ask"],
+  ["git config --file ~/.gitconfig user.email a@b.c", "ask"],
+  ["git config -f ~/.gitconfig --unset user.email", "ask"],
+  ["npm config set registry https://registry.npmjs.org --location=user", "ask"],
+  ["npm config set registry https://registry.npmjs.org", "ask"],
+  ["npm set registry https://registry.npmjs.org", "ask"],
+  ["pnpm config set store-dir ~/.pnpm-store --global", "ask"],
+  ["pnpm config set store-dir ~/.pnpm-store", "ask"],
+  ["git config user.name x", "allow"],
+  ["git config --local core.autocrlf false", "allow"],
+  ["git config --get user.email", "allow"],
+  ["git config --list", "allow"],
+  ["git config --global --list", "allow"],
+  ["git config --file ./.git/config user.name x", "allow"],
+  ["npm config get registry", "allow"],
+  ["npm config set registry https://registry.npmjs.org --location=project", "allow"],
+  ["pnpm config get store-dir", "allow"],
+  ["pnpm config list", "allow"],
 ];
 
 /** Composto: recusado nos três, mesmo quando cada parte seria liberada. */
