@@ -44,6 +44,12 @@ readonly NO_JOB_PICKED_UP_EXIT_CODE=75
 
 log() { echo "[entrypoint] $*"; }
 
+# PIDs que o repasse de sinal e a limpeza precisam conhecer. Vazios até o
+# processo correspondente existir.
+DOCKERD_PID=""
+RUNNER_PID=""
+RUN_STATUS=0
+
 # M4 — limpa qualquer resquício de execução anterior antes de copiar e rodar.
 # Cada contêiner nasce de imagem limpa, então isto não deveria encontrar nada;
 # existe como rede de segurança contra uma parada suja que tenha deixado a
@@ -81,6 +87,7 @@ start_isolated_dockerd() {
   # dockerd em si exige, e o runner do GitHub RECUSA rodar como root sem
   # `RUNNER_ALLOW_RUNASROOT`, que este script nunca define.
   dockerd --host=unix:///var/run/docker.sock --group=docker >/tmp/dockerd.log 2>&1 &
+  DOCKERD_PID=$!
   for _ in $(seq 1 30); do
     docker info >/dev/null 2>&1 && return 0
     sleep 1
@@ -90,7 +97,87 @@ start_isolated_dockerd() {
   return 1
 }
 
+# Limpeza na saída (EXIT): para o dockerd interno com SIGTERM e espera ele
+# terminar, para que jobs de contêiner aninhados não fiquem pela metade quando
+# o `docker stop` do host chega. Sem dockerd (ainda) é no-op; nunca altera o
+# código de saída do script.
+stop_isolated_dockerd() {
+  [ -n "$DOCKERD_PID" ] || return 0
+  if kill -0 "$DOCKERD_PID" 2>/dev/null; then
+    log "parando o dockerd isolado (pid ${DOCKERD_PID})"
+    kill -TERM "$DOCKERD_PID" 2>/dev/null || true
+    wait "$DOCKERD_PID" 2>/dev/null || true
+  fi
+  DOCKERD_PID=""
+}
+
+# Repasse de sinal. O entrypoint é o PID 1 do contêiner: o kernel NÃO aplica a
+# ação padrão de SIGTERM/SIGINT ao PID 1 sem handler, então sem este trap o
+# `docker stop` do host esperava o timeout (10 s) e terminava com SIGKILL,
+# sem o `run.sh` nem o dockerd verem sinal nenhum. SIGINT também vira SIGTERM
+# para o filho: processo em segundo plano de shell não interativo herda SIGINT
+# ignorado, e o `run.sh` do runner (que trata TERM, não INT) nunca o veria.
+# Se o runner ainda não nasceu, sai direto (o trap de EXIT limpa o dockerd).
+# Código de saída: 128 + sinal recebido (143/130). Nunca 75, para o controller
+# não ler "nenhum job foi pego" quando na verdade pediram para parar.
+TERMINATED_BY=""
+on_termination_signal() {
+  local name="$1" number="$2"
+  TERMINATED_BY="$number"
+  log "recebi SIG${name}; repassando SIGTERM ao runner"
+  if [ -z "$RUNNER_PID" ]; then
+    exit $((128 + number))
+  fi
+  kill -TERM "$RUNNER_PID" 2>/dev/null || true
+}
+
+# Lança o `run.sh --jitconfig` já no usuário 'runner', SEM camada intermediária:
+# `setpriv` troca o uid/gid/grupos e faz `exec` no `run.sh`, então o PID que o
+# entrypoint guarda em `$!` é o do próprio `run.sh`. Com `su -c`, o `su` ficava
+# entre os dois e o repasse dependia de a versão do `su` encaminhar o sinal.
+# `setpriv` vem do util-linux, já instalado na imagem (Dockerfile).
+#
+# m1 (re-revisão) — `env -i` constrói o ambiente do zero (só as quatro
+# variáveis abaixo), sem depender do que `su` preserva ou não sem `--login`.
+#
+# Roda em subshell em segundo plano (chamador usa `&`); o `cd` e o `exec` não
+# vazam para o shell principal.
+launch_runner_process() {
+  cd "$RUNNER_RUNTIME"
+  exec env -i \
+    "JIT_CONFIG=${JIT_CONFIG}" \
+    "PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-/opt/ms-playwright}" \
+    "HOME=/home/runner" \
+    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    setpriv --reuid=runner --regid=runner --init-groups \
+    ./run.sh --jitconfig "$JIT_CONFIG"
+}
+
+# Roda o runner em segundo plano e espera ele terminar de verdade, deixando o
+# status em RUN_STATUS. O `wait` volta assim que um trap dispara, com status
+# > 128, ainda com o filho vivo — por isso o laço: só sai quando o filho não
+# existe mais (um zumbi ainda existe para `kill -0`, então o próximo `wait`
+# colhe o status real). Se um sinal de término chegou, sai aqui com 128+sinal.
+supervise_runner() {
+  launch_runner_process &
+  RUNNER_PID=$!
+  while true; do
+    wait "$RUNNER_PID" && RUN_STATUS=0 || RUN_STATUS=$?
+    kill -0 "$RUNNER_PID" 2>/dev/null || break
+  done
+  RUNNER_PID=""
+
+  if [ -n "$TERMINATED_BY" ]; then
+    log "runner encerrado após pedido de parada (status do run.sh: ${RUN_STATUS}); saindo com $((128 + TERMINATED_BY))"
+    exit $((128 + TERMINATED_BY))
+  fi
+}
+
 main() {
+  trap 'on_termination_signal TERM 15' TERM
+  trap 'on_termination_signal INT 2' INT
+  trap stop_isolated_dockerd EXIT
+
   prepare_writable_runtime_copy
   start_isolated_dockerd
 
@@ -99,26 +186,11 @@ main() {
   # — não é `config.sh` + token de registro reutilizável, e nada aqui grava
   # `JIT_CONFIG` em disco fora da cópia gravável descartável.
   #
-  # m1 (re-revisão) — `env -i` constrói o ambiente do zero, em vez de confiar
-  # em `su --whitelist-environment` sem `--login`: o comportamento de
-  # preservar variável por variável sem uma sessão de login completa varia
-  # entre versões de `su`, e um ambiente construído explicitamente (só as
-  # quatro variáveis abaixo) não depende dessa sutileza. `su -p` (preserve)
-  # aceita o ambiente que `env -i` já deixou pronto, sem o próprio `su`
-  # tentar montar outro por cima.
-  #
   # SEM `exec` aqui (3ª revisão, minor 2): o entrypoint precisa continuar
-  # vivo depois do `run.sh` para decidir o código de saída certo — `&&
-  # run_status=0 || run_status=$?` é o jeito de capturar o status sob
-  # `set -e` sem que uma falha encerre o script antes da checagem abaixo.
-  local run_status
-  env -i \
-    "JIT_CONFIG=${JIT_CONFIG}" \
-    "PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-/opt/ms-playwright}" \
-    "HOME=/home/runner" \
-    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
-    su -p runner -c "cd '${RUNNER_RUNTIME}' && exec ./run.sh --jitconfig \"\$JIT_CONFIG\"" \
-    && run_status=0 || run_status=$?
+  # vivo depois do `run.sh` para decidir o código de saída certo, e para
+  # repassar o sinal de parada (ver `supervise_runner`).
+  supervise_runner
+  local run_status="$RUN_STATUS"
 
   if [ "$run_status" -ne 0 ]; then
     log "run.sh terminou com status ${run_status} — falha do PROCESSO do runner, não do job"
@@ -140,4 +212,9 @@ main() {
   exit 0
 }
 
-main "$@"
+# Só executa quando chamado como programa (ENTRYPOINT); `source` por um teste
+# define as funções sem rodar `main`.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  main "$@"
+fi
+

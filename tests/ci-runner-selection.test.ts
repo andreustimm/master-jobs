@@ -6,7 +6,9 @@
 // Boundary IN: `.github/workflows/ci.yml` e a fixture desta suíte, lidos como
 //   dado (YAML), e `scripts/github/fork-guard.ts`, executado de verdade
 // Boundary OUT: o motor de expressões do GitHub Actions e o runner real
-import { readFileSync, readdirSync } from "node:fs";
+import { spawn, type ChildProcess } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { isForkPullRequest, type WorkflowEvent } from "../scripts/github/fork-guard.ts";
@@ -215,5 +217,131 @@ describe("M2 (revisão L2 da PR #376) — instalação do Playwright pula no run
     for (const step of stepsThatInstallBrowsers) {
       expect(step.if, step.name ?? step.run).toContain("runner.environment != 'self-hosted'");
     }
+  });
+});
+
+describe("Minor SIGTERM (issue #367) — o entrypoint repassa o sinal de parada ao run.sh", () => {
+  // O entrypoint é o PID 1 do contêiner: sem handler, o kernel descarta
+  // SIGTERM e o `docker stop` do host espera o timeout e mata com SIGKILL.
+  // O que dá para provar sem root nem docker: a forma do script (estático) e
+  // o comportamento da lógica de supervisão com um runner de mentira, em bash
+  // puro. Ficam de fora, e só um runner de verdade prova: `setpriv` trocando
+  // para o usuário `runner` e o `run.sh` do GitHub reagindo ao SIGTERM.
+  const entrypoint = readFileSync("scripts/runner/entrypoint.sh", "utf8");
+  const codeLines = entrypoint.split("\n").filter((line) => !line.trim().startsWith("#"));
+  const code = codeLines.join("\n");
+
+  it("instala trap para TERM e INT", () => {
+    expect(code).toMatch(/^\s*trap\s+'[^']*'\s+TERM\b/m);
+    expect(code).toMatch(/^\s*trap\s+'[^']*'\s+INT\b/m);
+  });
+
+  it("o run.sh roda em segundo plano, sem a camada do su, e o laço de wait espera o filho de verdade", () => {
+    expect(code).toMatch(/^\s*launch_runner_process\s+&\s*$/m);
+    expect(code).not.toMatch(/\bsu\s+-/);
+    expect(code).toMatch(/while true; do\s+wait "\$RUNNER_PID"/);
+    expect(code).toContain("exec env -i");
+    expect(code).toMatch(/setpriv --reuid=runner/);
+  });
+
+  it("o código 75 só sai depois de run.sh status 0 e ausência do log de Worker", () => {
+    const sentinelExits = codeLines.filter((line) => line.includes('exit "$NO_JOB_PICKED_UP_EXIT_CODE"'));
+    expect(sentinelExits).toHaveLength(1);
+    const statusGuardIndex = code.indexOf('if [ "$run_status" -ne 0 ]');
+    const guardIndex = code.indexOf('! compgen -G "${RUNNER_RUNTIME}/_diag/Worker_*.log"');
+    const sentinelIndex = code.indexOf('exit "$NO_JOB_PICKED_UP_EXIT_CODE"');
+    expect(statusGuardIndex).toBeGreaterThan(-1);
+    expect(guardIndex).toBeGreaterThan(statusGuardIndex);
+    expect(sentinelIndex).toBeGreaterThan(guardIndex);
+  });
+
+  it("para o dockerd interno na saída", () => {
+    expect(code).toMatch(/^\s*trap stop_isolated_dockerd EXIT\s*$/m);
+  });
+
+  describe("comportamento, com um runner de mentira (bash puro, sem root nem docker)", () => {
+    const stubScript = [
+      'case "$STUB_MODE" in',
+      "  wait-for-term)",
+      "    trap 'echo term > \"$MARKER_DIR/received-term\"; exit 0' TERM",
+      '    echo ready > "$MARKER_DIR/ready"',
+      "    while :; do sleep 0.05; done ;;",
+      "  exit-clean) exit 0 ;;",
+      "  worker-log) mkdir -p _diag; : > _diag/Worker_1.log; exit 0 ;;",
+      "  fail) exit 3 ;;",
+      "esac",
+      "",
+    ].join("\n");
+
+    const harness = [
+      "set -euo pipefail",
+      'source "$ENTRYPOINT"',
+      'RUNNER_RUNTIME="$TEST_RUNTIME"',
+      "prepare_writable_runtime_copy() { :; }",
+      "start_isolated_dockerd() { :; }",
+      'launch_runner_process() { cd "$RUNNER_RUNTIME"; exec bash "$STUB_SCRIPT"; }',
+      "main",
+    ].join("\n");
+
+    type Run = { child: ChildProcess; dir: string; done: Promise<number | null> };
+
+    function start(mode: string): Run {
+      const dir = mkdtempSync(join(tmpdir(), "entrypoint-"));
+      const runtime = join(dir, "runtime");
+      mkdirSync(runtime);
+      writeFileSync(join(dir, "stub.sh"), stubScript);
+      const child = spawn("bash", ["-c", harness], {
+        env: {
+          ...process.env,
+          ENTRYPOINT: join(process.cwd(), "scripts/runner/entrypoint.sh"),
+          JIT_CONFIG: "jit-de-mentira",
+          TEST_RUNTIME: runtime,
+          STUB_SCRIPT: join(dir, "stub.sh"),
+          STUB_MODE: mode,
+          MARKER_DIR: dir,
+        },
+        stdio: "ignore",
+      });
+      const done = new Promise<number | null>((resolve) => child.on("close", (exitCode) => resolve(exitCode)));
+      return { child, dir, done };
+    }
+
+    async function waitForFile(path: string) {
+      for (let attempt = 0; attempt < 200; attempt++) {
+        if (existsSync(path)) return;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      throw new Error(`arquivo não apareceu: ${path}`);
+    }
+
+    it("run.sh sem log de Worker e status 0 sai com 75", async () => {
+      expect(await start("exit-clean").done).toBe(75);
+    });
+
+    it("run.sh com log de Worker e status 0 sai com 0", async () => {
+      expect(await start("worker-log").done).toBe(0);
+    });
+
+    it("status diferente de 0 do run.sh propaga", async () => {
+      expect(await start("fail").done).toBe(3);
+    });
+
+    it("SIGTERM chega ao runner, o entrypoint espera ele sair e termina com 143, nunca 75", async () => {
+      const run = start("wait-for-term");
+      await waitForFile(join(run.dir, "ready"));
+      run.child.kill("SIGTERM");
+      expect(await run.done).toBe(143);
+      // O runner de mentira sai 0 sem log de Worker ao receber o sinal: sem o
+      // desvio de parada, o entrypoint leria isso como "nenhum job" (75).
+      expect(existsSync(join(run.dir, "received-term"))).toBe(true);
+    }, 15_000);
+
+    it("SIGINT também chega ao runner (como SIGTERM) e termina com 130", async () => {
+      const run = start("wait-for-term");
+      await waitForFile(join(run.dir, "ready"));
+      run.child.kill("SIGINT");
+      expect(await run.done).toBe(130);
+      expect(existsSync(join(run.dir, "received-term"))).toBe(true);
+    }, 15_000);
   });
 });

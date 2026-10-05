@@ -769,7 +769,14 @@ contêiner:
   o usuário não-root `runner` sobre uma CÓPIA gravável e descartável do
   binário, com o bit de escrita restaurado para o novo dono (M1 — a origem
   em `/opt/actions-runner` continua sem bit de escrita para ninguém depois
-  do build da imagem).
+  do build da imagem). O entrypoint é o PID 1 do contêiner e roda o
+  `run.sh` em segundo plano, direto no usuário `runner` por `setpriv` (sem a
+  camada do `su`, que não repassa sinal de forma confiável): um `docker stop`
+  (SIGTERM) ou SIGINT vira SIGTERM para o `run.sh`, o entrypoint espera o
+  runner sair, para o dockerd interno e termina com 143 (130 no SIGINT) —
+  nunca com 75, para o controller não ler uma parada como "nenhum job". Sem o
+  trap, o PID 1 ignorava o sinal e o `docker stop` só terminava no SIGKILL
+  do timeout.
 - **`scripts/runner/runner-controller.sh`** roda no HOST, como o serviço
   systemd `master-jobs-runner-controller.service` (instalado por
   `provision-vps.sh`, com `Requires=docker.service`). Para cada job, ele pede
