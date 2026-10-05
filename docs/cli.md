@@ -1294,8 +1294,10 @@ A rede é do candidato ativo da CLI (o de slug `default`): `contacts`,
 `referrals` e `engage targets` leem e gravam só nela, e sem esse candidato
 recusam com "Candidato padrão não cadastrado" (`jho db seed` o cria). No
 dashboard, `/referrals` mostra só a rede do candidato da sessão (#379).
-Contatos gravados antes dessa mudança ficam sem dono e ocultos até o backfill
-da #405.
+Contatos gravados antes dessa mudança foram atribuídos ao candidato `default`
+pela migration 0034 (#405). A URL do LinkedIn identifica o contato dentro da
+rede: `contacts add -u <url>` com uma URL que a rede já tem atualiza o
+contato, e a mesma URL na rede de outra conta não interfere.
 
 ### `jho contacts seed`
 

@@ -43,34 +43,36 @@ export type NewContact = {
 };
 
 /**
- * A URL do LinkedIn já está gravada fora da rede deste candidato.
+ * Grava um contato na rede do candidato, ou atualiza o que já tem a mesma URL.
  *
- * O índice `target_account_url_idx` ainda é global: a mesma pessoa não entra
- * em duas redes, e contato gravado antes da migration 0031 (sem dono) também
- * ocupa a URL. Recusar é o lado seguro — casar pela URL global sobrescreveria
- * o contato de outra conta. Some quando o índice passar a ser por candidato
- * (#405). `cause` guarda o erro do banco (23505).
+ * A URL do LinkedIn é a chave natural DENTRO da rede: o índice
+ * `target_account_candidate_url_idx` é por `(candidate_id, linkedin_url)`
+ * (#405). Outra conta que conheça a mesma pessoa tem a própria linha, e casar
+ * pela URL global sobrescreveria as notas dela.
+ *
+ * Duas gravações simultâneas da mesma URL na mesma conta podem passar ambas
+ * pela leitura e colidir no índice (23505). A segunda passada enxerga a linha
+ * já commitada e vira o UPDATE que ela pretendia ser.
  */
-export class ContactUrlTaken extends Error {
-  readonly code = "contact_url_taken";
-  readonly linkedinUrl: string;
-
-  constructor(linkedinUrl: string, cause: unknown) {
-    super(`A URL ${linkedinUrl} já está cadastrada fora da sua rede.`, { cause });
-    this.name = "ContactUrlTaken";
-    this.linkedinUrl = linkedinUrl;
+export async function addContact(
+  candidateId: number,
+  input: NewContact,
+): Promise<{ id: number; created: boolean }> {
+  try {
+    return await upsertContact(candidateId, input);
+  } catch (error) {
+    // Só a URL tem índice único nesta tabela; sem URL não há o que colidir.
+    if (input.linkedinUrl && isDuplicateKey(error)) return upsertContact(candidateId, input);
+    throw error;
   }
 }
 
-export async function addContact(
+async function upsertContact(
   candidateId: number,
   input: NewContact,
 ): Promise<{ id: number; created: boolean }> {
   const db = getDb();
 
-  // The LinkedIn URL is the natural key when present — within this
-  // candidate's network. Matching globally would overwrite another
-  // account's notes; a URL taken elsewhere is refused below.
   if (input.linkedinUrl) {
     const existing = await db
       .select({ id: targetAccount.id })
@@ -99,26 +101,19 @@ export async function addContact(
     }
   }
 
-  let inserted: { id: number }[];
-  try {
-    inserted = await db
-      .insert(targetAccount)
-      .values({
-        candidateId,
-        name: input.name,
-        company: input.company ?? null,
-        role: input.role ?? null,
-        linkedinUrl: input.linkedinUrl ?? null,
-        category: input.category,
-        country: input.country ?? null,
-        notes: input.notes ?? null,
-      })
-      .returning({ id: targetAccount.id });
-  } catch (error) {
-    // Só a URL tem índice único nesta tabela; sem URL não há o que colidir.
-    if (input.linkedinUrl && isDuplicateKey(error)) throw new ContactUrlTaken(input.linkedinUrl, error);
-    throw error;
-  }
+  const inserted = await db
+    .insert(targetAccount)
+    .values({
+      candidateId,
+      name: input.name,
+      company: input.company ?? null,
+      role: input.role ?? null,
+      linkedinUrl: input.linkedinUrl ?? null,
+      category: input.category,
+      country: input.country ?? null,
+      notes: input.notes ?? null,
+    })
+    .returning({ id: targetAccount.id });
 
   const row = inserted[0];
   if (!row) throw new Error("insert returned no row");

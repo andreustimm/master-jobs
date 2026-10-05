@@ -957,7 +957,9 @@ nota por trilha na leitura e falha na gravação, e a 0005 apaga notas sem trilh
 Correção desta versão vai para frente, numa versão nova.
 
 Para o snapshot legado, `scripts/migration/select-production.ts` aplica a
-allowlist de tabelas e exclui sessões, tokens, filas e HTML de crawler. O
+allowlist de tabelas e exclui sessões, tokens, filas, HTML de crawler e a rede
+de contatos (`target_account` tem dono obrigatório, e o snapshot não diz de
+quem é cada contato). O
 `scripts/migration/import-production.ts` importa somente a seleção verificada,
 exige destino vazio, mantém as FKs ativas e aborta acima de 400 MiB. Não há
 comando de reset destrutivo implícito: uma nova carga deve usar uma instância

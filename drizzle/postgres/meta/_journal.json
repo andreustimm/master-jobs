@@ -239,6 +239,13 @@
       "when": 1790910049534,
       "tag": "0033_source_run_due_total",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1791218296045,
+      "tag": "0034_contatos_candidato_obrigatorio",
+      "breakpoints": true
     }
   ]
 }
