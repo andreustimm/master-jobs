@@ -6,7 +6,7 @@
 
 ### Documentação
 
-- Roteiro do dono para apagar as contas do E2E que ficaram no banco de produção (candidatos 2 e 3, usuário 4) e deixar um único candidato com `is_default`: `docs/engineering/runbooks/435-contas-e2e-producao.md`. Ninguém o executou.
+- Roteiro do dono para apagar as contas do E2E que ficaram no banco de produção (toda conta `@local.test` e todo candidato `e2e-%` do run de 20/08, não só os candidatos 2 e 3 e o usuário 4 já vistos), com contenção imediata das contas que entram com a senha publicada do E2E, e deixar um único candidato com `is_default`: `docs/engineering/runbooks/435-contas-e2e-producao.md`. Ninguém o executou.
 
 ## pt-BR
 

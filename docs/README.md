@@ -64,7 +64,7 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`product/job-lifecycle-and-application-history.md`](product/job-lifecycle-and-application-history.md) | Regras de fechamento, arquivamento e leitura do histórico para candidato e recrutador. |
 | [`engineering/session-2026-09-16.md`](engineering/session-2026-09-16.md) | Registro histórico das decisões, bloqueios e próximos passos discutidos naquela sessão. |
 | [`engineering/local-postgres.md`](engineering/local-postgres.md) | Compose local com imagem Supabase Postgres, PGMQ, pgvector e limites de paridade. |
-| [`engineering/runbooks/435-contas-e2e-producao.md`](engineering/runbooks/435-contas-e2e-producao.md) | Roteiro do dono para apagar as contas do E2E que ficaram em produção e deixar um dono só (`is_default`). |
+| [`engineering/runbooks/435-contas-e2e-producao.md`](engineering/runbooks/435-contas-e2e-producao.md) | Roteiro do dono para desligar e apagar as contas do E2E (`@local.test`, candidatos `e2e-%`) que ficaram em produção e deixar um dono só (`is_default`). |
 | [`engineering/local-storage.md`](engineering/local-storage.md) | MinIO local para o armazenamento de objetos (foto e capa), suíte de contrato e como apontar para AWS S3. |
 | [`engineering/stack-lts-upgrade-proposal.md`](engineering/stack-lts-upgrade-proposal.md) | Proposta de upgrade LTS e matriz de paridade entre local, CI, Vercel e Supabase. |
 | [`.compozy/tasks/job-lifecycle-retention/`](../.compozy/tasks/job-lifecycle-retention/) | PRD, especificação e testes para arquivar vagas preservando candidaturas. |
