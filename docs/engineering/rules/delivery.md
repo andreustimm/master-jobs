@@ -684,8 +684,12 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   token, não por texto: corta em todo separador fora de aspas (inclusive
   corpo de laço, `$(…)`, crase e `sh -c '…'`), tira `rtk`/`rtk proxy`,
   atribuição, invólucro (`env`, `command`, `nohup`, `time`, `nice`,
-  `timeout`, `env -`, `script`…), lançador (`npx [-y]`, `npm exec [--]`,
-  `pnpm exec`, `pnpm dlx`, `bunx`, `node --run`, `node node_modules/…`), o
+  `timeout`, `env -`, `script`…), lançador (`npx`, `npm exec`, `pnpm`,
+  `pnpm exec`, `pnpm dlx`, `yarn`, `bun`, `bunx`, `node --run`,
+  `node node_modules/…` — sem lista fechada de opções: a opção desconhecida
+  sem `=` é lida como flag **e** como opção com valor, cada leitura é julgada
+  e vale a mais forte, e script ou arquivo de produção conta em qualquer
+  posição; leituras demais perguntam), o
   payload de `xargs`, de `find -exec/-execdir/-ok` e do texto que o git
   entrega ao shell (`rebase -x/--exec`, `submodule foreach`, `bisect run`,
   `difftool -x/--extcmd`), a entrada de `sh -s` e as opções globais do git
@@ -694,7 +698,8 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   `main`). Comando que a política não consegue julgar (aninhado demais, acima
   de 100 mil caracteres ou que derruba a leitura) pergunta — o hook não cai. Por isso
   `git -c x=y push origin main` e `find . -exec git push -f origin main \;`
-  são push para `main`, e `git -C /wt commit -m "chore: restore foo"` não é
+  são push para `main`, e
+  `git -C .claude/worktrees/x commit -m "chore: restore foo"` não é
   `restore`. A rotina passa direto: leitura, edição no projeto, `git`, todo
   `gh` (decisão do dono: nenhum `gh` pergunta), `pnpm`/`npm`/`npx`, `rm` sem
   recursão, `chmod`, `kill` e utilitários de texto e arquivo. Reescrever
@@ -708,17 +713,39 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     `switch -f/--discard-changes/-C`; `restore` fora de `--staged`;
     `stash drop/clear`; `worktree remove --force`; `git rm -r/-f`), reescrita de
     histórico (`filter-branch`, `filter-repo`, `update-ref -d`,
-    `reflog expire`, `gc --prune`, `prune`), branch protegida local reescrita
-    (`branch -f/-M/-m/-D/-d/--force main|staging|dev`, `update-ref` em
-    `refs/heads/main|staging|dev` ou `HEAD`, `symbolic-ref HEAD <ref>`),
-    encanamento do push (`send-pack` e `http-push` com o julgamento de
-    `push`, `send-pack --stdin`, `receive-pack`), escrita fora da árvore do
-    projeto ou na configuração pessoal (`>`, `>>`, `>&`, `tee`, `cp`/`ln`/
-    `install` no destino, `mv`, `dd of=` para `~`, `$HOME`, `/etc`,
-    `~/.zshrc`, `~/.ssh`, `~/.claude`, `~/.codex`, `~/.config` ou caminho que
-    sai do projeto; `/tmp`, `/private/tmp`, `$TMPDIR` e `/var/folders`
-    passam — o chamador passa a raiz: `$CLAUDE_PROJECT_DIR`, o `cwd` do Codex,
-    o `worktree` do OpenCode; sem raiz, absoluto fora do temporário pergunta),
+    `reflog expire`, `gc --prune`, `prune`, `replace`), escrita de ref
+    local por uma checagem única — `HEAD`, `main`/`staging`/`dev` (também
+    `refs/heads/…`, `heads/…`), qualquer tag e destino por variável ou
+    curinga fora de `refs/remotes/` —, valendo para `fetch`/`pull` com
+    `src:dst` (com `+`, `-f` ou `--update-head-ok`) ou `--refmap`,
+    `update-ref`, `branch -f/-M/-m/-D/-d/--force`, `symbolic-ref HEAD <ref>`,
+    criar protegida por `checkout -b/--orphan`, `switch -c/--create/--orphan`
+    e `worktree add -b`, recriar qualquer branch por cima (`checkout -B`,
+    `switch -C/--force-create`, `worktree add -B`, inclusive colado ou
+    agrupado: `-Bmain`, `-fB`), `tag -f/-d/--force/--delete`,
+    `fetch --prune-tags`/`-P` e `fetch --force --tags` (regra 22; criar tag
+    nova passa), encanamento do push (`send-pack` e `http-push` com o
+    julgamento de `push`, `send-pack --stdin`, `receive-pack`), escrita fora
+    da árvore do projeto ou na configuração pessoal — redirecionamento
+    (`>`, `>>`, `>|`, `>&`), destino de `tee`, `cp`/`ln`/`install`, `mv`,
+    `dd of=`, saída de `uniq` e `tar` (`-f` ao criar, `-C` ao extrair) e a
+    tabela única de opções que escrevem arquivo (`curl -o/--output/
+    --output-dir/-D/-c`, `wget -O/-o/-a/-P`, `sort -o/--output`,
+    `openssl -out/-keyout`, `git diff|log|show --output`,
+    `git format-patch -o/--output-directory`, `git archive -o`), também
+    agrupadas (`curl -sSo x`) ou coladas (`-ox`, `--output=x`), para `~`,
+    `$HOME`, `/etc`, `~/.zshrc`, `~/.ssh`, `~/.claude`, `~/.codex`,
+    `~/.config` ou caminho que sai do projeto —, e o git apontado para
+    repositório fora do projeto (`-C`, encadeado; `--git-dir`,
+    `--work-tree`, `GIT_DIR=`/`GIT_WORK_TREE=`) em subcomando que não só lê
+    (`commit`, `checkout`, `reset`, `add`, `rm`, `merge`, `rebase`, `stash`,
+    `clean`, `push`…; `status`, `log`, `diff` passam), além do caminho de
+    `worktree add`. `/tmp`, `/private/tmp`, `$TMPDIR` e `/var/folders`
+    passam. O chamador passa a raiz — `$CLAUDE_PROJECT_DIR`, o `cwd` do
+    Codex, o `worktree` do OpenCode —, e a raiz dentro de
+    `<repo>/.claude/worktrees/<wt>` vale como o repositório inteiro (os
+    outros worktrees são o projeto); sem raiz, absoluto fora do temporário
+    pergunta,
     git que executa programa ou
     pula hook (`-c` ou `git config` com `core.pager`, `core.editor`,
     `core.sshCommand`, `core.fsmonitor`, `core.hooksPath`, `diff.external`,
@@ -783,7 +810,17 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   variável de ambiente (`GIT_SSH_COMMAND`, `PAGER`, `GIT_EDITOR`) nem
   `git checkout <arquivo>` sem extensão e sem `/` (`git checkout Makefile`):
   separar arquivo de branch ali exige olhar o disco, e a política é pura —
-  só `.`, `..`, `./x`, `x/` e `:x`, que nenhum ref aceita, perguntam;
+  só `.`, `..`, `./x`, `x/` e `:x`, que nenhum ref aceita, perguntam.
+  Escrita fora do projeto, limites aceitos pelo dono (#462): `touch`,
+  `mkdir` e `rmdir` fora do projeto passam, porque não perdem dado
+  existente; link simbólico não é resolvido — `ln -s ~/.zshrc ./link` e
+  depois `echo x > ./link` passam, porque seguir o link exige olhar o disco
+  e a política é pura (o sandbox do harness é a camada que vê o disco);
+  opção de saída de programa fora da tabela (`zip`, `unzip -d`, `rsync` já
+  pergunta) não é vista; `GIT_DIR=` vale para o `git` do mesmo comando, não
+  para o de dentro de `sh -c`. `git notes --ref refs/heads/main` não é
+  vetor: o git prefixa `refs/notes/` (grava `refs/notes/refs/heads/main`, e
+  `main` fica intacta), por isso não pergunta.
   `Bash(node:*)`,
   `Bash(npx:*)` e `Bash(rtk proxy:*)` liberam código arbitrário por desenho, e
   o classificador só pega neles o risco que reconhece.

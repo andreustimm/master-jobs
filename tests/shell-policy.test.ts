@@ -129,6 +129,46 @@ const GIT: readonly [string, Expected][] = [
   ["git update-ref refs/heads/main HEAD~1", "ask"],
   ["git update-ref HEAD HEAD~1", "ask"],
   ["git symbolic-ref HEAD refs/heads/main", "ask"],
+  // Revisão da #462 (quarta rodada): toda escrita de ref local passa pela
+  // mesma checagem — branch protegida, tag, `HEAD` e curinga perguntam.
+  ["git fetch --update-head-ok -f origin x:dev", "ask"],
+  ["git fetch -f origin x:dev", "ask"],
+  ["git fetch origin +x:refs/heads/main", "ask"],
+  ["git fetch origin x:heads/staging", "ask"],
+  ["git fetch origin x:refs/tags/v1.2.3", "ask"],
+  ["git fetch origin 'refs/heads/*:refs/heads/*'", "ask"],
+  ["git fetch --refmap=x:dev origin", "ask"],
+  ["git fetch --prune-tags origin", "ask"],
+  ["git fetch -P origin", "ask"],
+  ["git fetch -f --tags origin", "ask"],
+  ["git pull origin x:staging", "ask"],
+  ["git worktree add --force -B main /tmp/wt HEAD~1", "ask"],
+  ["git worktree add -B feat/x /tmp/wt", "ask"],
+  ["git worktree add -b main /tmp/wt", "ask"],
+  ["git worktree add -fB dev /tmp/wt", "ask"],
+  ["git tag -f v1.2.3 HEAD~1", "ask"],
+  ["git tag -fa v1.2.3 -m x", "ask"],
+  ["git tag -d v1.2.3", "ask"],
+  ["git tag --delete v1.2.3", "ask"],
+  ["git tag --force v1.2.3", "ask"],
+  ["git checkout -Bmain", "ask"],
+  ["git checkout -b dev", "ask"],
+  ["git checkout --orphan staging", "ask"],
+  ["git switch -c staging", "ask"],
+  ["git switch --create=main", "ask"],
+  ["git switch --force-create=feat/x", "ask"],
+  ["git switch -Cdev", "ask"],
+  ["git update-ref refs/tags/v1 HEAD", "ask"],
+  ["git update-ref refs/heads/$B HEAD", "ask"],
+  ["git replace HEAD HEAD~1", "ask"],
+  ["git replace -d abc123", "ask"],
+  // Arquivo de saída fora do projeto, pelo próprio git.
+  ["git diff --output=/etc/x", "ask"],
+  ["git log --output ~/x.txt", "ask"],
+  ["git format-patch -o ~/patches HEAD~1", "ask"],
+  ["git format-patch --output-directory=/etc/p HEAD~1", "ask"],
+  ["git archive -o ~/x.tgz HEAD", "ask"],
+  ["git diff --output=.claude/settings.json", "ask"],
 ];
 
 /** O resto dos achados, sem `git` à frente. */
@@ -252,6 +292,55 @@ const OTHER: readonly [string, Expected][] = [
   ["ln -s a /usr/local/bin/x", "ask"],
   ["install a ~/bin/x", "ask"],
   ["dd if=a of=/etc/x", "ask"],
+  // Revisão da #462 (quarta rodada): lançador com opção que a política não
+  // conhece — as duas leituras (flag ou com valor) são julgadas.
+  ["pnpm --filter-prod . exec node scripts/migration/production.ts --apply", "ask"],
+  ["npx --loglevel silent node scripts/migration/production.ts --apply", "ask"],
+  ["npx --registry https://r.test node scripts/migration/production.ts --apply", "ask"],
+  ["pnpm --workspace-root --filter-prod . exec node scripts/migration/production.ts", "ask"],
+  ["npm --cache /tmp/c exec -- node scripts/migration/production.ts", "ask"],
+  ["pnpm --filter-prod . run db:import-production", "ask"],
+  ["yarn workspace web db:import-production", "ask"],
+  ["bun --cwd x run perf:producao", "ask"],
+  ["pnpm --unknown x exec vercel --prod", "ask"],
+  ["npx --loglevel silent vercel --prod", "ask"],
+  ["bunx --foo bar vercel --prod", "ask"],
+  ["node --unknown-flag x node_modules/.bin/vercel --prod", "ask"],
+  ["npx --loglevel silent -c 'vercel --prod'", "ask"],
+  // Opção que escreve arquivo (tabela única) fora do projeto.
+  ["sort -o ~/.zshrc input", "ask"],
+  ["sort --output=/etc/x input", "ask"],
+  ["sort -nro ~/.zshrc input", "ask"],
+  ["uniq input ~/.zshrc", "ask"],
+  ["curl -o ~/.zshrc https://x.test", "ask"],
+  ["curl -sSo ~/.zshrc https://x.test", "ask"],
+  ["curl -o~/.zshrc https://x.test", "ask"],
+  ["curl --output=/etc/x https://x.test", "ask"],
+  ["curl --output-dir ~/.config https://x.test -O", "ask"],
+  ["curl -c ~/.ssh/jar https://x.test", "ask"],
+  ["curl -o .claude/settings.json https://x.test", "ask"],
+  ["wget -O ~/.zshrc https://x.test", "ask"],
+  ["wget --output-document=/etc/x https://x.test", "ask"],
+  ["wget -P ~/.config https://x.test", "ask"],
+  ["openssl genrsa -out ~/.ssh/k 2048", "ask"],
+  ["openssl req -new -keyout /etc/k -out x.csr", "ask"],
+  ["tar -czf ~/x.tgz src", "ask"],
+  ["tar czf ~/x.tgz src", "ask"],
+  ["tar --create --file=/etc/x.tar src", "ask"],
+  ["tar -xzf a.tgz -C ~/.config", "ask"],
+  ["tar -x -f a.tgz --directory=/etc", "ask"],
+  // O repositório do git fora do projeto: o que não só lê pergunta.
+  ["git -C ~ commit -m x", "ask"],
+  ['git -C /wt commit -m "chore: restore foo"', "ask"],
+  ["git -C / -C etc checkout x", "ask"],
+  ["git --git-dir=/elsewhere/.git commit -m x", "ask"],
+  ["git --work-tree ~ add .", "ask"],
+  ["GIT_DIR=~/x/.git git commit -m x", "ask"],
+  ["env GIT_WORK_TREE=/etc git stash", "ask"],
+  ["git -C ~ merge x", "ask"],
+  ["git worktree add /elsewhere/wt -b feat/x", "ask"],
+  // `>|` é redirecionamento: fora do projeto pergunta.
+  ["echo x >| ~/.zshrc", "ask"],
 ];
 
 const LAUNCHERS = ["npx", "npx -y", "npx --yes", "npm exec", "npm exec --", "pnpm exec", "pnpm dlx", "bunx", "pnpm"];
@@ -385,8 +474,47 @@ describe("classifyRisk: a mesma operação, a mesma decisão, em qualquer forma"
   });
 
   it.each([
-    'git -C /wt commit -m "chore: restore foo"',
     "git -C /wt log --grep clean",
+    "git -C /tmp/x commit -m x",
+    // Revisão da #462 (quarta rodada): o que continua liberado ao lado dos achados.
+    "git fetch origin",
+    "git fetch origin dev",
+    "git fetch --prune",
+    "git fetch origin dev:refs/remotes/origin/dev",
+    "git fetch origin feat/x:feat/x",
+    "git pull --rebase origin dev",
+    "git worktree add -b feat/x .claude/worktrees/x origin/dev",
+    "git worktree add .claude/worktrees/x feat/x",
+    "git tag -a v9.9.9 -m 'notas -d e -f no texto'",
+    "git tag -l",
+    "git tag --list 'v*'",
+    "git switch -c fix/y",
+    "git checkout -b feat/x origin/dev",
+    "git update-ref refs/remotes/origin/feat/x HEAD",
+    "git replace -l",
+    "git notes --ref refs/heads/main add -m x HEAD",
+    "git diff --output=/tmp/x.diff",
+    "git format-patch -o patches HEAD~1",
+    "npx drizzle-kit generate",
+    "npx -y drizzle-kit generate",
+    "pnpm --filter x test",
+    "pnpm -r --filter web exec tsc --noEmit",
+    "pnpm --silent jho stats",
+    "npm --prefix x run build",
+    "curl -o /tmp/x https://x.test",
+    "curl -sS http://127.0.0.1:3000",
+    "curl -sSL -o ./out.json https://x.test",
+    "curl -H 'X-Out: -o ~/.zshrc' https://x.test",
+    "sort -o ./out.txt in",
+    "sort -k2,2 -t, in",
+    "uniq in",
+    "uniq in out.txt",
+    "wget -O /tmp/x https://x.test",
+    "openssl rand -out ./key.bin 32",
+    "tar -czf /tmp/x.tgz src",
+    "tar -xzf a.tgz",
+    "tar -tzf ~/x.tgz",
+    "echo x >| ./out.txt",
     'git commit -m "git push origin main --force"',
     "git commit -m 'limpa o .env de exemplo'",
     "git push -u origin fix/x",
@@ -532,6 +660,10 @@ describe("findCompound: pipe só de leitura e laço com corpo julgado", () => {
     ["./cat x | head", "| (pipe) com estágio fora da leitura"],
     ["/tmp/bin/cat x | head", "| (pipe) com estágio fora da leitura"],
     ["/opt/homebrew/bin/rg x | /usr/bin/head", null],
+    // `>|` (noclobber) é redirecionamento, não pipe.
+    ["echo x >| ./out.txt", null],
+    ["echo x 2>| err.txt", null],
+    ["echo x >| out.txt | sh", "| (pipe) com estágio fora da leitura"],
     ["cat <(sudo ls)", "<(...) (substituição de processo)"],
   ])("%s -> %s", (command, expected) => {
     expect(findCompound(command)).toBe(expected);
@@ -654,6 +786,38 @@ describe("escrita fora da árvore do projeto, com a raiz informada pelo chamador
     expect(classifyRisk(command, env)?.decision).toBe("ask");
   });
 
+  it("de dentro de um worktree, o repositório inteiro é o projeto (rodada 4 da #462)", () => {
+    const fromWorktree = { root: "/repo/.claude/worktrees/a", cwd: "/repo/.claude/worktrees/a", home: "/home/eu" };
+    for (const command of [
+      'git -C /repo/.claude/worktrees/b commit -m "chore: restore x"',
+      "git -C /repo/.claude/worktrees/b push -u origin feat/x",
+      "git -C /repo status",
+      "echo x > /repo/.claude/worktrees/b/out.txt",
+      "curl -o /repo/tmp.json https://x.test",
+    ]) {
+      expect(classifyRisk(command, fromWorktree), command).toBeNull();
+    }
+    for (const command of ["git -C /home/eu/outro commit -m x", "sort -o /home/eu/x in", "git -C /repo2 commit -m x"]) {
+      expect(classifyRisk(command, fromWorktree)?.decision, command).toBe("ask");
+    }
+  });
+
+  it("caminho relativo do git vale a partir do `-C`", () => {
+    expect(classifyRisk("git -C /repo diff --output=../x.diff", env)?.decision).toBe("ask");
+    expect(classifyRisk("git -C /repo diff --output=x.diff", env)).toBeNull();
+    expect(classifyRisk("git -C /repo worktree add ../fora -b feat/x", env)?.decision).toBe("ask");
+    expect(classifyRisk("git -C /repo worktree add .claude/worktrees/x -b feat/x", env)).toBeNull();
+  });
+
+  // Limites aceitos (G85): criar ou remover entrada vazia não perde dado
+  // existente, e o link simbólico exigiria olhar o disco — a política é pura.
+  it.each(["touch ~/.zshrc", "mkdir -p ~/.config/novo", "rmdir ~/fora", "ln -s ~/.zshrc ./link", "echo x > ./link"])(
+    "limite aceito, registrado em G85: %s",
+    (command) => {
+      expect(classifyRisk(command, env)).toBeNull();
+    },
+  );
+
   it("o diretório pessoal absoluto conta como `~` no `rm` recursivo", () => {
     expect(classifyRisk("rm -rf /home/eu", env)?.decision).toBe("deny");
     expect(classifyRisk("rm -rf /home/eu/www", env)?.decision).toBe("ask");
@@ -665,6 +829,14 @@ describe("falha fecha: o que a política não consegue julgar pergunta", () => {
     expect(judgeShell(`${"xargs ".repeat(20000)}rm x`, REAL_BASH)).toMatchObject({ decision: "ask" });
     expect(judgeShell(`${"xargs ".repeat(3000)}git push origin main`, REAL_BASH)).toMatchObject({ decision: "ask" });
     expect(classifyRisk(`${"xargs ".repeat(8)}rm x`)?.decision).toBe("ask");
+  });
+
+  it("leituras de lançador demais perguntam, sem travar", () => {
+    const started = performance.now();
+    expect(classifyRisk(`npx ${"-a x ".repeat(5000)}vercel --prod`)?.decision).toBe("ask");
+    expect(classifyRisk(`npx ${"-a npx ".repeat(15)}ls`)?.decision).toBe("ask");
+    expect(classifyRisk(`pnpm ${"--z ".repeat(5000)}test`)).toBeNull();
+    expect(performance.now() - started).toBeLessThan(2000);
   });
 
   it("comando acima do teto pergunta", () => {

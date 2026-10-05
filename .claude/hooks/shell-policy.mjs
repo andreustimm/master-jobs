@@ -427,6 +427,11 @@ function scan(command) {
       double = true;
       continue;
     }
+    // `>|` (sobrescreve mesmo com `noclobber`) é redirecionamento, não pipe.
+    if (c === ">" && next === "|") {
+      i++;
+      continue;
+    }
     if (c === "&" && next === "&") return { reason: "&&" };
     if (c === "|" && next === "|") return { reason: "||" };
     if (c === "|") {
@@ -563,15 +568,7 @@ function readOnlyWords(input, redirects) {
   if (name === "sort") {
     return !args.some((arg) => /^--(?:output|compress-program)(?:=|$)/.test(arg) || shortCluster(arg, "o"));
   }
-  if (name === "uniq") {
-    // `uniq entrada saída` grava o segundo argumento.
-    let positional = 0;
-    for (let k = 0; k < args.length; k++) {
-      if (/^-[fsw]$/.test(args[k])) k++;
-      else if (args[k] === "-" || !args[k].startsWith("-")) positional++;
-    }
-    return positional <= 1;
-  }
+  if (name === "uniq") return uniqOutput(args).length === 0;
   if (name === "git") return readOnlyGit(args);
   return false;
 }
@@ -631,6 +628,13 @@ function readOnlyBranch(rest) {
 
 /** Níveis de comando carregado por outro (`sh -c`, `xargs`, `find -exec`, lançador). */
 const MAX_DEPTH = 4;
+/**
+ * Teto de comandos julgados numa chamada de `classifyRisk` (as leituras de
+ * lançador se multiplicam por nível); acima dele, pergunta. Reiniciado a cada
+ * chamada — a política continua sem estado entre comandos.
+ */
+const MAX_JUDGEMENTS = 2000;
+let budget = MAX_JUDGEMENTS;
 /** Teto de tamanho do comando julgado; acima dele, pergunta. */
 export const MAX_COMMAND = 100_000;
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
@@ -700,17 +704,6 @@ function skipOptions(rest, spec) {
   }
   k += spec.positional ?? 0;
   return [...injected, ...rest.slice(k)];
-}
-
-/** Primeiro argumento que não é opção, pulando o valor das opções de `value`. */
-function firstPositional(args, value) {
-  for (let k = 0; k < args.length; k++) {
-    const arg = args[k];
-    if (arg === "--") return { sub: args[k + 1], rest: args.slice(k + 2) };
-    if (!arg.startsWith("-")) return { sub: arg, rest: args.slice(k + 1) };
-    if (value.has(arg)) k++;
-  }
-  return { sub: undefined, rest: [] };
 }
 
 /** `vercel@latest` → `vercel`; `@escopo/pacote@1` → `pacote`. */
@@ -834,11 +827,136 @@ function outsideWrite(target, env) {
     const relative = path.slice(normalizePath(env.home).length + 1);
     if (PERSONAL_CONFIG.test(relative)) return ask(`escreve na configuração pessoal (${target})`);
   }
-  return env.root && within(path, normalizePath(env.root)) ? null : outside;
+  return env.root && within(path, projectTree(env.root)) ? null : outside;
 }
 
-/** O que `tee`, `cp`, `mv`, `ln`, `install`, `dd` e `truncate` gravam. */
+/**
+ * A árvore do projeto a partir da raiz que o chamador informa: dentro de um
+ * worktree (`<repo>/.claude/worktrees/<wt>`), é o repositório inteiro — os
+ * outros worktrees e a raiz também são o projeto.
+ */
+function projectTree(root) {
+  const base = normalizePath(root);
+  const worktree = /^(.*?)\/\.claude\/worktrees\/[^/]+(?:\/|$)/.exec(base);
+  return worktree ? worktree[1] || "/" : base;
+}
+
+/** `base/path`, salvo quando `path` já é absoluto, `~` ou variável; sem base, o próprio `path`. */
+function joinPath(base, path) {
+  if (!base || /^(?:\/|~|\$)/.test(path)) return path;
+  return `${base}/${path}`;
+}
+
+/** Escrita em `path`: a política de permissões pergunta; fora do projeto também. */
+function writeRisk(path, env) {
+  return stronger(isPolicyPath(path) ? ask(POLICY_WRITE) : null, outsideWrite(path, env));
+}
+
+/**
+ * Opções que escrevem arquivo, por programa (#461) — a tabela única. `short`:
+ * letras de opção curta cujo valor é o arquivo, também agrupadas (`-sSo x`,
+ * `-ox`); `stop`: letras curtas com outro valor, que consomem o resto do grupo
+ * (`-dfoo` não é `-o`); `long`: `--output x` e `--output=x`; `single`: opção de
+ * traço único (`openssl -out x`).
+ */
+const OUTPUT_OPTIONS = {
+  curl: {
+    short: "oDc",
+    stop: "dHXuAeFTxbmwrKEYyzCQUt",
+    long: ["--output", "--output-dir", "--dump-header", "--cookie-jar", "--trace", "--trace-ascii", "--stderr", "--libcurl", "--etag-save", "--hsts", "--alt-svc"],
+  },
+  wget: {
+    short: "OoaP",
+    stop: "etTwQUiBlARDIX",
+    long: ["--output-document", "--output-file", "--append-output", "--directory-prefix", "--save-cookies"],
+  },
+  sort: { short: "o", stop: "kStT", long: ["--output"] },
+  openssl: { single: ["-out", "-keyout"] },
+};
+
+/** Os valores das opções de `spec` em `args` (ver `OUTPUT_OPTIONS`). */
+function optionValues(args, spec) {
+  const found = [];
+  for (let k = 0; k < args.length; k++) {
+    const arg = args[k];
+    if (arg === "--") break;
+    if (spec.single?.includes(arg)) found.push(args[++k] ?? "");
+    else if (arg.startsWith("--")) {
+      const eq = arg.indexOf("=");
+      if (!spec.long?.includes(eq === -1 ? arg : arg.slice(0, eq))) continue;
+      found.push(eq === -1 ? (args[++k] ?? "") : arg.slice(eq + 1));
+    } else if (spec.short && /^-[A-Za-z0-9]/.test(arg)) {
+      for (let i = 1; i < arg.length; i++) {
+        if (spec.short.includes(arg[i])) {
+          found.push(arg.slice(i + 1) || (args[++k] ?? ""));
+          break;
+        }
+        if (spec.stop?.includes(arg[i])) {
+          if (i === arg.length - 1) k++;
+          break;
+        }
+      }
+    }
+  }
+  return found;
+}
+
+/** `uniq entrada saída` grava o segundo argumento. */
+function uniqOutput(args) {
+  const positional = [];
+  for (let k = 0; k < args.length; k++) {
+    if (/^-[fsw]$/.test(args[k])) k++;
+    else if (args[k] === "-" || !args[k].startsWith("-")) positional.push(args[k]);
+  }
+  return positional.slice(1, 2);
+}
+
+/**
+ * `tar`: criar (`c`, `r`, `u`) grava o arquivo de `-f`; extrair (`x`) grava em
+ * `-C`. As letras vêm agrupadas com ou sem traço (`czf x`, `-xzf x -C dir`).
+ */
+function tarOutput(args) {
+  let create = false;
+  let extract = false;
+  const files = [];
+  const dirs = [];
+  for (let k = 0; k < args.length; k++) {
+    const arg = args[k];
+    if (arg.startsWith("--")) {
+      const eq = arg.indexOf("=");
+      const flag = eq === -1 ? arg : arg.slice(0, eq);
+      const value = () => (eq === -1 ? (args[++k] ?? "") : arg.slice(eq + 1));
+      if (flag === "--create" || flag === "--append" || flag === "--update") create = true;
+      else if (flag === "--extract" || flag === "--get") extract = true;
+      else if (flag === "--file") files.push(value());
+      else if (flag === "--directory") dirs.push(value());
+      continue;
+    }
+    // O primeiro argumento sem traço também é grupo de letras (`tar czf x`).
+    const cluster = arg.startsWith("-") ? arg.slice(1) : k === 0 ? arg : null;
+    if (cluster === null || !/^[A-Za-z]+/.test(cluster)) continue;
+    for (let i = 0; i < cluster.length; i++) {
+      const letter = cluster[i];
+      if ("cru".includes(letter)) create = true;
+      else if (letter === "x") extract = true;
+      else if (letter === "f" || letter === "C") {
+        const value = arg.startsWith("-") && i < cluster.length - 1 ? cluster.slice(i + 1) : (args[++k] ?? "");
+        (letter === "f" ? files : dirs).push(value);
+        if (arg.startsWith("-") && i < cluster.length - 1) break;
+      }
+    }
+  }
+  return [...(create ? files : []), ...(extract ? dirs : [])];
+}
+
+/**
+ * O que o comando grava, pelo nome do programa: destino de `tee`, `cp`, `mv`,
+ * `ln`, `install`, `dd of=` e `truncate`; saída de `uniq` e `tar`; e as
+ * opções de `OUTPUT_OPTIONS` (`curl -o`, `wget -O`, `sort -o`,
+ * `openssl -out`). O `git` tem os seus em `judgeGit`.
+ */
 function writtenPaths(name, args) {
+  if (Object.hasOwn(OUTPUT_OPTIONS, name)) return optionValues(args, OUTPUT_OPTIONS[name]);
   const operands = args.filter((arg) => !arg.startsWith("-"));
   const targetDir = [];
   for (let k = 0; k < args.length; k++) {
@@ -856,6 +974,10 @@ function writtenPaths(name, args) {
       return targetDir.length > 0 ? targetDir : operands.slice(-1);
     case "dd":
       return args.filter((arg) => arg.startsWith("of=")).map((arg) => arg.slice(3));
+    case "uniq":
+      return uniqOutput(args);
+    case "tar":
+      return tarOutput(args);
     default:
       return [];
   }
@@ -873,8 +995,10 @@ function scriptRisk(script) {
 }
 
 const PNPM_VALUE = new Set(["--filter", "-F", "-C", "--dir", "--reporter", "--loglevel", "--resume-from", "--workspace-concurrency"]);
-const NPM_VALUE = new Set(["--prefix", "-w", "--workspace", "-C"]);
-const LAUNCHER_VALUE = new Set(["-p", "--package", "-w", "--workspace", "--filter", "-F", "--node-options", "-C", "--dir", "--resume-from", "--reporter", "--allow-build"]);
+const NPM_VALUE = new Set(["--prefix", "-w", "--workspace", "-C", "--loglevel"]);
+const LAUNCHER_VALUE = new Set(["-p", "--package", "-w", "--workspace", "--filter", "-F", "--node-options", "-C", "--dir", "--resume-from", "--reporter", "--allow-build", "--loglevel"]);
+/** Opções conhecidas sem valor: poupam a segunda leitura. */
+const LAUNCHER_FLAG = new Set(["-y", "--yes", "--no", "-q", "--quiet", "-s", "--silent", "--bun", "-r", "--recursive"]);
 const LAUNCHER_SHELL = new Set(["-c", "--call", "--shell-mode"]);
 const PNPM_BUILTINS = new Set([
   "add", "install", "i", "remove", "rm", "uninstall", "un", "update", "up", "upgrade", "link", "ln", "unlink", "import",
@@ -884,56 +1008,116 @@ const PNPM_BUILTINS = new Set([
   "workspace", "plugin", "version", "npm", "node", "explain", "constraints",
 ]);
 
+/** Teto de leituras das opções de um lançador; acima dele, pergunta. */
+const MAX_READINGS = 16;
+const NO_OPTIONS = new Set();
+
+/**
+ * Onde o comando pode começar depois das opções de um lançador (#461). Não há
+ * lista fechada de opções com valor: a conhecida (`value`) consome a seguinte,
+ * a conhecida sem valor (`flag`) não, e a desconhecida sem `=` tem as duas
+ * leituras — o chamador julga cada início e fica com a decisão mais forte, de
+ * modo que `npx --loglevel silent node x` é julgado como `silent …` e como
+ * `node x`. `shell`: opção cujo resto é texto de shell (`npx -c '…'`);
+ * `stop`: opção depois da qual não há comando (`node -e`). `null` quando há
+ * leituras demais.
+ * @param {string[]} args
+ * @param {{ value?: Set<string>, flag?: Set<string>, shell?: Set<string>, stop?: Set<string> }} spec
+ * @returns {{ starts: number[], shells: string[] } | null}
+ */
+function commandStarts(args, spec) {
+  const value = spec.value ?? NO_OPTIONS;
+  const flag = spec.flag ?? NO_OPTIONS;
+  const reach = new Uint8Array(args.length + 2);
+  reach[0] = 1;
+  const starts = [];
+  const shells = [];
+  for (let p = 0; p < args.length; p++) {
+    if (!reach[p]) continue;
+    const arg = args[p];
+    const eq = arg.indexOf("=");
+    const name = eq === -1 ? arg : arg.slice(0, eq);
+    if (arg === "--") {
+      if (p + 1 < args.length) starts.push(p + 1);
+    } else if (!arg.startsWith("-") || arg === "-") starts.push(p);
+    else if (spec.shell?.has(name)) shells.push(eq === -1 ? args.slice(p + 1).join(" ") : arg.slice(eq + 1));
+    else if (spec.stop?.has(name)) continue;
+    else {
+      const attached = eq !== -1 || (!arg.startsWith("--") && arg.length > 2 && value.has(arg.slice(0, 2)));
+      if (value.has(name) && !attached) reach[p + 2] = 1;
+      else if (attached || flag.has(name)) reach[p + 1] = 1;
+      else {
+        reach[p + 1] = 1;
+        reach[p + 2] = 1;
+      }
+    }
+    if (starts.length + shells.length > MAX_READINGS) return null;
+  }
+  return { starts, shells };
+}
+
+const TOO_MANY_READINGS = "lançador com opções demais para julgar";
+
+/** Julga cada leitura com `judge(início)` e fica com a mais forte. */
+function eachReading(args, spec, context, judge) {
+  const readings = commandStarts(args, spec);
+  if (!readings) return ask(TOO_MANY_READINGS);
+  let worst = null;
+  for (const payload of readings.shells) worst = stronger(worst, riskOf(payload, context.depth + 1, false, context.env));
+  for (const start of readings.starts) {
+    if (worst?.decision === "deny") break;
+    worst = stronger(worst, judge(start));
+  }
+  return worst;
+}
+
 /**
  * Lançador de pacote (`npx [-y]`, `npm exec [--]`, `pnpm exec`, `pnpm dlx`,
- * `bunx`): julga o binário que ele roda. `-c`/`--call`/`--shell-mode` rodam
- * texto como shell, que é julgado inteiro.
+ * `bunx`): julga o binário que ele roda, em toda leitura das opções.
+ * `-c`/`--call`/`--shell-mode` rodam texto como shell, julgado inteiro.
  */
 function judgeLaunched(args, context) {
-  let k = 0;
-  while (k < args.length) {
-    const arg = args[k];
-    if (arg === "--") {
-      k++;
-      break;
-    }
-    if (!arg.startsWith("-")) break;
-    const flag = arg.split("=")[0];
-    if (LAUNCHER_SHELL.has(flag)) {
-      const payload = arg.includes("=") ? arg.slice(arg.indexOf("=") + 1) : args.slice(k + 1).join(" ");
-      return riskOf(payload, context.depth + 1, false, context.env);
-    }
-    if (LAUNCHER_VALUE.has(flag) && !arg.includes("=")) k++;
-    k++;
-  }
-  const rest = args.slice(k);
-  return rest.length === 0 ? null : judgeWords([packageBin(rest[0]), ...rest.slice(1)], deeper(context));
+  const spec = { value: LAUNCHER_VALUE, flag: LAUNCHER_FLAG, shell: LAUNCHER_SHELL };
+  return eachReading(args, spec, context, (start) => judgeWords([packageBin(args[start]), ...args.slice(start + 1)], deeper(context)));
+}
+
+/** Script de `run`, em toda leitura das opções. */
+function judgeRun(rest, value, context) {
+  return eachReading(rest, { value, flag: LAUNCHER_FLAG }, context, (start) => scriptRisk(rest[start]));
 }
 
 function judgeNpm(args, context) {
-  const { sub, rest } = firstPositional(args, NPM_VALUE);
-  if (sub === "exec" || sub === "x") return judgeLaunched(rest, context);
-  if (sub === "run" || sub === "run-script" || sub === "rum" || sub === "urn") return scriptRisk(firstPositional(rest, NPM_VALUE).sub);
-  return null;
+  return eachReading(args, { value: NPM_VALUE, flag: LAUNCHER_FLAG }, context, (start) => {
+    const sub = args[start];
+    const rest = args.slice(start + 1);
+    if (sub === "exec" || sub === "x") return judgeLaunched(rest, context);
+    if (sub === "run" || sub === "run-script" || sub === "rum" || sub === "urn") return judgeRun(rest, NPM_VALUE, context);
+    return null;
+  });
 }
 
 /** `pnpm`/`yarn`: exec e dlx lançam; o que não é comando embutido é script ou binário. */
 function judgePnpm(args, context) {
-  const { sub, rest } = firstPositional(args, PNPM_VALUE);
-  if (!sub) return null;
-  if (sub === "exec" || sub === "dlx") return judgeLaunched(rest, context);
-  if (sub === "run" || sub === "run-script") return scriptRisk(firstPositional(rest, PNPM_VALUE).sub);
-  // `pnpm node <arquivo>` é o `node` do pnpm: arquivo, `--run` e `node_modules/.bin` julgados igual.
-  if (sub === "node") return judgeNode(rest, deeper(context));
-  if (PNPM_BUILTINS.has(sub)) return null;
-  return stronger(scriptRisk(sub), judgeWords([sub, ...rest], deeper(context)));
+  return eachReading(args, { value: PNPM_VALUE, flag: LAUNCHER_FLAG }, context, (start) => {
+    const sub = args[start];
+    const rest = args.slice(start + 1);
+    if (sub === "exec" || sub === "dlx") return judgeLaunched(rest, context);
+    if (sub === "run" || sub === "run-script") return judgeRun(rest, PNPM_VALUE, context);
+    // `pnpm node <arquivo>` é o `node` do pnpm: arquivo, `--run` e `node_modules/.bin` julgados igual.
+    if (sub === "node") return judgeNode(rest, deeper(context));
+    if (PNPM_BUILTINS.has(sub)) return null;
+    return stronger(scriptRisk(sub), judgeWords([sub, ...rest], deeper(context)));
+  });
 }
 
 function judgeBun(args, context) {
-  const { sub, rest } = firstPositional(args, new Set());
-  if (sub === "x") return judgeLaunched(rest, context);
-  if (sub === "run") return stronger(scriptRisk(rest[0]), productionFile(rest));
-  return stronger(scriptRisk(sub), productionFile(args));
+  return eachReading(args, { flag: LAUNCHER_FLAG }, context, (start) => {
+    const sub = args[start];
+    const rest = args.slice(start + 1);
+    if (sub === "x") return judgeLaunched(rest, context);
+    if (sub === "run") return judgeRun(rest, NO_OPTIONS, context);
+    return scriptRisk(sub);
+  });
 }
 
 function productionFile(args) {
@@ -941,36 +1125,42 @@ function productionFile(args) {
   return file ? ask(`produção: ${file}`) : null;
 }
 
-const NODE_VALUE = new Set(["-r", "--require", "--import", "--loader", "--experimental-loader", "-C", "--conditions", "--input-type", "--title", "--env-file", "--env-file-if-exists", "--watch-path", "--inspect-port", "--test-name-pattern"]);
+/**
+ * Script ou arquivo de produção em qualquer posição do lançador, inclusive
+ * como valor de `--opção=` (`node --run=perf:producao`): são nomes que só
+ * existem para agir em produção, então dispensam saber onde o comando começa.
+ */
+function productionAnywhere(args) {
+  let worst = productionFile(args.map((arg) => arg.replace(/^--[A-Za-z][\w-]*=/, "")));
+  for (const arg of args) worst = stronger(worst, scriptRisk(arg.replace(/^--[A-Za-z][\w-]*=/, "")));
+  return worst;
+}
+
+const NODE_VALUE = new Set(["-r", "--require", "--import", "--loader", "--experimental-loader", "-C", "--conditions", "--input-type", "--title", "--env-file", "--env-file-if-exists", "--watch-path", "--inspect-port", "--test-name-pattern", "--run"]);
+const NODE_STOP = new Set(["-e", "--eval", "-p", "--print"]);
 const NODE_BIN = /(?:^|\/)node_modules\/\.bin\/([^/]+)$/;
 const NODE_PACKAGE = /(?:^|\/)node_modules\/((?:@[^/]+\/)?[^/]+)\/(?:.*\/)?([^/]+)$/;
 
 /**
- * `node`: `--run <script>` é `pnpm <script>`; `node node_modules/.bin/vercel`
- * e `node node_modules/supabase/bin/supabase` são o próprio pacote.
+ * `node`: o arquivo e o `--run <script>` de produção valem em qualquer
+ * posição (`productionAnywhere`, no chamador); `node node_modules/.bin/vercel`
+ * e `node node_modules/supabase/bin/supabase` são o próprio pacote, em toda
+ * leitura das opções.
  */
 function judgeNode(args, context) {
-  let worst = productionFile(args);
-  for (let k = 0; k < args.length; k++) {
-    const arg = args[k];
-    if (arg === "--run") return stronger(worst, scriptRisk(args[k + 1]));
-    if (arg.startsWith("--run=")) return stronger(worst, scriptRisk(arg.slice("--run=".length)));
-    if (arg === "-e" || arg === "--eval" || arg === "-p" || arg === "--print" || arg === "--") break;
-    if (NODE_VALUE.has(arg)) k++;
-    else if (!arg.startsWith("-")) {
-      const rest = args.slice(k + 1);
+  return stronger(
+    productionAnywhere(args),
+    eachReading(args, { value: NODE_VALUE, stop: NODE_STOP }, context, (start) => {
+      const arg = args[start];
+      const rest = args.slice(start + 1);
       const bin = NODE_BIN.exec(arg);
-      if (bin) return stronger(worst, judgeWords([bin[1], ...rest], deeper(context)));
+      if (bin) return judgeWords([bin[1], ...rest], deeper(context));
       const pkg = NODE_PACKAGE.exec(arg);
-      if (pkg) {
-        const file = pkg[2].replace(/\.[cm]?js$/, "");
-        worst = stronger(worst, judgeWords([packageBin(pkg[1]), ...rest], deeper(context)));
-        return stronger(worst, judgeWords([file, ...rest], deeper(context)));
-      }
-      return worst;
-    }
-  }
-  return worst;
+      if (!pkg) return null;
+      const file = pkg[2].replace(/\.[cm]?js$/, "");
+      return stronger(judgeWords([packageBin(pkg[1]), ...rest], deeper(context)), judgeWords([file, ...rest], deeper(context)));
+    }),
+  );
 }
 
 /**
@@ -1088,15 +1278,27 @@ const GIT_GLOBAL_VALUE = new Set(["-C", "-c", "--git-dir", "--work-tree", "--nam
 function judgeGit(args, context) {
   let k = 0;
   const configs = [];
+  /** `-C` encadeia (`git -C a -C b` roda em `a/b`); `--git-dir`, `--work-tree` e `GIT_DIR=` apontam o repositório. */
+  let place = null;
+  const repos = [];
+  for (const assignment of context.assigned ?? []) {
+    const match = /^(?:GIT_DIR|GIT_WORK_TREE)=(.*)$/s.exec(assignment);
+    if (match) repos.push(match[1]);
+  }
   while (k < args.length && args[k].startsWith("-")) {
     const arg = args[k];
+    const next = args[k + 1] ?? "";
     if (GIT_GLOBAL_VALUE.has(arg)) {
-      if (arg === "-c" || arg === "--config-env") configs.push(args[k + 1] ?? "");
+      if (arg === "-c" || arg === "--config-env") configs.push(next);
+      if (arg === "-C") place = joinPath(place, next);
+      if (arg === "--git-dir" || arg === "--work-tree") repos.push(next);
       k += 2;
       continue;
     }
     if (/^-c./.test(arg)) configs.push(arg.slice(2));
     if (arg.startsWith("--config-env=")) configs.push(arg.slice("--config-env=".length));
+    const repo = /^--(?:git-dir|work-tree)=(.*)$/s.exec(arg);
+    if (repo) repos.push(repo[1]);
     k++;
   }
   let worst = null;
@@ -1107,7 +1309,38 @@ function judgeGit(args, context) {
     if (GIT_EXEC_KEY.test(key)) worst = stronger(worst, ask(`git -c ${key} executa programa ou desliga os hooks`));
     if (key.startsWith("alias.") && value.trimStart().startsWith("!")) worst = stronger(worst, ask("alias do git que roda shell"));
   }
-  return stronger(worst, judgeGitSubcommand(args[k], args.slice(k + 1), context));
+  const sub = args[k];
+  const rest = args.slice(k + 1);
+  const env = context.env ?? NO_ENV;
+  // O repositório fora do projeto (e fora do temporário): o que não só lê pergunta.
+  if (sub !== undefined && !GIT_READ_SUBCOMMANDS.has(sub)) {
+    for (const dir of [place, ...repos.map((repo) => joinPath(place, repo))]) {
+      if (dir !== null && outsideWrite(dir, env)) worst = stronger(worst, ask(`git ${sub} num repositório fora do projeto (${dir})`));
+    }
+  }
+  // Arquivo de saída: relativo ao diretório do `-C`.
+  for (const out of gitOutputs(sub, rest)) worst = stronger(worst, writeRisk(joinPath(place, out), env));
+  return stronger(worst, judgeGitSubcommand(sub, rest, { ...context, place }));
+}
+
+/** Subcomandos do git que só leem o repositório: rodam em qualquer diretório. */
+const GIT_READ_SUBCOMMANDS = new Set([
+  "status", "diff", "log", "show", "rev-parse", "rev-list", "ls-files", "ls-tree", "ls-remote", "cat-file", "blame",
+  "describe", "shortlog", "grep", "help", "version", "merge-base", "name-rev", "for-each-ref", "show-ref", "whatchanged",
+  "cherry", "count-objects", "var", "check-ignore", "check-attr", "check-ref-format", "verify-commit", "verify-tag",
+  "show-branch", "range-diff", "diff-tree", "diff-files", "diff-index",
+]);
+
+/**
+ * O que o git grava por opção (#461): `--output` de `diff`/`log`/`show`… em
+ * qualquer subcomando, `-o`/`--output-directory` de `format-patch` e
+ * `-o`/`--output` de `archive`.
+ */
+function gitOutputs(sub, rest) {
+  const long = ["--output"];
+  if (sub === "format-patch") long.push("--output-directory");
+  const short = sub === "format-patch" || sub === "archive" ? "o" : "";
+  return optionValues(rest, { short, long, stop: "" });
 }
 
 /**
@@ -1189,11 +1422,26 @@ function judgeGitSubcommand(sub, rest, context) {
     case "clean":
       return has(rest, "-n", "--dry-run") || rest.some((arg) => shortCluster(arg, "n")) ? null : ask("git clean apaga arquivo não versionado");
     case "checkout":
-      return judgeCheckout(rest);
-    case "switch":
-      return has(rest, "-f", "--force", "--discard-changes", "-C", "--force-create") || rest.some((arg) => shortCluster(arg, "f"))
-        ? ask("git switch descarta mudanças ou recria o branch")
-        : null;
+      return stronger(judgeCheckout(rest), branchOptions(rest, "git checkout", "b", "B", ["--orphan"], []));
+    case "switch": {
+      const discard = has(rest, "-f", "--force", "--discard-changes") || rest.some((arg) => shortCluster(arg, "f"));
+      return stronger(
+        discard ? ask("git switch descarta mudanças") : null,
+        branchOptions(rest, "git switch", "c", "C", ["--create", "--orphan"], ["--force-create"]),
+      );
+    }
+    case "fetch":
+    case "pull":
+      return judgeFetch(sub, rest);
+    case "tag": {
+      const rewrites = rest.some((arg, k) => {
+        if (k > 0 && /^(?:-[mFu]|--message|--file|--local-user)$/.test(rest[k - 1])) return false;
+        return arg === "--force" || arg === "--delete" || (/^-[A-Za-z]+$/.test(arg) && /[fd]/.test(arg.slice(1)));
+      });
+      return rewrites ? ask("git tag -f/-d reescreve ou apaga tag (regra 22)") : null;
+    }
+    case "replace":
+      return rest.length === 0 || has(rest, "-l", "--list") ? null : ask("git replace troca um objeto por outro em todo o histórico");
     case "restore": {
       const staged = has(rest, "--staged", "-S") || rest.some((arg) => shortCluster(arg, "S"));
       const worktree = has(rest, "--worktree", "-W") || rest.some((arg) => shortCluster(arg, "W"));
@@ -1202,6 +1450,15 @@ function judgeGitSubcommand(sub, rest, context) {
     case "stash":
       return rest[0] === "drop" || rest[0] === "clear" ? ask(`git stash ${rest[0]} apaga stash`) : null;
     case "worktree":
+      if (rest[0] === "add") {
+        const positional = [];
+        for (let k = 1; k < rest.length; k++) {
+          if (/^(?:-[bB]|--orphan|--reason)$/.test(rest[k])) k++;
+          else if (!rest[k].startsWith("-")) positional.push(rest[k]);
+        }
+        const path = positional[0] === undefined ? null : outsideWrite(joinPath(context.place ?? null, positional[0]), context.env ?? NO_ENV);
+        return stronger(path, branchOptions(rest.slice(1), "git worktree add", "b", "B", ["--orphan"], []));
+      }
       return rest[0] === "remove" && (has(rest, "--force", "-f") || rest.some((arg) => shortCluster(arg, "f")))
         ? ask("git worktree remove --force descarta mudanças")
         : null;
@@ -1210,8 +1467,7 @@ function judgeGitSubcommand(sub, rest, context) {
       return ask(`git ${sub} reescreve histórico`);
     case "update-ref": {
       if (has(rest, "-d", "--stdin")) return ask("git update-ref apaga referência");
-      const ref = rest.find((arg) => !arg.startsWith("-"));
-      return ref && (ref === "HEAD" || PROTECTED_BRANCHES.has(pushDestination(ref))) ? ask(`git update-ref reescreve ${ref}`) : null;
+      return refWrite(rest.find((arg) => !arg.startsWith("-")), "git update-ref");
     }
     case "reflog":
       return rest[0] === "expire" || rest[0] === "delete" ? ask(`git reflog ${rest[0]} apaga histórico de referência`) : null;
@@ -1384,6 +1640,106 @@ function judgeBranchWrite(rest) {
 }
 
 /**
+ * A checagem única de "escreve o ref X?" (#461) para quem grava ref local
+ * por nome — `fetch`/`pull` com `src:dst`, `update-ref`: `HEAD`, branch
+ * protegida (também `refs/heads/…` e `heads/…`) e qualquer tag perguntam;
+ * destino por variável ou curinga fora de `refs/remotes/` também. Branch de
+ * trabalho `<tipo>/<slug>` passa.
+ * @param {string | undefined} ref
+ * @param {string} verb
+ */
+function refWrite(ref, verb) {
+  if (!ref) return null;
+  const bare = ref.replace(/^\+/, "");
+  const target = pushDestination(bare);
+  if (/[$`*{]/.test(bare)) {
+    return /^(?:remotes|notes)\//.test(target) ? null : ask(`${verb} escreve ref por curinga ou variável (${ref})`);
+  }
+  if (target === "HEAD") return ask(`${verb} reescreve o HEAD`);
+  if (PROTECTED_BRANCHES.has(target)) return ask(`${verb} reescreve a branch protegida ${target}`);
+  if (target.startsWith("tags/")) return ask(`${verb} escreve a tag ${target.slice("tags/".length)} (regra 22)`);
+  return null;
+}
+
+/**
+ * Branch que o subcomando cria (`create`: `-b`, `-c`, `--orphan`) ou recria
+ * por cima (`force`: `-B`, `-C`, `--force-create`), pelo nome — com valor
+ * colado (`-bx`, `--create=x`) ou agrupado (`-fB x`). Criar `main`,
+ * `staging` ou `dev` pergunta; recriar por cima sempre pergunta, como
+ * `checkout -B`; criar branch de trabalho passa.
+ * @param {string[]} rest
+ * @param {string} verb
+ * @param {string} createLetters
+ * @param {string} forceLetters
+ * @param {string[]} createLong
+ * @param {string[]} forceLong
+ */
+function branchOptions(rest, verb, createLetters, forceLetters, createLong, forceLong) {
+  let worst = null;
+  const created = (name) => {
+    if (name && PROTECTED_BRANCHES.has(pushDestination(name))) worst = stronger(worst, ask(`${verb} cria a branch protegida ${name}`));
+  };
+  const forced = () => {
+    worst = stronger(worst, ask(`${verb} recria o branch por cima (-B/-C)`));
+  };
+  for (let k = 0; k < rest.length; k++) {
+    const arg = rest[k];
+    if (arg === "--") break;
+    if (arg.startsWith("--")) {
+      const eq = arg.indexOf("=");
+      const flag = eq === -1 ? arg : arg.slice(0, eq);
+      if (forceLong.includes(flag)) forced();
+      else if (createLong.includes(flag)) created(eq === -1 ? rest[++k] : arg.slice(eq + 1));
+      continue;
+    }
+    if (!/^-[A-Za-z]/.test(arg)) continue;
+    for (let i = 1; i < arg.length; i++) {
+      if (forceLetters.includes(arg[i])) {
+        forced();
+        if (i === arg.length - 1) k++;
+        break;
+      }
+      if (createLetters.includes(arg[i])) {
+        created(arg.slice(i + 1) || rest[++k]);
+        break;
+      }
+    }
+  }
+  return worst;
+}
+
+/**
+ * `fetch`/`pull`: refspec `src:dst` (com `+`, `-f` ou `--update-head-ok`)
+ * grava `dst` localmente; `--force` com `--tags` sobrescreve tag local e
+ * `--prune-tags` apaga. `git fetch origin dev` (sem `:`) e `--prune` passam.
+ */
+function judgeFetch(sub, rest) {
+  let worst = null;
+  let force = false;
+  let tags = false;
+  const specs = [];
+  for (let k = 0; k < rest.length; k++) {
+    const arg = rest[k];
+    if (arg === "--") {
+      specs.push(...rest.slice(k + 1));
+      break;
+    }
+    if (arg === "--prune-tags" || (/^-[A-Za-z]+$/.test(arg) && arg.includes("P"))) worst = stronger(worst, ask(`git ${sub} --prune-tags apaga tag local`));
+    if (arg === "--force" || shortCluster(arg, "f")) force = true;
+    if (arg === "--tags" || shortCluster(arg, "t")) tags = true;
+    if (arg === "--refmap") specs.push(rest[++k] ?? "");
+    else if (arg.startsWith("--refmap=")) specs.push(arg.slice("--refmap=".length));
+    else if (!arg.startsWith("-")) specs.push(arg);
+  }
+  if (force && tags) worst = stronger(worst, ask(`git ${sub} --force --tags sobrescreve tag local`));
+  for (const spec of specs) {
+    const colon = spec.lastIndexOf(":");
+    if (colon !== -1) worst = stronger(worst, refWrite(spec.slice(colon + 1), `git ${sub}`));
+  }
+  return worst;
+}
+
+/**
  * Destino do refspec como o git o resolve: `@` é `HEAD`; `refs/heads/main`,
  * `heads/main` e `refs/main` são `main`; `refs/tags/v1` vira `tags/v1`.
  */
@@ -1470,10 +1826,12 @@ function policyWrite(name, args) {
  */
 function judgeWords(input, context) {
   if (context.depth > MAX_DEPTH) return ask("comando aninhado demais para julgar");
+  if (--budget < 0) return ask("comando com leituras demais para julgar");
   let words = input.slice();
+  const assigned = [...(context.assigned ?? [])];
   for (let guard = 0; guard < 64 && words.length > 0; guard++) {
     const head = words[0];
-    if (ASSIGNMENT.test(head)) words.shift();
+    if (ASSIGNMENT.test(head)) assigned.push(words.shift());
     else if (head === "rtk") {
       words.shift();
       if (words[0] === "proxy") words.shift();
@@ -1486,7 +1844,7 @@ function judgeWords(input, context) {
   if (words.length === 0) return null;
   const [name, ...args] = words;
   let write = policyWrite(name, args);
-  for (const path of writtenPaths(name, args)) write = stronger(write, outsideWrite(path, context.env ?? NO_ENV));
+  for (const path of writtenPaths(name, args)) write = stronger(write, writeRisk(path, context.env ?? NO_ENV));
   switch (name) {
     case "sudo":
     case "doas":
@@ -1494,7 +1852,7 @@ function judgeWords(input, context) {
     case "pkexec":
       return deny(`elevação de privilégio (${name})`);
     case "git":
-      return judgeGit(args, context);
+      return judgeGit(args, { ...context, assigned });
     case "rm":
       return judgeRm(args, context);
     case "chmod":
@@ -1517,14 +1875,14 @@ function judgeWords(input, context) {
     case "npx":
     case "pnpx":
     case "bunx":
-      return judgeLaunched(args, context);
+      return stronger(productionAnywhere(args), judgeLaunched(args, context));
     case "npm":
-      return judgeNpm(args, context);
+      return stronger(productionAnywhere(args), judgeNpm(args, context));
     case "pnpm":
     case "yarn":
-      return judgePnpm(args, context);
+      return stronger(productionAnywhere(args), judgePnpm(args, context));
     case "bun":
-      return judgeBun(args, context);
+      return stronger(productionAnywhere(args), judgeBun(args, context));
     case "node":
       return judgeNode(args, context);
     case "tsx":
@@ -1599,6 +1957,7 @@ function riskOf(text, depth, bulk = false, env = NO_ENV) {
  * @returns {Risk | null}
  */
 export function classifyRisk(command, env = NO_ENV) {
+  budget = MAX_JUDGEMENTS;
   return riskOf(command, 0, false, env);
 }
 

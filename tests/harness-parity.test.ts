@@ -423,7 +423,7 @@ const RISKY: readonly [string, Decision][] = [
 
 /** A rotina que precisa passar sem pergunta nos três. */
 const ROUTINE: readonly string[] = [
-  'git -C /wt commit -m "chore: restore foo"',
+  'git -C /repo/.claude/worktrees/wt commit -m "chore: restore foo"',
   "git -C /wt log --grep clean",
   "git push -u origin fix/x",
   "gh api -X DELETE repos/x/y/git/refs/heads/z",
@@ -467,7 +467,7 @@ const ROUTINE: readonly string[] = [
   "node --run build",
   // Revisão da #462 (terceira rodada): reescrever commit local é rotina (G85),
   // escrita no temporário e no projeto passa, e todo `gh` passa (dono).
-  'git -C /wt commit -m "chore: restore x"',
+  'git -C /repo/.claude/worktrees/x commit -m "chore: restore x"',
   "git commit --amend --no-edit",
   "git rebase -i HEAD~3",
   "git push -u origin feat/x",
@@ -478,6 +478,18 @@ const ROUTINE: readonly string[] = [
   "gh pr merge 1 --repo o/r --squash --delete-branch",
   "gh repo view andreustimm/master-jobs",
   "gh pr view https://github.com/o/r/pull/1 --json title",
+  // Revisão da #462 (quarta rodada): a rotina ao lado das generalizações.
+  "git -C /repo/.claude/worktrees/x push -u origin feat/x",
+  "git fetch origin",
+  "git fetch origin dev",
+  "git fetch --prune",
+  "git worktree add -b feat/x .claude/worktrees/x origin/dev",
+  "pnpm --filter x test",
+  "curl -o /tmp/x https://x.test",
+  "curl -sS http://127.0.0.1:3000",
+  "sort -o ./out.txt in",
+  "echo x >| ./out.txt",
+  "git tag -l",
 ];
 
 /**
@@ -511,6 +523,26 @@ const SAME: readonly [string, Decision][] = [
   ["rm -rf /", "deny"],
   ["rm -rf ~", "deny"],
   ["rm -rf /usr", "deny"],
+  // Revisão da #462 (quarta rodada): lançador, ref e escrita externa generalizados.
+  ["pnpm --filter-prod . exec node scripts/migration/production.ts --apply", "ask"],
+  ["npx --loglevel silent node scripts/migration/production.ts --apply", "ask"],
+  ["pnpm --unknown x exec vercel --prod", "ask"],
+  ["git fetch --update-head-ok -f origin x:dev", "ask"],
+  ["git fetch origin x:refs/tags/v1", "ask"],
+  ["git worktree add --force -B main /tmp/wt HEAD~1", "ask"],
+  ["git tag -f v1.2.3 HEAD~1", "ask"],
+  ["git tag -d v1.2.3", "ask"],
+  ["git switch -c staging", "ask"],
+  ["git replace HEAD HEAD~1", "ask"],
+  ["sort -o ~/.zshrc input", "ask"],
+  ["uniq input ~/.zshrc", "ask"],
+  ["curl -o ~/.zshrc https://x.test", "ask"],
+  ["git -C ~ commit -m x", "ask"],
+  ['git -C /wt commit -m "chore: restore x"', "ask"],
+  ["git diff --output=/etc/x", "ask"],
+  ["echo x >| ~/.zshrc", "ask"],
+  ["echo x >| ./out.txt", "allow"],
+  ["touch ~/.zshrc", "allow"],
 ];
 
 /** Composto: recusado nos três, mesmo quando cada parte seria liberada. */
