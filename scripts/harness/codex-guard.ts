@@ -95,7 +95,12 @@ export function run(stdin: string, root: string, home: string): string | null {
   } catch (error) {
     return hookResponse({ decision: "deny", target: `guarda sem política legível (${(error as Error).message})` });
   }
-  return hookResponse(judge(input, rules, { root, home }));
+  try {
+    return hookResponse(judge(input, rules, { root, home }));
+  } catch (error) {
+    // Falha fecha também na decisão: a guarda que cai deixaria o comando passar.
+    return hookResponse({ decision: "deny", target: `guarda não conseguiu julgar o comando (${(error as Error).message})` });
+  }
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {

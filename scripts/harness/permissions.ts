@@ -11,7 +11,7 @@
 // e das palavras reservadas mora em `.claude/hooks/shell-policy.mjs`, que o
 // hook do Claude Code e o plugin do OpenCode importam sem strip-types (#461).
 
-import { bashSpecifierMatches, commandWords, escapeRegex, type BashRules } from "../../.claude/hooks/shell-policy.mjs";
+import { bashSpecifierMatches, commandWords, escapeRegex, isLoop, LOOP_BUILTINS, type BashRules } from "../../.claude/hooks/shell-policy.mjs";
 
 export { bashSpecifierMatches };
 
@@ -247,11 +247,17 @@ export function decideCommand(rules: readonly Rule[], command: string): Decision
     if (matches && strength(rule.decision) > strength(found)) found = rule.decision;
   }
   if (found !== null) return found;
+  const loop = isLoop(command);
   const allowed = (whole: string): boolean => {
     const part = withoutReserved(whole);
     if (part === "") return true;
     const candidates = [part, part.replace(/^rtk\s+(?:proxy\s+)?/, "")];
-    if (BUILTIN_ALLOWED.has(candidates[1]!.split(/\s+/)[0]!)) return true;
+    const head = candidates[1]!.split(/\s+/)[0]!;
+    if (BUILTIN_ALLOWED.has(head)) return true;
+    // Em laço, `[ -f x ]`, `read l`, `:` e o `< f` de `done < f` são estrutura
+    // do laço, como no hook (`LOOP_BUILTINS`); segredo e política o
+    // classificador já julgou.
+    if (loop && (LOOP_BUILTINS.has(head) || /^\d*(?:<|>>?|&>>?)\s*\S+$/.test(part))) return true;
     return bash.some(
       (rule) =>
         rule.decision === "allow" &&

@@ -110,18 +110,18 @@
       "Bash(case:*)"
     ],
     "ask": [
-      "Edit(./.claude/settings.json)",
-      "Write(./.claude/settings.json)",
-      "Edit(./.claude/hooks/**)",
-      "Write(./.claude/hooks/**)",
-      "Edit(./scripts/harness/**)",
-      "Write(./scripts/harness/**)",
-      "Edit(./opencode.json)",
-      "Write(./opencode.json)",
-      "Edit(./.codex/**)",
-      "Write(./.codex/**)",
-      "Edit(./.opencode/plugins/**)",
-      "Write(./.opencode/plugins/**)"
+      "Edit(**/.claude/settings.json)",
+      "Write(**/.claude/settings.json)",
+      "Edit(**/.claude/hooks/**)",
+      "Write(**/.claude/hooks/**)",
+      "Edit(**/scripts/harness/**)",
+      "Write(**/scripts/harness/**)",
+      "Edit(**/opencode.json)",
+      "Write(**/opencode.json)",
+      "Edit(**/.codex/**)",
+      "Write(**/.codex/**)",
+      "Edit(**/.opencode/plugins/**)",
+      "Write(**/.opencode/plugins/**)"
     ],
     "deny": [
       "Read(./.env)",

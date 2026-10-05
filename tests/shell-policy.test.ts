@@ -17,6 +17,7 @@ import {
   findCompound,
   isReadOnlyStage,
   judgeShell,
+  MAX_COMMAND,
   PRODUCTION_FILES,
   PRODUCTION_SCRIPTS,
 } from "../.claude/hooks/shell-policy.mjs";
@@ -74,6 +75,40 @@ const GIT: readonly [string, Expected][] = [
   ["git gc --prune=now", "ask"],
   ["git rm -r src", "ask"],
   ["git rm -f src/a.ts", "ask"],
+  // Revisão da #462: destino do refspec normalizado (`@`, `heads/`).
+  ["git push origin @", "ask"],
+  ["git push origin @:@", "ask"],
+  ["git push origin HEAD:heads/main", "deny"],
+  ["git push origin heads/dev", "deny"],
+  ["git push origin refs/heads/staging:heads/staging", "deny"],
+  // Tag remota apagada pergunta (regra 22).
+  ["git push origin :refs/tags/v1", "ask"],
+  ["git push --delete origin v1.0.0", "ask"],
+  ["git push origin -d v1.0.0", "ask"],
+  ["git push origin --delete main", "deny"],
+  // Chave que executa programa, por `-c` ou gravada; hooks pulados.
+  ["git -c core.pager=less log", "ask"],
+  ["git -c core.sshCommand=ssh fetch", "ask"],
+  ["git -c core.editor=vim commit", "ask"],
+  ["git -c diff.external=x diff", "ask"],
+  ["git -c core.fsmonitor=x status", "ask"],
+  ["git -c diff.x.textconv=sh diff", "ask"],
+  ["git -c sequence.editor=x rebase -i HEAD~2", "ask"],
+  ["git -c credential.helper=x fetch", "ask"],
+  ["git -c gpg.program=x commit -S -m x", "ask"],
+  ["git config core.hooksPath /dev/null", "ask"],
+  ["git config --global core.pager less", "ask"],
+  ["git config --local core.editor vim", "ask"],
+  ["git config --unset core.hooksPath", "ask"],
+  ["git config set core.fsmonitor x", "ask"],
+  ["git config --global alias.p x", "ask"],
+  ["git commit --no-verify -m x", "ask"],
+  ["git commit -n -m x", "ask"],
+  ["git commit -anm x", "ask"],
+  // Nome que não pode ser ref é caminho.
+  ["git checkout src/", "ask"],
+  ["git checkout ./Makefile", "ask"],
+  ["git checkout ..", "ask"],
 ];
 
 /** O resto dos achados, sem `git` à frente. */
@@ -142,6 +177,29 @@ const OTHER: readonly [string, Expected][] = [
   ["cp /tmp/x opencode.json", "ask"],
   ["sed -i s/a/b/ scripts/harness/sync.ts", "ask"],
   ["rm .opencode/plugins/shell-guard.js", "ask"],
+  // Revisão da #462: `node --run` e `node node_modules/…` como o pacote.
+  ["node --run db:import-production", "ask"],
+  ["node --run=perf:producao", "ask"],
+  ["node node_modules/.bin/vercel --prod", "ask"],
+  ["node ./node_modules/.bin/supabase db push", "ask"],
+  ["node node_modules/supabase/bin/supabase db push", "ask"],
+  ["node --import tsx node_modules/.bin/vercel promote x", "ask"],
+  // Curinga que o shell pode expandir para `.env`.
+  ["cat .en?", "deny"],
+  ["cat .en*", "deny"],
+  ["cat ./.en[v]", "deny"],
+  ["cat .e*", "deny"],
+  ["cat app/.e?v.local", "deny"],
+  ["cat < .en?", "deny"],
+  // Produção fora do mapa anterior.
+  ["vercel blob del x", "ask"],
+  ["vercel blob rm x", "ask"],
+  ["vercel deploy --target=PRODUCTION", "ask"],
+  ["vercel deploy --target Production", "ask"],
+  ["vercel deploy --prod=true", "ask"],
+  ["vercel --prod=1", "ask"],
+  ["supabase storage rm ss:///x -r", "ask"],
+  ["supabase branches delete x", "ask"],
 ];
 
 const LAUNCHERS = ["npx", "npx -y", "npx --yes", "npm exec", "npm exec --", "pnpm exec", "pnpm dlx", "bunx", "pnpm"];
@@ -188,7 +246,18 @@ describe("classifyRisk: a mesma operação, a mesma decisão, em qualquer forma"
   }
 
   // Produção pede confirmação por qualquer lançador.
-  for (const command of ["vercel --prod", "vercel promote x", "vercel env rm X", "supabase db push", "supabase db query --linked 'x'", "supabase secrets set X=1"]) {
+  for (const command of [
+    "vercel --prod",
+    "vercel promote x",
+    "vercel env rm X",
+    "vercel blob del x",
+    "vercel deploy --prod=1",
+    "supabase db push",
+    "supabase db query --linked 'x'",
+    "supabase secrets set X=1",
+    "supabase storage rm ss:///x",
+    "supabase branches delete x",
+  ]) {
     it.each(LAUNCHERS.map((launcher) => `${launcher} ${command}`))("%s -> ask", (form) => {
       expect(decision(form)).toBe("ask");
     });
@@ -231,6 +300,34 @@ describe("classifyRisk: a mesma operação, a mesma decisão, em qualquer forma"
     ["case $x in a|b) git push origin main;; esac", "deny"],
     ["for b in main; do git push origin $b; done", "ask"],
     ["for f in .env; do cat $f; done", "deny"],
+    // Revisão da #462: `$'…'` decodificado como o bash (`\x`, `\NNN`).
+    ["git push origin $'\\x6dain'", "deny"],
+    ["git push origin $'\\155ain'", "deny"],
+    ["git push origin HEAD:$'\\x6d'ain", "deny"],
+    ["$'\\x67it' push origin main", "deny"],
+    // Subcomando do git que entrega texto ao shell.
+    ['git rebase -x "rm -rf ~" HEAD~1', "deny"],
+    ['git rebase --exec="git push origin main" HEAD~1', "deny"],
+    ['git rebase --exec "git push origin main" HEAD~1', "deny"],
+    ['git rebase -ix "git push --force" HEAD~3', "ask"],
+    ["git rebase -x 'rm -f x' HEAD~1", "ask"],
+    ['git submodule foreach "rm -rf ~"', "deny"],
+    ['git submodule --quiet foreach --recursive "git push origin main"', "deny"],
+    ['git bisect run sh -c "git push origin main"', "deny"],
+    ["git bisect run rm -rf x", "ask"],
+    ['git difftool -x "rm -rf /" HEAD', "deny"],
+    ['git difftool --extcmd="rm -rf ~" HEAD', "deny"],
+    ["git difftool --extcmd 'git reset --hard' HEAD", "ask"],
+    // Invólucros e shell lendo da entrada.
+    ['sh -s -- x <<< "git push origin main"', "deny"],
+    ['bash -s arg <<< "git push origin main"', "deny"],
+    ['bash -- <<< "git push origin main"', "deny"],
+    ["env - git push origin main", "deny"],
+    ["env - PATH=/usr/bin git push origin main", "deny"],
+    ["script -q /dev/null git push origin main", "deny"],
+    ["script -q -t 0 /dev/null git push origin main", "deny"],
+    ["script -c 'git push origin main' /dev/null", "deny"],
+    ["for f in a; do script -q /dev/null rm -rf ~; done", "deny"],
   ] as const)("comando carregado por outro: %s -> %s", (command, expected) => {
     expect(decision(command)).toBe(expected);
   });
@@ -279,6 +376,36 @@ describe("classifyRisk: a mesma operação, a mesma decisão, em qualquer forma"
     "rg -n process.env src",
     "git log | head",
     "for f in a b; do echo $f; done",
+    // Revisão da #462: o que continua liberado.
+    "git push origin :fix/x",
+    "git push origin -d fix/x",
+    "git push origin v1.2.3",
+    "git rebase -x 'pnpm test' HEAD~3",
+    "git rebase -i HEAD~3",
+    "git submodule update --init",
+    "git bisect start",
+    "git difftool HEAD",
+    "git -c user.name=x commit -m x",
+    "git config user.name x",
+    "git config --get core.pager",
+    "git config core.pager",
+    "git config --global --list",
+    "git commit -m '-n e --no-verify no texto'",
+    "git commit -F /tmp/msg.txt",
+    "git checkout feat/x",
+    "git checkout -",
+    "node --run build",
+    "node --run=typecheck",
+    "node node_modules/.bin/vercel ls",
+    "node node_modules/vitest/vitest.mjs run",
+    "ls *.ts",
+    "cat .e",
+    "rg '.e*' src",
+    "vercel blob ls",
+    "vercel deploy --target preview",
+    "env -i PATH=/usr/bin ls",
+    "script -q /dev/null ls",
+    "sh -s <<< 'echo ok'",
   ])("rotina não pergunta: %s", (command) => {
     expect(classifyRisk(command)).toBeNull();
   });
@@ -300,7 +427,11 @@ describe("findCompound: pipe só de leitura e laço com corpo julgado", () => {
     ["for f in a; do sleep 1 & done", "& (segundo plano)"],
     ["for f in a; do echo; done; rm -rf build", "; (comando depois do laço)"],
     ["for f in a; do echo; done\nrm -rf build", "; (comando depois do laço)"],
-    ["for f in a; do echo; done | sh", "; (comando depois do laço)"],
+    ["for f in a; do echo; done | sh", "| (pipe) com estágio fora da leitura"],
+    ["for f in a; do echo $f; done | grep a", null],
+    ["for f in a; do echo $f; done | grep a | sort", null],
+    ["for f in a; do echo; done | grep a; rm x", "; (comando depois do laço)"],
+    ["while read l; do echo $l; done < f", null],
     ["for f in a; do echo $f", "; (laço sem fechamento)"],
     ["for f in a; do cat $f | sh; done", "| (pipe) com estágio fora da leitura"],
     ["for f in $(ls); do echo $f; done", "$(...) (substituição de comando)"],
@@ -387,5 +518,39 @@ describe("uma fonte de verdade para o risco de shell", () => {
     expect(judgeShell("while docker ps; do sleep 1; done", REAL_BASH)).toMatchObject({ decision: "ask", kind: "body" });
     expect(judgeShell("for f in a; do echo $f; done", null)).toMatchObject({ decision: "ask", kind: "body" });
     expect(judgeShell("for f in a; do git push origin main; done", REAL_BASH)).toMatchObject({ decision: "deny" });
+  });
+
+  it.each([
+    "if [ -f x ]; then echo a; fi",
+    "if [[ -f x ]]; then echo a; fi",
+    "while read l; do echo $l; done < f",
+    "while :; do sleep 1; done",
+    "until false; do echo; done",
+    "for f in a; do if test -f $f; then continue; else break; fi; done",
+    "for f in a; do echo $f; done | grep a",
+  ])("embutido do shell no laço não pergunta: %s", (command) => {
+    expect(judgeShell(command, REAL_BASH)).toBeNull();
+  });
+
+  it("embutido não libera o resto do corpo", () => {
+    expect(judgeShell("while read l; do docker rm $l; done < f", REAL_BASH)).toMatchObject({ decision: "ask", kind: "body" });
+    expect(judgeShell("if [ -f x ]; then git push origin main; fi", REAL_BASH)).toMatchObject({ decision: "deny" });
+  });
+});
+
+describe("falha fecha: o que a política não consegue julgar pergunta", () => {
+  it("cadeia longa de `xargs` não estoura a pilha", () => {
+    expect(judgeShell(`${"xargs ".repeat(20000)}rm x`, REAL_BASH)).toMatchObject({ decision: "ask" });
+    expect(judgeShell(`${"xargs ".repeat(3000)}git push origin main`, REAL_BASH)).toMatchObject({ decision: "ask" });
+    expect(classifyRisk(`${"xargs ".repeat(8)}rm x`)?.decision).toBe("ask");
+  });
+
+  it("comando acima do teto pergunta", () => {
+    expect(judgeShell(`echo ${"a".repeat(MAX_COMMAND)}`, REAL_BASH)).toMatchObject({ decision: "ask", kind: "risk" });
+  });
+
+  it("exceção ao julgar vira ask, não queda", () => {
+    const broken = { allow: null, ask: [], deny: [] } as unknown as typeof REAL_BASH;
+    expect(judgeShell("for f in a; do echo $f; done", broken)).toMatchObject({ decision: "ask", kind: "risk" });
   });
 });

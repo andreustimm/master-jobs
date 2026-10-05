@@ -25,7 +25,33 @@
 // Leitura do shell: palavras, operadores, redirecionamentos e heredoc
 
 const BLANK = new Set([" ", "\t", "\r"]);
-const ANSI_ESCAPES = { n: "\n", t: "\t", r: "\r", "\\": "\\", "'": "'", '"': '"' };
+const ANSI_ESCAPES = { a: "\x07", b: "\b", e: "\x1b", E: "\x1b", f: "\f", n: "\n", t: "\t", r: "\r", v: "\v", "\\": "\\", "'": "'", '"': '"', "?": "?" };
+
+/**
+ * Um escape de `$'…'` a partir da barra em `text[at]`, como o bash decodifica:
+ * `\x6d`, `\155`, `m` e `\cM` também viram o caractere — `$'\x6dain'` é
+ * `main`. Devolve o texto e o índice do último caractere consumido.
+ */
+function ansiEscape(text, at) {
+  const c = text[at + 1];
+  const digits = (pattern, max, from) => {
+    let end = from;
+    while (end < text.length && end - from < max && pattern.test(text[end])) end++;
+    return end;
+  };
+  if (/[0-7]/.test(c)) {
+    const end = digits(/[0-7]/, 3, at + 1);
+    return { value: String.fromCharCode(parseInt(text.slice(at + 1, end), 8) & 0xff), last: end - 1 };
+  }
+  const hex = { x: 2, u: 4, U: 8 }[c];
+  if (hex) {
+    const end = digits(/[0-9A-Fa-f]/, hex, at + 2);
+    if (end === at + 2) return { value: `\\${c}`, last: at + 1 };
+    return { value: String.fromCodePoint(Math.min(parseInt(text.slice(at + 2, end), 16), 0x10ffff)), last: end - 1 };
+  }
+  if (c === "c" && at + 2 < text.length) return { value: String.fromCharCode(text.charCodeAt(at + 2) & 0x1f), last: at + 2 };
+  return { value: ANSI_ESCAPES[c] ?? `\\${c}`, last: at + 1 };
+}
 const SUBST = "$(...) (substituição de comando)";
 const BACKTICK = "crase (substituição de comando)";
 const PROCESS = "<(...) (substituição de processo)";
@@ -123,8 +149,9 @@ export function lex(text) {
       let j = i + 2;
       for (; j < text.length && text[j] !== "'"; j++) {
         if (text[j] === "\\" && j + 1 < text.length) {
-          j++;
-          word.value += ANSI_ESCAPES[text[j]] ?? text[j];
+          const escape = ansiEscape(text, j);
+          word.value += escape.value;
+          j = escape.last;
         } else word.value += text[j];
       }
       i = j + 1;
@@ -240,6 +267,8 @@ export function lex(text) {
         tokens.push({ type: "redir", value: op });
       }
     } else {
+      // Curinga fora de aspas: o shell expande (`.en?` pode virar `.env`).
+      if (c === "*" || c === "?" || c === "[") begin().glob = true;
       begin().value += c;
       i++;
     }
@@ -318,7 +347,7 @@ function splitSimple(tokens) {
   const commands = [];
   let paren = false;
   let casePattern = false;
-  const fresh = (before) => ({ raw: [], redirects: [], heredocs: [], subs: [], before });
+  const fresh = (before) => ({ raw: [], redirects: [], heredocs: [], subs: [], globs: [], before });
   let current = fresh(null);
   const close = (op) => {
     if (current.raw.length + current.redirects.length + current.heredocs.length + current.subs.length > 0) commands.push(current);
@@ -342,12 +371,14 @@ function splitSimple(tokens) {
       const target = tokens[k + 1]?.type === "word" ? tokens[++k] : null;
       current.redirects.push({ op: token.value, target: target ? target.value : "" });
       if (target) current.subs.push(...target.subs);
+      if (target?.glob) current.globs.push(target.value);
     } else if (token.type === "heredoc") {
       current.heredocs.push(token);
       current.subs.push(...token.subs);
     } else {
       current.raw.push(token.value);
       current.subs.push(...token.subs);
+      if (token.glob) current.globs.push(token.value);
       const lead = leadingReserved(current.raw);
       if (current.raw[lead] === "case" && current.raw.length === lead + 3 && token.value === "in") {
         close(null);
@@ -454,13 +485,21 @@ function loopVerdict(text) {
   const { commands, paren } = splitSimple(lexed.tokens);
   if (paren) return "( ) (subshell)";
   let depth = 0;
+  let end = -1;
   for (let k = 0; k < commands.length; k++) {
     depth += depthDelta(commands[k].raw);
-    if (depth <= 0 && k < commands.length - 1) return "; (comando depois do laço)";
+    if (depth <= 0) {
+      end = k;
+      break;
+    }
   }
-  if (depth !== 0) return "; (laço sem fechamento)";
-  for (let k = 0; k < commands.length; k++) {
-    const piped = commands[k].before === "|" || commands[k + 1]?.before === "|";
+  if (end === -1) return "; (laço sem fechamento)";
+  // Depois do fechamento, só pipe de leitura: `for …; done | grep a`.
+  const tail = commands.slice(end + 1);
+  if (tail.some((command) => command.before !== "|")) return "; (comando depois do laço)";
+  if (tail.some((command) => !readOnlyWords(command.raw, command.redirects))) return PIPE_STAGE;
+  for (let k = 0; k < end; k++) {
+    const piped = commands[k].before === "|" || commands[k + 1].before === "|";
     if (piped && !readOnlyWords(commandWords(commands[k].raw), commands[k].redirects)) return PIPE_STAGE;
   }
   return null;
@@ -590,7 +629,10 @@ function readOnlyBranch(rest) {
 // ---------------------------------------------------------------------------
 // Classificador de risco
 
+/** Níveis de comando carregado por outro (`sh -c`, `xargs`, `find -exec`, lançador). */
 const MAX_DEPTH = 4;
+/** Teto de tamanho do comando julgado; acima dele, pergunta. */
+export const MAX_COMMAND = 100_000;
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 const PROTECTED_BRANCHES = new Set(["main", "staging", "dev"]);
 
@@ -612,7 +654,8 @@ function stronger(a, b) {
  * opções que consomem valor. `timeout` consome ainda a duração.
  */
 const WRAPPERS = {
-  env: { value: ["-u", "--unset", "-C", "--chdir", "-S", "--split-string", "-P"], split: ["-S", "--split-string"] },
+  // `env -` é `env -i`: o `-` sozinho é opção, não o comando.
+  env: { value: ["-u", "--unset", "-C", "--chdir", "-S", "--split-string", "-P"], split: ["-S", "--split-string"], dash: true },
   command: {},
   builtin: {},
   exec: { value: ["-a"] },
@@ -639,6 +682,10 @@ function skipOptions(rest, spec) {
     if (arg === "--") {
       k++;
       break;
+    }
+    if (arg === "-" && spec.dash) {
+      k++;
+      continue;
     }
     if (!arg.startsWith("-") || arg === "-") break;
     const long = arg.startsWith("--");
@@ -681,6 +728,43 @@ function isSecretWord(word) {
   if (word.includes(".linkedin.token.json")) return true;
   const tail = word.split(/[=@<:]/).pop() ?? "";
   return /^\.env(?:[.*]|$)/.test(tail.slice(tail.lastIndexOf("/") + 1));
+}
+
+const SECRET_NAMES = [".env", ".env.local", ".env.production", ".linkedin.token.json"];
+
+/** Curinga do shell (`*`, `?`, `[…]`) como regex de um nome de arquivo. */
+function shellGlobRegex(glob) {
+  let source = "";
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i];
+    if (c === "*") source += "[^/]*";
+    else if (c === "?") source += "[^/]";
+    else if (c === "[" && glob.indexOf("]", i + 2) !== -1) {
+      const end = glob.indexOf("]", i + 2);
+      let body = glob.slice(i + 1, end);
+      if (body.startsWith("!") || body.startsWith("^")) body = `^${body.slice(1)}`;
+      source += `[${body.replace(/\\/g, "\\\\")}]`;
+      i = end;
+    } else source += c.replace(/[.+?^${}()|[\]\\/-]/g, "\\$&");
+  }
+  return new RegExp(`^${source}$`, "s");
+}
+
+/**
+ * Palavra com curinga fora de aspas que o shell pode expandir para `.env`
+ * (`.en?`, `.en*`, `./.en[v]`, `.e*`). Sem `.` literal no início o bash não
+ * casa arquivo oculto, então `*.ts` não conta.
+ */
+function globMayBeSecret(word) {
+  const tail = word.split(/[=@<:]/).pop() ?? "";
+  const base = tail.slice(tail.lastIndexOf("/") + 1);
+  if (!base.startsWith(".")) return false;
+  try {
+    const pattern = shellGlobRegex(base);
+    return SECRET_NAMES.some((name) => pattern.test(name));
+  } catch {
+    return true;
+  }
 }
 
 /** A política de permissões: editar pela shell também pergunta. */
@@ -737,7 +821,7 @@ function judgeLaunched(args, context) {
     k++;
   }
   const rest = args.slice(k);
-  return rest.length === 0 ? null : judgeWords([packageBin(rest[0]), ...rest.slice(1)], context);
+  return rest.length === 0 ? null : judgeWords([packageBin(rest[0]), ...rest.slice(1)], deeper(context));
 }
 
 function judgeNpm(args, context) {
@@ -754,7 +838,7 @@ function judgePnpm(args, context) {
   if (sub === "exec" || sub === "dlx") return judgeLaunched(rest, context);
   if (sub === "run" || sub === "run-script") return scriptRisk(firstPositional(rest, PNPM_VALUE).sub);
   if (PNPM_BUILTINS.has(sub)) return null;
-  return stronger(scriptRisk(sub), judgeWords([sub, ...rest], context));
+  return stronger(scriptRisk(sub), judgeWords([sub, ...rest], deeper(context)));
 }
 
 function judgeBun(args, context) {
@@ -769,13 +853,79 @@ function productionFile(args) {
   return file ? ask(`produção: ${file}`) : null;
 }
 
-/** `sh -c '…'` e afins: o texto é julgado como comando; sem `-c`, a entrada (heredoc, `<<<`). */
+const NODE_VALUE = new Set(["-r", "--require", "--import", "--loader", "--experimental-loader", "-C", "--conditions", "--input-type", "--title", "--env-file", "--env-file-if-exists", "--watch-path", "--inspect-port", "--test-name-pattern"]);
+const NODE_BIN = /(?:^|\/)node_modules\/\.bin\/([^/]+)$/;
+const NODE_PACKAGE = /(?:^|\/)node_modules\/((?:@[^/]+\/)?[^/]+)\/(?:.*\/)?([^/]+)$/;
+
+/**
+ * `node`: `--run <script>` é `pnpm <script>`; `node node_modules/.bin/vercel`
+ * e `node node_modules/supabase/bin/supabase` são o próprio pacote.
+ */
+function judgeNode(args, context) {
+  let worst = productionFile(args);
+  for (let k = 0; k < args.length; k++) {
+    const arg = args[k];
+    if (arg === "--run") return stronger(worst, scriptRisk(args[k + 1]));
+    if (arg.startsWith("--run=")) return stronger(worst, scriptRisk(arg.slice("--run=".length)));
+    if (arg === "-e" || arg === "--eval" || arg === "-p" || arg === "--print" || arg === "--") break;
+    if (NODE_VALUE.has(arg)) k++;
+    else if (!arg.startsWith("-")) {
+      const rest = args.slice(k + 1);
+      const bin = NODE_BIN.exec(arg);
+      if (bin) return stronger(worst, judgeWords([bin[1], ...rest], deeper(context)));
+      const pkg = NODE_PACKAGE.exec(arg);
+      if (pkg) {
+        const file = pkg[2].replace(/\.[cm]?js$/, "");
+        worst = stronger(worst, judgeWords([packageBin(pkg[1]), ...rest], deeper(context)));
+        return stronger(worst, judgeWords([file, ...rest], deeper(context)));
+      }
+      return worst;
+    }
+  }
+  return worst;
+}
+
+/**
+ * `script [-q] arquivo comando…` (BSD/macOS) e `script -c 'comando' arquivo`
+ * (util-linux) rodam o comando gravando a sessão.
+ */
+function judgeScript(args, context) {
+  for (let k = 0; k < args.length; k++) {
+    const arg = args[k];
+    if (arg === "-c" || arg === "--command") return riskOf(args[k + 1] ?? "", context.depth + 1);
+    if (arg.startsWith("--command=")) return riskOf(arg.slice("--command=".length), context.depth + 1);
+    if (arg === "--") return judgeWords(args.slice(k + 2), deeper(context));
+    // macOS: só `-t` e `-T` levam valor; util-linux: `-I`, `-O`, `-B`, `-E`, `-m`.
+    if (arg === "-t" || arg === "-T" || arg === "-I" || arg === "-O" || arg === "-B" || arg === "-E" || arg === "-m") k++;
+    else if (!arg.startsWith("-")) return judgeWords(args.slice(k + 1), deeper(context));
+  }
+  return null;
+}
+
+/** O mesmo contexto, um nível mais fundo (comando carregado por outro). */
+function deeper(context, extra = {}) {
+  return { ...context, ...extra, depth: context.depth + 1 };
+}
+
+/**
+ * `sh -c '…'` e afins: o texto é julgado como comando; sem `-c`, a entrada
+ * (heredoc, `<<<`). Com `-s`, o que vem depois são argumentos do texto lido
+ * da entrada, não um arquivo de script.
+ */
 function judgeShellInvocation(args, context) {
+  let stdin = false;
   for (let k = 0; k < args.length; k++) {
     const arg = args[k];
     if (arg === "-o" || arg === "+o" || arg === "-O" || arg === "+O" || arg === "--rcfile" || arg === "--init-file") k++;
     else if (/^-[A-Za-z]*c[A-Za-z]*$/.test(arg) || arg === "--command") return riskOf(args[k + 1] ?? "", context.depth + 1);
-    else if (!arg.startsWith("-") && !arg.startsWith("+")) return null;
+    else if (/^-[A-Za-z]*s[A-Za-z]*$/.test(arg)) stdin = true;
+    else if (arg === "--") {
+      if (!stdin && k + 1 < args.length) return null;
+      break;
+    } else if (!arg.startsWith("-") && !arg.startsWith("+")) {
+      if (!stdin) return null;
+      break;
+    }
   }
   let worst = null;
   for (const body of context.stdin) worst = stronger(worst, riskOf(body, context.depth + 1));
@@ -790,7 +940,7 @@ function judgeFind(args, context) {
     if (arg === "-exec" || arg === "-execdir" || arg === "-ok" || arg === "-okdir") {
       let end = k + 1;
       while (end < args.length && args[end] !== ";" && args[end] !== "+") end++;
-      worst = stronger(worst, judgeWords(args.slice(k + 1, end), { ...context, bulk: true }));
+      worst = stronger(worst, judgeWords(args.slice(k + 1, end), deeper(context, { bulk: true })));
       k = end;
     }
   }
@@ -813,7 +963,7 @@ function judgeRm(args, context) {
   }
   if (recursive && targets.some((target) => ROOTISH.test(target))) return deny("rm recursivo na raiz ou no diretório pessoal");
   let worst = targets.some(isPolicyPath) ? ask(POLICY_WRITE) : null;
-  if (context.bulk) worst = stronger(worst, ask("rm em massa (xargs ou find -exec)"));
+  if (context.bulk) worst = stronger(worst, ask("rm em massa (xargs, find -exec ou comando repetido pelo git)"));
   if (recursive) worst = stronger(worst, ask("rm recursivo"));
   return worst;
 }
@@ -842,7 +992,7 @@ const GIT_GLOBAL_VALUE = new Set(["-C", "-c", "--git-dir", "--work-tree", "--nam
  * `--no-pager`…) antes de olhar o subcomando — `git -c x=y push origin main`
  * é push para `main`.
  */
-function judgeGit(args) {
+function judgeGit(args, context) {
   let k = 0;
   const configs = [];
   while (k < args.length && args[k].startsWith("-")) {
@@ -861,18 +1011,72 @@ function judgeGit(args) {
     const eq = entry.indexOf("=");
     const key = (eq === -1 ? entry : entry.slice(0, eq)).toLowerCase();
     const value = eq === -1 ? "" : entry.slice(eq + 1);
-    if (key === "core.hookspath") worst = stronger(worst, ask("git -c core.hooksPath desliga os hooks do projeto"));
+    if (GIT_EXEC_KEY.test(key)) worst = stronger(worst, ask(`git -c ${key} executa programa ou desliga os hooks`));
     if (key.startsWith("alias.") && value.trimStart().startsWith("!")) worst = stronger(worst, ask("alias do git que roda shell"));
   }
-  return stronger(worst, judgeGitSubcommand(args[k], args.slice(k + 1)));
+  return stronger(worst, judgeGitSubcommand(args[k], args.slice(k + 1), context));
 }
+
+/**
+ * Chaves de configuração do git cujo valor é um programa que ele executa (ou
+ * que desligam os hooks): `-c` e `git config` com elas perguntam.
+ */
+const GIT_EXEC_KEY =
+  /^(?:core\.(?:pager|editor|sshcommand|fsmonitor|hookspath|askpass)|diff\.external|sequence\.editor|credential\.helper|credential\..+\.helper|gpg\.program|gpg\.[^.]+\.program|.+\.textconv|diff\..+\.command|merge\..+\.driver|filter\..+\.(?:clean|smudge|process)|pager\..+|uploadpack\.packobjectshook)$/;
 
 const has = (args, ...flags) => args.some((arg) => flags.includes(arg));
 
-function judgeGitSubcommand(sub, rest) {
+/**
+ * Texto que o git entrega ao shell (`rebase -x`, `submodule foreach`,
+ * `bisect run`): um argumento é linha de shell; vários, o primeiro ainda passa
+ * pelo shell e o resto são argumentos. Roda a cada commit ou submódulo: em massa.
+ */
+function gitShellPayload(args, context) {
+  if (args.length === 0) return null;
+  const line = riskOf(args[0], context.depth + 1, true);
+  return args.length === 1 ? line : stronger(line, judgeWords(args, deeper(context, { bulk: true })));
+}
+
+/** Valor de `-x <cmd>`, `-x<cmd>`, `-ix <cmd>`, `--exec <cmd>` e `--exec=<cmd>`. */
+function optionPayloads(rest, short, long) {
+  const found = [];
+  for (let k = 0; k < rest.length; k++) {
+    const arg = rest[k];
+    if (arg === "--") break;
+    if (arg === long || new RegExp(`^-[A-Za-z]*${short}$`).test(arg)) found.push(rest[++k] ?? "");
+    else if (arg.startsWith(`${long}=`)) found.push(arg.slice(long.length + 1));
+    else if (arg.startsWith(`-${short}`) && !arg.startsWith("--")) found.push(arg.slice(2));
+  }
+  return found;
+}
+
+function judgeGitSubcommand(sub, rest, context) {
   switch (sub) {
     case "push":
       return judgePush(rest);
+    case "rebase": {
+      let worst = null;
+      for (const payload of optionPayloads(rest, "x", "--exec")) worst = stronger(worst, riskOf(payload, context.depth + 1, true));
+      return worst;
+    }
+    case "difftool": {
+      let worst = null;
+      for (const payload of optionPayloads(rest, "x", "--extcmd")) worst = stronger(worst, riskOf(payload, context.depth + 1, true));
+      return worst;
+    }
+    case "submodule": {
+      const at = rest.indexOf("foreach");
+      if (at === -1) return null;
+      let k = at + 1;
+      while (k < rest.length && rest[k].startsWith("-")) k++;
+      return gitShellPayload(rest.slice(k), context);
+    }
+    case "bisect":
+      return rest[0] === "run" ? gitShellPayload(rest.slice(1), context) : null;
+    case "config":
+      return judgeGitConfig(rest);
+    case "commit":
+      return judgeCommit(rest);
     case "reset":
       return has(rest, "--hard", "--merge") ? ask("git reset --hard/--merge descarta mudanças") : null;
     case "clean":
@@ -916,8 +1120,67 @@ function judgeGitSubcommand(sub, rest) {
   }
 }
 
+const CONFIG_READ = new Set(["--get", "--get-all", "--get-regexp", "--get-urlmatch", "--get-color", "--get-colorbool", "-l", "--list", "--show-origin", "--show-scope", "--name-only"]);
+const CONFIG_VALUE = new Set(["-f", "--file", "--blob", "--type", "--default", "--comment", "--value"]);
+const CONFIG_WRITE = new Set(["--add", "--replace-all", "--unset", "--unset-all", "--rename-section", "--remove-section"]);
+
+/**
+ * `git config` que grava chave que executa programa (`core.pager`,
+ * `core.hooksPath`…) ou qualquer `alias.*`: o efeito persiste depois da
+ * chamada. Leitura (`--get`, `--list`, `get`, `list`) não pergunta.
+ */
+function judgeGitConfig(rest) {
+  const positional = [];
+  let write = false;
+  for (let k = 0; k < rest.length; k++) {
+    const arg = rest[k];
+    if (arg === "-e" || arg === "--edit") return ask("git config --edit grava qualquer chave");
+    if (CONFIG_READ.has(arg)) return null;
+    if (CONFIG_WRITE.has(arg)) write = true;
+    else if (CONFIG_VALUE.has(arg)) k++;
+    else if (!arg.startsWith("-")) positional.push(arg);
+  }
+  if (positional[0] === "get" || positional[0] === "list") return null;
+  if (positional[0] === "edit") return ask("git config edit grava qualquer chave");
+  const subcommand = ["set", "unset", "rename-section", "remove-section"].includes(positional[0]);
+  const key = (subcommand ? positional[1] : positional[0])?.toLowerCase();
+  // `git config chave` sozinho lê.
+  if (!key || !(write || subcommand || positional.length >= 2)) return null;
+  if (GIT_EXEC_KEY.test(key)) return ask(`git config ${key} executa programa ou desliga os hooks`);
+  if (key.startsWith("alias.") || key === "alias") return ask("git config alias.* cria comando do git");
+  return null;
+}
+
+const COMMIT_VALUE = "mFcCt";
+
+/** `git commit --no-verify` e `-n` pulam os hooks pre-commit e commit-msg. */
+function judgeCommit(rest) {
+  for (let k = 0; k < rest.length; k++) {
+    const arg = rest[k];
+    if (arg === "--") break;
+    if (arg === "--no-verify") return ask("git commit --no-verify pula os hooks do projeto");
+    if (/^--(?:message|file|reuse-message|reedit-message|template|author|date|fixup|squash|trailer|cleanup)$/.test(arg)) k++;
+    else if (/^-[A-Za-z]+$/.test(arg)) {
+      for (let i = 1; i < arg.length; i++) {
+        if (arg[i] === "n") return ask("git commit -n pula os hooks do projeto");
+        if (COMMIT_VALUE.includes(arg[i])) {
+          if (i === arg.length - 1) k++;
+          break;
+        }
+      }
+    }
+  }
+  return null;
+}
+
 /** Branch passado por nome que parece arquivo (`src/a.ts`): checkout de caminho. */
 const FILE_LIKE = /\.[A-Za-z][A-Za-z0-9]{0,5}$/;
+/**
+ * Nome que nenhum ref do git aceita (termina em `/`, começa por `.` ou `:`):
+ * só pode ser caminho. Arquivo sem extensão (`Makefile`) que não é ref
+ * exigiria olhar o disco, e a política é pura — resíduo documentado.
+ */
+const PATH_ONLY = /(?:\/$|^\.|^:)/;
 
 function judgeCheckout(rest) {
   const positional = [];
@@ -932,7 +1195,9 @@ function judgeCheckout(rest) {
   }
   if (positional.includes(".")) return ask("git checkout . sobrescreve o working tree");
   if (positional.length >= 2) return ask("git checkout <ref> <caminho> sobrescreve arquivo");
-  if (positional.length === 1 && FILE_LIKE.test(positional[0])) return ask("git checkout <caminho> sobrescreve arquivo");
+  if (positional.length === 1 && (FILE_LIKE.test(positional[0]) || PATH_ONLY.test(positional[0]))) {
+    return ask("git checkout <caminho> sobrescreve arquivo");
+  }
   return null;
 }
 
@@ -947,6 +1212,7 @@ const PUSH_VALUE = new Set(["--repo", "--receive-pack", "--exec", "--push-option
 function judgePush(rest) {
   let worst = null;
   let everything = false;
+  let deleting = false;
   const positional = [];
   for (let k = 0; k < rest.length; k++) {
     const arg = rest[k];
@@ -962,11 +1228,13 @@ function judgePush(rest) {
         worst = stronger(worst, ask(`git push ${flag} empurra todos os branches`));
       } else if (flag === "--prune") worst = stronger(worst, ask("git push --prune apaga branch remoto"));
       else if (flag === "--no-verify") worst = stronger(worst, ask("git push --no-verify pula o hook pre-push"));
+      else if (flag === "--delete") deleting = true;
       else if (PUSH_VALUE.has(flag) && !arg.includes("=")) k++;
       continue;
     }
     if (/^-[A-Za-z0-9]+$/.test(arg)) {
       if (arg.includes("f")) worst = stronger(worst, ask("push forçado"));
+      if (arg.includes("d")) deleting = true;
       if (arg.endsWith("o")) k++;
       continue;
     }
@@ -977,14 +1245,30 @@ function judgePush(rest) {
   for (const spec of refspecs) {
     const bare = spec.replace(/^\+/, "");
     if (bare !== spec) worst = stronger(worst, ask("push forçado (+refspec)"));
-    const target = bare.includes(":") ? bare.slice(bare.indexOf(":") + 1) : bare;
-    const branch = target.replace(/^refs\/heads\//, "");
-    if (PROTECTED_BRANCHES.has(branch)) return deny(`push direto para ${branch}`);
+    const colon = bare.indexOf(":");
+    const target = pushDestination(colon === -1 ? bare : bare.slice(colon + 1));
+    if (PROTECTED_BRANCHES.has(target)) return deny(`push direto para ${target}`);
     // `$VAR`, curinga e o `{}` de `find -exec`/`xargs -I`: o destino só aparece na hora.
     if (/[$`*{]/.test(bare)) worst = stronger(worst, ask("refspec com variável ou curinga"));
-    if (bare === "HEAD") worst = stronger(worst, ask("git push HEAD sem destino explícito"));
+    if (target === "HEAD") worst = stronger(worst, ask("git push HEAD sem destino explícito"));
+    // Apagar ref remoto (`:x` ou `--delete x`): branch de trabalho `<tipo>/<slug>`
+    // passa; tag (regra 22: toda tag SemVer tem Release) e nome sem `/` perguntam.
+    if ((deleting || (colon === 0 && bare.length > 1)) && (target.startsWith("tags/") || !target.includes("/"))) {
+      worst = stronger(worst, ask(`git push apaga ref remoto que pode ser tag (${target})`));
+    }
   }
   return worst;
+}
+
+/**
+ * Destino do refspec como o git o resolve: `@` é `HEAD`; `refs/heads/main`,
+ * `heads/main` e `refs/main` são `main`; `refs/tags/v1` vira `tags/v1`.
+ */
+function pushDestination(ref) {
+  if (ref === "@") return "HEAD";
+  let out = ref.replace(/^refs\//, "");
+  out = out.replace(/^heads\//, "");
+  return out;
 }
 
 const VERCEL_VALUE = new Set(["--scope", "-S", "--token", "-t", "--cwd", "--local-config", "-A", "--global-config", "-Q", "--team", "-T", "--env", "-e", "--build-env", "-b", "--meta", "-m", "--regions", "--archive"]);
@@ -995,9 +1279,10 @@ function judgeVercel(args) {
   let production = false;
   for (let k = 0; k < args.length; k++) {
     const arg = args[k];
-    if (arg === "--prod" || arg === "--production") production = true;
-    else if (arg === "--target") production ||= args[++k] === "production";
-    else if (arg.startsWith("--target=")) production ||= arg.slice("--target=".length) === "production";
+    // `--prod=false` também pergunta: o valor que a CLI aceita não é conferido aqui.
+    if (/^--prod(?:uction)?(?:=|$)/.test(arg)) production = true;
+    else if (arg === "--target") production ||= args[++k]?.toLowerCase() === "production";
+    else if (arg.startsWith("--target=")) production ||= arg.slice("--target=".length).toLowerCase() === "production";
     else if (VERCEL_VALUE.has(arg)) k++;
     else if (!arg.startsWith("-")) positional.push(arg);
   }
@@ -1006,6 +1291,7 @@ function judgeVercel(args) {
   if (VERCEL_PRODUCTION.has(sub)) return ask(`produção: vercel ${sub}`);
   if (sub === "env" && ["add", "rm", "remove", "update"].includes(action)) return ask(`produção: vercel env ${action}`);
   if ((sub === "project" || sub === "projects") && (action === "rm" || action === "remove")) return ask(`produção: vercel ${sub} ${action}`);
+  if (sub === "blob" && ["del", "delete", "rm", "remove"].includes(action)) return ask(`produção: vercel blob ${action}`);
   return null;
 }
 
@@ -1026,6 +1312,7 @@ function judgeSupabase(args) {
   if ((key === "db query" || key === "migration up") && remote) return ask(`produção: supabase ${key} remoto`);
   if (group === "secrets") return ask("produção: supabase secrets");
   if (key === "functions deploy" || key === "functions delete" || key === "projects delete") return ask(`produção: supabase ${key}`);
+  if (key === "storage rm" || key === "branches delete") return ask(`produção: supabase ${key}`);
   return null;
 }
 
@@ -1059,6 +1346,7 @@ function policyWrite(name, args) {
  * `context.bulk` marca o payload de `xargs` e `find -exec`.
  */
 function judgeWords(input, context) {
+  if (context.depth > MAX_DEPTH) return ask("comando aninhado demais para julgar");
   let words = input.slice();
   for (let guard = 0; guard < 64 && words.length > 0; guard++) {
     const head = words[0];
@@ -1082,7 +1370,7 @@ function judgeWords(input, context) {
     case "pkexec":
       return deny(`elevação de privilégio (${name})`);
     case "git":
-      return judgeGit(args);
+      return judgeGit(args, context);
     case "rm":
       return judgeRm(args, context);
     case "chmod":
@@ -1114,13 +1402,16 @@ function judgeWords(input, context) {
     case "bun":
       return judgeBun(args, context);
     case "node":
+      return judgeNode(args, context);
     case "tsx":
     case "ts-node":
     case "deno":
       return productionFile(args);
+    case "script":
+      return judgeScript(args, context);
     case "xargs": {
       const payload = skipOptions(args, XARGS);
-      return judgeWords(payload.length > 0 ? payload : ["echo"], { ...context, bulk: true });
+      return judgeWords(payload.length > 0 ? payload : ["echo"], deeper(context, { bulk: true }));
     }
     case "find":
       return judgeFind(args, context);
@@ -1142,13 +1433,16 @@ function judgeWords(input, context) {
   }
 }
 
-function riskOf(text, depth) {
+function riskOf(text, depth, bulk = false) {
   if (depth > MAX_DEPTH) return ask("comando aninhado demais para julgar");
   const { commands } = splitSimple(lex(text).tokens);
   let worst = null;
   for (const command of commands) {
     for (const word of [...command.raw, ...command.redirects.map((redirect) => redirect.target)]) {
       if (isSecretWord(word)) return deny(`arquivo de segredo (${word})`);
+    }
+    for (const word of command.globs) {
+      if (globMayBeSecret(word)) return deny(`curinga que pode abrir arquivo de segredo (${word})`);
     }
     for (const redirect of command.redirects) {
       if (WRITE_REDIRECT.has(redirect.op) && isPolicyPath(redirect.target)) worst = stronger(worst, ask(POLICY_WRITE));
@@ -1160,7 +1454,7 @@ function riskOf(text, depth) {
         ...command.heredocs.map((heredoc) => heredoc.body),
         ...command.redirects.filter((redirect) => redirect.op === "<<<").map((redirect) => redirect.target),
       ];
-      worst = stronger(worst, judgeWords(words, { depth, bulk: false, stdin }));
+      worst = stronger(worst, judgeWords(words, { depth, bulk, stdin }));
     }
     if (worst?.decision === "deny") return worst;
   }
@@ -1239,6 +1533,17 @@ export function decideByRules(rules, text) {
 }
 
 /**
+ * Embutidos do shell que só testam, leem a entrada ou controlam o laço: no
+ * corpo de laço passam sem regra `allow` (o classificador continua julgando).
+ */
+export const LOOP_BUILTINS = new Set(["[", "[[", ":", "true", "false", "read", "test", "break", "continue"]);
+
+/** O texto começa por `for`/`while`/`until`/`if`/`case`. */
+export function isLoop(command) {
+  return LOOP_START.test(command.trim());
+}
+
+/**
  * Cada comando de um laço contra a lista, como se rodasse sozinho: o
  * `Bash(for:*)` libera a forma, não o corpo.
  * @param {BashRules | null} rules
@@ -1249,7 +1554,7 @@ function judgeLoopBody(command, rules) {
   let worst = null;
   for (const simple of splitSimple(lex(command).tokens).commands) {
     const words = commandWords(simple.raw);
-    if (words.length === 0) continue;
+    if (words.length === 0 || LOOP_BUILTINS.has(words[0])) continue;
     const text = words.join(" ");
     const decision = decideByRules(rules, text);
     if (decision === "deny") return { decision: "deny", reason: `comando do laço negado pela lista: ${text}`, kind: "body" };
@@ -1267,16 +1572,25 @@ function judgeLoopBody(command, rules) {
  * @returns {ShellVerdict | null}
  */
 export function judgeShell(command, rules) {
-  const text = command.trim();
-  const compound = findCompound(text);
-  if (compound) return { decision: "deny", reason: compound, kind: "compound" };
-  const risk = classifyRisk(text);
-  /** @type {ShellVerdict | null} */
-  const verdict = risk ? { ...risk, kind: "risk" } : null;
-  if (verdict?.decision === "deny" || !LOOP_START.test(text)) return verdict;
-  const body = judgeLoopBody(text, rules);
-  if (!verdict) return body;
-  return body?.decision === "deny" ? body : verdict;
+  if (command.length > MAX_COMMAND) {
+    return { decision: "ask", reason: `comando com mais de ${MAX_COMMAND} caracteres, grande demais para julgar`, kind: "risk" };
+  }
+  // Falha fecha: entrada que quebra a leitura (pilha, regex) pergunta em vez
+  // de derrubar o hook — hook que cai deixa o comando passar.
+  try {
+    const text = command.trim();
+    const compound = findCompound(text);
+    if (compound) return { decision: "deny", reason: compound, kind: "compound" };
+    const risk = classifyRisk(text);
+    /** @type {ShellVerdict | null} */
+    const verdict = risk ? { ...risk, kind: "risk" } : null;
+    if (verdict?.decision === "deny" || !LOOP_START.test(text)) return verdict;
+    const body = judgeLoopBody(text, rules);
+    if (!verdict) return body;
+    return body?.decision === "deny" ? body : verdict;
+  } catch (error) {
+    return { decision: "ask", reason: `a política de shell não conseguiu julgar o comando (${error?.message ?? error})`, kind: "risk" };
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -387,6 +387,38 @@ const RISKY: readonly [string, Decision][] = [
   // Corpo de laço fora da lista allow.
   ["for f in a; do docker rm $f; done", "ask"],
   ["while true; do git push --force; done", "ask"],
+  // Revisão da #462 (segunda rodada).
+  ["git push origin @", "ask"],
+  ["git push origin HEAD:heads/main", "deny"],
+  ["git push origin heads/dev", "deny"],
+  ["git push origin $'\\x6dain'", "deny"],
+  ["git push origin $'\\155ain'", "deny"],
+  ['git rebase -x "rm -rf ~" HEAD~1', "deny"],
+  ['git submodule foreach "git push origin main"', "deny"],
+  ['git bisect run sh -c "git push origin main"', "deny"],
+  ['git difftool -x "rm -rf /" HEAD', "deny"],
+  ['git -c core.pager="rm -rf ~" log', "ask"],
+  ["git -c credential.helper=x fetch", "ask"],
+  ["node --run db:import-production", "ask"],
+  ["node node_modules/.bin/vercel --prod", "ask"],
+  ["node node_modules/supabase/bin/supabase db push", "ask"],
+  ["git config core.hooksPath /dev/null", "ask"],
+  ['git config --global alias.p "!git push origin main"', "ask"],
+  ["git commit --no-verify -m x", "ask"],
+  ["git commit -n -m x", "ask"],
+  ["cat .en?", "deny"],
+  ["cat ./.en[v]", "deny"],
+  ['sh -s -- x <<< "git push origin main"', "deny"],
+  ["env - git push origin main", "deny"],
+  ["script -q /dev/null git push origin main", "deny"],
+  ["npx vercel blob del x", "ask"],
+  ["supabase storage rm ss:///x -r", "ask"],
+  ["supabase branches delete x", "ask"],
+  ["vercel deploy --target=PRODUCTION", "ask"],
+  ["npx vercel --prod=1", "ask"],
+  ["git checkout src/", "ask"],
+  ["git push origin :refs/tags/v1", "ask"],
+  ["git push --delete origin v1.0.0", "ask"],
 ];
 
 /** A rotina que precisa passar sem pergunta nos três. */
@@ -423,6 +455,16 @@ const ROUTINE: readonly string[] = [
   "ls | head",
   "git branch | head",
   "git -C /repo diff --stat | tail -5",
+  // Revisão da #462 (segunda rodada): embutido no laço, laço com pipe de
+  // leitura e o que continua liberado ao lado dos achados.
+  "if [ -f x ]; then echo a; fi",
+  "if [[ -f x ]]; then echo a; fi",
+  "while read l; do echo $l; done < f",
+  "while :; do sleep 1; done",
+  "for f in a; do echo $f; done | grep a",
+  "git push origin --delete feat/x",
+  "git config user.name x",
+  "node --run build",
 ];
 
 /** Composto: recusado nos três, mesmo quando cada parte seria liberada. */
@@ -433,6 +475,7 @@ const COMPOUND: readonly string[] = [
   "for f in a; do git add $f && git commit; done",
   "for f in a; do echo; done; rm -rf build",
   "git log | sort -o x",
+  "for f in a; do echo $f; done | sh",
 ];
 
 describe("decisão real nos três harnesses (#461)", () => {
@@ -554,11 +597,20 @@ describe("OpenCode: tradução gerada de `.claude/settings.json`", () => {
     "opencode.json",
     ".codex/hooks.json",
     ".opencode/plugins/shell-guard.js",
-  ])("editar a própria política pergunta nos três harnesses: %s", (path) => {
-    expect(openCodeDecide(permission, "edit", `/repo/${path}`)).toBe("ask");
-    expect(decidePath(rules, "Edit", `/repo/${path}`, context)).toBe("ask");
-    const patch = `*** Begin Patch\n*** Update File: ${path}\n*** End Patch`;
-    expect(judge({ tool_name: "apply_patch", tool_input: { command: patch } }, rules, context).decision).toBe("ask");
+  ])("editar a própria política pergunta nos três harnesses, também dentro de worktree: %s", (path) => {
+    for (const prefix of ["", ".claude/worktrees/wt/"]) {
+      const file = `${prefix}${path}`;
+      expect(openCodeDecide(permission, "edit", `/repo/${file}`), file).toBe("ask");
+      expect(decidePath(rules, "Edit", `/repo/${file}`, context), file).toBe("ask");
+      const patch = `*** Begin Patch\n*** Update File: ${file}\n*** End Patch`;
+      expect(judge({ tool_name: "apply_patch", tool_input: { command: patch } }, rules, context).decision, file).toBe("ask");
+    }
+  });
+
+  it("a regra de editar a política não se ancora na raiz (worktree em `.claude/worktrees/`)", () => {
+    const policy = REAL_SETTINGS.permissions.ask!.filter((rule) => /^(?:Edit|Write)\(/.test(rule));
+    expect(policy.length).toBeGreaterThan(0);
+    for (const rule of policy) expect(rule, rule).toMatch(/^(?:Edit|Write)\(\*\*\//);
   });
 
   it("padrão de arquivo traduzido nunca fica mais estreito", () => {

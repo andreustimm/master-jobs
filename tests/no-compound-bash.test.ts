@@ -66,6 +66,8 @@ describe("findCompound: um comando de shell por chamada", () => {
     ["while true; do sleep 1; done", null],
     ["for f in a; do echo; done; rm -rf x", "; (comando depois do laço)"],
     ["for f in a; do git add $f && git commit; done", "&&"],
+    ["for f in a; do echo $f; done | grep a", null],
+    ["for f in a; do echo $f; done | sh", "| (pipe) com estágio fora da leitura"],
     // Nits: `ls`, `git branch` só listando e `rtk proxy` contam como leitura.
     ["ls -la | head", null],
     ["git branch -a | grep fix", null],
@@ -120,6 +122,15 @@ describe("processo real do hook: bloqueia composto, libera simples", () => {
       const result = run(JSON.stringify({ tool_name: "Bash", tool_input: { command } }));
       expect(result.status, command).toBe(0);
       expect(result.stdout, command).toBe("");
+    }
+  });
+
+  it("entrada que estouraria a pilha pergunta (JSON ask, saída 0) em vez de derrubar o hook", () => {
+    for (const command of [`${"xargs ".repeat(20000)}rm x`, `echo ${"a".repeat(100_001)}`]) {
+      const result = run(JSON.stringify({ tool_name: "Bash", tool_input: { command } }));
+      expect(result.status).toBe(0);
+      const output = JSON.parse(result.stdout) as { hookSpecificOutput: Record<string, string> };
+      expect(output.hookSpecificOutput.permissionDecision).toBe("ask");
     }
   });
 

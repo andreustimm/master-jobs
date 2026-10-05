@@ -36,7 +36,13 @@ export function loadRules(path = SETTINGS) {
  * @returns {{ exit: 0 | 2, stdout?: string, stderr?: string }}
  */
 export function hookOutcome(command, rules) {
-  const verdict = judgeShell(command, rules);
+  let verdict;
+  try {
+    verdict = judgeShell(command, rules);
+  } catch (error) {
+    // Falha fecha na decisão: o hook que cai deixaria o comando passar.
+    verdict = { decision: "ask", reason: `a política de shell não conseguiu julgar o comando (${error?.message ?? error})`, kind: "risk" };
+  }
   if (!verdict) return { exit: 0 };
   if (verdict.kind === "compound") return { exit: 2, stderr: `${compoundMessage(verdict.reason)}\n` };
   const output = {

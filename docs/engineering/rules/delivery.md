@@ -680,10 +680,15 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   token, não por texto: corta em todo separador fora de aspas (inclusive
   corpo de laço, `$(…)`, crase e `sh -c '…'`), tira `rtk`/`rtk proxy`,
   atribuição, invólucro (`env`, `command`, `nohup`, `time`, `nice`,
-  `timeout`…), lançador (`npx [-y]`, `npm exec [--]`, `pnpm exec`,
-  `pnpm dlx`, `bunx`), o payload de `xargs` e de `find -exec/-execdir/-ok`
-  e as opções globais do git (`-C`, `-c`, `--git-dir`, `--work-tree`,
-  `--no-pager`, `-P`…) antes de olhar subcomando e flags. Por isso
+  `timeout`, `env -`, `script`…), lançador (`npx [-y]`, `npm exec [--]`,
+  `pnpm exec`, `pnpm dlx`, `bunx`, `node --run`, `node node_modules/…`), o
+  payload de `xargs`, de `find -exec/-execdir/-ok` e do texto que o git
+  entrega ao shell (`rebase -x/--exec`, `submodule foreach`, `bisect run`,
+  `difftool -x/--extcmd`), a entrada de `sh -s` e as opções globais do git
+  (`-C`, `-c`, `--git-dir`, `--work-tree`, `--no-pager`, `-P`…) antes de olhar
+  subcomando e flags; `$'…'` é decodificado como o bash (`$'\x6dain'` é
+  `main`). Comando que a política não consegue julgar (aninhado demais, acima
+  de 100 mil caracteres ou que derruba a leitura) pergunta — o hook não cai. Por isso
   `git -c x=y push origin main` e `find . -exec git push -f origin main \;`
   são push para `main`, e `git -C /wt commit -m "chore: restore foo"` não é
   `restore`. A rotina passa direto: leitura, edição no projeto, `git`, todo
@@ -696,27 +701,38 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     `switch -f/--discard-changes/-C`; `restore` fora de `--staged`;
     `stash drop/clear`; `worktree remove --force`; `git rm -r/-f`), reescrita de
     histórico (`filter-branch`, `filter-repo`, `update-ref -d`,
-    `reflog expire`, `gc --prune`, `prune`, `-c core.hooksPath`, alias `!`),
+    `reflog expire`, `gc --prune`, `prune`), git que executa programa ou
+    pula hook (`-c` ou `git config` com `core.pager`, `core.editor`,
+    `core.sshCommand`, `core.fsmonitor`, `core.hooksPath`, `diff.external`,
+    `*.textconv`, `sequence.editor`, `credential.helper`, `gpg.program`;
+    `git config alias.*`; alias `!` em `-c`; `commit --no-verify/-n`), tag
+    remota apagada (`push :refs/tags/v1`, `push --delete origin v1.0.0` —
+    apagar branch `<tipo>/<slug>` passa),
     apagamento em massa (`rm` recursivo em qualquer ordem de flags,
     `find -delete`, `rm` atrás de `xargs`/`find -exec`), saída do projeto
     (`ssh`, `scp`, `sftp`, `rsync`, `brew`, `chown`), edição da própria
     política pela shell e **produção** por qualquer lançador: `vercel --prod`
-    (`--target production`), `promote`, `rollback`, `remove`, `redeploy`,
-    `alias`, `domains`, `dns`, `env add/rm/update`; `supabase db push/reset`,
+    (`--prod=<qualquer valor>`, `--target production` em qualquer caixa),
+    `promote`, `rollback`, `remove`, `redeploy`, `alias`, `domains`, `dns`,
+    `env add/rm/update`, `blob del/rm`; `supabase db push/reset`,
     `db query`/`migration up` com `--linked`/`--db-url`, `migration repair`,
-    `secrets`, `functions deploy/delete`, `projects delete`; e os scripts
+    `secrets`, `functions deploy/delete`, `projects delete`, `storage rm`,
+    `branches delete`; e os scripts
     `db:import-production*` e `perf:producao*` (por `pnpm`, `npm run` ou o
     arquivo direto no `node`).
   - **Nega (`deny`):** push para `main`/`staging`/`dev` por qualquer refspec
-    (`HEAD:main`, `refs/heads/main`, `:main`), `.env*` e
-    `.linkedin.token.json` em qualquer palavra (`cat .env*`, `curl -d @.env`,
-    `-F f=@.env`, `--env-file=.env`, `< .env`, cabeçalho de laço), `sudo`/
+    (`HEAD:main`, `refs/heads/main`, `heads/main`, `:main`, `$'\x6dain'`),
+    `.env*` e `.linkedin.token.json` em qualquer palavra (`cat .env*`,
+    `curl -d @.env`, `-F f=@.env`, `--env-file=.env`, `< .env`, cabeçalho de
+    laço) ou por curinga fora de aspas que o shell pode expandir para eles
+    (`.en?`, `./.en[v]`, `.e*`), `sudo`/
     `doas`/`su`, `chmod` que deixa gravável por todos (`777`, `0777`,
     `a+rwx`, `o+w`) e `rm` recursivo na raiz ou no diretório pessoal.
 - **O que fica no `.claude/settings.json`.** `allow` da rotina (com
   `Bash(for:*)`, `while`, `until`, `if`, `case`); `ask` só para editar a
   própria política (`.claude/settings.json`, `.claude/hooks/**`,
-  `scripts/harness/**`, `opencode.json`, `.codex/**`, `.opencode/plugins/**`),
+  `scripts/harness/**`, `opencode.json`, `.codex/**`, `.opencode/plugins/**`,
+  com `**/` à frente para valer também dentro de `.claude/worktrees/<wt>/`),
   que o classificador de shell não vê; e `deny` ancorado de reserva — push
   protegido, `.env`, `sudo`, `chmod 777`, `rm -rf /` — escrito também como
   `rtk <padrão>` e `rtk proxy <padrão>`, para valer se o hook não rodar e
@@ -740,7 +756,12 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   tradução recusa em vez de perder o deny, e a guarda do Codex só julga shell e
   patch) são diferenças do harness, não da política. O classificador não vê
   alias do git definido em config, script de shell chamado por arquivo
-  (`bash x.sh`) nem código passado a `node -e`/`python -c`; `Bash(node:*)`,
+  (`bash x.sh`), código passado a `node -e`/`python -c`, programa apontado por
+  variável de ambiente (`GIT_SSH_COMMAND`, `PAGER`, `GIT_EDITOR`) nem
+  `git checkout <arquivo>` sem extensão e sem `/` (`git checkout Makefile`):
+  separar arquivo de branch ali exige olhar o disco, e a política é pura —
+  só `.`, `..`, `./x`, `x/` e `:x`, que nenhum ref aceita, perguntam;
+  `Bash(node:*)`,
   `Bash(npx:*)` e `Bash(rtk proxy:*)` liberam código arbitrário por desenho, e
   o classificador só pega neles o risco que reconhece.
 - **Instruções.** Os três carregam só o `AGENTS.md`; as regras por domínio são
@@ -797,9 +818,11 @@ vira fila. Duas exceções (#461):
   quebra de linha entre a abertura e o fechamento são aceitos. O corpo
   continua julgado comando a comando — `&&`, `||`, `&`, subshell, heredoc,
   substituição, pipe fora da leitura e qualquer comando depois do `done`
-  seguem recusados, o classificador de risco vê cada comando do corpo, e cada
-  um precisa estar no `allow` como se rodasse sozinho (`Bash(for:*)` libera a
-  forma, não o corpo).
+  (salvo pipe de leitura: `for …; done | grep a`) seguem recusados, o
+  classificador de risco vê cada comando do corpo, e cada um precisa estar no
+  `allow` como se rodasse sozinho (`Bash(for:*)` libera a forma, não o
+  corpo); os embutidos `[`, `[[`, `:`, `true`, `false`, `read`, `test`,
+  `break` e `continue` passam sem regra.
 
 Filtre saída com a flag do próprio programa (`--jq`, `--format`) e ponha
 etapas múltiplas num script que roda com um comando.
