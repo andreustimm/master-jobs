@@ -33,8 +33,10 @@ const config: NextConfig = {
   // before Next builds and enter the server bundle through a static import.
   // `sources.yaml` is read by path too: the sweep slices (ADR 0025) sync from
   // it inside the function, and a missing file there is a sweep that does nothing.
+  // `search-synonyms.yaml` is read by path when SEARCH_SYNONYMS_ENABLED is on
+  // (#370); without it in the trace the list would silently stay empty.
   outputFileTracingIncludes: {
-    "/**": ["./config/certs/supabase-ca.crt"],
+    "/**": ["./config/certs/supabase-ca.crt", "./config/search-synonyms.yaml"],
     "/api/cron/varredura": ["./config/sources.yaml"],
   },
 

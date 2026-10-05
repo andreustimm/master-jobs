@@ -469,8 +469,10 @@ não serve: o contrato atual não dobra acento.
 chave do termo (`tech-lead` → `techlead`). O índice é sobre essa forma, e a
 consulta pergunta `ilike '%chave%'` a ele; `~*` e `ilike` concordam sobre caixa
 nas letras ASCII, então o pré-filtro só vale para chaves ASCII com três letras
-ou dígitos seguidos. Termo com acento, `C++`, `CI/CD` ou `go` seguem só com o
-`~*`, como antes. Os candidatos vêm num `array(...)`: um InitPlan, calculado
+ou dígitos seguidos. Termo com acento usa só o trecho ASCII mais longo da chave
+(`sênior` → `%nior%`, também condição necessária), para que a grafia acentuada de
+um grupo de sinônimos (#370) não tire o índice do grupo inteiro; `C++`, `CI/CD`
+ou `go` seguem só com o `~*`, como antes. Os candidatos vêm num `array(...)`: um InitPlan, calculado
 uma vez por consulta. As duas alternativas medidas pioraram — `in (...)` dentro
 do `or` vira subplano reconstruído duas vezes por ocorrência, e a semijunção
 fora do `or` mudou a estimativa e levou o agrupamento a um laço aninhado de

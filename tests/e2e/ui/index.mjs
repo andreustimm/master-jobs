@@ -47,6 +47,7 @@ import * as rateLimit from "./rate-limit.mjs";
 import * as recheck from "./recheck.mjs";
 import * as roles from "./roles.mjs";
 import * as searchRelevance from "./search-relevance.mjs";
+import * as searchSynonyms from "./search-synonyms.mjs";
 import * as recruiterLogoTransition from "./recruiter-logo-transition.mjs";
 import * as searches from "./searches.mjs";
 import * as slowFilters from "./slow-filters.mjs";
@@ -106,6 +107,8 @@ export const AREAS = [
   // devolve o estado original (#327).
   { id: "public-images", run: publicImages.run, requires: [] },
   { id: "search-relevance", run: searchRelevance.run, requires: [] },
+  // Lista de sinônimos ligada só no ambiente do runner (#370, E2E-007).
+  { id: "search-synonyms", run: searchSynonyms.run, requires: [] },
   { id: "filter-auto-apply", run: filterAutoApply.run, requires: [] },
   { id: "jobs-loading", run: jobsLoading.run, requires: [] },
   { id: "job-analysis", run: jobAnalysis.run, requires: [] },

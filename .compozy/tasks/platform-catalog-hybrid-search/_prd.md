@@ -325,6 +325,22 @@ consistent; where they conflict, the amendment wins.
 - **A6 — Local database.** The constraint to preserve the local SQLite/libSQL
   path is obsolete: the runtime is PostgreSQL-only (ADR 0021 item 5). Review it
   before this PRD's TechSpec.
+- **A7 — Curated synonym expansion in the filter (PROPOSED, pending the
+  owner; #370, Phase 0).** *Numbered A7 because A5 and A6 are taken; the
+  analysis called it "A5".* A4 says nothing may change what the whole-word
+  filter returns except ordering signals. This amendment proposes one narrow
+  exception: a short, hand-curated bilingual list (`config/search-synonyms.yaml`)
+  may expand a loose query term into an `OR` group of its listed equivalents
+  (`engenheiro` also searches `engineer`). The exception is bounded: (1) the
+  set grows only by terms that are on the list, never by similarity, vector or
+  LLM; (2) a quoted phrase is literal and never expands; (3) each alternative
+  keeps the term kernel's boundary and escaping, so the filter is still
+  whole-word; (4) it is off unless `SEARCH_SYNONYMS_ENABLED` is on, and emptying
+  the list turns it off without code; (5) the scorer and its blockers are
+  untouched, so a job that is ineligible only enters the set and keeps its
+  blocker; (6) the row says which listed term matched. Semantic vectors (US-020)
+  keep the A4 rule unchanged: they only reorder. Until the owner accepts this
+  amendment the code ships behind the flag, off.
 
 ## Architecture Decision Records
 

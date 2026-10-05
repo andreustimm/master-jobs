@@ -20,7 +20,7 @@ import { workModeSql } from "./work-mode.ts";
 import { attributedJobIds } from "../../contexts/sourcing/index.ts";
 import { loadRates } from "../../contexts/fx/index.ts";
 import { PERIODS_PER_YEAR, annualFactorSql, type Currency, type FxTable } from "../money.ts";
-import type { MatchField } from "../search.ts";
+import type { MatchField, SynonymMap } from "../search.ts";
 import { phraseRegexSql, termPrefilterLike, termRegexSql, type ValidTerm } from "../term.ts";
 import {
   CLOSING,
@@ -105,6 +105,8 @@ export type BoardRow = {
   repeats: GroupPosting[];
   /** Onde a consulta casou, para a explicação da linha. Null sem consulta. */
   matchedFields: MatchField[] | null;
+  /** Sinônimos da lista que casaram nesta vaga. Null sem consulta ou sem sinônimo. */
+  matchedSynonyms: string[] | null;
 };
 
 /** Termos e frases já validados; ver `parseQuery` em `src/core/search.ts`. */
@@ -215,6 +217,13 @@ export type BoardFilters = {
    * de um termo só, para quem chama sem análise (CLI, cockpit).
    */
   query?: SearchQuery;
+  /**
+   * Sinônimos da lista curada para `term` e `query.terms`, pela chave do termo
+   * digitado (`expandTerms` em `src/core/search.ts`, #370). Cada termo vira um
+   * grupo `or` com os sinônimos; a frase entre aspas nunca expande. Ausente, a
+   * busca é a de sempre.
+   */
+  synonyms?: SynonymMap;
   /**
    * `relevance` só ordena quando há consulta: sem ela não há casamento a
    * pesar, e a ordem cai na de fit. Nunca muda o conjunto nem a contagem.
@@ -603,16 +612,36 @@ function termTextCandidates(like: string): SQL {
     where ${withoutSeparators(jobPage.text)} ilike ${like})`;
 }
 
-/** Um termo ou uma frase da consulta, já como padrão de `~*` e pré-filtro trigrama. */
-type QueryPart = { pattern: string; like: string | null };
+/** Uma forma de escrever o termo: o padrão de `~*` e o pré-filtro trigrama. */
+type QueryAlternative = { term: string; pattern: string; like: string | null };
 
-function queryParts(opts: BoardFilters): QueryPart[] {
+/**
+ * Um termo ou uma frase da consulta. `alternatives[0]` é o que a pessoa
+ * digitou; as demais são sinônimos da lista curada (#370) e só existem para
+ * termo solto. Sem lista, todo grupo tem uma alternativa só.
+ */
+type QueryPart = { alternatives: [QueryAlternative, ...QueryAlternative[]] };
+
+/** `Object.hasOwn`: a chave é o que a pessoa digitou, e `constructor` não é sinônimo de nada. */
+const synonymsFor = (opts: Pick<BoardFilters, "synonyms">, term: ValidTerm): readonly ValidTerm[] =>
+  opts.synonyms && Object.hasOwn(opts.synonyms, term.key) ? opts.synonyms[term.key]! : [];
+
+const alternativeOf = (term: ValidTerm): QueryAlternative => ({
+  term: term.term,
+  pattern: termRegexSql(term.term),
+  like: termPrefilterLike(term.term),
+});
+
+function queryParts(opts: Pick<BoardFilters, "term" | "query" | "synonyms">): QueryPart[] {
   const terms = [...(opts.term ? [opts.term] : []), ...(opts.query?.terms ?? [])];
   return [
-    ...terms.map((term) => ({ pattern: termRegexSql(term.term), like: termPrefilterLike(term.term) })),
+    ...terms.map((term) => ({
+      alternatives: [alternativeOf(term), ...synonymsFor(opts, term).map(alternativeOf)] as QueryPart["alternatives"],
+    })),
     ...(opts.query?.phrases ?? []).map((phrase) => ({
-      pattern: phraseRegexSql(phrase.term),
-      like: termPrefilterLike(phrase.term),
+      alternatives: [
+        { term: phrase.term, pattern: phraseRegexSql(phrase.term), like: termPrefilterLike(phrase.term) },
+      ] as QueryPart["alternatives"],
     })),
   ];
 }
@@ -633,24 +662,50 @@ const inLocation = (pattern: string) => sql`coalesce(${job.locationRaw}, '') ~* 
  */
 function queryCondition(parts: readonly QueryPart[]): SQL | undefined {
   if (parts.length === 0) return undefined;
+  const anywhere = ({ pattern, like }: QueryAlternative) =>
+    sql`(${job.title} ~* ${pattern} or ${job.companyName} ~* ${pattern} or ${inLocation(pattern)} or ${
+      like ? sql`(${job.id} = any(${termTextCandidates(like)}) and ${inText(pattern)})` : inText(pattern)
+    })`;
+  // Termo e sinônimos se juntam por `or` dentro do grupo; entre grupos continua
+  // `and`. Com uma alternativa só, o SQL é o de antes da lista.
   return sql`(${sql.join(
-    parts.map(({ pattern, like }) =>
-      sql`(${job.title} ~* ${pattern} or ${job.companyName} ~* ${pattern} or ${inLocation(pattern)} or ${
-        like ? sql`(${job.id} = any(${termTextCandidates(like)}) and ${inText(pattern)})` : inText(pattern)
-      })`,
+    parts.map(({ alternatives }) =>
+      alternatives.length === 1 ? anywhere(alternatives[0]) : sql`(${sql.join(alternatives.map(anywhere), sql` or `)})`,
     ),
     sql` and `,
   )})`;
 }
 
-/** Algum termo ou frase casou neste campo — para a explicação e a relevância. */
-function fieldMatches(parts: readonly QueryPart[], field: MatchField): SQL {
-  const one = (pattern: string) =>
-    field === "title" ? sql`${job.title} ~* ${pattern}`
+/** Em que campo um padrão casa. */
+function matchesInField(pattern: string, field: MatchField): SQL {
+  return field === "title" ? sql`${job.title} ~* ${pattern}`
     : field === "company" ? sql`${job.companyName} ~* ${pattern}`
     : field === "location" ? inLocation(pattern)
     : inText(pattern);
-  return sql`(${sql.join(parts.map(({ pattern }) => one(pattern)), sql` or `)})`;
+}
+
+/** Algum termo, sinônimo ou frase casou neste campo — para a explicação e a relevância. */
+function fieldMatches(parts: readonly QueryPart[], field: MatchField): SQL {
+  const patterns = parts.flatMap(({ alternatives }) => alternatives.map(({ pattern }) => matchesInField(pattern, field)));
+  return sql`(${sql.join(patterns, sql` or `)})`;
+}
+
+/**
+ * Os sinônimos da lista que casaram na vaga, em qualquer campo — para a
+ * explicação da linha. Só os termos da lista (`alternatives[1..]`), nunca o que
+ * a pessoa digitou. Nulo quando a consulta não tem sinônimo.
+ */
+function matchedSynonyms(parts: readonly QueryPart[]): SQL<string[] | null> {
+  const synonyms = parts.flatMap(({ alternatives }) => alternatives.slice(1));
+  if (synonyms.length === 0) return sql<string[] | null>`null::text[]`;
+  const fields = ["title", "company", "location", "description"] as const;
+  return sql<string[]>`array_remove(array[${sql.join(
+    synonyms.map(
+      ({ term, pattern }) =>
+        sql`case when ${sql.join(fields.map((field) => matchesInField(pattern, field)), sql` or `)} then ${term}::text end`,
+    ),
+    sql`, `,
+  )}]::text[], null)`;
 }
 
 function boardConditions(opts: BoardFilters, candidateId: number | null, pay?: PaySql): SQL[] {
@@ -923,6 +978,7 @@ async function readBoard(
           sql`, `,
         )}]::text[], null)`
         : sql<MatchField[] | null>`null::text[]`,
+      matchedSynonyms: matchedSynonyms(parts),
     })
     .from(job)
     .leftJoin(jobScore, scoreJoin(candidateId, opts.track))
@@ -968,7 +1024,7 @@ async function readBoard(
  * BUG-20260929-search-term-false-negative-laravel (achados da revisão da PR
  * #419).
  */
-export async function termExistsInOpenCorpus(opts: Pick<BoardFilters, "term" | "query">): Promise<boolean> {
+export async function termExistsInOpenCorpus(opts: Pick<BoardFilters, "term" | "query" | "synonyms">): Promise<boolean> {
   const matched = queryCondition(queryParts(opts));
   if (!matched) return false;
   const rows = await getDb()

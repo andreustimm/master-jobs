@@ -61,7 +61,9 @@ inteiro" — é como eles acabam incluídos, e é frágil.
 `JHO_PROFILE_PATH` e `JHO_SOURCES_PATH` existem e permitem apontar para outro
 lugar. Enquanto os dois arquivos forem versionados, o padrão funciona. A rota
 da varredura fatiada não depende da sorte: `next.config.ts` inclui
-`config/sources.yaml` explicitamente no pacote de `/api/cron/varredura`.
+`config/sources.yaml` explicitamente no pacote de `/api/cron/varredura`. O mesmo
+vale para `config/search-synonyms.yaml` (lido por caminho só com
+`SEARCH_SYNONYMS_ENABLED` ligada): `next.config.ts` o inclui em `/**`.
 
 ## Variáveis
 
@@ -72,6 +74,7 @@ da varredura fatiada não depende da sorte: `next.config.ts` inclui
 | `DATABASE_MIGRATION_URL` | migration/CI | URL PostgreSQL com privilégio de DDL |
 | `POSTGRES_URL_NON_POOLING` | Vercel (integração) | usada na migration quando não há a de cima |
 | `DATABASE_CA_CERT` | CI/Vercel | o PEM da CA **ou** o caminho de um arquivo |
+| `SEARCH_SYNONYMS_ENABLED` | Vercel (opcional; **desligada por padrão**) | `1` ou `true` liga os sinônimos bilíngues da busca de Vagas (`config/search-synonyms.yaml`, #370, Fase 0). Ligar em Preview ou Production é decisão do dono depois de revisar a lista; desligar devolve exatamente a busca de antes. Não é segredo |
 | `SUPABASE_CRAWL_ENABLED` | Actions produção | `true` somente após os gates de quota/retensão |
 | `RESEND_API_KEY` | Vercel | e-mail transacional; sem ela ou sem `RESEND_FROM`, nada é enviado e o log só alerta |
 | `RESEND_FROM` | Vercel | remetente de domínio verificado |

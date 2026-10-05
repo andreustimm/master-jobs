@@ -79,8 +79,40 @@ describe("term kernel", () => {
     expect(termPrefilterLike("C++")).toBeNull();
     expect(termPrefilterLike("go")).toBeNull();
     expect(termPrefilterLike("k8s")).toBe("%k8s%");
-    expect(termPrefilterLike("gestão")).toBeNull();
     expect(termPrefilterLike("O'Reilly%_")).toBeNull();
+    expect(termPrefilterLike("ção")).toBeNull();
+  });
+
+  it("UT-214c an accented key is prefiltered by its longest ASCII run only", () => {
+    expect(termPrefilterLike("gestão")).toBe("%gest%");
+    expect(termPrefilterLike("sênior")).toBe("%nior%");
+    expect(termPrefilterLike("júnior")).toBe("%nior%");
+    expect(termPrefilterLike("híbrido")).toBe("%brido%");
+    expect(termPrefilterLike("líder técnico")).toBe("%cnico%");
+    expect(termPrefilterLike("estágio")).toBe("%est%");
+    // Símbolo fora do conjunto seguro continua sem pré-filtro, com ou sem acento.
+    expect(termPrefilterLike("gestão'%")).toBeNull();
+  });
+
+  it("UT-214d the accented prefilter is necessary: every regex hit survives it", () => {
+    const survives = (like: string, text: string) =>
+      text.replace(/[ -]/g, "").toLowerCase().includes(like.slice(1, -1));
+    const terms = ["sênior", "Júnior", "líder técnico", "híbrido", "estágio", "gestão"];
+    const texts = [
+      "Perfil Sênior", "SÊNIOR", "s-ê-n-i-o-r", "Dev Júnior", "Líder Técnico", "líder-técnico", "Modelo Híbrido",
+      "Estágio em TI", "Gestão de pessoas", "senior", "nothing here",
+    ];
+    let checked = 0;
+    for (const term of terms) {
+      const like = termPrefilterLike(term)!;
+      expect(like, term).not.toBeNull();
+      for (const text of texts) {
+        if (!matchesTerm(term, text)) continue;
+        checked += 1;
+        expect(survives(like, text), `${term} in ${text}`).toBe(true);
+      }
+    }
+    expect(checked).toBeGreaterThan(6);
   });
 
   it("UT-214b the prefilter is necessary: every regex hit survives it", () => {

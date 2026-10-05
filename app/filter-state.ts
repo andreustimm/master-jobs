@@ -10,7 +10,9 @@ import {
 } from "../src/contexts/matching/index.ts";
 import { FUNNEL_STATUSES } from "../src/contexts/pursuit/domain/application.ts";
 import type { FxTable } from "../src/core/money.ts";
-import { parseQuery } from "../src/core/search.ts";
+import { expandTerms, parseQuery, synonymMapOf, type SynonymMap } from "../src/core/search.ts";
+import type { SynonymDictionary } from "../src/core/synonyms.ts";
+import { searchSynonyms } from "../src/core/synonyms-load.ts";
 import { validateTerm, type TermError, type ValidTerm } from "../src/core/term.ts";
 import { FIT_MAX, PAY_FILTER_MAX } from "./filter-scales.ts";
 
@@ -59,7 +61,7 @@ export type FilterState = {
    * A consulta `q` analisada: termos de palavra inteira e frases entre aspas
    * sobre cargo, empresa, localização e descrição. `raw` é o que volta à URL.
    */
-  query?: { raw: string; terms: ValidTerm[]; phrases: ValidTerm[] };
+  query?: { raw: string; terms: ValidTerm[]; phrases: ValidTerm[]; synonyms?: SynonymMap };
   /** O termo, quando a consulta é um termo só — o que se salva como termo. */
   term?: ValidTerm;
   /** Part of the employer's name. Free text: it is matched, never parsed. */
@@ -126,7 +128,15 @@ function positiveInt(raw: string | undefined): number | null {
   return Number.isSafeInteger(value) && value > 0 ? value : null;
 }
 
-export function readFilters(params: Record<string, string | string[] | undefined>): FilterState {
+/**
+ * `dictionary` é a lista de sinônimos (#370): por omissão a da composição, que
+ * só tem conteúdo com `SEARCH_SYNONYMS_ENABLED` ligada. Vazia, a leitura é a de
+ * sempre.
+ */
+export function readFilters(
+  params: Record<string, string | string[] | undefined>,
+  dictionary: SynonymDictionary = searchSynonyms(),
+): FilterState {
   const one = (k: string) => {
     const v = params[k];
     return Array.isArray(v) ? v[0] : v;
@@ -181,6 +191,9 @@ export function readFilters(params: Record<string, string | string[] | undefined
     if (error) notices.push(error);
     else if (terms.length + phrases.length > 0) {
       state.query = { raw: q.trim().replace(/\s+/g, " "), terms, phrases };
+      // Só os termos soltos expandem; a frase entre aspas é literal.
+      const synonyms = synonymMapOf(expandTerms(terms, dictionary));
+      if (Object.keys(synonyms).length > 0) state.query.synonyms = synonyms;
       // Um termo só, sem frase: é o termo que se salva e se busca nas plataformas.
       if (terms.length === 1 && phrases.length === 0) state.term = terms[0];
     }
@@ -407,6 +420,7 @@ export function toBoardFilters(state: FilterState): BoardFilters {
     keepUnscored: true,
     cluster: state.cluster,
     query: state.query ? { terms: state.query.terms, phrases: state.query.phrases } : undefined,
+    synonyms: state.query?.synonyms,
     company: state.company,
     sourceKinds: state.sources,
     workMode: state.workMode,

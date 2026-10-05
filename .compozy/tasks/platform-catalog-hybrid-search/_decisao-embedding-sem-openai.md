@@ -10,6 +10,16 @@ com evidência nova e adiciona uma leitura de escopo (ver
 que pode mudar a prioridade da tarefa inteira. **Não decide** — as caixas
 abaixo são do dono. Tarefa 07 continua bloqueada até isso.
 
+> **Atualização (05/10/2026): a Fase 0 foi implementada atrás de flag.** O
+> dicionário bilíngue de sinônimos (`config/search-synonyms.yaml`, expansão por
+> termo solto no filtro, nota "também buscou" na linha) entrou com
+> `SEARCH_SYNONYMS_ENABLED` **desligada por padrão**, sem migração e sem tocar o
+> scorer — ver [`_techspec-fase0-sinonimos.md`](_techspec-fase0-sinonimos.md).
+> Isso **não responde D1b**: a Fase 0 ataca o vocabulário, e a pergunta de
+> refinar a ordem dentro do conjunto (fases de vetor 1–3) segue aberta, assim
+> como D1, D2, D3, D4 e D5. A emenda ao ADR-001 que permite a expansão no filtro
+> (PRD A7) está **proposta, pendente do dono**.
+
 ## Decisões do dono
 
 | # | Decisão | Recomendação deste documento | Owner decide |

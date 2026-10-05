@@ -104,6 +104,11 @@ export function JobList({
         // the employer is unknowable — worth saying, since you cannot research
         // the company or use your network on one of these.
         const anonymous = !hasNamedEmployer(r.sourceId, r.companyName, r.sourceLabel);
+        const matchSignals = explainMatch({
+          fields: r.matchedFields ?? [],
+          proximity: false,
+          synonyms: r.matchedSynonyms ?? [],
+        });
 
         return (
           <article
@@ -213,10 +218,19 @@ export function JobList({
               {r.matchedFields !== null && r.matchedFields.length > 0 && (
                 <p className="mt-1 text-xs text-muted-foreground" data-testid={`job-match-${r.jobId}`}>
                   {t("jobs.matchedIn", {
-                    fields: explainMatch({ fields: r.matchedFields, proximity: false })
-                      .map((signal) => (signal.kind === "field" ? t(MATCH_FIELD_LABEL[signal.field]) : t("jobs.matchProximity")))
+                    fields: matchSignals
+                      .flatMap((signal) => (signal.kind === "field" ? [t(MATCH_FIELD_LABEL[signal.field])] : []))
                       .join(", "),
                   })}
+                  {matchSignals.map((signal) =>
+                    signal.kind === "synonym" ? (
+                      <span key="synonym" data-testid={`job-synonym-${r.jobId}`}>
+                        {` · ${t("jobs.matchSynonym")} `}
+                        {/* Os termos vêm da lista curada, em pt-BR ou en, qualquer que seja o idioma da tela. */}
+                        <span data-user-content>{signal.terms.join(", ")}</span>
+                      </span>
+                    ) : null,
+                  )}
                 </p>
               )}
 
