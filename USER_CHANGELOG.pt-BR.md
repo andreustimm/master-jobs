@@ -36,6 +36,14 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 ## [Unreleased]
 
+## [1.34.0] - 2026-10-05T18:11:37.000Z
+
+### Documentação
+
+- Seção "Desativação e rollback": protocolo auditado de pausa, desabilitação de flags, rotação de credenciais e validação
+- Seção "Auditoria periódica": comandos de leitura sem efeito, inspeção de regras nativas, verificação de republication e histórico de workflows
+- Atualização de "Sequência de ativação em #191": apontamento para novas seções, modelo de registro de evidência com links de runs, piloto e tarefas
+
 ## [1.33.1] - 2026-10-02T05:15:07.000Z
 
 ### Corrigido
