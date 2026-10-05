@@ -286,9 +286,10 @@ rtk git grep -n -E "compozy/tasks|projections|tasks refresh" -- .github scripts 
 ```
 
 Resultado esperado hoje (5 de outubro de 2026):
-- `scripts/tasks/projection.ts:176` — Comentário de geração, arquivo ignorado
-  pelo Git (`.compozy/projections/` em `.gitignore`)
 - `.github/workflows/ci.yml:40` — Comentário descritivo, não republicação
+
+As projeções são geradas em `.compozy/projections/` e ignoradas pelo Git
+(`.gitignore`), sem republicação ativa.
 
 Nenhuma outra ocorrência indica republication ativa.
 
