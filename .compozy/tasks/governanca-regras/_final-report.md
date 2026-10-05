@@ -1,5 +1,10 @@
 # Relatório final da verificação (task_11 / #205)
 
+> **Reverificação 05/10/2026 (`46e3268f`, v1.33.1).** Veredito atual: **não
+> certificada**. P0-2 segue aberto; P0-3 ficou com dois limites sem aceite
+> escrito. Detalhe em "Reverificação 2026-10-05 — 46e3268f", no fim deste
+> relatório. O texto de 24/09 abaixo é a fotografia de `c23f8ba2`.
+
 > **Atualização #308 (24/09/2026, branch `test/governanca-g41`).** P0-1
 > (G41 / V03-06), E16 e E27 foram resolvidos; detalhe em "Atualização #308"
 > no fim deste relatório. Restam P0-2 e P0-3, que dependem do dono. O texto
@@ -269,3 +274,170 @@ Branch `test/governanca-g41`, a partir de `origin/dev` `c565478e`, em
 
 Com isso, só P0-2 e P0-3 continuam impedindo a certificação; as duas
 dependem do dono.
+
+## Reverificação 2026-10-05 — 46e3268f
+
+Segunda passada de leitura e execução da task_11 (#205), feita 11 dias depois
+da primeira. Não houve escrita remota, nem leitura de secret, nem conexão ao
+banco de produção. As seções acima continuam como fotografia de `c23f8ba2`; esta
+as atualiza onde a observação mudou.
+
+### (a) Ambiente
+
+| Item | Valor |
+|---|---|
+| Commit verificado | `46e3268fc241ea65167bbbba8a4d6353c0f335ce`, `origin/dev` = `origin/main` (merge da PR #452, que promoveu a v1.33.1) |
+| Versão (`package.json`) | `1.33.1` |
+| Worktree | `.claude/worktrees/governanca-reverificacao-final`, branch `docs/governanca-reverificacao-final` |
+| Data | 2026-10-05; coleta remota às 16:37 UTC |
+| Node / pnpm | `v24.14.0` / `10.28.0`. O projeto pede `^24.19.0`; o aviso de engine apareceu e não bloqueou |
+| Docker | PostgreSQL 17 descartável do global setup do Vitest, em loopback. O daemon estava parado e foi iniciado localmente para o `check` |
+| Identidade GitHub | `andreustimm` (sessão `gh`), só GET |
+
+### (b) V11-02 e V11-03
+
+Rótulos como no início deste relatório: [R] configuração remota observada por
+GET, [X] comando executado nesta sessão ou CI observado, [L] leitura, [H]
+verificação humana pendente.
+
+| Prova | Tipo | Resultado |
+|---|---|---|
+| `pnpm check` completo na worktree, em `46e3268f` | [X] | exit 0, em 228 s no Vitest (teto de 10 min respeitado). **345 arquivos passaram, 2 pulados; 5181 testes passaram, 9 pulados.** Cobertura: statements 97,97%, branches 94,9%, functions 98,45%, lines 98,5%, todas acima dos limiares. `test:qa-skills`: 17 testes OK. `check:qa-tracker`: 112 cenários conforme o esquema |
+| `pnpm check:instructions` | [X] | "symlinks dos harnesses, links, âncoras e inventário de regras conferem" |
+| `pnpm check:release-ready` | [X] | `no-release` (sem fragmento pendente) |
+| `pnpm check:qa-tracker` | [X] | `docs/qa/state.csv: 112 scenarios` |
+| Conferência avulsa de completude (script local, fora do repo, sem novo gate) | [X] | Intervalo real do inventário: **G01–G87**. 87 linhas `\| Gnn \|` em `rules/README.md` e 87 âncoras `<a id="gnn">` em `rules/`, exatamente uma de cada por ID; nenhuma faltando, duplicada ou fora do intervalo. Em 24/09 eram 84; G85–G87 entraram depois (harnesses e roteamento) |
+| CI do SHA | [X] observado | `46e3268f` é o merge de retorno `main → dev` (fast-forward), e não tem execução de `CI` por push: só execuções do coordenador, puladas. A árvore difere do último commit com CI de push em `dev`, `2387cbdd`, só em `CHANGELOG.md`, os dois `USER_CHANGELOG`, `package.json` (a versão) e a remoção do fragmento promovido (`git diff --stat 2387cbdd 46e3268f`: 5 arquivos). O CI de `2387cbdd` (run 36966870296, push em `dev`, 02/10 04:58 UTC) terminou em `success`, com `qualidade`, `schema-e-migracao`, `contratos`, as 4 fatias de `testes`, `cobertura`, `build`, `pwa-browser` e `e2e-navegador` em `success`; `validacao` foi pulado |
+| CI da PR de produção #452 (v1.33.1) | [X] observado | `gh pr checks 452`: `qualidade`, `schema-e-migracao`, `cobertura`, `e2e-navegador`, `contratos`, `build`, `pwa-browser` e as 4 fatias de `testes` em `SUCCESS`; `validacao` e `Supabase Preview` pulados; 0 falhas |
+| CI de `dev` | [X] observado | Das 15 execuções mais recentes (`gh run list --branch dev --limit 15`, de 01/10 16:11 a 02/10 04:58 UTC), 13 terminaram em `success` e 2 em `cancelled`, ambas em 01/10 (22:54 e 23:05 UTC). Nenhuma falhou |
+| `verify-protections.ts` | [R] | Imprimiu `ok` nas quatro linhas: `permanentes: sem exclusão nem force-push`, `main: CI obrigatório`, `main: produção por PR aprovada`, `ambiente Production` |
+| Rulesets | [R] | Três ativos, os mesmos de 24/09 (ids 23854305, 23854306, 23854307, nenhum atualizado desde 22/09). Regras efetivas: `main` = `required_status_checks`, `pull_request`, `deletion`, `non_fast_forward`; `dev` e `staging` = `deletion`, `non_fast_forward`. Bypass: só o papel admin (id 5), modo `pull_request`, no ruleset de PR de `main` |
+| Ambiente `Production` | [R] | `can_admins_bypass: false`; política de branch personalizada com uma só branch, `main`. Sem revisor obrigatório (razão em [github-protections.md](../../../docs/engineering/github-protections.md), "Revisor obrigatório no ambiente `Production`") |
+| Permissões do Actions | [R] | `default_workflow_permissions: write`; `can_approve_pull_request_reviews: true` |
+| Variáveis do Actions | [R] | Só `JHO_SOURCE_ALLOWLIST` e `SUPABASE_CRAWL_ENABLED`. `TASKS_ENFORCEMENT` segue inexistente |
+| PRs de produção | [R] | As cinco últimas mescladas em `main` (#443, #445, #448, #450, #452; v1.32.12 a v1.33.1, de 01/10 23:58 a 02/10 05:35 UTC) têm autor `github-actions[bot]`, foram mescladas por `andreustimm` e estão com `reviewDecision: REVIEW_REQUIRED`: entraram pelo bypass de admin dentro da PR |
+
+Os valores brutos estão em
+[evidencias/task_11-protecoes-2026-10-05.json](evidencias/task_11-protecoes-2026-10-05.json).
+O `pnpm check` imprime no meio da saída duas mensagens de `git` e `rebase` de
+fixtures de teste (`fatal: ambiguous argument 'v1.10.0..ref-inexistente'`,
+`Successfully rebased ... feat/task`). São casos negativos de testes que passam,
+e não falhas da execução.
+
+### (c) P0-3, reclassificado
+
+O primeiro item do P0-3 de 24/09 mudou de natureza, e os outros dois não.
+
+- **Agente mesclando a promoção com bypass de admin: regra aceita pelo dono.**
+  [G46](../../../docs/engineering/rules/delivery.md#g46)
+  (`delivery.md:186-197`) registra a delegação de 23/09/2026 ("staging → main:
+  ficou verde pode mesclar"): o agente mescla a PR do robô com
+  `gh pr merge <n> --merge --admin` quando `qualidade` e `schema-e-migracao`
+  estão verdes na cabeça, nenhuma migração não aditiva espera revisão e o QA de
+  G56 foi cumprido. `--admin` dispensa só a aprovação, e o CI de `main` não tem
+  bypass (`delivery.md:193-194`). O mesmo está em
+  [github-protections.md](../../../docs/engineering/github-protections.md)
+  (`:37-42` e `:46-52`). A observação [R] bate com isso: as cinco últimas PRs de
+  produção entraram por bypass de admin, com CI exigido verde. A delegação vale
+  para a promoção `staging → main`, não para hotfix, e o dono a revoga por
+  escrito. Em 24/09 isto estava como limite à espera de aceite; agora o aceite
+  está escrito, e este item deixa de ser pendência.
+- **Limite ainda não aceito por escrito: `can_approve_pull_request_reviews: true`.**
+  Reobservado [R] hoje. O texto está documentado como limitação em
+  `github-protections.md:190-195` ("GitHub Actions pode aprovar PR"), mas nenhum
+  texto diz que o dono aceita esse risco ou decide mudá-lo.
+- **Limite ainda não aceito por escrito: `dev` e `staging` sem PR nem CI no
+  remoto.** Reobservado [R] hoje: só `deletion` e `non_fast_forward`.
+  `delivery.md:208-211` documenta que ali a regra segue por processo e hooks
+  locais. É descrição do estado, e não aceite do dono.
+- **Resíduo de identidade.** `github-protections.md:184-188` ("Uma identidade
+  só") continua descrevendo o que a delegação não muda: agentes e dono usam a
+  mesma credencial, e o GitHub não distingue quem clicou. A separação continua
+  sendo a permissão do harness. Isto vale como contexto dos dois limites acima.
+
+Esta reverificação não encontrou nada diferente do documentado. O P0-3 passa de
+"três limites a aceitar" para "dois limites a aceitar ou mudar".
+
+### (d) P0-2, inalterado [H]
+
+[deploy.md](../../../docs/engineering/deploy.md) `:1077-1080` ainda diz que a
+configuração "será aplicada no próximo deploy de produção aprovado por humano" e
+que, "até essa evidência, O-01 permanece em validação". Desde 24/09 houve
+novas promoções (a última, #452, de 02/10), e nenhuma evidência da confirmação de
+sessões de `master_jobs_app` foi registrada. Esta verificação não conecta ao
+banco de produção. **[H]:** o dono confere `pg_stat_activity`/`current_user` do
+runtime e registra o resultado em `deploy.md`, o que encerra O-01.
+
+### (e) Outras pendências, reconferidas
+
+- **[H] Vercel.** O último deployment de `Production` criado por `vercel[bot]`
+  segue sendo o de 23/09 14:38 UTC (`a3350b6a`) [R]: 12 dias sem registro da
+  Vercel, apesar de promoções até 02/10. Os deployments mais recentes (até 05/10
+  12:59 UTC) foram criados por `andreustimm`. Esta passada não investigou a
+  origem dessas entradas. A decisão de manter ou remover a política de branch do
+  ambiente (`github-protections.md:197-201`) continua com o dono.
+- **[H] #233 (CV público).** O cenário `PUB-public-cv-protected-content` não
+  está mais `untested`: o tracker o mostra como `pass`, reconfirmado na Full
+  1.29 (29/09/2026, HEAD `494aa37`) [L]. A **decisão do dono** pedida na PR #233
+  (manter o filtro por padrão ou não publicar o CV quando houver sinal de
+  remuneração) continua sem registro: a conversa da PR #233 não tem
+  comentários [R] (as revisões não foram listadas), e
+  [G23](../../../docs/engineering/rules/security.md#g23)
+  (`security.md:328-348`) descreve o filtro por padrão com limite declarado
+  ("não deve ser apresentado como sanitização perfeita"), sem dizer que o dono o
+  escolheu. O tracker tem hoje 112 cenários: 70 `pass`, 21 `untested`, 17
+  `blocked-verify`, 2 `blocked-decision` e 2 `fail`. O último relatório full é o
+  da 1.29; as versões seguintes, até a 1.33.1 atual, foram publicadas depois
+  dele. Pela regra 20, o dono confere se a cadência de full valeu para elas.
+- **Follow-ups Minor declarados nas PRs.** A busca por palavras-chave com
+  `gh issue list --state all --search` (ruleset extra, `RELEASE_PAT`,
+  `actions:read`, custo quadrático, final parecido com ano, alias de crypto,
+  G65, regra 2) não encontrou nenhuma issue [R]. Continuam sem issue:
+  - o verificador não acusa ruleset extra (#272);
+  - `RELEASE_PAT` precisaria de `actions:read` (#225);
+  - crypto importado com alias e `fetch` sem pacote de rede (#271);
+  - telefone com final parecido com ano, e custo quadrático do filtro (#233);
+  - G65 e o texto da regra 2 (#274).
+
+  A busca é por palavras, e não garante que nenhuma issue trate do assunto com
+  outras palavras.
+- **Gates que ainda não existem.**
+  - Completude G01–Gnn como gate permanente: não existe [L]. A conferência
+    acima foi avulsa. `check-instructions` continua conferindo só a coerência
+    entre âncora e linha.
+  - Corpo real da PR (E28): nenhum workflow nem script em `.github/` ou
+    `scripts/` lê o corpo da PR [L] (busca textual por `pull_request.body`,
+    `pr.body` e `event.pull_request.body`, sem resultado).
+  - `verify-protections.ts` agendado: nenhum workflow nem o `package.json` o
+    referencia [L]. Ele só roda quando alguém o executa.
+  - `e2e-navegador` obrigatório: continua não bloqueante. `NON_BLOCKING_CI_JOBS`
+    em `scripts/release/promotion-ci.ts:15`, e
+    `tests/promotion-provenance.test.ts:281` exige que a lista seja
+    exatamente `["e2e-navegador"]` [L].
+  - Existência dos arquivos citados pelo tracker de QA (E27): entregue na #308,
+    sem mudança.
+
+### (f) Veredito
+
+**Governança NÃO certificada como concluída em `46e3268f`.**
+
+O P0-2 continua aberto: a role de runtime em produção não foi observada, e só o
+dono pode fazê-lo. Enquanto ele estiver aberto, o veredito não muda. O P0-1
+segue resolvido (#308). O P0-3 perdeu o item da delegação, e restam dois limites
+sem aceite escrito.
+
+| P0 | Estado em 05/10 | O que fecha |
+|---|---|---|
+| P0-1 (G41 / V03-06) | resolvido (#308) | nada |
+| P0-2 (G80 / V05-05) | **aberto [H]** | confirmar a role no banco de produção e registrar em `deploy.md` |
+| P0-3 (G46) | parcial: delegação aceita, 2 limites abertos | aceitar por escrito, ou mudar, `can_approve_pull_request_reviews` e a ausência de PR e CI em `dev` e `staging` |
+
+O épico [#194](https://github.com/andreustimm/master-jobs/issues/194) e a #205
+**não devem ser fechados** até o dono resolver o P0-2, ou aceitá-lo por escrito
+como limite. O commit desta reverificação leva `Refs #205`, e não `Closes`.
+Nada foi publicado em `main`.
+
+Decisões que só o dono toma, na ordem do impacto: o P0-2, os dois limites do
+P0-3, a decisão da #233, a política de branch do ambiente `Production` por causa
+da Vercel, fechar ou manter abertos #205 e #194, e a criação de issues para os
+gates inexistentes.

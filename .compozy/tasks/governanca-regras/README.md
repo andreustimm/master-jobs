@@ -1,8 +1,10 @@
 # Governança das regras de desenvolvimento
 
-**Status (24/09/2026):** as tarefas 01 a 10 foram entregues e as issues
+**Status (05/10/2026):** as tarefas 01 a 10 foram entregues e as issues
 #195 a #204 estão fechadas. A verificação final (task_11) **não certificou** a
-governança como concluída: restam três pendências P0, descritas em
+governança como concluída. Na reverificação de 05/10 em `46e3268f`, o P0-1
+está resolvido (#308), o P0-2 segue aberto e o P0-3 ficou com dois limites sem
+aceite escrito do dono; ver "Reverificação 2026-10-05" em
 [_final-report.md](_final-report.md). O texto abaixo continua como fotografia
 da auditoria.
 

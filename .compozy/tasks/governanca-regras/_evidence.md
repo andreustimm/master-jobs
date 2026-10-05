@@ -194,6 +194,12 @@ Continuavam **abertas** em `c23f8ba2` (as duas foram fechadas pela #308; ver aba
   sentinela V03-06. Isso impede certificar G41.
 - **E27:** o tracker de QA não confere se os arquivos referenciados existem.
 
+Em 05/10/2026, em `46e3268f` (v1.33.1), o `pnpm check` completo voltou a passar
+(345 arquivos e 5181 testes passaram; 2 arquivos e 9 testes pulados). O
+resultado e o estado das proteções remotas estão em "Reverificação
+2026-10-05" de [_final-report.md](_final-report.md). Nenhuma evidência E01–E34
+foi reaberta ou reescrita por essa passada.
+
 **Fechadas pela #308 (24/09/2026, branch `test/governanca-g41`):**
 
 - **E16:** o gate de `architecture.test.ts` isenta `apiKeyEnv` por ocorrência
