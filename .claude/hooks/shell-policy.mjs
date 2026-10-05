@@ -1092,7 +1092,8 @@ function judgeRun(rest, value, context) {
  * ferramentas, então só `--location=project` (sem `--global`/`-g`) fica livre.
  * `get`, `list` e `ls` leem.
  */
-const TOOL_CONFIG_WRITE = new Set(["set", "delete", "rm", "edit"]);
+// `del` é apelido de `delete` no npm; `fix` regrava os arquivos de config.
+const TOOL_CONFIG_WRITE = new Set(["set", "delete", "del", "rm", "edit", "fix"]);
 const TOOL_CONFIG_READ = new Set(["get", "list", "ls"]);
 
 function judgeToolConfig(tool, args, start) {

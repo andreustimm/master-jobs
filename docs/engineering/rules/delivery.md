@@ -818,7 +818,12 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   e a política é pura (o sandbox do harness é a camada que vê o disco);
   opção de saída de programa fora da tabela (`zip`, `unzip -d`, `rsync` já
   pergunta) não é vista; `GIT_DIR=` vale para o `git` do mesmo comando, não
-  para o de dentro de `sh -c`. `git notes --ref refs/heads/main` não é
+  para o de dentro de `sh -c`. Configuração pessoal: `git config -f<arq>`
+  com o caminho colado na opção não é lido como fora do projeto, e config
+  redirecionada ao projeto por variável (`GIT_CONFIG_GLOBAL=./x`,
+  `NPM_CONFIG_USERCONFIG=./x`, `NPM_CONFIG_LOCATION=project`,
+  `npm --userconfig ./x`) pergunta mesmo assim — falso positivo seguro.
+  `git notes --ref refs/heads/main` não é
   vetor: o git prefixa `refs/notes/` (grava `refs/notes/refs/heads/main`, e
   `main` fica intacta), por isso não pergunta.
   `Bash(node:*)`,
