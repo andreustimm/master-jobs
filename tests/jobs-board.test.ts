@@ -202,6 +202,25 @@ describe("term filter over the corpus (ADR-005, ADR-012)", () => {
 
   it("IT-214b the term query can reach both trigram indexes (#214)", async () => {
     await addJob({ title: "Engineer", description: "Tech lead", page: "tech lead" });
+    const text = await planOf(() => countBoard(owner, { term: term("techlead") }));
+    expect(text).toContain("job_description_trgm_idx");
+    expect(text).toContain("job_page_text_trgm_idx");
+  });
+
+  it("IT-214c a grafia acentuada de um grupo de sinônimos também alcança o índice (#370)", async () => {
+    await addJob({ title: "Engineer", description: "Perfil sênior em plataforma." });
+    // `sênior` não tem chave ASCII, mas o trecho `nior` é condição necessária:
+    // sem ele, o `or` do grupo avaliaria o `~*` na descrição de toda linha.
+    // As duas grafias são acentuadas de propósito: sem pré-filtro nenhuma delas,
+    // a consulta nem tem `ilike`, e `planOf` recusa.
+    const text = await planOf(() =>
+      countBoard(owner, { term: term("sênior"), synonyms: { sênior: [term("júnior")] } }),
+    );
+    expect(text).toContain("job_description_trgm_idx");
+  });
+
+  /** O plano que o quadro realmente envia para `run`, com seqscan e índices de `closed_at` fora da transação. */
+  async function planOf(run: () => Promise<unknown>): Promise<string> {
     // Captura o SQL que o quadro realmente envia: a expressão do índice e a da
     // consulta precisam ser idênticas, e só o plano mostra se são.
     const client = db.$client as unknown as {
@@ -215,7 +234,7 @@ describe("term filter over the corpus (ADR-005, ADR-012)", () => {
       return original(...args);
     };
     try {
-      await countBoard(owner, { term: term("techlead") });
+      await run();
     } finally {
       client.unsafe = original;
     }
@@ -237,9 +256,8 @@ describe("term filter over the corpus (ADR-005, ADR-012)", () => {
       .catch((error: unknown) => {
         if (error !== rollback) throw error;
       });
-    expect(text).toContain("job_description_trgm_idx");
-    expect(text).toContain("job_page_text_trgm_idx");
-  });
+    return text;
+  }
 });
 
 describe("recorte implícito contra ausência no acervo (#402, achado da revisão da PR #419)", () => {

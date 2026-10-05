@@ -118,14 +118,25 @@ const TRIGRAM_RUN = /[a-z0-9]{3}/;
  * A prova vale para letras ASCII, onde `~*` e `ilike` concordam sobre caixa em
  * qualquer locale usado aqui. Acento e letra de outro alfabeto têm regras de
  * caixa que dependem da collation, e um pré-filtro que recusasse o que o `~*`
- * aceita esconderia vaga: esses termos, e os curtos demais para trigrama,
- * ficam sem pré-filtro. `%`, `_` e `\` não passam por `PREFILTER_KEY`, então o
- * padrão não precisa de escape.
+ * aceita esconderia vaga: a chave inteira nunca vai ao `ilike`.
+ *
+ * Mas a chave `sênior` contém `nior` colado, e o trecho que o padrão casa só
+ * pode ter `[ -]` entre letras — que o `replace` do índice apaga —, então
+ * `%nior%` também é condição necessária, e só com letras ASCII. Sem isso, toda
+ * grafia acentuada da lista de sinônimos (#370) deixava o grupo inteiro sem
+ * índice, porque o `or` do grupo obriga a avaliar a alternativa em toda linha.
+ * Vale o trecho ASCII mais longo (o primeiro no empate), cortado nas letras
+ * não ASCII. Outro símbolo fora de `PREFILTER_KEY` (apóstrofo, `%`, `_`) segue
+ * sem pré-filtro. O termo curto demais para trigrama também. `%`, `_` e `\`
+ * não passam por `PREFILTER_KEY`, então o padrão não precisa de escape.
  */
 export function termPrefilterLike(term: string): string | null {
   const key = termKey(term);
-  if (!PREFILTER_KEY.test(key) || !TRIGRAM_RUN.test(key)) return null;
-  return `%${key}%`;
+  if (PREFILTER_KEY.test(key)) return TRIGRAM_RUN.test(key) ? `%${key}%` : null;
+  if (![...key].every((char) => PREFILTER_KEY.test(char) || /^\p{L}$/u.test(char))) return null;
+  const runs = key.split(/[^a-z0-9+#./]+/).filter((run) => TRIGRAM_RUN.test(run));
+  const best = runs.reduce<string | null>((top, run) => (top === null || run.length > top.length ? run : top), null);
+  return best === null ? null : `%${best}%`;
 }
 
 export function matchesTerm(term: string, text: string): boolean {

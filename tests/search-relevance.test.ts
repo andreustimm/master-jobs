@@ -20,6 +20,8 @@ import {
 import type { DB } from "../src/core/db/client.ts";
 import { NEAR_LIMIT, NEAR_THRESHOLD, nearMatchesQuery } from "../src/core/db/repo.ts";
 import { candidate, job, jobScore, source } from "../src/core/db/schema.ts";
+import { loadCockpit } from "../app/cockpit-data.ts";
+import { readFilters, toBoardFilters } from "../app/filter-state.ts";
 import { loadProfile } from "../src/core/profile/load.ts";
 import { compareByRelevance, expandTerms, parseQuery, synonymMapOf } from "../src/core/search.ts";
 import { buildSynonymDictionary, EMPTY_SYNONYMS, type SynonymDictionary } from "../src/core/synonyms.ts";
@@ -345,6 +347,16 @@ describe("IT-017 sinônimos bilíngues no filtro (#370)", () => {
       minFit: 0,
     });
     expect(sorted(ids(rows))).toEqual(sorted([ptTitle, enTitle, enDescription]));
+  });
+
+  it("o cockpit conta a mesma pergunta nas facetas e no total (regressão: facetas sem sinônimo)", async () => {
+    await bilingual();
+    const state = readFilters({ q: "engenheiro", fit: "0" }, dictionary);
+    const cockpit = await loadCockpit(owner, state, toBoardFilters(state));
+    expect(cockpit.total).toBe(3);
+    expect(cockpit.facets.total).toBe(cockpit.total);
+    const off = readFilters({ q: "engenheiro", fit: "0" }, EMPTY_SYNONYMS);
+    expect((await loadCockpit(owner, off, toBoardFilters(off))).facets.total).toBe(1);
   });
 
   it("o EXISTS do vazio enxerga a vaga que só casa por sinônimo", async () => {
