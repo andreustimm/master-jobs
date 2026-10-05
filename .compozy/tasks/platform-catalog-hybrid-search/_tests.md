@@ -97,6 +97,10 @@ O residual não pode enfraquecer estes testes; cada tarefa os roda como estão.
 | US-020.EC-2 | Vetor de outro modelo é ignorado | UT-020 | — | — |
 | US-020 + A4 | Sinal semântico nunca adiciona nem remove linha do conjunto filtrado | — | IT-013 | — |
 | US-030 | Listas paginadas; execução com trabalho limitado | — | IT-004 | E2E-003 |
+| #370 Fase 0 | Lista de sinônimos válida; termo inválido ou repetido derruba a carga; flag desligada = lista vazia | UT-022 | — | — |
+| #370 Fase 0 | Termo solto expande, frase não; lista vazia devolve a entrada; o conjunto só cresce por termo listado | UT-023 | IT-017 | E2E-007 |
+| #370 Fase 0 | Flag desligada: mesmo conjunto e mesma ordem (regressão do IT-013) | UT-023 | IT-017 | — |
+| #370 Fase 0 | Explicação diz qual sinônimo casou; nunca "semântico" | UT-024 | IT-017 | E2E-007 |
 
 ## Testes unitários
 
@@ -120,6 +124,10 @@ O residual não pode enfraquecer estes testes; cada tarefa os roda como estão.
 - **UT-018** (privacidade): o construtor da entrada da análise recebe só a vaga; não aceita CV, perfil nem dossiê.
 - **UT-019** (fallback): sem vetor atual, a ordem é idêntica à lexical e a explicação não fala em semântica.
 - **UT-020** (versão): vetor de modelo ou dimensão diferente do configurado é tratado como ausente.
+- **UT-021**: reservado à fase 2 (orçamento e estado de espera da indexação).
+- **UT-022** (sinônimos, #370): `buildSynonymDictionary` valida a forma com Zod e cada entrada com `validateTerm`, recusa termo repetido (no grupo ou entre grupos) com o caminho do defeito, aceita a lista vazia e distingue acento como o filtro; a lista versionada em `config/` é válida e cobre os pares combinados; `searchSynonyms` fica vazia sem a flag (sem ler o arquivo), carrega o arquivo apontado com a flag e, com arquivo inválido ou ausente, devolve vazia e registra o defeito.
+- **UT-023** (expansão, #370): `expandTerms` expande engenheiro↔engineer, remoto↔remote e dados↔data nos dois sentidos, deixa intacto o termo fora da lista e o termo inteiro mais longo que a entrada, devolve a entrada com o dicionário vazio e nunca traz o próprio termo como alternativa; `readFilters` só expande termo solto, deixa a frase entre aspas literal e não muda nada com a lista vazia; a URL segue levando só o `q` cru.
+- **UT-024** (explicação, #370): `explainMatch` acrescenta o sinal de sinônimo só quando algum casou, depois dos campos, e continua sem sinal semântico.
 
 ## Testes de integração
 
@@ -136,6 +144,8 @@ O residual não pode enfraquecer estes testes; cada tarefa os roda como estão.
 - **IT-011**: pedido de análise idempotente sob clique duplo; nova tentativa ligada; cota esgotada → `paused_quota`; `running` sem batimento vira `interrupted` e libera novo pedido; `input_hash` diferente sinaliza vaga alterada; nenhuma coluna guarda chave.
 - **IT-012**: vaga ilegível responde como inexistente; candidato não recebe modelo nem custo; análise não escreve em `application`, `job_score` nem `candidate`.
 - **IT-013**: com vetores presentes, o sinal semântico só reordena; o conjunto filtrado é idêntico ao da busca sem vetor.
+- **IT-014 a IT-016**: reservados às fases 2 e 3 (vetor, migração, indexação).
+- **IT-017** (sinônimos, #370): com a lista vazia (ou sem entrada para o termo), conjunto, ordem e `matchedSynonyms` são os de antes em `fit`, `relevance` e `recent`; com a lista, "engenheiro" acha a vaga de título "Engineer" e a que cita "engineer", sem trazer vaga sem relação, e a contagem acompanha; a ordem por relevância continua a de `compareByRelevance` (cargo por sinônimo antes de descrição); a linha diz qual sinônimo casou (lista vazia quando só o termo digitado casou, nula sem sinônimo); termo e frase somam por E, a frase não expande; o caminho de termo único, o `EXISTS` do vazio e o grupo de termos parecidos usam as mesmas alternativas; o padrão de cada alternativa é escapado (`c++` literal).
 
 ## Testes ponta a ponta
 
@@ -144,4 +154,5 @@ O residual não pode enfraquecer estes testes; cada tarefa os roda como estão.
 - **E2E-003**: Buscar em todas com uma fonte falhando → `partial` com contagens por fonte e "desconhecido" onde faltou → tentar de novo só a falha → Atualizar status de uma fonte; telas em 375 px e varredura em inglês nas rotas novas.
 - **E2E-004**: detalhe de vaga mostra disponibilidade com última checagem; vaga nunca verificada mostra desconhecida; vaga fechada com candidatura é distinguida no histórico.
 - **E2E-005**: candidato busca `"tech lead"` com modalidade remota e ordenação por relevância → URL compartilhável, refresh preserva, explicação por campo visível, grupo de termos parecidos rotulado e separado; remover `q` volta à ordenação por fit.
+- **E2E-007** (sinônimos, #370): com `SEARCH_SYNONYMS_ENABLED` ligada no ambiente do runner, `engenheiro` isolado por empresa traz a vaga em português e a só em inglês, a segunda com "também buscou: engineer" (termo marcado `data-user-content`) e a primeira sem a nota; a frase `"engenheiro"` não expande; em 375 px sem estouro e com a nota à vista; refresh preserva; nenhuma menção a semântico.
 - **E2E-006**: candidato pede análise → pendente sobrevive a refresh → processador pela CLI com provedor falso → campos, desconhecidos e evidências visíveis; admin vê versão e custo; após alterar o texto da vaga, aparece o aviso de análise desatualizada.

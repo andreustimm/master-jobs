@@ -125,6 +125,7 @@ export const ptBR = {
     matchLocation: "localização",
     matchDescription: "descrição",
     matchProximity: "título parecido",
+    matchSynonym: "também buscou:",
     nearTitle: "Termos parecidos",
     nearHint: "Vagas que não citam a busca, mas têm título parecido. Não entram na contagem acima.",
     newBadge: "nova",

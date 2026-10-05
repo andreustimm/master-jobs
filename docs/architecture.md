@@ -323,6 +323,13 @@ completa de problemas no formato `path: message`:
 | `profile/profile.yaml` | `loadProfile(force = false)` (cache em módulo) | `ProfileSchema` | `JHO_PROFILE_PATH` |
 | `config/sources.yaml` | `loadSources()` (devolve toda entrada, com `enabled`; o sync seleciona do banco) | `SourcesFile` | `JHO_SOURCES_PATH` |
 
+`config/search-synonyms.yaml` (sinônimos bilíngues da busca de Vagas, #370) é
+validado do mesmo jeito por `buildSynonymDictionary` (`src/core/synonyms.ts`,
+puro); a flag, o caminho (`JHO_SEARCH_SYNONYMS_PATH`) e a leitura em cache ficam
+na composição, `src/core/synonyms-load.ts`. Só vale com
+`SEARCH_SYNONYMS_ENABLED=1`; arquivo ilegível com a flag ligada deixa a busca
+como era e registra o defeito no log.
+
 `scoreAll()` chama `loadProfile(true)` — força releitura, para que editar o
 YAML e rodar o score na sequência não use um perfil em cache.
 
@@ -503,6 +510,8 @@ que seguram o núcleo determinístico.
 | `DATABASE_CA_CERT` | `db/client.ts` | CA opcional para PostgreSQL gerenciado. |
 | `JHO_PROFILE_PATH` | `profile/load.ts` | Override do caminho de `profile.yaml`. |
 | `JHO_SOURCES_PATH` | `sources/config.ts` | Override do caminho de `sources.yaml`. |
+| `SEARCH_SYNONYMS_ENABLED` | `synonyms-load.ts` | `1` ou `true` liga a expansão por sinônimo da busca de Vagas (#370); ausente, desligada. Não é segredo. |
+| `JHO_SEARCH_SYNONYMS_PATH` | `synonyms-load.ts` | Override do caminho de `config/search-synonyms.yaml`. |
 | `JHO_USER_AGENT` | `sources/http.ts` | Header `user-agent` em toda requisição; fallback `master-jobs/0.1 (personal job search)`. |
 | `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | `sources/aggregators.ts` | Sem elas o adapter `adzuna` retorna 0 jobs + warning, em vez de falhar. |
 | `JHO_VAULT_PATH` | `report/markdown.ts` | Raiz do vault Obsidian; ausente e sem `--out`, `buildReport()` retorna `path: null` e nada é escrito. |

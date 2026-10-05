@@ -128,6 +128,7 @@ export const en: Dictionary = {
     matchLocation: "location",
     matchDescription: "description",
     matchProximity: "similar title",
+    matchSynonym: "also searched:",
     nearTitle: "Similar terms",
     nearHint: "Jobs that do not mention your search but have a similar title. They are not in the count above.",
     newBadge: "new",

@@ -13,6 +13,7 @@ import {
   listBoard,
   nearMatches,
   setMatchingProfile,
+  termExistsInOpenCorpus,
   trackScope,
   type BoardFilters,
 } from "../src/contexts/matching/index.ts";
@@ -20,7 +21,8 @@ import type { DB } from "../src/core/db/client.ts";
 import { NEAR_LIMIT, NEAR_THRESHOLD, nearMatchesQuery } from "../src/core/db/repo.ts";
 import { candidate, job, jobScore, source } from "../src/core/db/schema.ts";
 import { loadProfile } from "../src/core/profile/load.ts";
-import { compareByRelevance, parseQuery } from "../src/core/search.ts";
+import { compareByRelevance, expandTerms, parseQuery, synonymMapOf } from "../src/core/search.ts";
+import { buildSynonymDictionary, EMPTY_SYNONYMS, type SynonymDictionary } from "../src/core/synonyms.ts";
 import { validateTerm, type ValidTerm } from "../src/core/term.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 
@@ -241,6 +243,144 @@ describe("IT-010 grupo de termos parecidos", () => {
     await db.execute(sql`drop extension pg_trgm cascade`);
     expect(ids(await listBoard(owner, { query: query("kubernets") }))).toEqual([hit]);
     expect(await nearMatches(owner, { query: query("kubernets") })).toEqual({ available: false, rows: [] });
+  });
+});
+
+const dictionary = buildSynonymDictionary({
+  groups: [["engenheiro", "engineer"], ["remoto", "remote"], ["dados", "data"]],
+});
+
+/** A consulta como a tela monta com a flag ligada: termos e os sinônimos da lista. */
+function withSynonyms(raw: string, list: SynonymDictionary = dictionary): BoardFilters {
+  const parsed = query(raw)!;
+  return { query: parsed, synonyms: synonymMapOf(expandTerms(parsed.terms, list)) };
+}
+
+describe("IT-017 sinônimos bilíngues no filtro (#370)", () => {
+  async function bilingual() {
+    return {
+      ptTitle: await addJob({ title: "Engenheiro de Software", description: "Atuação em plataforma." }, 60),
+      enTitle: await addJob({ title: "Software Engineer", description: "Platform work." }, 60),
+      enDescription: await addJob({ title: "Backend Developer", description: "You will be an engineer on the team." }, 90),
+      unrelated: await addJob({ title: "Designer de Produto", description: "Figma." }, 95),
+    };
+  }
+
+  it("com a lista vazia, o conjunto e a ordem são os de antes (regressão do IT-013)", async () => {
+    await reference();
+    await bilingual();
+    for (const raw of ["tech lead", '"tech lead"', "engenheiro", "engenheiro remoto", 'lead "tech lead"']) {
+      for (const sort of ["fit", "relevance", "recent"] as const) {
+        const before = await listBoard(owner, { query: query(raw), minFit: 0, sort });
+        const empty = await listBoard(owner, { ...withSynonyms(raw, EMPTY_SYNONYMS), minFit: 0, sort });
+        const noMatch = await listBoard(owner, { ...withSynonyms(raw), synonyms: { outro: [valid("other")] }, minFit: 0, sort });
+        expect(ids(empty), `${raw} ${sort}`).toEqual(ids(before));
+        expect(ids(noMatch), `${raw} ${sort}`).toEqual(ids(before));
+        expect(empty.map((row) => row.matchedSynonyms)).toEqual(before.map(() => null));
+      }
+    }
+  });
+
+  it("'engenheiro' acha a vaga cujo título é 'Engineer' e as que citam engineer, sem trazer o que não tem relação", async () => {
+    const { ptTitle, enTitle, enDescription, unrelated } = await bilingual();
+    const without = await listBoard(owner, { query: query("engenheiro"), minFit: 0 });
+    expect(ids(without)).toEqual([ptTitle]);
+
+    const filters: BoardFilters = { ...withSynonyms("engenheiro"), minFit: 0 };
+    const rows = await listBoard(owner, { ...filters, sort: "relevance" });
+    expect(sorted(ids(rows))).toEqual(sorted([ptTitle, enTitle, enDescription]));
+    expect(ids(rows)).not.toContain(unrelated);
+    // O conjunto só cresceu, e a contagem acompanha a lista.
+    for (const id of ids(without)) expect(ids(rows)).toContain(id);
+    expect(await countBoard(owner, filters)).toBe(3);
+  });
+
+  it("a ordem por relevância se mantém: cargo antes de descrição, mesmo por sinônimo", async () => {
+    const { ptTitle, enTitle, enDescription } = await bilingual();
+    const rows = await listBoard(owner, { ...withSynonyms("engenheiro"), minFit: 0, sort: "relevance" });
+    // Os dois cargos (fit 60, empate resolvido por recência e id) antes da descrição (fit 90).
+    expect(ids(rows)).toEqual([ptTitle, enTitle, enDescription]);
+    const ranked = rows.map((row) => ({
+      id: row.jobId,
+      fields: row.matchedFields ?? [],
+      fit: row.fit,
+      postedAt: row.postedAt ?? row.firstSeenAt,
+    }));
+    expect([...ranked].sort(compareByRelevance).map((row) => row.id)).toEqual(ids(rows));
+  });
+
+  it("a explicação diz qual sinônimo casou; sem sinônimo casado, lista vazia, não nula", async () => {
+    const { ptTitle, enTitle, enDescription } = await bilingual();
+    const rows = await listBoard(owner, { ...withSynonyms("engenheiro"), minFit: 0 });
+    const byId = new Map(rows.map((row) => [row.jobId, row]));
+    expect(byId.get(ptTitle)!.matchedSynonyms).toEqual([]);
+    expect(byId.get(enTitle)!.matchedSynonyms).toEqual(["engineer"]);
+    expect(byId.get(enTitle)!.matchedFields).toEqual(["title"]);
+    expect(byId.get(enDescription)!.matchedSynonyms).toEqual(["engineer"]);
+    expect(byId.get(enDescription)!.matchedFields).toEqual(["description"]);
+  });
+
+  it("os termos se combinam com E entre grupos e OU dentro do grupo", async () => {
+    const platformEn = await addJob({ title: "Software Engineer", description: "Platform work." });
+    const billingEn = await addJob({ title: "Software Engineer", description: "Billing work." });
+    const platformPt = await addJob({ title: "Engenheiro", description: "Time de platform." });
+    // O termo solto expande; a frase ao lado continua obrigatória e literal.
+    const rows = await listBoard(owner, { ...withSynonyms('engenheiro "platform"'), minFit: 0 });
+    expect(sorted(ids(rows))).toEqual(sorted([platformEn, platformPt]));
+    expect(ids(rows)).not.toContain(billingEn);
+  });
+
+  it("frase entre aspas é literal: não expande", async () => {
+    const { ptTitle } = await bilingual();
+    const rows = await listBoard(owner, { ...withSynonyms('"engenheiro"'), minFit: 0 });
+    expect(ids(rows)).toEqual([ptTitle]);
+    expect(rows[0]!.matchedSynonyms).toBeNull();
+  });
+
+  it("o caminho de termo único (CLI e cockpit) expande do mesmo jeito", async () => {
+    const { ptTitle, enTitle, enDescription } = await bilingual();
+    const rows = await listBoard(owner, {
+      term: valid("engenheiro"),
+      synonyms: synonymMapOf(expandTerms([valid("engenheiro")], dictionary)),
+      minFit: 0,
+    });
+    expect(sorted(ids(rows))).toEqual(sorted([ptTitle, enTitle, enDescription]));
+  });
+
+  it("o EXISTS do vazio enxerga a vaga que só casa por sinônimo", async () => {
+    await addJob({ title: "Software Engineer", description: "Platform work." });
+    expect(await termExistsInOpenCorpus({ query: query("engenheiro") })).toBe(false);
+    const filters = withSynonyms("engenheiro");
+    expect(await termExistsInOpenCorpus({ query: filters.query, synonyms: filters.synonyms })).toBe(true);
+  });
+
+  it("o grupo de termos parecidos não repete o que o sinônimo já trouxe", async () => {
+    const hit = await addJob({ title: "Kubernetes Engineer" });
+    const list = buildSynonymDictionary({ groups: [["kubernets", "kubernetes"]] });
+    const filters = { ...withSynonyms("kubernets", list), minFit: 0 };
+    expect(ids(await listBoard(owner, filters))).toEqual([hit]);
+    const near = await nearMatches(owner, filters);
+    expect(near.rows.map((row) => row.jobId)).not.toContain(hit);
+  });
+
+  it("a chave é o que a pessoa digitou: 'constructor' e '__proto__' não viram sinônimo", async () => {
+    const hit = await addJob({ title: "Constructor Engineer" });
+    for (const raw of ["constructor", "tostring", "hasownproperty"]) {
+      const filters = { ...withSynonyms(raw), minFit: 0 };
+      expect(filters.synonyms, raw).toEqual({});
+      await expect(listBoard(owner, filters), raw).resolves.toBeDefined();
+    }
+    expect(ids(await listBoard(owner, { ...withSynonyms("constructor"), minFit: 0 }))).toEqual([hit]);
+  });
+
+  it("o padrão de cada alternativa é escapado: 'c++' é literal, não quantificador", async () => {
+    const cpp = await addJob({ title: "C++ Developer" });
+    await addJob({ title: "C Developer" });
+    await addJob({ title: "Ccc Developer" });
+    const list = buildSynonymDictionary({ groups: [["sistemas", "c++"]] });
+    const rows = await listBoard(owner, { ...withSynonyms("sistemas", list), minFit: 0 });
+    expect(ids(rows)).toEqual([cpp]);
+    expect(rows[0]!.matchedSynonyms).toEqual(["c++"]);
   });
 });
 

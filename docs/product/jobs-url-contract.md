@@ -75,6 +75,17 @@ em algum campo. Aspas desbalanceadas viram texto simples. A localização entrou
 no filtro com a #223 (adenda A4); numa consulta que não aparece em nenhuma
 localização, o conjunto é o mesmo de antes.
 
+**Com `SEARCH_SYNONYMS_ENABLED` ligada, um termo solto também casa seus
+sinônimos da lista curada** (`config/search-synonyms.yaml`, #370, Fase 0):
+`engenheiro` acha "Engineer", `remoto` acha "remote". Cada termo vira um grupo
+`OU` com os sinônimos e os grupos continuam somando por `E`. Só o termo
+digitado INTEIRO expande (`engenheiro de dados` só expande se a frase inteira
+estiver na lista); texto entre aspas é literal e nunca expande; a chave segue
+a do filtro (sem caixa, espaço nem hífen, com acento). A URL continua levando só
+o `q` cru, e o conjunto só cresce por termo listado. Desligada (padrão) ou com a
+lista vazia, a busca é a de antes. Cada linha diz qual sinônimo casou
+("também buscou: engineer"); nada fala em semântica.
+
 **`sort=relevance` só ordena, e só com `q`.** A ordem é o campo mais forte onde
 a consulta casou (cargo, depois empresa, depois localização e descrição),
 então fit, recência e id — a mesma de `compareByRelevance` em

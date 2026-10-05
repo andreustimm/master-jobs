@@ -205,6 +205,22 @@ try {
       locationRaw: "Remote · Brazil",
       remote: true,
     },
+    // Sinônimos bilíngues (#370, E2E-007): uma vaga só em inglês e uma em
+    // português; a consulta "engenheiro" só acha a primeira com a lista ligada.
+    {
+      id: 907000000,
+      title: "Backend Engineer Synonym Fixture",
+      companyName: "Synonym QA",
+      locationRaw: "Remote · Brazil",
+      remote: true,
+    },
+    {
+      id: 907000001,
+      title: "Engenheiro Synonym Fixture",
+      companyName: "Synonym QA",
+      locationRaw: "Remote · Brazil",
+      remote: true,
+    },
     ...Array.from({ length: 7 }, (_, index) => ({
       id: 901000000 + index,
       title: `Task 04 typical fixture ${index + 1}`,

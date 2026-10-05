@@ -6,6 +6,8 @@
  * (`term.ts`) continua sendo o único juiz de QUAIS vagas voltam; isto só decide
  * a ORDEM e o que a tela diz sobre cada uma (adenda A4).
  */
+import { synonymsOf, type SynonymDictionary } from "./synonyms.ts";
+import type { ValidTerm } from "./term.ts";
 
 export type ParsedQuery = {
   /** Trechos fora de aspas, cada um com a semântica do termo de sempre. */
@@ -36,6 +38,33 @@ export function parseQuery(raw: string): ParsedQuery {
     (index % 2 === 1 ? phrases : terms).push(text);
   });
   return { terms, phrases };
+}
+
+export type ExpandedTerm = { term: ValidTerm; alternatives: ValidTerm[] };
+
+/**
+ * Sinônimos de cada termo da consulta, pela chave de `termKey` do termo
+ * digitado. Só tem entrada quem ganhou alternativa; vazio é a busca de sempre.
+ */
+export type SynonymMap = Readonly<Record<string, readonly ValidTerm[]>>;
+
+/**
+ * Cada termo vira ele mesmo mais os sinônimos da lista curada (#370, Fase 0).
+ * Só os termos soltos passam por aqui: a frase entre aspas é literal e nem
+ * entra. Dicionário vazio devolve cada termo sem alternativa, e a lista nunca
+ * traz o próprio termo como alternativa.
+ */
+export function expandTerms(terms: readonly ValidTerm[], dictionary: SynonymDictionary): ExpandedTerm[] {
+  return terms.map((term) => ({
+    term,
+    alternatives: synonymsOf(dictionary, term).filter((alt) => alt.key !== term.key),
+  }));
+}
+
+export function synonymMapOf(expanded: readonly ExpandedTerm[]): SynonymMap {
+  return Object.fromEntries(
+    expanded.filter((item) => item.alternatives.length > 0).map((item) => [item.term.key, item.alternatives]),
+  );
 }
 
 export type MatchField = "title" | "company" | "location" | "description";
@@ -75,18 +104,27 @@ export function compareByRelevance(a: RankedRow, b: RankedRow): number {
   return a.id - b.id;
 }
 
-export type MatchSignal = { kind: "field"; field: MatchField } | { kind: "proximity" };
+export type MatchSignal =
+  | { kind: "field"; field: MatchField }
+  | { kind: "proximity" }
+  | { kind: "synonym"; terms: string[] };
 
 /**
  * Só o que de fato contribuiu: cada campo casado, uma vez, na ordem de força,
- * e a proximidade quando foi ela que trouxe a vaga. Não existe sinal
- * "semântico": sem vetor persistido não há o que dizer, e a tela não finge.
+ * a proximidade quando foi ela que trouxe a vaga e os sinônimos da lista
+ * curada que casaram. Não existe sinal "semântico": sem vetor persistido não
+ * há o que dizer, e a tela não finge.
  */
-export function explainMatch(input: { fields: readonly MatchField[]; proximity: boolean }): MatchSignal[] {
+export function explainMatch(input: {
+  fields: readonly MatchField[];
+  proximity: boolean;
+  synonyms?: readonly string[];
+}): MatchSignal[] {
   const signals: MatchSignal[] = FIELD_ORDER.filter((field) => input.fields.includes(field)).map((field) => ({
     kind: "field",
     field,
   }));
   if (input.proximity) signals.push({ kind: "proximity" });
+  if (input.synonyms && input.synonyms.length > 0) signals.push({ kind: "synonym", terms: [...input.synonyms] });
   return signals;
 }

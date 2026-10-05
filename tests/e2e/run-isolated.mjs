@@ -256,6 +256,9 @@ try {
     DATABASE_URL: testDatabase.url,
     DATABASE_MIGRATION_URL: testDatabase.url,
     JHO_TEST_DATABASE_URL: testDatabase.url,
+    // A lista de sinônimos é opt-in (#370); só o ambiente do harness a liga,
+    // para a área `search-synonyms` provar o caminho ligado sem tocar o padrão.
+    SEARCH_SYNONYMS_ENABLED: "1",
     E2E_BASE: base,
     E2E_RESET_EXPIRED_TOKEN: TASK04_FIXTURES.resetExpiredToken,
     E2E_RESET_CONSUMED_TOKEN: TASK04_FIXTURES.resetConsumedToken,

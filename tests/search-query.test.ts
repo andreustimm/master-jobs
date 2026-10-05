@@ -4,8 +4,17 @@
  */
 import { describe, expect, it } from "vitest";
 import { readFilters, toBoardFilters, toParams } from "../app/filter-state.ts";
-import { compareByRelevance, explainMatch, parseQuery, relevanceRank, type RankedRow } from "../src/core/search.ts";
-import { matchesTerm, phraseRegexSql, termPrefilterLike } from "../src/core/term.ts";
+import {
+  compareByRelevance,
+  expandTerms,
+  explainMatch,
+  parseQuery,
+  relevanceRank,
+  synonymMapOf,
+  type RankedRow,
+} from "../src/core/search.ts";
+import { buildSynonymDictionary, EMPTY_SYNONYMS } from "../src/core/synonyms.ts";
+import { matchesTerm, phraseRegexSql, termPrefilterLike, validateTerm, type ValidTerm } from "../src/core/term.ts";
 
 describe("UT-013 análise da consulta", () => {
   it("sem aspas, o texto é UM termo, como antes da tarefa", () => {
@@ -123,5 +132,86 @@ describe("UT-015 explicação honesta", () => {
     const every = explainMatch({ fields: ["title", "company", "location", "description"], proximity: true });
     expect(every.map((signal) => signal.kind)).not.toContain("semantic");
     expect(JSON.stringify(every)).not.toMatch(/seman/i);
+  });
+
+  it("UT-024 sinônimo só aparece quando algum casou, e depois dos campos", () => {
+    expect(explainMatch({ fields: ["title"], proximity: false, synonyms: [] })).toEqual([{ kind: "field", field: "title" }]);
+    expect(explainMatch({ fields: ["title"], proximity: false, synonyms: ["engineer"] })).toEqual([
+      { kind: "field", field: "title" },
+      { kind: "synonym", terms: ["engineer"] },
+    ]);
+    const withSynonym = explainMatch({ fields: ["title", "description"], proximity: true, synonyms: ["remote"] });
+    expect(JSON.stringify(withSynonym)).not.toMatch(/seman/i);
+  });
+});
+
+const dictionary = buildSynonymDictionary({
+  groups: [
+    ["engenheiro", "engineer"],
+    ["remoto", "remote"],
+    ["dados", "data"],
+    ["líder técnico", "tech lead", "technical lead"],
+  ],
+});
+
+const valid = (raw: string): ValidTerm => {
+  const result = validateTerm(raw);
+  if (!result.ok) throw new Error(result.code);
+  return result.value;
+};
+
+const alternativesOf = (raw: string) =>
+  expandTerms([valid(raw)], dictionary)[0]!.alternatives.map((alternative) => alternative.term);
+
+describe("UT-023 expansão por sinônimo", () => {
+  it("engenheiro↔engineer, remoto↔remote, dados↔data, nos dois sentidos", () => {
+    expect(alternativesOf("engenheiro")).toEqual(["engineer"]);
+    expect(alternativesOf("engineer")).toEqual(["engenheiro"]);
+    expect(alternativesOf("remoto")).toEqual(["remote"]);
+    expect(alternativesOf("remote")).toEqual(["remoto"]);
+    expect(alternativesOf("dados")).toEqual(["data"]);
+    expect(alternativesOf("Data")).toEqual(["dados"]);
+  });
+
+  it("termo fora da lista fica intacto", () => {
+    expect(expandTerms([valid("java")], dictionary)).toEqual([{ term: valid("java"), alternatives: [] }]);
+  });
+
+  it("dicionário vazio devolve exatamente a entrada", () => {
+    const terms = [valid("engenheiro"), valid("remoto")];
+    expect(expandTerms(terms, EMPTY_SYNONYMS)).toEqual(terms.map((term) => ({ term, alternatives: [] })));
+    expect(synonymMapOf(expandTerms(terms, EMPTY_SYNONYMS))).toEqual({});
+  });
+
+  it("não cruza a fronteira do termo: só o termo inteiro expande", () => {
+    expect(alternativesOf("engenheiro de dados")).toEqual([]);
+    expect(alternativesOf("engenh")).toEqual([]);
+  });
+
+  it("o conjunto só cresce por termo da lista, e o termo digitado segue primeiro", () => {
+    const terms = [valid("engenheiro"), valid("java"), valid("tech-lead")];
+    const expanded = expandTerms(terms, dictionary);
+    expect(expanded.map((item) => item.term)).toEqual(terms);
+    expect(expanded.map((item) => item.alternatives.map((alt) => alt.term))).toEqual([
+      ["engineer"],
+      [],
+      ["líder técnico", "technical lead"],
+    ]);
+    // Nunca devolve o próprio termo como alternativa.
+    for (const item of expanded) expect(item.alternatives.map((alt) => alt.key)).not.toContain(item.term.key);
+  });
+
+  it("a URL: frase entre aspas não expande; termo solto expande; a flag desligada não muda nada", () => {
+    const on = readFilters({ q: '"engenheiro" remoto' }, dictionary);
+    expect(on.query?.phrases.map((phrase) => phrase.term)).toEqual(["engenheiro"]);
+    expect(Object.keys(on.query?.synonyms ?? {})).toEqual(["remoto"]);
+    expect(toBoardFilters(on).synonyms).toEqual({ remoto: [valid("remote")] });
+    // A URL continua levando só a consulta crua.
+    expect(toParams(on)).toContainEqual(["q", '"engenheiro" remoto']);
+
+    const off = readFilters({ q: '"engenheiro" remoto' }, EMPTY_SYNONYMS);
+    expect(off.query?.synonyms).toBeUndefined();
+    expect(toBoardFilters(off).synonyms).toBeUndefined();
+    expect(readFilters({ q: '"engenheiro" remoto' })).toEqual(off);
   });
 });
