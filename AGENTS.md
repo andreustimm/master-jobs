@@ -219,6 +219,13 @@ commit. [[G62](docs/engineering/rules/delivery.md#g62)]
   symlink. Skill ensina procedimento, não concede autorização; publicar na PR
   exige `--publish` ou pedido explícito.
   [[G61](docs/engineering/rules/delivery.md#g61)]
+- A memória local dos agentes vive em `.claude/memory/` da checkout
+  principal, fora do Git; `.codex/memory` e `.opencode/memory` são symlinks
+  para ela, e o Claude Code a carrega sozinho. Codex e OpenCode leem
+  `MEMORY.md` (índice) e abrem só o arquivo que a tarefa toca; em worktree,
+  a pasta fica ao lado do diretório que `git rev-parse --git-common-dir`
+  devolve. Memória é contexto, não estado (regra 24).
+  [[workflow.md](docs/engineering/workflow.md#compozy-memória-e-evidências)]
 - Agentes (`.claude/agents/`) e permissões (`.claude/settings.json`) são a
   fonte; os espelhos de Codex e OpenCode saem de `pnpm harness:sync` e são
   conferidos por `pnpm check:harness`. Papéis: `task-analyst`, `executor`,
