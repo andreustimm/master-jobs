@@ -1,19 +1,14 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "Política de versões (issue #468, docs/engineering/versions.md): tudo na versão mais nova, por PR que só entra com o CI verde.",
+  "description": "Política de versões (issue #468, docs/engineering/versions.md): tudo na versão mais nova, por PR para dev que segue o fluxo normal (revisão no nível, juiz e merge com o CI verde). Sem mescla automática: liberá-la exige exceção às regras 19 e 24 decidida pelo dono.",
   "extends": ["config:recommended", ":dependencyDashboard"],
   "baseBranchPatterns": ["dev"],
   "timezone": "America/Sao_Paulo",
   "schedule": ["* 0-6 * * *"],
-  "automergeSchedule": ["* 0-6 * * *"],
   "minimumReleaseAge": "1 day",
   "rangeStrategy": "bump",
   "postUpdateOptions": ["pnpmDedupe"],
-  "automerge": true,
-  "automergeType": "pr",
-  "automergeStrategy": "merge-commit",
-  "platformAutomerge": false,
-  "ignoreTests": false,
+  "automerge": false,
   "branchPrefix": "chore/renovate-",
   "branchNameStrict": true,
   "semanticCommits": "enabled",
@@ -23,7 +18,7 @@
   "commitMessageTopic": "{{depName}}",
   "commitMessageExtra": "para {{#if isPinDigest}}{{{newDigestShort}}}{{else}}{{#if isMajor}}{{prettyNewMajor}}{{else}}{{#if isSingleVersion}}{{prettyNewVersion}}{{else}}{{#if newValue}}{{{newValue}}}{{else}}{{{newDigestShort}}}{{/if}}{{/if}}{{/if}}{{/if}}",
   "prBodyNotes": [
-    "Atualização automática da política de versões ([#468](https://github.com/andreustimm/master-jobs/issues/468), `docs/engineering/versions.md`). Entra sozinha só com todos os checks verdes; quebra se resolve adaptando o código, nunca rebaixando a versão."
+    "Atualização automática da política de versões ([#468](https://github.com/andreustimm/master-jobs/issues/468), `docs/engineering/versions.md`). Não entra sozinha: segue o fluxo normal de PR (revisão no nível do diff, juiz e merge com o CI verde). Quebra se resolve adaptando o código, nunca rebaixando a versão."
   ],
   "labels": ["dependências"],
   "assignees": ["andreustimm"],
@@ -35,7 +30,7 @@
   },
   "lockFileMaintenance": {
     "enabled": true,
-    "automerge": true,
+    "automerge": false,
     "schedule": ["* 0-6 * * 1"]
   },
   "customManagers": [
@@ -54,9 +49,10 @@
     },
     {
       "customType": "regex",
-      "description": "PostgreSQL descartável que os testes e o ensaio de migração sobem pelo Docker.",
-      "managerFilePatterns": ["/^tests/support/postgres-global\\.ts$/", "/^scripts/migration/rehearse-production\\.ts$/"],
-      "matchStrings": ["\"(?<depName>postgres):(?<currentValue>\\d+)\""],
+      "description": "Major mais nova do PostgreSQL descartável (testes e ensaio de migração). Só a chave `latest`: a `production` é a do Supabase e o CI continua a testá-la quando a mais nova sobe.",
+      "managerFilePatterns": ["/^config/postgres-majors\\.json$/"],
+      "matchStrings": ["\"latest\":\\s*\"(?<currentValue>\\d+)\""],
+      "depNameTemplate": "postgres",
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
     },
@@ -99,34 +95,48 @@
       "description": "npm: minor e patch num PR só por rodada; cada major em PR próprio, para a quebra de um não segurar os outros.",
       "matchManagers": ["npm"],
       "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
-      "groupName": "dependências npm (minor e patch)"
+      "groupName": "dependências npm (minor e patch)",
+      "automerge": false
     },
     {
       "description": "pnpm (packageManager) anda sozinho: troca de major muda a configuração lida (pnpm-workspace.yaml).",
       "matchManagers": ["npm"],
       "matchDepTypes": ["packageManager"],
-      "groupName": "pnpm"
+      "groupName": "pnpm",
+      "automerge": false
+    },
+    {
+      "description": "Major do pnpm só depois de a Vercel instalar a major nova no build (ela lê `packageManager`): o CI não roda o build da Vercel.",
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["packageManager"],
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["dependências", "confirmar-vercel"]
     },
     {
       "description": "Actions e etiquetas de runner num PR só por rodada, inclusive major.",
       "matchManagers": ["github-actions"],
-      "groupName": "GitHub Actions e runners"
+      "groupName": "GitHub Actions e runners",
+      "automerge": false
     },
     {
       "description": "Etiqueta do runner dentro da expressão do ci.yml anda junto com as Actions.",
       "matchDatasources": ["github-runners"],
-      "groupName": "GitHub Actions e runners"
+      "groupName": "GitHub Actions e runners",
+      "automerge": false
     },
     {
       "description": "Imagens Docker (Dockerfile, runner próprio, Compose, Postgres dos testes), menos o Node, que é runtime.",
       "matchDatasources": ["docker"],
       "matchPackageNames": ["!node"],
-      "groupName": "imagens Docker"
+      "groupName": "imagens Docker",
+      "automerge": false
     },
     {
       "description": "Runtime Node: .nvmrc, engines.node, imagens node:* e @types/node sobem juntos (scripts/versions/check.ts reprova majors divergentes).",
       "matchPackageNames": ["node", "@types/node"],
-      "groupName": "runtime Node"
+      "groupName": "runtime Node",
+      "automerge": false
     },
     {
       "description": "Major do Node só depois de a Vercel aceitar a major nova em produção (docs.vercel.com, 'Supported Node.js versions'): o CI não roda o build da Vercel, então verde aqui não prova o deploy.",
@@ -136,9 +146,10 @@
       "labels": ["dependências", "confirmar-vercel"]
     },
     {
-      "description": "Python dos scripts (.python-version).",
-      "matchManagers": ["pyenv"],
-      "groupName": "Python"
+      "description": "Python dos scripts: .python-version e a imagem python:* do runner próprio sobem juntos (o build da imagem reprova se divergirem).",
+      "matchPackageNames": ["python"],
+      "groupName": "Python",
+      "automerge": false
     },
     {
       "description": "Major do Sentry muda o formato do que sai (o 11 passou a transmitir spans em fluxo); a peneira de privacidade precisa ser revista antes. tests/instrumentation-guard.test.ts trava a major.",

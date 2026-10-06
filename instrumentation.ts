@@ -75,8 +75,8 @@ async function iniciarRelato(): Promise<void> {
 
   const Sentry = sdkComPeneiraDeSpan(await import("@sentry/nextjs"));
   /**
-   * A configuração inteira — peneiras, amostragem, `sendDefaultPii: false`,
-   * nenhuma propagação de trace — mora em `src/core/observability.ts`, pura,
+   * A configuração inteira — peneiras, amostragem, `dataCollection` toda
+   * desligada, nenhuma propagação de trace — mora em `src/core/observability.ts`, pura,
    * porque aqui dentro nenhum teste a alcançava. É ela que carrega a promessa
    * de privacidade: a pilha atravessa driver e biblioteca de terceiro, o
    * driver do PostgreSQL traz a URL de conexão com senha no texto da exceção,

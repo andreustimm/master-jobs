@@ -369,7 +369,7 @@ jobs:
     # sem migração correspondente passa em todos os testes — eles rodam sobre um
     # banco recriado do zero — e quebra só no ambiente que já tem dado.
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v7
@@ -396,6 +396,14 @@ jobs:
             exit 1
           fi
           echo "Schema e migrações em sincronia."
+
+      - name: Banco nas majors do PostgreSQL declaradas
+        # A suíte inteira roda na major mais nova; a produção é Supabase
+        # Postgres 17. Aqui os testes de schema, migração, upgrade e
+        # integridade, e o ensaio de corte, rodam em cada major de
+        # `config/postgres-majors.json` — a da produção e a mais nova. As
+        # majors moram só naquele arquivo; este passo não repete nenhuma.
+        run: pnpm test:postgres-majors
 
   e2e-navegador:
     # A suíte `pnpm test:e2e` inteira — interface, papéis, 320–1024 px, inglês,

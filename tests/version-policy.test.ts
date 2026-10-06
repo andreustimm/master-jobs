@@ -8,6 +8,14 @@
 // Boundary OUT: qual é a versão mais nova (rede) — papel do Renovate.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import YAML from "yaml";
+import {
+  majorFromServerVersionNum,
+  parsePostgresMajors,
+  postgresTestImage,
+  readPostgresMajors,
+  testedPostgresMajors,
+} from "../scripts/versions/postgres-majors.ts";
 import {
   checkRepository,
   composeViolations,
@@ -169,26 +177,109 @@ describe("o repositório cumpre a política", () => {
   });
 });
 
+describe("majors do PostgreSQL testadas", () => {
+  const majors = { latest: "18", production: "17" };
+
+  it("o arquivo declara a da produção (Supabase 17) e a mais nova, nunca abaixo dela", () => {
+    const declarado = readPostgresMajors();
+    expect(declarado.production).toBe("17");
+    expect(Number(declarado.latest)).toBeGreaterThanOrEqual(Number(declarado.production));
+    expect(testedPostgresMajors(declarado)).toContain(declarado.production);
+  });
+
+  it("sem variável, a mais nova; com ela, a major pedida entre as declaradas", () => {
+    expect(postgresTestImage({}, majors)).toBe("postgres:18");
+    expect(postgresTestImage({ JHO_TEST_POSTGRES_MAJOR: "  " }, majors)).toBe("postgres:18");
+    expect(postgresTestImage({ JHO_TEST_POSTGRES_MAJOR: "17" }, majors)).toBe("postgres:17");
+  });
+
+  it("major fora da lista, ou que não é major, recusa em vez de subir qualquer imagem", () => {
+    for (const pedido of ["16", "19", "latest", "17.6", "postgres:17"]) {
+      expect(() => postgresTestImage({ JHO_TEST_POSTGRES_MAJOR: pedido }, majors), pedido).toThrow("fora de config/postgres-majors.json");
+    }
+    expect(() => parsePostgresMajors('{"latest":"18"}')).toThrow("production");
+    expect(() => parsePostgresMajors('{"latest":"latest","production":"17"}')).toThrow("latest");
+  });
+
+  it("produção primeiro e sem repetir quando as duas coincidem", () => {
+    expect(testedPostgresMajors(majors)).toEqual(["17", "18"]);
+    expect(testedPostgresMajors({ latest: "18", production: "18" })).toEqual(["18"]);
+  });
+
+  it("lê a major do `server_version_num`", () => {
+    expect(majorFromServerVersionNum("170006")).toBe("17");
+    expect(majorFromServerVersionNum(180001)).toBe("18");
+  });
+
+  it("o job obrigatório `schema-e-migracao` roda a suíte de banco em cada major", () => {
+    expect(pkg.scripts["test:postgres-majors"]).toBe("node --no-warnings scripts/versions/postgres-majors.ts");
+    const job = ciWorkflow().jobs["schema-e-migracao"] as { steps: { run?: string }[] };
+    expect(job.steps.some((step) => step.run === "pnpm test:postgres-majors")).toBe(true);
+  });
+});
+
 describe("renovate.json", () => {
   const renovate = JSON.parse(readFileSync("renovate.json", "utf8")) as Record<string, unknown> & {
-    packageRules: { matchPackageNames?: string[]; matchUpdateTypes?: string[]; automerge?: boolean }[];
+    packageRules: { matchPackageNames?: string[]; matchDepTypes?: string[]; matchUpdateTypes?: string[]; automerge?: boolean; labels?: string[] }[];
     customManagers: { managerFilePatterns: string[]; datasourceTemplate: string; matchStrings: string[] }[];
   };
 
-  it("abre PR para dev, sobe para o mais novo e só mescla com o CI verde", () => {
+  it("abre PR para dev e sobe para o mais novo", () => {
     expect(renovate.baseBranchPatterns).toEqual(["dev"]);
     expect(renovate.rangeStrategy).toBe("bump");
-    expect(renovate.automerge).toBe(true);
-    // Sem proteção de branch em `dev`, o auto-merge nativo do GitHub não
-    // espera check nenhum; é o próprio Renovate que confere os checks.
-    expect(renovate.platformAutomerge).toBe(false);
-    expect(renovate.ignoreTests).toBe(false);
   });
 
-  it("espera o mesmo dia que o pnpm 11+ exige de quarentena", () => {
+  it("nada mescla sozinho: a PR do Renovate segue o fluxo normal (regras 19 e 24)", () => {
+    // Liberar automerge exige exceção às regras 19 e 24 decidida pelo dono
+    // (docs/engineering/versions.md). Varre o arquivo inteiro: uma regra nova
+    // com `automerge: true` reprova aqui, onde quer que esteja.
+    expect(renovate.automerge).toBe(false);
+    const ligados: string[] = [];
+    const varrer = (valor: unknown, caminho: string) => {
+      if (Array.isArray(valor)) valor.forEach((item, i) => varrer(item, `${caminho}[${i}]`));
+      else if (valor && typeof valor === "object") {
+        for (const [chave, filho] of Object.entries(valor)) {
+          if (chave === "platformAutomerge" || (chave === "automerge" && filho !== false)) ligados.push(`${caminho}.${chave}`);
+          varrer(filho, `${caminho}.${chave}`);
+        }
+      }
+    };
+    varrer(renovate, "renovate");
+    expect(ligados).toEqual([]);
+    // Explícito em cada regra, e não só herdado do topo: regra de preset em
+    // `extends` que ligue automerge para os mesmos pacotes vem antes e perde
+    // para a nossa.
+    expect(renovate.packageRules.filter((rule) => rule.automerge !== false)).toEqual([]);
+  });
+
+  it("espera o mesmo dia que o pnpm exige de quarentena, e o pnpm declara a dele", () => {
     // Com `minimumReleaseAge` do pnpm (1440 min) e sem esta espera, o
     // Renovate tentaria uma versão que o `pnpm install` se recusa a resolver.
     expect(renovate.minimumReleaseAge).toBe("1 day");
+    // Declarada, e não herdada do padrão do pnpm: um padrão que muda numa
+    // major desligaria a quarentena sem diff nenhum aqui.
+    const workspace = YAML.parse(readFileSync("pnpm-workspace.yaml", "utf8")) as { minimumReleaseAge?: unknown };
+    expect(workspace.minimumReleaseAge).toBe(1440);
+  });
+
+  it("major do pnpm não entra sem a Vercel confirmar a major nova no build", () => {
+    const rule = renovate.packageRules.find(
+      (entry) => entry.matchDepTypes?.includes("packageManager") && entry.matchUpdateTypes?.includes("major"),
+    );
+    expect(rule?.automerge).toBe(false);
+    expect(rule?.labels).toContain("confirmar-vercel");
+  });
+
+  it("subir a major mais nova do Postgres não tira a da produção do CI", () => {
+    // O Renovate só alcança `latest`; `production` fica onde está, e os dois
+    // continuam na lista que o job `schema-e-migracao` percorre.
+    const manager = renovate.customManagers.find((entry) => entry.managerFilePatterns.some((p) => p.includes("postgres-majors")))!;
+    const text = readFileSync("config/postgres-majors.json", "utf8");
+    const majors = readPostgresMajors();
+    const matches = [...text.matchAll(new RegExp(manager.matchStrings[0]!, "g"))];
+    expect(matches.map((match) => match.groups?.currentValue)).toEqual([majors.latest]);
+    const subido = text.replace(new RegExp(manager.matchStrings[0]!), `"latest": "${Number(majors.latest) + 1}"`);
+    expect(testedPostgresMajors(parsePostgresMajors(subido))).toEqual([majors.production, String(Number(majors.latest) + 1)]);
   });
 
   it("commit de manutenção, para não exigir fragmento de changelog nem disparar release", () => {
@@ -206,7 +297,7 @@ describe("renovate.json", () => {
 
   it("acompanha as versões que moram fora dos gerenciadores padrão", () => {
     const covered = renovate.customManagers.flatMap((manager) => manager.managerFilePatterns).join(" ");
-    for (const file of ["ci\\.yml", "ci-workflow\\.ts", "postgres-global\\.ts", "rehearse-production\\.ts", "docker-compose\\.local\\.yml", "scripts/runner/Dockerfile"]) {
+    for (const file of ["ci\\.yml", "ci-workflow\\.ts", "config/postgres-majors\\.json", "docker-compose\\.local\\.yml", "scripts/runner/Dockerfile"]) {
       expect(covered, file).toContain(file);
     }
     expect(renovate.customManagers.map((manager) => manager.datasourceTemplate)).toContain("github-runners");

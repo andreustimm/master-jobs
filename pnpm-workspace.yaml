@@ -17,3 +17,9 @@ allowBuilds:
   "@sentry/cli": false
   agent-browser: false
   esbuild: false
+
+# Quarentena de um dia (minutos): versão publicada há menos de 24 h não é
+# resolvida (proteção contra pacote comprometido). Declarada, e não herdada do
+# padrão do pnpm 11, para que uma mudança de padrão não a desligue em silêncio;
+# o `minimumReleaseAge: "1 day"` do renovate.json espera o mesmo.
+minimumReleaseAge: 1440

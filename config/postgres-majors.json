@@ -1,0 +1,5 @@
+{
+  "$comment": "Majors do PostgreSQL que o CI prova (docs/engineering/versions.md, issue #468). `latest` é a mais nova: padrão local, da suíte inteira e do ensaio, e é a que o Renovate sobe. `production` é a do Supabase de produção e só muda quando o dono atualizar o projeto. O job `schema-e-migracao` roda os testes de banco e o ensaio em cada uma (`pnpm test:postgres-majors`).",
+  "latest": "18",
+  "production": "17"
+}

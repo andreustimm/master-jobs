@@ -17,6 +17,7 @@
 
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { dataCollectionDoCliente, naoColetaNada } from "./support/sentry-client.ts";
 
 const original = process.env.SENTRY_DSN;
 
@@ -79,7 +80,11 @@ describe("register", () => {
     } finally {
       delete process.env.SENTRY_TRACES_SAMPLE_RATE;
     }
-    expect(recebido).toMatchObject({ sendDefaultPii: false, tracesSampleRate: 0.05, tracePropagationTargets: [] });
+    expect(recebido).toMatchObject({ tracesSampleRate: 0.05, tracePropagationTargets: [] });
+    // O que o `init` recebeu, entregue a um cliente real do SDK: é o cliente
+    // que resolve `dataCollection`, e uma chave que ele não lê não desliga nada.
+    const real = await vi.importActual<typeof import("@sentry/nextjs")>("@sentry/nextjs");
+    naoColetaNada(await dataCollectionDoCliente(recebido, real));
     const peneira = recebido.beforeSendTransaction as (e: object) => unknown;
     const limpo = peneira({
       transaction: "GET /jobs?q=termo-secreto",

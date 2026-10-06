@@ -24,6 +24,7 @@ import {
   tracesSampleRate,
   type ScrubbableTransaction,
 } from "../src/core/observability.ts";
+import { dataCollectionDoCliente, naoColetaNada } from "./support/sentry-client.ts";
 
 /**
  * Tudo o que não pode sair, com um marcador por dado. O teste procura cada um
@@ -283,8 +284,15 @@ describe("sentryServerOptions", () => {
     tracesSampleRate: "0.2",
   });
 
-  it("nunca manda PII padrão nem propaga trace para terceiro", () => {
-    expect(opcoes.sendDefaultPii).toBe(false);
+  it("um cliente real do SDK resolve toda coleta automática como desligada", async () => {
+    // No SDK 11 `sendDefaultPii` deixou de existir e a coleta passou a
+    // `dataCollection`, com padrões permissivos (usuário, cookies, cabeçalhos,
+    // corpos, query string, dados de consulta, variáveis de pilha). Quem decide
+    // é o cliente, então o teste pergunta a ele, e não ao objeto de opções.
+    naoColetaNada(await dataCollectionDoCliente(opcoes));
+  });
+
+  it("nunca propaga trace para terceiro", () => {
     // `baggage` leva chave pública, release e nome da transação para cada
     // board que a sincronização consulta.
     expect(opcoes.tracePropagationTargets).toEqual([]);

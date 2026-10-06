@@ -1130,7 +1130,16 @@ atualização de dependência e teste não.
 | **`authorization`** | **não** | é a credencial |
 | **`x-forwarded-for`, `x-real-ip`** | **não** | IP é dado pessoal |
 | Corpo da requisição | não | carrega CV, nota de funil e senha |
-| Identidade do usuário | não | `sendDefaultPii: false`, e `event.user` é apagado |
+| Identidade do usuário | não | `dataCollection.userInfo: false`, e `event.user` é apagado |
+
+Desde o SDK 11, a coleta automática é decidida por `dataCollection` (o antigo
+`sendDefaultPii` não existe mais) e cada campo omitido vale **ligado**.
+`sentryServerOptions` desliga todos: usuário, cookies, cabeçalhos, corpos,
+query string, GraphQL, IA generativa, dados de consulta, filas e variáveis de
+pilha; só `frameContextLines` fica no padrão, porque são linhas do nosso
+código. As peneiras `beforeSend*` continuam como segunda linha. O teste
+(`tests/support/sentry-client.ts`) entrega as opções a um `NodeClient` real e
+lê `getDataCollectionOptions()`; chave nova que o SDK resolver ligada reprova.
 
 A lista de cabeçalhos é de **permissão**: cabeçalho novo não vai até alguém
 decidir que pode. Cabeçalho fora da lista some por inteiro, em vez de aparecer
