@@ -195,9 +195,9 @@ erDiagram
     }
     target_account {
         INTEGER id PK
-        INTEGER candidate_id FK "dono da rede, ON DELETE CASCADE; nulo = oculto"
+        INTEGER candidate_id FK "dono da rede, NOT NULL, ON DELETE CASCADE"
         TEXT name
-        TEXT linkedin_url UK
+        TEXT linkedin_url UK "única por candidato"
         TEXT category "recruiter, ai-leader, peer, company"
         TEXT company
         TEXT role
@@ -855,7 +855,7 @@ escreve hoje**. A única leitura é `repo.openTasks()`, sobre `positioning_task`
 |---|---|---|
 | `post` | Rascunhos de conteúdo. *"Published through the official `w_member_social` API only."* | `slug` (UNIQUE), `pillar`, `status` (`draft \| ready \| published \| archived`), `linkedin_urn` (ex. `urn:li:share:123`), métricas `impressions` / `reactions` / `comment_count` |
 | `engagement` | Fila de engajamento **assistido** | `kind` (`comment \| connect \| follow \| message \| endorse`), `target_url`, `draft`, `status` (`queued \| done \| skipped`), índice `(status, queued_for)` |
-| `target_account` | A rede de contatos de um candidato (nasceu das 30 contas-alvo da §2.2 do audit) | `candidate_id` (anulável até a #405, `ON DELETE CASCADE`; nulo não aparece para ninguém), `linkedin_url` (UNIQUE), `category` (`recruiter \| ai-leader \| peer \| company`), `status` (`identified \| following \| engaged \| connected \| conversing`) |
+| `target_account` | A rede de contatos de um candidato (nasceu das 30 contas-alvo da §2.2 do audit) | `candidate_id` (NOT NULL, `ON DELETE CASCADE`), `linkedin_url` (UNIQUE com `candidate_id`), `category` (`recruiter \| ai-leader \| peer \| company`), `status` (`identified \| following \| engaged \| connected \| conversing`) |
 | `metric_snapshot` | Métricas de funil registradas à mão — SSI, search appearances, profile views | UNIQUE `(at, key)`, `value REAL` |
 | `positioning_task` | O plano de ação da §14 do audit como linhas executáveis | `id TEXT` no formato `PT-0001`, `horizon` (`24h \| week \| 30d \| 60d \| 90d`), `priority` (`P0 \| P1 \| P2 \| P3`), `source_ref` apontando de volta pro audit |
 
@@ -1345,11 +1345,26 @@ candidato, e apagar o candidato apaga a rede dele. Toda leitura e escrita em
 tinha dono e `/referrals` mostrava a rede do dono, com nomes, para qualquer
 conta.
 
-A coluna ainda é **anulável**: a migration `0031_contatos_por_candidato` é só
-aditiva e não atribui as linhas antigas. Linha sem dono não aparece para
-ninguém, então a rede gravada antes da 0031 fica oculta, inclusive para o dono,
-até o lote da #405 (backfill para o candidato `default`, URL única por
-candidato, drop do índice global e NOT NULL, com revisão humana da migration).
-Até lá a URL do LinkedIn continua única no banco inteiro
-(`target_account_url_idx`): se duas contas cadastram a mesma pessoa, a segunda
-é recusada.
+A coluna é **obrigatória** desde a `0034_contatos_candidato_obrigatorio`
+(#405). A `0031_contatos_por_candidato`, só aditiva, criou a coluna anulável;
+entre as duas, a rede gravada antes da 0031 ficava sem dono e oculta para
+todos, inclusive o dono. A 0034, numa transação só:
+
+1. apaga a linha sem dono e sem `linkedin_url` que tem gêmea já atribuída ao
+   candidato de slug `default` — mesmo `name`, mesma `category` e mesma
+   `company`, com nulo casando com nulo (`IS NOT DISTINCT FROM`). Fica a linha
+   com dono, que é a mais recente e a que `jho contacts seed` atualiza; as
+   notas da órfã não são fundidas. Órfã com URL nunca é apagada;
+2. atribui o resto ao candidato de slug `default` (o slug, não `is_default`,
+   que um defeito antigo gravou `true` em convidado);
+3. cria `target_account_candidate_url_idx`, único em
+   `(candidate_id, linkedin_url)`, e remove o índice global
+   `target_account_url_idx`;
+4. torna `candidate_id` NOT NULL.
+
+Sem candidato `default` e com linha sem dono, o passo 4 falha (23502) e o lote
+inteiro volta atrás. A URL do LinkedIn é única **dentro da rede**: duas contas
+podem cadastrar a mesma pessoa, cada uma com a própria linha, e
+`addContact` casa pela URL só dentro do candidato. Contato sem URL não colide.
+A importação do snapshot legado não transfere `target_account`
+(`exclude-unowned`): o snapshot não diz de quem é cada contato.

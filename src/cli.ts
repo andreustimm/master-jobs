@@ -22,7 +22,6 @@ import { ageInDays, loadRates, refreshRates, STALE_AFTER_DAYS } from "./contexts
 import { importJobs, parseFile } from "./core/ingest/import.ts";
 import {
   CONTACT_CATEGORIES,
-  ContactUrlTaken,
   addContact,
   companiesWithContacts,
   listContacts,
@@ -1509,30 +1508,15 @@ contacts
     }
     await withDb(async () => {
       const candidateId = await activeCandidateId();
-      let r: { id: number; created: boolean };
-      try {
-        r = await addContact(candidateId, {
-          name,
-          company: opts.company,
-          role: opts.role,
-          linkedinUrl: opts.url,
-          category,
-          country: opts.country,
-          notes: opts.notes,
-        });
-      } catch (error) {
-        if (!(error instanceof ContactUrlTaken)) throw error;
-        console.error(c.red(`Recusado: ${error.linkedinUrl} já está cadastrada fora da sua rede.`));
-        console.log(
-          c.dim(
-            "  A URL do LinkedIn ainda é única no banco inteiro, e contatos gravados antes da\n" +
-            "  separação por candidato (#379) ficam sem dono até o backfill da #405.\n" +
-            "  Cadastre sem -u por enquanto, ou aguarde a #405.",
-          ),
-        );
-        process.exitCode = 1;
-        return;
-      }
+      const r = await addContact(candidateId, {
+        name,
+        company: opts.company,
+        role: opts.role,
+        linkedinUrl: opts.url,
+        category,
+        country: opts.country,
+        notes: opts.notes,
+      });
       console.log(
         `${c.green("\u2713")} ${r.created ? "adicionado" : "atualizado"}: ${c.bold(name)} ` +
         c.dim(`@ ${opts.company} · ${opts.category} · #${r.id}`),
