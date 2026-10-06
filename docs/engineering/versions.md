@@ -61,22 +61,27 @@ Três peças sustentam isso:
   variante (`node:24-trixie-slim` → `node:26-trixie-slim`, digest novo), mas
   não troca Debian 13 (`trixie`) pelo próximo; quando sair a estável nova,
   troque a variante numa PR.
-- **Postgres: a mais nova e a da produção, as duas no CI.** A produção é
-  Supabase Postgres 17 (17.6), e o Supabase gerenciado sobe pelo painel, por
-  decisão do dono. Testar só a mais nova deixaria sem prova a major que guarda o
-  dado de verdade, então [`config/postgres-majors.json`](../../config/postgres-majors.json)
-  declara as duas, e só ali:
-  - `latest` (hoje 18) é o padrão local, da suíte inteira e do ensaio de
+- **Postgres: a mais nova e a da produção, as duas no CI.** A produção é o
+  Supabase gerenciado, que sobe de major pelo painel, por decisão do dono.
+  Testar só a mais nova deixaria sem prova a major que guarda o dado de
+  verdade, então [`config/postgres-majors.json`](../../config/postgres-majors.json)
+  declara as duas. Os números moram só lá; código, workflow e docs citam as
+  chaves:
+  - `latest` é a mais nova: o padrão local, da suíte inteira e do ensaio de
     corte; o Renovate a sobe.
-  - `production` (17) só muda quando o dono atualizar o projeto; o Renovate não
-    a alcança, e subir `latest` não a tira da lista
+  - `production` é a do Supabase de produção e só muda quando o dono atualizar
+    o projeto; o Renovate não a alcança, e subir `latest` não a tira da lista
     (`tests/version-policy.test.ts`).
 
   O job obrigatório `schema-e-migracao` roda `pnpm test:postgres-majors`, que
-  executa os testes de schema, migração, upgrade e integridade e o ensaio
+  executa todo teste que usa PostgreSQL real — inclusive o ensaio
   (`scripts/migration/rehearse-production.ts`, sobre um snapshot sintético
-  em `tests/production-selection.test.ts`) em cada major declarada, a da
-  produção primeiro. Os bancos descartáveis aceitam a major por
+  em `tests/production-selection.test.ts`) — em cada major declarada, a da
+  produção primeiro. A lista não é escrita à mão: entra todo arquivo de teste
+  que alcança `tests/support/db.ts` ou `tests/support/postgres-global.ts` por
+  import, ou lê `JHO_TEST_POSTGRES_URL` (`postgresDependentTests` em
+  `scripts/versions/postgres-majors.ts`), e `tests/version-policy.test.ts`
+  reprova se um teste que importa o helper de banco ficar fora. Os bancos descartáveis aceitam a major por
   `JHO_TEST_POSTGRES_MAJOR` (só uma das declaradas) e reprovam se o servidor
   que subiu não for dessa major (`server_version_num`). Quando o dono subir a
   produção, atualize `production`; se ela alcançar `latest`, a lista vira uma

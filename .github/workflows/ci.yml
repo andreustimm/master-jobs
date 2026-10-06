@@ -398,11 +398,11 @@ jobs:
           echo "Schema e migrações em sincronia."
 
       - name: Banco nas majors do PostgreSQL declaradas
-        # A suíte inteira roda na major mais nova; a produção é Supabase
-        # Postgres 17. Aqui os testes de schema, migração, upgrade e
-        # integridade, e o ensaio de corte, rodam em cada major de
-        # `config/postgres-majors.json` — a da produção e a mais nova. As
-        # majors moram só naquele arquivo; este passo não repete nenhuma.
+        # A suíte inteira roda na major `latest`. Aqui todo teste que usa
+        # PostgreSQL real (derivado dos imports, não de lista), com o ensaio
+        # de corte, roda em cada major de `config/postgres-majors.json` —
+        # `production` e `latest`. Os números moram só naquele arquivo; este
+        # passo não repete nenhum.
         run: pnpm test:postgres-majors
 
   e2e-navegador:
@@ -415,7 +415,8 @@ jobs:
     # registrada ao agregador e à promoção (`NON_BLOCKING_CI_JOBS` em
     # scripts/release/promotion-ci.ts).
     #
-    # Banco: o próprio `run-isolated.mjs` sobe um `postgres:18` descartável pelo
+    # Banco: o próprio `run-isolated.mjs` sobe um PostgreSQL descartável, na major
+    # `latest` de `config/postgres-majors.json`, pelo
     # Docker do runner, preso a 127.0.0.1, com senha aleatória — o mesmo
     # caminho da máquina local. Um `services:` do Actions seria um segundo
     # caminho, que o harness não usa e que poderia divergir do primeiro; e

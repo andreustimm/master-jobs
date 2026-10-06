@@ -6,12 +6,16 @@
 // Boundary IN: workflows, Dockerfiles, Compose, package.json, .nvmrc e
 //   renovate.json, lidos como texto/YAML/JSON.
 // Boundary OUT: qual é a versão mais nova (rede) — papel do Renovate.
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import YAML from "yaml";
 import {
   majorFromServerVersionNum,
   parsePostgresMajors,
+  postgresDependentTests,
+  postgresMajorRunArgs,
   postgresTestImage,
   readPostgresMajors,
   testedPostgresMajors,
@@ -209,6 +213,50 @@ describe("majors do PostgreSQL testadas", () => {
   it("lê a major do `server_version_num`", () => {
     expect(majorFromServerVersionNum("170006")).toBe("17");
     expect(majorFromServerVersionNum(180001)).toBe("18");
+  });
+
+  it("todo teste que usa PostgreSQL real entra na suíte das majors", () => {
+    // Leitura independente da seleção: quem importa o helper de banco ou lê a
+    // URL do servidor de teste precisa estar na lista que roda em cada major.
+    // A lista manual anterior deixava de fora candidatura, sessão e sugestão.
+    // O nome da variável vai montado: escrito inteiro, este arquivo entraria.
+    const urlVar = ["JHO", "TEST", "POSTGRES", "URL"].join("_");
+    const selecionados = new Set(postgresDependentTests());
+    const usamBanco = readdirSync("tests")
+      .filter((name) => name.endsWith(".test.ts"))
+      .map((name) => `tests/${name}`)
+      .filter((file) => {
+        const text = readFileSync(file, "utf8");
+        return /["']\.\/support\/(?:db|postgres-global)(?:\.ts)?["']/.test(text) || text.includes(urlVar);
+      });
+    expect(usamBanco.length).toBeGreaterThan(0);
+    expect(usamBanco.filter((file) => !selecionados.has(file))).toEqual([]);
+    for (const file of ["tests/mail-suggestion.test.ts", "tests/repo.application.test.ts", "tests/auth-session.test.ts", "tests/production-selection.test.ts"]) {
+      expect(selecionados.has(file), file).toBe(true);
+    }
+    // Teste puro fica fora. (O leitor é léxico: um import escrito dentro de
+    // string, como nos arquivos sintéticos abaixo, conta — errar para dentro
+    // custa só tempo.)
+    expect(selecionados.has("tests/country.test.ts")).toBe(false);
+    expect(postgresMajorRunArgs([...selecionados]).slice(3)).toEqual([...selecionados]);
+    expect(() => postgresMajorRunArgs([])).toThrow("nenhum teste de PostgreSQL");
+  });
+
+  it("a seleção segue helper intermediário e ignora import só de tipo", () => {
+    const root = mkdtempSync(join(tmpdir(), "jho-pg-suite-"));
+    try {
+      mkdirSync(join(root, "tests/support"), { recursive: true });
+      writeFileSync(join(root, "tests/support/db.ts"), "export const useTestDb = 1;\n");
+      writeFileSync(join(root, "tests/support/fixture.ts"), 'import { useTestDb } from "./db.ts";\nexport const x = useTestDb;\n');
+      writeFileSync(join(root, "tests/direto.test.ts"), 'import { useTestDb } from "./support/db.ts";\n');
+      writeFileSync(join(root, "tests/indireto.test.ts"), 'import { x } from "./support/fixture.ts";\n');
+      writeFileSync(join(root, "tests/url.test.ts"), `const url = process.env.${["JHO", "TEST", "POSTGRES", "URL"].join("_")};\n`);
+      writeFileSync(join(root, "tests/tipo.test.ts"), 'import type { TestDb } from "./support/db.ts";\n');
+      writeFileSync(join(root, "tests/puro.test.ts"), 'import { x } from "../src/x.ts";\n');
+      expect(postgresDependentTests(root)).toEqual(["tests/direto.test.ts", "tests/indireto.test.ts", "tests/url.test.ts"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("o job obrigatório `schema-e-migracao` roda a suíte de banco em cada major", () => {

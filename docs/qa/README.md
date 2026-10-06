@@ -151,8 +151,8 @@ São perguntas diferentes, e nenhuma das quatro camadas responde a da outra.
 | QA de jornada (`qa-execution`) | só local, com gente ou agente dirigindo | que a persona chega ao estado final pela interface pública, e que ele sobrevive a refresh e a leitura independente | nada que o CI já reprova — ela não substitui nenhuma das linhas acima |
 
 O job `e2e-navegador` roda em todo PR e push das três branches, sem segredo
-nenhum: o próprio harness sobe um PostgreSQL descartável na major mais nova
-de `config/postgres-majors.json` (hoje `postgres:18`) no loopback do runner,
+nenhum: o próprio harness sobe um PostgreSQL descartável na major `latest`
+de `config/postgres-majors.json` no loopback do runner,
 com senha aleatória, e `database-guard.mjs` recusa qualquer outro banco.
 `pnpm test:e2e:external` passa pela mesma guarda: banco e `E2E_BASE` só no
 loopback, nunca o site publicado.
