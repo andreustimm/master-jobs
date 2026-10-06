@@ -707,8 +707,10 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   trabalho) também é rotina, por decisão do dono: o portão da reescrita é o
   push forçado, que pergunta.
   - **Pergunta (`ask`):** perda de trabalho (push forçado ou `+ref`,
-    `--mirror`, `--all`, `--prune`, `--no-verify`, push sem refspec ou com
-    refspec variável; `reset --hard/--merge`; `clean`; `checkout -- <caminho>`,
+    `--mirror`, `--all`, `--prune`, `--no-verify`, push sem refspec fora de
+    worktree de trabalho — dentro dela (`-C` ou diretório atual em
+    `.claude/worktrees/<nome>`) o branch é sempre `<tipo>/<slug>` e passa,
+    por autorização do dono de 06/10/2026 — ou com refspec variável; `reset --hard/--merge`; `clean`; `checkout -- <caminho>`,
     `checkout .`, `checkout <ref> <caminho>`, `checkout -f/-B`;
     `switch -f/--discard-changes/-C`; `restore` fora de `--staged`;
     `stash drop/clear`; `worktree remove --force` fora de worktree de
