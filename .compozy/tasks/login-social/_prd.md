@@ -1,15 +1,16 @@
 # Social Sign-In, Self-Sign-Up and Account Emails
 
 Issue: #464. Related: #465 (candidate grants recruiter access), #237 (email
-delivery, absorbed by this scope). Reference screen chosen by the owner:
-https://app.tecla.io/t/signup.
+delivery via Resend, already shipped — this scope reuses it). Reference screen
+chosen by the owner: https://app.tecla.io/t/signup.
 
 ## Overview
 
 Today a person enters master-jobs with an email and password or with a magic
 link that only the CLI can issue; only an administrator can create an account,
-the account email is never verified, and the product cannot send email — not
-even the password-recovery link. Invited people often have no password, so
+and the account email is never verified. Email delivery exists (Resend, used
+for the password-recovery link) but only for that one message, in Portuguese
+only. Invited people often have no password, so
 their first access needs the owner to run a command, and nobody can join on
 their own.
 
@@ -24,7 +25,7 @@ provider identity already linked to it or, on first use, by the email the
 provider verifies, and is linked automatically. Provider data is used only to
 authenticate.
 
-The product gains a transactional email channel for the sign-up code, the
+The existing email channel gains localized messages for the sign-up code, the
 welcome message, notices when a provider is linked or unlinked, and the
 password-recovery link.
 
@@ -369,7 +370,7 @@ links and disabled accounts.
 - [ADR-003: LinkedIn and Google only for authentication, keeping provider subject and verified email only](adrs/adr-003.md) — data minimization and rule 1 amendment.
 - [ADR-004: Sign-in methods coexist and the last method cannot be removed](adrs/adr-004.md) — coexistence, last-method protection, administrator and CLI powers.
 - [ADR-005: Social sign-in available in production and local only](adrs/adr-005.md) — environment availability.
-- [ADR-006: Manual sign-up confirmed by an emailed code, and a transactional email channel](adrs/adr-006.md) — manual sign-up, code rules, account emails (absorbs #237).
+- [ADR-006: Manual sign-up confirmed by an emailed code, and a transactional email channel](adrs/adr-006.md) — manual sign-up, code rules, account emails over the existing Resend channel (#237).
 - [ADR-007: One sign-up screen creates the account and the candidate profile](adrs/adr-007.md) — Tecla pattern.
 
 ## Open Questions
