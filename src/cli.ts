@@ -273,6 +273,7 @@ db.command("cleanup")
           `  ${result.candidates.onlineJobs} online job payload(s) compactable\n` +
           `  ${result.candidates.parsedPages} parsed page HTML payload(s) removable\n` +
           `  ${result.candidates.closedJobs} closed untracked job(s) prunable\n` +
+          `  ${result.candidates.expiredSignups} expired sign-up record(s) purgeable\n` +
           `  ${mib} MiB of reconstructable payload identified`,
       );
       if (!result.applied) {
@@ -282,7 +283,8 @@ db.command("cleanup")
       console.log(
         `${c.green("✓")} compacted ${result.applied.compactedJobs} job(s), ` +
           `cleared ${result.applied.clearedPages} page(s), ` +
-          `pruned ${result.applied.prunedJobs} job(s)`,
+          `pruned ${result.applied.prunedJobs} job(s), ` +
+          `purged ${result.applied.purgedSignups} sign-up record(s)`,
       );
     });
   });

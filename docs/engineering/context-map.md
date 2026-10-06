@@ -9,11 +9,11 @@ inclusive pelo `index.ts` de um contexto, que compõe adapters. O scorer é
 domínio de Matching fisicamente fora do contexto, e por isso é o único de fora
 que importa `contexts/matching/domain/` direto.
 
-<!-- schema-table-count: 44 -->
+<!-- schema-table-count: 46 -->
 
 | Contexto | Aggregate owner / responsabilidade | Tabelas próprias | API pública | Dependências permitidas |
 |---|---|---|---|---|
-| auth | identidade, sessão e autorização | `auth_user`, `auth_session`, `auth_login_token`, `auth_event`, `recruiter_candidate` | `src/contexts/auth/index.ts` | Candidate por `candidate_id`; relógio e hash como portas |
+| auth | identidade, sessão e autorização; identidade de provedor social e cadastro pendente (#464) | `auth_user`, `auth_session`, `auth_login_token`, `auth_event`, `recruiter_candidate`, `auth_identity`, `auth_signup` | `src/contexts/auth/index.ts` | Candidate por `candidate_id`; relógio e hash como portas |
 | correspondence | mensagem observada e sugestão de mudança | `mail_message`, `mail_suggestion` | `src/contexts/correspondence/index.ts` | Sourcing observa vagas; Pursuit aplica decisão na mesma transação |
 | fx | cotação e cache cambial | `fx_rate` | `src/contexts/fx/index.ts` | `HttpClient`, `Clock`; nenhum contexto de negócio |
 | matching | avaliação candidato–vaga, trilhas de alvo e comparação manual | `candidate_matching_profile`, `target_track`, `saved_term`, `saved_term_request`, `job_score`, `score_cursor` | `src/contexts/matching/index.ts` | Candidate, Sourcing, Skills e FX; não escreve Pursuit |

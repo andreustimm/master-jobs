@@ -70,6 +70,16 @@ export const postSnapshotColumns: Record<string, Record<string, unknown>> = {
   application_event: { reverts_event_id: null },
   // Dono do contato (#379). A tabela não atravessa a importação (ver `policies`).
   target_account: { candidate_id: null },
+  // Login social e cadastro (#464). Conta do snapshot foi criada por admin:
+  // e-mail nunca confirmado, nenhum termo aceito, origem e idioma desconhecidos.
+  auth_user: {
+    email_verified_at: null,
+    terms_version: null,
+    privacy_version: null,
+    terms_accepted_at: null,
+    signup_origin: null,
+    locale: null,
+  },
 };
 
 /**
@@ -100,6 +110,10 @@ export const postSnapshotTables = new Set([
   // Checagem do vigia de cota (ADR 0030, Fase 3): estado operacional, nasce
   // vazia — nenhuma checagem existiu antes deste agendador existir.
   "quota_watch",
+  // Login social e cadastro (#464, ADR-009): o snapshot não tem provedor ligado
+  // nem cadastro pendente. Nascem vazias.
+  "auth_identity",
+  "auth_signup",
 ]);
 
 const selectedJobs = `SELECT id FROM job WHERE
