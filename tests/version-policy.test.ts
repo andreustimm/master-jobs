@@ -6,6 +6,7 @@
 // Boundary IN: workflows, Dockerfiles, Compose, package.json, .nvmrc e
 //   renovate.json, lidos como texto/YAML/JSON.
 // Boundary OUT: qual é a versão mais nova (rede) — papel do Renovate.
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,6 +14,7 @@ import { describe, expect, it } from "vitest";
 import YAML from "yaml";
 import {
   majorFromServerVersionNum,
+  parseMajorRunOptions,
   parsePostgresMajors,
   postgresDependentTests,
   postgresMajorRunArgs,
@@ -259,10 +261,49 @@ describe("majors do PostgreSQL testadas", () => {
     }
   });
 
-  it("o job obrigatório `schema-e-migracao` roda a suíte de banco em cada major", () => {
+  it("o CI escolhe major pela chave e fatia; o resto recusa", () => {
+    expect(parseMajorRunOptions([], majors)).toEqual({ majors: ["17", "18"], shard: null });
+    expect(parseMajorRunOptions(["--major=production", "--shard=1/2"], majors)).toEqual({ majors: ["17"], shard: "1/2" });
+    expect(parseMajorRunOptions(["--major=latest"], majors)).toEqual({ majors: ["18"], shard: null });
+    expect(postgresMajorRunArgs(["tests/a.test.ts"], "2/2")).toEqual(["exec", "vitest", "run", "--shard=2/2", "tests/a.test.ts"]);
+    for (const errado of [["--major=17"], ["--major="], ["--shard=3/2"], ["--shard=0/2"], ["--shard=1"], ["17"]]) {
+      expect(() => parseMajorRunOptions(errado, majors), errado.join(" ")).toThrow();
+    }
+  });
+
+  it("o check obrigatório `schema-e-migracao` só passa com a suíte de banco aprovada em cada major e fatia", () => {
     expect(pkg.scripts["test:postgres-majors"]).toBe("node --no-warnings scripts/versions/postgres-majors.ts");
-    const job = ciWorkflow().jobs["schema-e-migracao"] as { steps: { run?: string }[] };
-    expect(job.steps.some((step) => step.run === "pnpm test:postgres-majors")).toBe(true);
+    const ci = ciWorkflow();
+    const matrix = ci.jobs["banco-nas-majors"]!;
+    expect(matrix.strategy?.matrix?.major).toEqual(["production", "latest"]);
+    const fatias = matrix.strategy?.matrix?.fatia as number[];
+    expect(fatias.length).toBeGreaterThan(0);
+    expect(fatias).toEqual(fatias.map((_, index) => index + 1));
+    expect(matrix.steps.filter((step) => step.run?.startsWith("pnpm test:postgres-majors")).map((step) => step.run)).toEqual([
+      `pnpm test:postgres-majors --major=\${{ matrix.major }} --shard=\${{ matrix.fatia }}/${fatias.length}`,
+    ]);
+
+    // Pulado conta como aprovado na proteção de branch: o check obrigatório
+    // roda sempre e reprova sozinho quando alguma fatia não passou.
+    const gate = ci.jobs["schema-e-migracao"]!;
+    expect(gate.if).toBe("${{ always() }}");
+    expect(gate.needs).toEqual(["banco-nas-majors"]);
+    const step = gate.steps.find((candidate) => candidate.env?.RESULTADOS === "${{ toJSON(needs) }}")!;
+    const run = (needs: Record<string, { result: string }>) =>
+      spawnSync("bash", ["-e", "-c", step.run!], { encoding: "utf8", env: { ...process.env, RESULTADOS: JSON.stringify(needs) } }).status;
+    expect(run({ "banco-nas-majors": { result: "success" } })).toBe(0);
+    for (const result of ["failure", "skipped", "cancelled"]) {
+      expect(run({ "banco-nas-majors": { result } }), result).not.toBe(0);
+    }
+    expect(run({})).not.toBe(0);
+  });
+
+  it("workflow e docs citam as chaves; os números moram só em config/postgres-majors.json", () => {
+    const declarado = readPostgresMajors();
+    const numero = new RegExp(String.raw`postgres(?:ql)?(?::|\s+)(?:${declarado.production}|${declarado.latest})\b`, "i");
+    for (const file of [".github/workflows/ci.yml", "docs/engineering/versions.md", "docs/qa/README.md"]) {
+      expect(readFileSync(file, "utf8"), file).not.toMatch(numero);
+    }
   });
 });
 

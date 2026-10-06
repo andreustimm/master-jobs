@@ -8,7 +8,8 @@
  *
  * Executado direto (`pnpm test:postgres-majors`), roda todo teste que usa
  * PostgreSQL real (`postgresDependentTests`) em cada major declarada, uma
- * depois da outra, e reprova na primeira falha.
+ * depois da outra, e reprova na primeira falha; o CI escolhe major e fatia
+ * (`parseMajorRunOptions`).
  */
 
 import { spawnSync } from "node:child_process";
@@ -93,16 +94,46 @@ export function postgresDependentTests(root: string = process.cwd()): string[] {
     .sort();
 }
 
-/** O comando de uma major: o Vitest só sobre os testes de banco. */
-export function postgresMajorRunArgs(tests: readonly string[]): string[] {
+/** O comando de uma major: o Vitest só sobre os testes de banco, inteiros ou numa fatia. */
+export function postgresMajorRunArgs(tests: readonly string[], shard: string | null = null): string[] {
   if (tests.length === 0) throw new Error("nenhum teste de PostgreSQL encontrado em tests/");
-  return ["exec", "vitest", "run", ...tests];
+  return ["exec", "vitest", "run", ...(shard === null ? [] : [`--shard=${shard}`]), ...tests];
+}
+
+export type MajorRunOptions = { majors: string[]; shard: string | null };
+
+/**
+ * Sem argumento, todas as majors declaradas, a suíte inteira em cada (uso
+ * local). O CI divide em matriz: `--major=production|latest` escolhe pela
+ * chave do arquivo — o workflow nunca escreve o número — e `--shard=i/n`
+ * passa a fatia ao Vitest.
+ */
+export function parseMajorRunOptions(argv: readonly string[], majors: PostgresMajors): MajorRunOptions {
+  const options: MajorRunOptions = { majors: testedPostgresMajors(majors), shard: null };
+  for (const arg of argv) {
+    const key = /^--major=(.*)$/.exec(arg)?.[1];
+    const slice = /^--shard=(.*)$/.exec(arg)?.[1];
+    if (key !== undefined) {
+      if (key !== "production" && key !== "latest") throw new Error(`--major aceita production ou latest, não "${key}"`);
+      options.majors = [majors[key]];
+    } else if (slice !== undefined) {
+      const [index, total] = slice.split("/").map(Number);
+      if (!/^[1-9]\d*\/[1-9]\d*$/.test(slice) || index! > total!) throw new Error(`--shard espera i/n com 1 ≤ i ≤ n, não "${slice}"`);
+      options.shard = slice;
+    } else {
+      throw new Error(`argumento desconhecido: ${arg}`);
+    }
+  }
+  return options;
 }
 
 if (import.meta.main) {
-  const args = postgresMajorRunArgs(postgresDependentTests());
-  for (const major of testedPostgresMajors(readPostgresMajors())) {
-    console.log(`\n== PostgreSQL ${major}: ${args.length - 3} arquivos de teste ==`);
+  const options = parseMajorRunOptions(process.argv.slice(2), readPostgresMajors());
+  const tests = postgresDependentTests();
+  const args = postgresMajorRunArgs(tests, options.shard);
+  const scope = options.shard === null ? "" : `, fatia ${options.shard}`;
+  for (const major of options.majors) {
+    console.log(`\n== PostgreSQL ${major}: ${tests.length} arquivos de teste${scope} ==`);
     const started = Date.now();
     const run = spawnSync("pnpm", args, {
       stdio: "inherit",

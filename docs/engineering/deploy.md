@@ -611,7 +611,8 @@ no push das três branches. Os gates correm em jobs paralelos:
 | `cobertura` | mescla os blobs das fatias e aplica o piso de `vitest.config.ts` sobre o total |
 | `pwa-browser` | a fronteira de privacidade do service worker num Chromium real |
 | `build` | `next build`, com `.next/cache` reaproveitado entre execuções |
-| `schema-e-migracao` | `schema.ts` e `drizzle/` em sincronia |
+| `banco-nas-majors` (major × 2 fatias) | todo teste que usa PostgreSQL real, nas majors `production` e `latest` de `config/postgres-majors.json` ([política de versões](versions.md)) |
+| `schema-e-migracao` | `schema.ts` e `drizzle/` em sincronia, e `banco-nas-majors` aprovado (depende dele, com `if: always()`) |
 | `qualidade` | agregador: só passa quando todos os anteriores passaram |
 
 `qualidade` e `schema-e-migracao` são os nomes que a promoção e a proteção de

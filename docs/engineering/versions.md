@@ -73,15 +73,19 @@ Três peças sustentam isso:
     o projeto; o Renovate não a alcança, e subir `latest` não a tira da lista
     (`tests/version-policy.test.ts`).
 
-  O job obrigatório `schema-e-migracao` roda `pnpm test:postgres-majors`, que
-  executa todo teste que usa PostgreSQL real — inclusive o ensaio
-  (`scripts/migration/rehearse-production.ts`, sobre um snapshot sintético
-  em `tests/production-selection.test.ts`) — em cada major declarada, a da
-  produção primeiro. A lista não é escrita à mão: entra todo arquivo de teste
-  que alcança `tests/support/db.ts` ou `tests/support/postgres-global.ts` por
-  import, ou lê `JHO_TEST_POSTGRES_URL` (`postgresDependentTests` em
-  `scripts/versions/postgres-majors.ts`), e `tests/version-policy.test.ts`
-  reprova se um teste que importa o helper de banco ficar fora. Os bancos descartáveis aceitam a major por
+  `pnpm test:postgres-majors` executa todo teste que usa PostgreSQL real —
+  inclusive o ensaio (`scripts/migration/rehearse-production.ts`, sobre um
+  snapshot sintético em `tests/production-selection.test.ts`) — em cada major
+  declarada, a da produção primeiro. A lista não é escrita à mão: entra todo
+  arquivo de teste que alcança `tests/support/db.ts` ou
+  `tests/support/postgres-global.ts` por import, ou lê `JHO_TEST_POSTGRES_URL`
+  (`postgresDependentTests` em `scripts/versions/postgres-majors.ts`), e
+  `tests/version-policy.test.ts` reprova se um teste que importa o helper de
+  banco ficar fora. No CI, o job `banco-nas-majors` divide o mesmo comando em
+  matriz (`--major=production|latest`, pela chave, × `--shard=i/2`): em série
+  num runner só, as duas majors levaram 401 s + 422 s, rente ao teto de
+  15 min. O check obrigatório `schema-e-migracao` depende dele e reprova se
+  alguma fatia não passou. Os bancos descartáveis aceitam a major por
   `JHO_TEST_POSTGRES_MAJOR` (só uma das declaradas) e reprovam se o servidor
   que subiu não for dessa major (`server_version_num`). Quando o dono subir a
   produção, atualize `production`; se ela alcançar `latest`, a lista vira uma

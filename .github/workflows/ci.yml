@@ -363,15 +363,60 @@ jobs:
         # `prebuild` gera o service worker e o changelog compilado.
         run: pnpm build
 
+  banco-nas-majors:
+    # A suíte inteira roda na major `latest`. Aqui todo teste que usa
+    # PostgreSQL real (derivado dos imports, não de lista), com o ensaio de
+    # corte, roda em cada major de `config/postgres-majors.json` —
+    # `production` e `latest`, citadas pela chave: os números moram só naquele
+    # arquivo. Em série num runner só, as duas majors levaram 401 s + 422 s,
+    # rente ao teto de 15 min; por isso a matriz major × fatia. O resultado
+    # entra no check obrigatório `schema-e-migracao`, que depende deste job.
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        major: [production, latest]
+        fatia: [1, 2]
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target-sha || github.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Banco na major ${{ matrix.major }} (fatia ${{ matrix.fatia }} de 2)
+        run: pnpm test:postgres-majors --major=${{ matrix.major }} --shard=${{ matrix.fatia }}/2
+
   schema-e-migracao:
     # Separado do portão de qualidade porque responde outra pergunta: não é "o
     # código funciona", é "o banco acompanha o código". Um schema.ts alterado
     # sem migração correspondente passa em todos os testes — eles rodam sobre um
     # banco recriado do zero — e quebra só no ambiente que já tem dado.
+    #
+    # Também responde pelas majors do PostgreSQL (`banco-nas-majors`). O
+    # `always()` é o mesmo do agregador `qualidade`: sem ele, uma fatia
+    # vermelha faria este check obrigatório ser PULADO, e pulado conta como
+    # aprovado na proteção de branch.
+    if: ${{ always() }}
+    needs: [banco-nas-majors]
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 15
 
     steps:
+      - name: Banco passou nas majors do PostgreSQL declaradas
+        env:
+          RESULTADOS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTADOS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$RESULTADOS" | jq -e 'length > 0 and (to_entries | all(.value.result == "success"))' > /dev/null
+
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.target-sha || github.sha }}
@@ -396,14 +441,6 @@ jobs:
             exit 1
           fi
           echo "Schema e migrações em sincronia."
-
-      - name: Banco nas majors do PostgreSQL declaradas
-        # A suíte inteira roda na major `latest`. Aqui todo teste que usa
-        # PostgreSQL real (derivado dos imports, não de lista), com o ensaio
-        # de corte, roda em cada major de `config/postgres-majors.json` —
-        # `production` e `latest`. Os números moram só naquele arquivo; este
-        # passo não repete nenhum.
-        run: pnpm test:postgres-majors
 
   e2e-navegador:
     # A suíte `pnpm test:e2e` inteira — interface, papéis, 320–1024 px, inglês,
@@ -503,7 +540,7 @@ jobs:
     # por conta própria quando qualquer dependência não terminou em sucesso —
     # falha, pulo ou cancelamento.
     if: ${{ always() }}
-    needs: [contratos, testes, cobertura, pwa-browser, build, schema-e-migracao]
+    needs: [contratos, testes, cobertura, pwa-browser, build, banco-nas-majors, schema-e-migracao]
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 5
 
