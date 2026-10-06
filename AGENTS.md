@@ -239,14 +239,18 @@ commit. [[G62](docs/engineering/rules/delivery.md#g62)]
   [[G86](docs/engineering/rules/orchestration.md#g86), [G87](docs/engineering/rules/orchestration.md#g87)]
 - Com `rtk` instalado, Codex e OpenCode prefixam cada comando com `rtk` (no
   Claude Code, um hook reescreve); sem ele, rode o comando puro. Um comando por
-  chamada de shell, sem `&&`, `|` ou `;`: a lista de permissão do Claude Code
-  casa pelo prefixo, e composto cai em aprovação manual. No Claude Code o gate
-  é `.claude/hooks/no-compound-bash.mjs`, registrado em `.claude/settings.json`
-  (`hooks.PreToolUse`, matcher `Bash`); Codex e OpenCode ainda dependem do
-  hábito — lacuna registrada, não fechada por hook lá. Heredoc e `$(...)` são
-  recusados mesmo em mensagem de commit: escreva a mensagem com a ferramenta
-  de arquivo e rode `git commit -F <arquivo>` (ou vários `-m`).
-  [[G63](docs/engineering/rules/delivery.md#g63)]
+  chamada de shell, sem `&&`, `||` ou `;`; pipe só quando todo estágio é
+  leitura (`git log | head`); laço `for`/`while`/`until`/`if`/`case` aceito,
+  com cada comando do corpo julgado. A lista de permissão casa pelo prefixo, e
+  composto cairia em aprovação manual. Uma função recusa o composto nos três
+  harnesses — `.claude/hooks/shell-policy.mjs`, chamada pelo hook do Claude
+  Code, pela guarda do Codex e pelo plugin `.opencode/plugins/shell-guard.js`
+  —, e o mesmo módulo classifica o risco: `gh` não pergunta; produção, perda
+  de trabalho e apagamento em massa perguntam (no Codex e no OpenCode, viram
+  bloqueio). Heredoc e `$(...)` são recusados mesmo em mensagem de commit:
+  escreva a mensagem com a ferramenta de arquivo e rode `git commit -F
+  <arquivo>` (ou vários `-m`).
+  [[G63](docs/engineering/rules/delivery.md#g63), [G85](docs/engineering/rules/delivery.md#g85)]
 - O bloco abaixo é gerado pelo `next dev`; não o edite nem o mova.
   [[G64](docs/engineering/rules/delivery.md#g64)]
 

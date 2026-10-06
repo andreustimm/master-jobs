@@ -105,7 +105,7 @@ segunda definição. "Regra N" é a numeração mantida na entrada comum.
 | G60 | Changelog vs `docs/` | [delivery](delivery.md#g60) | regra 23 | preservada; linha para `docs/engineering/rules/` |
 | G61 | Skills canônicas e symlinks | [delivery](delivery.md#g61) | "Skills compartilhadas" | preservada |
 | G62 | Instruções lidas; skill não é regra | [delivery](delivery.md#g62) | "Skills compartilhadas" | preservada; roteador na entrada |
-| G63 | RTK por harness; um comando por chamada | [delivery](delivery.md#g63) | nota final do AGENTS | preservada, sem copiar o arquivo global; fallback sem `rtk` e comando único por chamada (#321); gate por hook versionado no Claude Code, `.claude/hooks/no-compound-bash.mjs` — lacuna registrada no Codex e no OpenCode (#380) |
+| G63 | RTK por harness; um comando por chamada | [delivery](delivery.md#g63) | nota final do AGENTS | preservada, sem copiar o arquivo global; fallback sem `rtk` e comando único por chamada (#321); gate por hook versionado no Claude Code (#380); desde a #461, uma função (`.claude/hooks/shell-policy.mjs`) recusa o composto nos três harnesses — hook do Claude Code, guarda do Codex e plugin do OpenCode —, com pipe só de leitura e laço com corpo julgado |
 | G64 | Bloco do Next intacto | [delivery](delivery.md#g64) | bloco gerado | preservada; bloco continua no fim da entrada |
 | G65 | UI é adaptador | [architecture](architecture.md#g65) | "Arquitetura" | preservada; "única mutação" corrigida (C15) |
 | G66 | Idempotência e isolamento de falha | [architecture](architecture.md#g66) | "Convenções de código" | preservada |
@@ -127,7 +127,7 @@ segunda definição. "Regra N" é a numeração mantida na entrada comum.
 | G82 | Comentário explica por quê | [architecture](architecture.md#g82) | "Convenções de código" | preservada |
 | G83 | Estado e contagens fora das instruções | [delivery](delivery.md#g83) | "Estado atual", "Comandos" | preservada; inventário movido para `docs/cli.md` |
 | G84 | Revisão relata; auditoria e QA distintos | [delivery](delivery.md#g84) | "Revisão profunda" | preservada; um revisor por diff (#319) |
-| G85 | Paridade dos harnesses | [delivery](delivery.md#g85) | [#317](https://github.com/andreustimm/master-jobs/issues/317) | nova: espelhos gerados de `.claude/` e gate `pnpm check:harness` |
+| G85 | Paridade dos harnesses | [delivery](delivery.md#g85) | [#317](https://github.com/andreustimm/master-jobs/issues/317) | nova: espelhos gerados de `.claude/` e gate `pnpm check:harness`; #461: classificador de risco de shell único para os três harnesses |
 | G86 | Cinco papéis; juiz ≠ autor | [orchestration](orchestration.md#g86) | [#318](https://github.com/andreustimm/master-jobs/issues/318) | nova |
 | G87 | Modelo/effort explícitos; modo de assinatura falha fechado | [orchestration](orchestration.md#g87) | [#318](https://github.com/andreustimm/master-jobs/issues/318) | nova: `config/model-routing.json` e `pnpm route` |
 

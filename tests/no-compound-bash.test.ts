@@ -1,9 +1,12 @@
-// Suite: gate de comando composto do Claude Code (#380, G63)
+// Suite: hook de shell do Claude Code (#380, #461, G63)
 // Invariant: `findCompound` aceita comando único, inclusive com separador
-//   dentro de aspas ou redirecionamento com `&`, e recusa todo comando
+//   dentro de aspas ou redirecionamento com `&`, pipe em que todo estágio é
+//   leitura conhecida e laço com corpo julgado (#461); recusa todo outro
 //   composto fora de aspas — a lista de permissão casa pelo prefixo e um
 //   composto liberado em parte cai em aprovação manual, travando o terminal.
-// Boundary IN: `.claude/hooks/no-compound-bash.mjs`, versionado e citado em
+//   Risco do classificador sai como JSON de PreToolUse (`ask`/`deny`).
+// Boundary IN: `.claude/hooks/no-compound-bash.mjs` (sobre
+//   `.claude/hooks/shell-policy.mjs`), versionado e citado em
 //   `.claude/settings.json` (hooks.PreToolUse, matcher Bash)
 // Boundary OUT: o comportamento do próprio Claude Code ao rodar o hook — o
 //   teste prova a função pura que decide, não o processo do harness
@@ -25,9 +28,25 @@ describe("findCompound: um comando de shell por chamada", () => {
     ['git commit -m "fix: a && b"', null],
     ["cmd &> log", null],
     ["echo 'a\nb'", null],
+    // Pipe em que todo estágio só lê: passa (#461).
+    ["cat x | grep y", null],
+    ["git log --oneline | head -20", null],
+    ["git -C /repo diff --stat | tail -5", null],
+    ["rtk git status --short | wc -l", null],
+    ["rg -n foo src | sort | uniq -c", null],
+    ["/usr/bin/grep -r x . | head", null],
+    // Algum estágio executa, escreve ou não é leitura conhecida: recusa.
+    ["head -1 f | sh", "| (pipe) com estágio fora da leitura"],
+    ["cat x | xargs rm", "| (pipe) com estágio fora da leitura"],
+    ["git log | tee out.txt", "| (pipe) com estágio fora da leitura"],
+    ["git push origin x | cat", "| (pipe) com estágio fora da leitura"],
+    ["git log --output=/tmp/x | head", "| (pipe) com estágio fora da leitura"],
+    ["catamaran x | head", "| (pipe) com estágio fora da leitura"],
+    ["cat x | grep y && rm z", "&&"],
+    ["cat x | grep y; rm z", ";"],
+    ["cat x |& grep y", "& (segundo plano)"],
     ["git add . && git commit", "&&"],
     ["a || b", "||"],
-    ["cat x | grep y", "| (pipe)"],
     ["cd x; ls", ";"],
     ["gh run watch $(gh run list)", "$(...) (substituição de comando)"],
     ['echo "$(date)"', "$(...) (substituição de comando)"],
@@ -42,6 +61,18 @@ describe("findCompound: um comando de shell por chamada", () => {
       "$(...) (substituição de comando)",
     ],
     ["cat > f <<'X'\nconteúdo\nX", "quebra de linha (vários comandos)"],
+    // Laço é um comando só (#461); o corpo é julgado pelo classificador e pela lista.
+    ["for f in a b; do echo $f; done", null],
+    ["while true; do sleep 1; done", null],
+    ["for f in a; do echo; done; rm -rf x", "; (comando depois do laço)"],
+    ["for f in a; do git add $f && git commit; done", "&&"],
+    ["for f in a; do echo $f; done | grep a", null],
+    ["for f in a; do echo $f; done | sh", "| (pipe) com estágio fora da leitura"],
+    // Nits: `ls`, `git branch` só listando e `rtk proxy` contam como leitura.
+    ["ls -la | head", null],
+    ["git branch -a | grep fix", null],
+    ["rtk proxy git log | head", null],
+    ["./grep x | head", "| (pipe) com estágio fora da leitura"],
   ])("%s -> %s", (command, expected) => {
     expect(findCompound(command)).toBe(expected);
   });
@@ -68,6 +99,39 @@ describe("processo real do hook: bloqueia composto, libera simples", () => {
     const result = run(JSON.stringify({ tool_name: "Bash", tool_input: { command: heredocCommit } }));
     expect(result.status).toBe(2);
     expect(result.stderr).toContain("git commit -F <arquivo>");
+  });
+
+  // #461: risco sai em JSON de PreToolUse (saída 0), com ou sem `rtk`.
+  it.each([
+    ["rtk git push --force", "ask"],
+    ["git push --force origin fix/x", "ask"],
+    ["npx -y vercel --prod", "ask"],
+    ["for f in a; do docker rm $f; done", "ask"],
+    ["rtk git push origin main", "deny"],
+    ["git -c x=y push origin main", "deny"],
+  ])("risco devolve permissionDecision: %s -> %s", (command, decision) => {
+    const result = run(JSON.stringify({ tool_name: "Bash", tool_input: { command } }));
+    expect(result.status).toBe(0);
+    const output = JSON.parse(result.stdout) as { hookSpecificOutput: Record<string, string> };
+    expect(output.hookSpecificOutput).toMatchObject({ hookEventName: "PreToolUse", permissionDecision: decision });
+    expect(output.hookSpecificOutput.permissionDecisionReason).toContain("Política de shell do projeto");
+  });
+
+  it("rotina e laço com corpo liberado saem com 0 e sem saída", () => {
+    for (const command of ["git push -u origin fix/x", "for f in a b; do echo $f; done", "git log | head", "gh secret set X"]) {
+      const result = run(JSON.stringify({ tool_name: "Bash", tool_input: { command } }));
+      expect(result.status, command).toBe(0);
+      expect(result.stdout, command).toBe("");
+    }
+  });
+
+  it("entrada que estouraria a pilha pergunta (JSON ask, saída 0) em vez de derrubar o hook", () => {
+    for (const command of [`${"xargs ".repeat(20000)}rm x`, `echo ${"a".repeat(100_001)}`]) {
+      const result = run(JSON.stringify({ tool_name: "Bash", tool_input: { command } }));
+      expect(result.status).toBe(0);
+      const output = JSON.parse(result.stdout) as { hookSpecificOutput: Record<string, string> };
+      expect(output.hookSpecificOutput.permissionDecision).toBe("ask");
+    }
   });
 
   it("stdin ilegível ou sem `tool_input.command` não bloqueia — falha aberta na leitura, não na decisão", () => {
