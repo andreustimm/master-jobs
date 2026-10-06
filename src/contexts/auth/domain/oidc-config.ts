@@ -12,9 +12,9 @@
  * **Os portões de ambiente falham fechado.** O botão social só existe onde há
  * origem pública fixa (ADR-005): a URL de retorno cadastrada no Google e no
  * LinkedIn não pode depender do `Host` da requisição (G17). E os desvios de
- * teste — emissor falso (ADR-010) e sink de e-mail em arquivo (ADR-011) — nunca
- * valem em produção nem em deployment da Vercel, nem quando alguém os cadastra
- * por engano.
+ * teste — emissor falso (ADR-010) e sink de e-mail em arquivo (ADR-011) — só
+ * valem com `JHO_ENV` declarado `local` ou `e2e`, fora da Vercel; em qualquer
+ * outro ambiente são ignorados, mesmo quando alguém os cadastra por engano.
  */
 import { isLocalProcess, type AuthEnvironment } from "./open-mode.ts";
 import { resolvePublicOrigin } from "./public-origin.ts";
@@ -84,17 +84,27 @@ function httpUrl(raw: string): string | null {
 }
 
 /**
+ * Ambientes em que os desvios de teste valem: a máquina de quem desenvolve e
+ * a suíte E2E isolada, que se declara `e2e` sem se passar por `local` (o que
+ * ligaria o modo aberto e o mailer de terminal).
+ */
+const TEST_OVERRIDE_ENVIRONMENTS: readonly string[] = ["local", "e2e"];
+
+/**
  * Desvios de teste (emissor falso, sink de e-mail) podem valer aqui?
  *
- * Nunca em `JHO_ENV=production`, e nunca num deployment da Vercel (`VERCEL` ou
- * `VERCEL_ENV` presentes, de qualquer valor): Production por razão óbvia, e
- * Preview porque lá o e-mail fica omitido (ADR-011) e o login social não
- * existe (ADR-005). A presença das variáveis da Vercel decide mesmo que
- * `JHO_ENV` falte ou minta — a mesma prova de deployment de `isLocalProcess`.
+ * **Lista de permissão (G27, #378):** só com `JHO_ENV` declarado `local` ou
+ * `e2e`. Ausente, vazio, digitado errado (`prod`, `producao`) ou qualquer valor
+ * inventado depois recusa — um emissor falso aceito num servidor público assina
+ * ID token de qualquer e-mail, e o vínculo por e-mail (ADR-001) entrega a conta.
+ * E nunca num deployment da Vercel (`VERCEL` ou `VERCEL_ENV` presentes, de
+ * qualquer valor), mesmo que `JHO_ENV` minta — a mesma prova de deployment de
+ * `isLocalProcess`.
  */
 export function testOverridesAllowed(env: AuthEnvironment): boolean {
   if (present(env.VERCEL) || present(env.VERCEL_ENV)) return false;
-  return env.JHO_ENV?.trim().toLowerCase() !== "production";
+  const declared = env.JHO_ENV?.trim().toLowerCase();
+  return declared !== undefined && TEST_OVERRIDE_ENVIRONMENTS.includes(declared);
 }
 
 export type IssuerResult =
@@ -102,11 +112,12 @@ export type IssuerResult =
   | { ok: false; reason: string };
 
 /**
- * O emissor do provedor: o real, ou o falso do E2E fora de produção (ADR-010).
+ * O emissor do provedor: o real, ou o falso do E2E onde `testOverridesAllowed`
+ * deixa (ADR-010).
  *
- * Em produção a variável de desvio é ignorada em silêncio — cair no emissor
- * real é o lado seguro. Fora dela, desvio malformado é erro: cair no emissor
- * real faria a suíte chamar o Google de verdade.
+ * Fora desses ambientes a variável de desvio é ignorada em silêncio — cair no
+ * emissor real é o lado seguro. Dentro deles, desvio malformado é erro: cair no
+ * emissor real faria a suíte chamar o Google de verdade.
  */
 export function issuerFor(provider: OidcProviderId, env: AuthEnvironment): IssuerResult {
   const variable = CREDENTIAL_VARS[provider].issuer;
@@ -244,10 +255,10 @@ export function parseSignupLimits(env: AuthEnvironment): SignupLimits {
 /**
  * Diretório do sink de e-mail em arquivo, ou `null` (ADR-011).
  *
- * Só fora de produção e fora da Vercel (`testOverridesAllowed`): em produção o
- * e-mail sai pelo Resend, e em Preview fica omitido. Uma `JHO_MAIL_SINK`
- * cadastrada por engano em produção é ignorada — o código de cadastro nunca
- * vai parar num arquivo do servidor.
+ * Só com `JHO_ENV` `local` ou `e2e`, fora da Vercel (`testOverridesAllowed`):
+ * em produção o e-mail sai pelo Resend, e em Preview fica omitido. Uma
+ * `JHO_MAIL_SINK` cadastrada por engano num servidor é ignorada — o código de
+ * cadastro nunca vai parar num arquivo do servidor.
  */
 export function mailSinkDir(env: AuthEnvironment): string | null {
   const dir = value(env, "JHO_MAIL_SINK");

@@ -116,8 +116,8 @@ let sinkSequence = 0;
  * aparece. O nome começa pelo instante e por uma sequência, então a ordem
  * alfabética é a ordem de envio.
  *
- * Só `configuredMailer` o escolhe, e só onde `mailSinkDir` deixa — nunca em
- * produção nem na Vercel.
+ * Só `configuredMailer` o escolhe, e só onde `mailSinkDir` deixa — `JHO_ENV`
+ * `local` ou `e2e`, nunca na Vercel.
  */
 export function fileMailer(dir: string): Mailer {
   return {
@@ -146,9 +146,10 @@ export function fileMailer(dir: string): Mailer {
 /**
  * O mailer configurado; sem configuração, o de terminal ou o que omite.
  *
- * O sink em arquivo vence tudo onde é aceito (`JHO_MAIL_SINK` fora de produção
- * e da Vercel): uma suíte com chave do Resend no ambiente não pode mandar
- * e-mail de verdade. Em produção a variável é ignorada.
+ * O sink em arquivo vence tudo onde é aceito (`JHO_MAIL_SINK` com `JHO_ENV`
+ * `local` ou `e2e`, fora da Vercel): uma suíte com chave do Resend no ambiente
+ * não pode mandar e-mail de verdade. Em qualquer outro ambiente a variável é
+ * ignorada.
  *
  * O terminal só é aceitável onde o log é a tela de quem opera: sem chave
  * nenhuma, num processo local. Chave presente com remetente faltando

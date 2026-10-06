@@ -110,15 +110,55 @@ describe("ambientes em que o login social existe (ADR-005)", () => {
   });
 });
 
+/** Ambientes que não se declaram local nem E2E: ausência, erro de digitação, valor inventado (G27). */
+const UNDECLARED: readonly Env[] = [
+  {},
+  { JHO_ENV: "" },
+  { JHO_ENV: "  " },
+  { JHO_ENV: "prod" },
+  { JHO_ENV: "producao" },
+  { JHO_ENV: "dev" },
+  { JHO_ENV: "staging" },
+  { JHO_ENV: "preview" },
+  { JHO_ENV: "localhost" },
+];
+
 describe("desvios de teste nunca valem em produção", () => {
   it("UT-005 JHO_MAIL_SINK é ignorada em produção e na Vercel, e vale localmente", () => {
     expect(mailSinkDir({ JHO_MAIL_SINK: "/tmp/x", JHO_ENV: "production" })).toBeNull();
     expect(mailSinkDir({ JHO_MAIL_SINK: "/tmp/x", JHO_ENV: " Production " })).toBeNull();
     expect(mailSinkDir({ JHO_MAIL_SINK: "/tmp/x", VERCEL: "1", VERCEL_ENV: "preview" })).toBeNull();
     expect(mailSinkDir({ JHO_MAIL_SINK: "/tmp/x", JHO_ENV: "local" })).toBe("/tmp/x");
-    expect(mailSinkDir({ JHO_MAIL_SINK: "/tmp/x" })).toBe("/tmp/x");
+    expect(mailSinkDir({ JHO_MAIL_SINK: "/tmp/x", JHO_ENV: "e2e" })).toBe("/tmp/x");
+    // Ambiente que não se declara não é tratado como seguro (G27, #378).
+    expect(mailSinkDir({ JHO_MAIL_SINK: "/tmp/x" })).toBeNull();
     expect(mailSinkDir({ JHO_MAIL_SINK: "  ", JHO_ENV: "local" })).toBeNull();
     expect(mailSinkDir({ JHO_ENV: "local" })).toBeNull();
+  });
+
+  it("UT-005 desvios só com JHO_ENV em lista de permissão: ausente, digitado errado ou desconhecido recusa", () => {
+    const fake = "https://attacker.test";
+    for (const declared of UNDECLARED) {
+      const label = JSON.stringify(declared);
+      const env: Env = {
+        ...declared,
+        JHO_PUBLIC_URL: "https://jobs.mastertimm.com.br",
+        JHO_SESSION_SECRET: SECRET,
+        JHO_MAIL_SINK: "/srv/sink",
+        JHO_OIDC_ISSUER_GOOGLE: fake,
+        ...GOOGLE,
+      };
+      expect(mailSinkDir(env), label).toBeNull();
+      expect(issuerFor("google", env), label).toEqual({ ok: true, issuer: DEFAULT_ISSUERS.google, overridden: false });
+      const google = parseOidcConfig(env).google;
+      expect(google.status === "configured" && google.settings.issuer, label).not.toBe(fake);
+    }
+    // `JHO_ENV=local` ou `e2e` dentro da Vercel continua deployment.
+    for (const declared of ["local", "e2e"]) {
+      const env: Env = { JHO_ENV: declared, VERCEL: "1", JHO_MAIL_SINK: "/srv/sink", JHO_OIDC_ISSUER_GOOGLE: fake };
+      expect(mailSinkDir(env), declared).toBeNull();
+      expect(issuerFor("google", env).ok && issuerFor("google", env)).toMatchObject({ overridden: false });
+    }
   });
 
   it("UT-006 o emissor falso é ignorado em produção e o erro nomeia a variável, nunca o valor", () => {

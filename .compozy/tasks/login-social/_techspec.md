@@ -153,8 +153,8 @@ Configuration (all read by pure parsers, documented in `docs/engineering/deploy.
 | `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` | — | Shared with publishing app; sign-in scopes only |
 | `JHO_SIGNUP_MAX_PER_IP_HOUR` | `3` | Per-IP cap; invalid → 3 |
 | `JHO_SIGNUP_IP_SECRET` | — (required in production) | IP HMAC key |
-| `JHO_MAIL_SINK` | — | File sink dir, non-production only |
-| `JHO_OIDC_ISSUER_GOOGLE`, `JHO_OIDC_ISSUER_LINKEDIN` | — | Fake issuer, non-production only |
+| `JHO_MAIL_SINK` | — | File sink dir, only with `JHO_ENV` `local` or `e2e`, outside Vercel |
+| `JHO_OIDC_ISSUER_GOOGLE`, `JHO_OIDC_ISSUER_LINKEDIN` | — | Fake issuer, only with `JHO_ENV` `local` or `e2e`, outside Vercel |
 
 ### API Endpoints
 

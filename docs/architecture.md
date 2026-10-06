@@ -521,8 +521,8 @@ que seguram o núcleo determinístico.
 | `GOOGLE_OIDC_CLIENT_ID`, `GOOGLE_OIDC_CLIENT_SECRET` | `contexts/auth/domain/oidc-config.ts` | Credenciais do login com Google (#464), no mesmo estado das do LinkedIn. |
 | `JHO_SESSION_SECRET` | `contexts/auth/domain/oidc-config.ts` | Segredo da chave do cookie do fluxo OIDC; sem ele, nenhum provedor social é oferecido. |
 | `JHO_SIGNUP_MAX_PER_IP_HOUR` | `contexts/auth/domain/oidc-config.ts` | Limite de cadastros por IP por hora; padrão 3. |
-| `JHO_MAIL_SINK` | `contexts/auth/domain/oidc-config.ts`, `contexts/auth/infra/resend-mailer.ts` | Sink de e-mail em arquivo, só fora de produção e da Vercel. |
-| `JHO_OIDC_ISSUER_GOOGLE`, `JHO_OIDC_ISSUER_LINKEDIN` | `contexts/auth/domain/oidc-config.ts` | Emissor OIDC falso do E2E, ignorado em produção e na Vercel. |
+| `JHO_MAIL_SINK` | `contexts/auth/domain/oidc-config.ts`, `contexts/auth/infra/resend-mailer.ts` | Sink de e-mail em arquivo, só com `JHO_ENV` `local` ou `e2e` e fora da Vercel. |
+| `JHO_OIDC_ISSUER_GOOGLE`, `JHO_OIDC_ISSUER_LINKEDIN` | `contexts/auth/domain/oidc-config.ts` | Emissor OIDC falso do E2E, só com `JHO_ENV` `local` ou `e2e` e fora da Vercel. |
 
 ---
 

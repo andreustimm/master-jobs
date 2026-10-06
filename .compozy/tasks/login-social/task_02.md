@@ -29,7 +29,7 @@ Também traz a emenda da regra 1 do LinkedIn, que precisa sair junto.
 3. MUST criar `GET /login/oauth/[provider]` e `GET /login/oauth/[provider]/callback` com `redirect303`, origem por `resolvePublicOrigin` (G17), `next` só relativo e mesmo domínio, e registrá-las em `proxy.ts`, `PUBLIC_ROUTES` (`tests/architecture.test.ts`), `tests/e2e/routes.mjs` e `config/e2e-spec-map.json`.
 4. MUST esconder os botões e recusar o início fora de produção/local ou sem credenciais (ADR-005); o callback de pendência social grava `auth_signup(kind=social)` e redireciona para `/signup` (a tela em si é da task_03).
 5. MUST compartilhar a janela de tentativas com o login por senha e registrar `oidc_signin`, `identity_linked`, `oidc_failed` em `auth_event`.
-6. MUST criar `tests/e2e/fake-oidc.mjs` no `run-isolated` (só loopback) e aceitar `JHO_OIDC_ISSUER_*` só fora de produção.
+6. MUST criar `tests/e2e/fake-oidc.mjs` no `run-isolated` (só loopback) e aceitar `JHO_OIDC_ISSUER_*` só com `JHO_ENV` `local` ou `e2e` (lista de permissão de `testOverridesAllowed`); o `run-isolated` declara `JHO_ENV=e2e` junto com os desvios.
 7. MUST incluir os arquivos que fazem `fetch` na lista de `tests/outbound-transport-boundary.test.ts`.
 8. MUST emendar a regra 1 do `AGENTS.md`, a G01 de `docs/engineering/rules/security.md` e `docs/linkedin-policy.md` no mesmo commit (G62), permitindo OpenID Connect só para autenticação, sem `w_member_social` e sem dado de perfil (ADR-003).
 </requirements>

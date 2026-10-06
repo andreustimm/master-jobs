@@ -25,6 +25,9 @@ const PROBE_ORIGIN = "http://next.invalid";
  *
  * Devolve o caminho normalizado pelo parser de URL (o mesmo algoritmo que o
  * navegador usa), não o texto recebido: o que é conferido é o que é seguido.
+ * Por isso a saída passa de novo pela checagem de barra dupla: segmentos de
+ * ponto (`/..//evil.test`, `/%2e%2e//evil.test`) somem na normalização e
+ * deixam `//evil.test`, que o navegador lê como outro host.
  */
 export function safeNext(next: string | null | undefined): string | null {
   if (typeof next !== "string" || next.length === 0 || next.length > MAX_NEXT_LENGTH) return null;
@@ -40,7 +43,9 @@ export function safeNext(next: string | null | undefined): string | null {
     return null;
   }
   if (url.origin !== PROBE_ORIGIN) return null;
-  return `${url.pathname}${url.search}${url.hash}`;
+  const path = `${url.pathname}${url.search}${url.hash}`;
+  if (!path.startsWith("/") || path.startsWith("//") || path.startsWith("/\\")) return null;
+  return path;
 }
 
 /**

@@ -95,11 +95,26 @@ describe("next seguro e destino", () => {
       "javascript:alert(1)",
       "",
       `/${"a".repeat(2048)}`,
+      // Segmentos de ponto: o parser os resolve e a saída vira `//evil.test`.
+      "/..//evil.test",
+      "/.//evil.test",
+      "/a/..//evil.test",
+      "/%2e%2e//evil.test",
+      "/%2E//evil.test",
+      "/a/b/../..//evil.test",
     ]) {
       expect(safeNext(hostile), JSON.stringify(hostile)).toBeNull();
     }
     expect(safeNext(null)).toBeNull();
     expect(safeNext(undefined)).toBeNull();
+  });
+
+  it("UT-034 o que safeNext devolve é ponto fixo: conferido de novo, sai igual", () => {
+    for (const raw of ["/jobs/12", "/jobs?q=ai#top", "/a/../jobs", "/./jobs", "/%2e%2e/jobs", "/a/b/../c"]) {
+      const out = safeNext(raw);
+      expect(out, JSON.stringify(raw)).not.toBeNull();
+      expect(safeNext(out), JSON.stringify(raw)).toBe(out);
+    }
   });
 
   it("UT-035 sem next vai para a tela do papel; com next seguro, para ele", () => {
@@ -110,5 +125,7 @@ describe("next seguro e destino", () => {
     expect(landingFor(["admin", "candidate"], null)).toBe("/");
     // next hostil é ignorado, não seguido.
     expect(landingFor(["candidate"], "//evil.test")).toBe("/");
+    expect(landingFor(["candidate"], "/..//evil.test")).toBe("/");
+    expect(landingFor(["recruiter"], "/%2e%2e//evil.test")).toBe("/jobs");
   });
 });
