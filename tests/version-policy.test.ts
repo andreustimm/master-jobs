@@ -153,6 +153,13 @@ describe("o repositório cumpre a política", () => {
     expect(checkRepository(process.cwd())).toEqual([]);
   });
 
+  it("o Python dos scripts tem a versão completa, que o Renovate sobe a cada patch", () => {
+    // Só `3.14`, o `setup-python` aceita a que já estiver no cache do runner:
+    // na primeira execução no ubuntu-26.04 ele pegou a 3.14.7 com a 3.14.8 já
+    // publicada.
+    expect(readFileSync(".python-version", "utf8").trim()).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
   it("roda no `pnpm check` e num job que o agregador do CI exige", () => {
     expect(pkg.scripts["check:versions"]).toBe(
       "node --experimental-strip-types --no-warnings scripts/versions/check.ts",
