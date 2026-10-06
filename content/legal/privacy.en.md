@@ -18,10 +18,13 @@ matter, including exercising your rights, write to
 - **Account:** email, name, role (candidate, recruiter or administrator),
   language, your password stored only as a hash, the date your email was
   confirmed and the versions of these documents you accepted.
-- **Sign-in with Google or LinkedIn:** only the identifier the provider gives
-  your account and the email it confirms as verified, with the date of the
-  link and of the last use. We do not receive or keep the password, name,
-  photo, job title, contacts or posts of those accounts.
+- **Sign-in with Google or LinkedIn:** we keep only the identifier the
+  provider gives your account and the email it confirms as verified, with the
+  date of the link and of the last use. To return the email, LinkedIn requires
+  the basic profile permission, so its response also carries your name and
+  photo: those two items arrive only during sign-in, are not stored, logged or
+  used for anything, and are discarded when it ends. We do not receive the
+  password, job title, contacts or posts of those accounts.
 - **Candidate profile:** name, professional headline, CV and its versions,
   search preferences and, if you send them, the photo and cover of your public
   profile.
@@ -68,9 +71,12 @@ protection safeguards.
 
 ## 6. How long we keep data
 
-- **Account and profile:** while the account exists. If you ask us to close
-  it, we delete the account and the profile, except what the law requires us
-  to keep.
+- **Account:** while it exists. If you ask us to close it, we delete the
+  account, its sessions and its links with Google or LinkedIn.
+- **Candidate profile, CV and application tracking:** kept apart from the
+  account and not deleted along with it. To have them deleted, ask for
+  deletion explicitly (section 7), in the closing request itself or later; it
+  covers everything except what the law requires us to keep.
 - **Link with Google or LinkedIn:** until you disconnect the provider or close
   the account; disconnecting deletes the record.
 - **Unfinished sign-up:** expires after 24 hours and is deleted by the weekly

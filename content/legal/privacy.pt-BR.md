@@ -18,10 +18,13 @@ escreva para [contato@mastertimm.com.br](mailto:contato@mastertimm.com.br).
 - **Conta:** e-mail, nome, papel (candidato, recrutador ou administrador),
   idioma, a senha guardada apenas como hash, a data em que o e-mail foi
   confirmado e as versões destes documentos que você aceitou.
-- **Login com Google ou LinkedIn:** apenas o identificador que o provedor dá à
-  sua conta e o e-mail que ele confirma como verificado, com a data do vínculo
-  e do último uso. Não recebemos nem guardamos senha, nome, foto, cargo,
-  contatos ou publicações dessas contas.
+- **Login com Google ou LinkedIn:** guardamos apenas o identificador que o
+  provedor dá à sua conta e o e-mail que ele confirma como verificado, com a
+  data do vínculo e do último uso. Para devolver o e-mail, o LinkedIn exige a
+  permissão de perfil básico, e por isso a resposta dele também traz o seu nome
+  e a sua foto: esses dois dados chegam só durante o login, não são gravados,
+  registrados em log nem usados para nada, e são descartados ao fim dele. Não
+  recebemos senha, cargo, contatos nem publicações dessas contas.
 - **Perfil de candidato:** nome, título profissional, currículo e as versões
   dele, preferências de busca e, se você enviar, foto e capa do perfil público.
 - **Acompanhamento de candidaturas:** as vagas que você acompanha, o estágio de
@@ -68,8 +71,13 @@ de proteção compatíveis.
 
 ## 6. Por quanto tempo guardamos
 
-- **Conta e perfil:** enquanto a conta existir. Se você pedir o encerramento,
-  apagamos a conta e o perfil, exceto o que a lei nos obrigue a manter.
+- **Conta:** enquanto ela existir. Se você pedir o encerramento, apagamos a
+  conta, as sessões e os vínculos com Google ou LinkedIn.
+- **Perfil de candidato, currículo e acompanhamento de candidaturas:** ficam
+  guardados à parte da conta e não são apagados junto com ela. Para que sejam
+  eliminados, peça a eliminação expressamente (seção 7), no próprio pedido de
+  encerramento ou depois; ela alcança tudo, exceto o que a lei nos obrigue a
+  manter.
 - **Vínculo com Google ou LinkedIn:** até você desligar o provedor ou encerrar
   a conta; desligar apaga o registro.
 - **Cadastro não concluído:** expira em 24 horas e é apagado na rotina semanal
