@@ -441,6 +441,7 @@ const ROUTINE: readonly string[] = [
   "git log --grep clean --oneline",
   "git checkout -b fix/x-foo origin/dev",
   "git -C /repo worktree remove .claude/worktrees/x",
+  "git -C /repo worktree remove --force .claude/worktrees/x",
   "git restore --staged src/a.ts",
   "chmod +x scripts/a.sh",
   "kill 1234",

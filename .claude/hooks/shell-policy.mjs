@@ -534,6 +534,15 @@ function shortCluster(arg, letter) {
 }
 
 /**
+ * Caminho de worktree de trabalho: `.claude/worktrees/<nome>` (relativo ou
+ * absoluto) ou `~/.codex/worktrees/<…>`. Sem `..`, para não escapar do lugar.
+ */
+export function isWorkWorktree(path) {
+  if (typeof path !== "string" || path.split("/").includes("..")) return false;
+  return /(?:^|\/)\.claude\/worktrees\/[^/]+\/?$/.test(path) || /(?:^~|\/)\.codex\/worktrees\/.+/.test(path);
+}
+
+/**
  * Estágio de pipe que só lê: casado pelo nome do executável, nunca por
  * substring (`catamaran` não é `cat`), sem atribuição, sem redirecionamento de
  * escrita e sem a opção que faz o programa escrever arquivo ou rodar outro
@@ -1489,9 +1498,13 @@ function judgeGitSubcommand(sub, rest, context) {
         const path = positional[0] === undefined ? null : outsideWrite(joinPath(context.place ?? null, positional[0]), context.env ?? NO_ENV);
         return stronger(path, branchOptions(rest.slice(1), "git worktree add", "b", "B", ["--orphan"], []));
       }
-      return rest[0] === "remove" && (has(rest, "--force", "-f") || rest.some((arg) => shortCluster(arg, "f")))
-        ? ask("git worktree remove --force descarta mudanças")
-        : null;
+      if (rest[0] !== "remove" || !(has(rest, "--force", "-f") || rest.some((arg) => shortCluster(arg, "f")))) return null;
+      // Worktree de trabalho (`.claude/worktrees/<wt>` ou `~/.codex/worktrees/…`)
+      // sai sem pergunta, por autorização do dono (06/10/2026): é a limpeza de
+      // rotina depois do merge. Qualquer outro caminho continua perguntando.
+      return rest.slice(1).filter((arg) => !arg.startsWith("-")).every(isWorkWorktree)
+        ? null
+        : ask("git worktree remove --force fora de worktree de trabalho descarta mudanças");
     case "filter-branch":
     case "filter-repo":
       return ask(`git ${sub} reescreve histórico`);
