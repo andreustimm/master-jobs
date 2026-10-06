@@ -712,9 +712,11 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     `checkout .`, `checkout <ref> <caminho>`, `checkout -f/-B`;
     `switch -f/--discard-changes/-C`; `restore` fora de `--staged`;
     `stash drop/clear`; `worktree remove --force` fora de worktree de
-    trabalho — em `.claude/worktrees/<nome>` ou `~/.codex/worktrees/…` passa,
-    por autorização do dono de 06/10/2026, porque é a limpeza de rotina
-    depois do merge; `git rm -r/-f`), reescrita de
+    trabalho — em `.claude/worktrees/<nome>` ou `~/.codex/worktrees/<id>/<nome>`
+    passa, por autorização do dono de 06/10/2026, porque é a limpeza de rotina
+    depois do merge; `-ff` (worktree travada), alvo com variável, curinga ou
+    `..` e comando sem alvo perguntam; link simbólico com nome de worktree não
+    é resolvido; `git rm -r/-f`), reescrita de
     histórico (`filter-branch`, `filter-repo`, `update-ref -d`,
     `reflog expire`, `gc --prune`, `prune`, `replace`), escrita de ref
     local por uma checagem única — `HEAD`, `main`/`staging`/`dev` (também
