@@ -1,0 +1,156 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Política de versões (issue #468, docs/engineering/versions.md): tudo na versão mais nova, por PR que só entra com o CI verde.",
+  "extends": ["config:recommended", ":dependencyDashboard"],
+  "baseBranchPatterns": ["dev"],
+  "timezone": "America/Sao_Paulo",
+  "schedule": ["* 0-6 * * *"],
+  "automergeSchedule": ["* 0-6 * * *"],
+  "minimumReleaseAge": "1 day",
+  "rangeStrategy": "bump",
+  "postUpdateOptions": ["pnpmDedupe"],
+  "automerge": true,
+  "automergeType": "pr",
+  "automergeStrategy": "merge-commit",
+  "platformAutomerge": false,
+  "ignoreTests": false,
+  "branchPrefix": "chore/renovate-",
+  "branchNameStrict": true,
+  "semanticCommits": "enabled",
+  "semanticCommitType": "chore",
+  "semanticCommitScope": "deps",
+  "commitMessageAction": "atualiza",
+  "commitMessageTopic": "{{depName}}",
+  "commitMessageExtra": "para {{#if isPinDigest}}{{{newDigestShort}}}{{else}}{{#if isMajor}}{{prettyNewMajor}}{{else}}{{#if isSingleVersion}}{{prettyNewVersion}}{{else}}{{#if newValue}}{{{newValue}}}{{else}}{{{newDigestShort}}}{{/if}}{{/if}}{{/if}}{{/if}}",
+  "prBodyNotes": [
+    "Atualização automática da política de versões ([#468](https://github.com/andreustimm/master-jobs/issues/468), `docs/engineering/versions.md`). Entra sozinha só com todos os checks verdes; quebra se resolve adaptando o código, nunca rebaixando a versão."
+  ],
+  "labels": ["dependências"],
+  "assignees": ["andreustimm"],
+  "prConcurrentLimit": 10,
+  "prHourlyLimit": 4,
+  "vulnerabilityAlerts": {
+    "schedule": ["at any time"],
+    "labels": ["dependências", "segurança"]
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": true,
+    "schedule": ["* 0-6 * * 1"]
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Etiqueta do runner hospedado dentro da expressão de runs-on do ci.yml (as duas ocorrências por linha), a constante que o teste trava e a fixture que a reproduz.",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/ci\\.yml$/",
+        "/^tests/support/ci-workflow\\.ts$/",
+        "/^tests/fixtures/ci-runner-selection/job-com-literal\\.yml$/",
+        "/^docs/engineering/deploy\\.md$/"
+      ],
+      "matchStrings": ["[\"'` ](?<depName>ubuntu)-(?<currentValue>\\d+\\.\\d+)[\"'`\\n]"],
+      "matchStringsStrategy": "any",
+      "datasourceTemplate": "github-runners"
+    },
+    {
+      "customType": "regex",
+      "description": "PostgreSQL descartável que os testes e o ensaio de migração sobem pelo Docker.",
+      "managerFilePatterns": ["/^tests/support/postgres-global\\.ts$/", "/^scripts/migration/rehearse-production\\.ts$/"],
+      "matchStrings": ["\"(?<depName>postgres):(?<currentValue>\\d+)\""],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "supabase/postgres do Compose local, no padrão ${VAR:-imagem:tag}.",
+      "managerFilePatterns": ["/^docker-compose\\.local\\.yml$/"],
+      "matchStrings": ["\\$\\{LOCAL_POSTGRES_IMAGE:-(?<depName>supabase/postgres):(?<currentValue>\\d+\\.\\d+\\.\\d+\\.\\d+)\\}"],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)\\.(?<build>\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "MinIO (fork pgsty) do Compose local, fixado por tag RELEASE e digest.",
+      "managerFilePatterns": ["/^docker-compose\\.local\\.yml$/"],
+      "matchStrings": ["\\$\\{LOCAL_MINIO_IMAGE:-(?<depName>pgsty/minio):(?<currentValue>RELEASE\\.[0-9T:-]+Z)@(?<currentDigest>sha256:[a-f0-9]{64})\\}"],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "regex:^RELEASE\\.(?<major>\\d{4})-(?<minor>\\d{2})-(?<patch>\\d{2})T(?<build>\\d{2})-\\d{2}-\\d{2}Z$"
+    },
+    {
+      "customType": "regex",
+      "description": "Versão do runner do GitHub Actions na imagem do runner próprio. O SHA-256 continua conferido pelo dono (o build falha fechado até lá).",
+      "managerFilePatterns": ["/^scripts/runner/Dockerfile$/"],
+      "matchStrings": ["ARG RUNNER_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "actions/runner",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Playwright padrão da imagem do runner próprio; o provision-vps.sh passa a versão do lockfile, este é só o padrão.",
+      "managerFilePatterns": ["/^scripts/runner/Dockerfile$/"],
+      "matchStrings": ["ARG PLAYWRIGHT_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "playwright",
+      "datasourceTemplate": "npm"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "npm: minor e patch num PR só por rodada; cada major em PR próprio, para a quebra de um não segurar os outros.",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "groupName": "dependências npm (minor e patch)"
+    },
+    {
+      "description": "pnpm (packageManager) anda sozinho: troca de major muda a configuração lida (pnpm-workspace.yaml).",
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["packageManager"],
+      "groupName": "pnpm"
+    },
+    {
+      "description": "Actions e etiquetas de runner num PR só por rodada, inclusive major.",
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions e runners"
+    },
+    {
+      "description": "Etiqueta do runner dentro da expressão do ci.yml anda junto com as Actions.",
+      "matchDatasources": ["github-runners"],
+      "groupName": "GitHub Actions e runners"
+    },
+    {
+      "description": "Imagens Docker (Dockerfile, runner próprio, Compose, Postgres dos testes), menos o Node, que é runtime.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["!node"],
+      "groupName": "imagens Docker"
+    },
+    {
+      "description": "Runtime Node: .nvmrc, engines.node, imagens node:* e @types/node sobem juntos (scripts/versions/check.ts reprova majors divergentes).",
+      "matchPackageNames": ["node", "@types/node"],
+      "groupName": "runtime Node"
+    },
+    {
+      "description": "Major do Node só depois de a Vercel aceitar a major nova em produção (docs.vercel.com, 'Supported Node.js versions'): o CI não roda o build da Vercel, então verde aqui não prova o deploy.",
+      "matchPackageNames": ["node", "@types/node"],
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["dependências", "confirmar-vercel"]
+    },
+    {
+      "description": "Python dos scripts (.python-version).",
+      "matchManagers": ["pyenv"],
+      "groupName": "Python"
+    },
+    {
+      "description": "Major do Sentry muda o formato do que sai (o 11 passou a transmitir spans em fluxo); a peneira de privacidade precisa ser revista antes. tests/instrumentation-guard.test.ts trava a major.",
+      "matchPackageNames": ["@sentry/nextjs"],
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["dependências", "revisar-privacidade"]
+    },
+    {
+      "description": "Runner do GitHub na imagem própria: o SHA-256 precisa ser conferido pelo dono antes do build, então não entra sozinho.",
+      "matchPackageNames": ["actions/runner"],
+      "automerge": false
+    }
+  ]
+}

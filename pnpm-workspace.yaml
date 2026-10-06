@@ -1,0 +1,19 @@
+# Configuração do pnpm (a partir do pnpm 11, o campo `pnpm` do package.json e
+# as chaves não-auth do `.npmrc` deixaram de ser lidos; tudo mora aqui). O
+# Dockerfile copia este arquivo junto com o lockfile: sem ele, o
+# `--frozen-lockfile` da imagem resolveria com outras overrides.
+
+# Piso de segurança do esbuild (GHSA-67mh-4wv8-2f99, servidor de dev exposto à
+# rede local), herdado do antigo `pnpm.overrides` do package.json.
+overrides:
+  esbuild: ">=0.25.0"
+
+# O pnpm 11+ reprova a instalação quando um pacote com script de build não está
+# declarado aqui (`strictDepBuilds`). `false` mantém o comportamento que o
+# projeto já tinha com o pnpm 10 (scripts ignorados): o binário do Sentry CLI e
+# o do agent-browser vêm de dependências opcionais por plataforma, e o esbuild
+# traz o binário nativo pelo mesmo caminho.
+allowBuilds:
+  "@sentry/cli": false
+  agent-browser: false
+  esbuild: false

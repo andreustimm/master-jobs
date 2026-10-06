@@ -12,7 +12,7 @@ jobs:
   canonical-task:
     # Bootstrap is deliberately explicit. Enable only after the main pilot.
     if: vars.TASKS_ENFORCEMENT == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7

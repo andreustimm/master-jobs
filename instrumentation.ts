@@ -48,11 +48,32 @@ export async function register(): Promise<void> {
   }
 }
 
+type SentrySdk = typeof import("@sentry/nextjs");
+
+/**
+ * O SDK com `withStaticSpan` à mão, venha de onde vier.
+ *
+ * O build CJS do `@sentry/nextjs` (o que a condição `node` resolve) reexporta
+ * o `@sentry/node` por um laço dinâmico. Empacotado pelo Next, o nome aparece
+ * no módulo; no `import()` nativo do Node, só em `default`. Sem
+ * `withStaticSpan` em lugar nenhum, a peneira de span não seria chamada: é
+ * melhor não iniciar o relato do que iniciá-lo mandando span sem peneira.
+ */
+function sdkComPeneiraDeSpan(modulo: SentrySdk): SentrySdk {
+  // `in` antes de ler: um namespace de módulo pode recusar a leitura de um
+  // nome que não exporta (o mock do Vitest recusa), e a ausência é justamente
+  // o caso que esta função trata.
+  if ("withStaticSpan" in modulo && typeof modulo.withStaticSpan === "function") return modulo;
+  const padrao = "default" in modulo ? (modulo as SentrySdk & { default?: SentrySdk }).default : undefined;
+  if (padrao && typeof padrao.withStaticSpan === "function") return padrao;
+  throw new Error("@sentry/nextjs sem withStaticSpan: a peneira de span ficaria desligada");
+}
+
 async function iniciarRelato(): Promise<void> {
   const dsn = process.env.SENTRY_DSN?.trim();
   if (!dsn) return;
 
-  const Sentry = await import("@sentry/nextjs");
+  const Sentry = sdkComPeneiraDeSpan(await import("@sentry/nextjs"));
   /**
    * A configuração inteira — peneiras, amostragem, `sendDefaultPii: false`,
    * nenhuma propagação de trace — mora em `src/core/observability.ts`, pura,
@@ -65,14 +86,18 @@ async function iniciarRelato(): Promise<void> {
    * desliga). O SHA do commit é o release: é o que liga a exceção e o trace ao
    * código que os produziu.
    */
-  Sentry.init(
-    sentryServerOptions({
-      dsn,
-      environment: environment(),
-      release: process.env.VERCEL_GIT_COMMIT_SHA,
-      tracesSampleRate: process.env.SENTRY_TRACES_SAMPLE_RATE,
-    }),
-  );
+  const opcoes = sentryServerOptions({
+    dsn,
+    environment: environment(),
+    release: process.env.VERCEL_GIT_COMMIT_SHA,
+    tracesSampleRate: process.env.SENTRY_TRACES_SAMPLE_RATE,
+  });
+  /**
+   * `withStaticSpan` diz ao SDK 11 que a peneira de span espera o formato
+   * estático (`traceLifecycle: "static"`, fixado em `sentryServerOptions`).
+   * Sem a marca, o SDK nunca a chamaria e o span sairia como veio.
+   */
+  Sentry.init({ ...opcoes, beforeSendSpan: Sentry.withStaticSpan(opcoes.beforeSendSpan) });
 }
 
 /**

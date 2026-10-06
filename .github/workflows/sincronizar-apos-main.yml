@@ -60,7 +60,7 @@ jobs:
   # deixa o X vermelho que ninguém pode ignorar antes de avisar "em produção".
   gate-css:
     name: CSS de produção é do build novo
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
 
     steps:
@@ -95,7 +95,7 @@ jobs:
 
   marcar:
     name: Versionar e criar a tag
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     outputs:
       versao: ${{ steps.versao.outputs.versao }}
@@ -204,7 +204,7 @@ jobs:
   devolver:
     name: main → dev
     needs: marcar
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
 
     steps:

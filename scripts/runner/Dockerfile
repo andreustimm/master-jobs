@@ -32,18 +32,11 @@
 # "isolação" do dockerd interno seria teatro; com ele, o contêiner roda um
 # Docker completo por dentro sem escalar poder para fora de si mesmo
 # (re-revisão L2 de 29/09/2026, C1). Ver docs/engineering/deploy.md e ADR 0030.
-FROM node:24-bookworm-slim AS base
+FROM node:24-trixie-slim AS base
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Confere que a imagem base ainda serve a major exigida por engines.node —
-# falha cedo, no build, em vez de silenciosamente rodar Node errado.
-RUN node -e "if (!process.version.startsWith('v24.')) { \
-  console.error('Node ' + process.version + ' não é 24.x — atualize a tag da imagem base.'); \
-  process.exit(1); \
-}"
-
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl gnupg git jq unzip xz-utils util-linux \
+      ca-certificates curl gnupg git jq python3 unzip xz-utils util-linux \
     && rm -rf /var/lib/apt/lists/*
 
 # Docker Engine, só para o dockerd ISOLADO de dentro do contêiner do job —
@@ -63,11 +56,16 @@ WORKDIR /opt/build-context
 # repositório entra na imagem, e o `pnpm install` de verdade acontece no
 # checkout do próprio job, como em qualquer outro runner.
 COPY package.json ./package.json
-RUN NODE_WANTED="$(node -p "require('./package.json').engines.node")" \
-    && case "$(node -v)" in \
-         v24.*) : ;; \
-         *) echo "Node $(node -v) não satisfaz engines.node=${NODE_WANTED}"; exit 1 ;; \
-       esac \
+# Confere que a imagem base serve a MESMA major de engines.node — falha cedo,
+# no build, em vez de rodar Node errado em silêncio. A major vem do
+# package.json, não de um número repetido aqui: quando o Renovate sobe a tag
+# da imagem e o `engines` juntos, esta checagem acompanha sem edição.
+RUN node -e "const want = require('./package.json').engines.node.match(/\d+/)[0]; \
+  const have = process.versions.node.split('.')[0]; \
+  if (have !== want) { \
+    console.error('Node ' + process.version + ' não é ' + want + '.x (engines.node) — atualize a tag da imagem base.'); \
+    process.exit(1); \
+  }" \
     && PNPM_VERSION="$(node -p "require('./package.json').packageManager.split('@')[1]")" \
     && corepack enable \
     && corepack prepare "pnpm@${PNPM_VERSION}" --activate \
@@ -87,17 +85,17 @@ RUN NODE_WANTED="$(node -p "require('./package.json').engines.node")" \
 # install --with-deps`/`install-deps` quando `runner.environment ==
 # 'self-hosted'` (revisão L2, M2): os navegadores já estão aqui.
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
-ARG PLAYWRIGHT_VERSION=1.62.1
+ARG PLAYWRIGHT_VERSION=1.63.0
 RUN npx --yes "playwright@${PLAYWRIGHT_VERSION}" install --with-deps chromium webkit \
     && chmod -R a+rX "$PLAYWRIGHT_BROWSERS_PATH"
 
 # GitHub Actions runner — versão e checksum fixos. O checksum abaixo PRECISA
 # ser conferido pelo dono na página de release antes do primeiro build real
-# (https://github.com/actions/runner/releases/tag/v2.328.0, arquivo
-# actions-runner-linux-x64-2.328.0.tar.gz, campo SHA256) — o placeholder
+# (https://github.com/actions/runner/releases/tag/v2.338.0, arquivo
+# actions-runner-linux-x64-2.338.0.tar.gz, campo SHA256) — o placeholder
 # nunca bate com um download de verdade, e o build FALHA fechado até o dono
 # substituí-lo (revisão L2, M5: nunca aceitar tarball sem checksum batendo).
-ARG RUNNER_VERSION=2.328.0
+ARG RUNNER_VERSION=2.338.0
 ARG RUNNER_ARCH=x64
 ARG RUNNER_SHA256=PREENCHER_COM_O_SHA256_PUBLICADO_NA_PAGINA_DE_RELEASE
 RUN curl -fsSL -o /tmp/actions-runner.tar.gz \

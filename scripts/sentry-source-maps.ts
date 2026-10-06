@@ -39,8 +39,10 @@ export type SourceMapDeps = {
 };
 
 async function runSentryCli(args: string[]): Promise<void> {
-  const { default: SentryCli } = await import("@sentry/cli");
-  await new SentryCli().execute(args, "rejectOnError");
+  // `@sentry/cli` 3: export nomeado, e `live: true` é o antigo
+  // `"rejectOnError"` (herda o stdio e rejeita em saída diferente de zero).
+  const { SentryCli } = await import("@sentry/cli");
+  await new SentryCli(null, {}).execute(args, true);
 }
 
 /** Uma variável de ambiente pode estar no texto do erro; o log de build é lido por outras pessoas. */

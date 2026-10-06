@@ -15,6 +15,7 @@ const DOCKERIGNORE = readFileSync(".dockerignore", "utf8");
 const FLY_TOML = readFileSync("fly.toml", "utf8");
 const PACKAGE_JSON = JSON.parse(readFileSync("package.json", "utf8")) as {
   scripts: Record<string, string>;
+  engines: { node: string };
 };
 
 /**
@@ -154,8 +155,19 @@ describe("Dockerfile — reprodutibilidade e diretiva de sintaxe (minors da revi
     expect(DOCKERFILE.split("\n")[0]).toBe("# syntax=docker/dockerfile:1");
   });
 
-  it("a imagem base é pinada por digest, não por tag flutuante", () => {
-    expect(DOCKERFILE).toMatch(/node:24-slim@sha256:[0-9a-f]{64}/);
+  it("a imagem base é a major de engines.node, numa variante slim, pinada por digest", () => {
+    // Duas fontes da versão do Node divergem; a que quebra é a que ninguém
+    // lembrou de atualizar. O Renovate sobe as duas juntas (issue #468).
+    const major = /(\d+)/.exec(PACKAGE_JSON.engines.node)![1];
+    expect(DOCKERFILE).toMatch(new RegExp(`node:${major}-[a-z]+-slim@sha256:[0-9a-f]{64}`));
+  });
+
+  it("a versão do pnpm vem de packageManager, sem número repetido no Dockerfile", () => {
+    expect(DOCKERFILE).toContain("corepack install");
+    expect(DOCKERFILE).not.toMatch(/pnpm@\d/);
+    // Overrides e allowBuilds moram aqui desde o pnpm 11; sem o arquivo, o
+    // `--frozen-lockfile` da imagem resolveria com outra configuração.
+    expect(DOCKERFILE).toMatch(/COPY package\.json pnpm-lock\.yaml pnpm-workspace\.yaml/);
   });
 
   it("recebe o SHA do commit como build-arg para o marcador de versão do service worker", () => {

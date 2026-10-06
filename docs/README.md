@@ -66,7 +66,8 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`engineering/local-postgres.md`](engineering/local-postgres.md) | Compose local com imagem Supabase Postgres, PGMQ, pgvector e limites de paridade. |
 | [`engineering/runbooks/435-contas-e2e-producao.md`](engineering/runbooks/435-contas-e2e-producao.md) | Roteiro do dono para desligar e apagar as contas do E2E (`@local.test`, candidatos `e2e-%`) que ficaram em produção e deixar um dono só (`is_default`). |
 | [`engineering/local-storage.md`](engineering/local-storage.md) | MinIO local para o armazenamento de objetos (foto e capa), suíte de contrato e como apontar para AWS S3. |
-| [`engineering/stack-lts-upgrade-proposal.md`](engineering/stack-lts-upgrade-proposal.md) | Proposta de upgrade LTS e matriz de paridade entre local, CI, Vercel e Supabase. |
+| [`engineering/versions.md`](engineering/versions.md) | **Política de versões:** tudo na versão mais nova (SO, runtime, dependências, imagens, bancos), o Renovate que mantém assim, o gate `pnpm check:versions` e o que fica com o dono. |
+| [`engineering/stack-lts-upgrade-proposal.md`](engineering/stack-lts-upgrade-proposal.md) | Registro histórico; substituída pela política de versões. |
 | [`.compozy/tasks/job-lifecycle-retention/`](../.compozy/tasks/job-lifecycle-retention/) | PRD, especificação e testes para arquivar vagas preservando candidaturas. |
 | [`.compozy/tasks/environment-sample-only/`](../.compozy/tasks/environment-sample-only/) | Especificação e evidências da entrega que restringiu dev/staging a fixtures. Estado atual na issue vinculada. |
 | [`operations/turso-quota-incident-2026-09-03.md`](operations/turso-quota-incident-2026-09-03.md) | Histórico do incidente Turso e de sua contenção; conferir as demandas residuais no Project antes de alterar agendadores. |

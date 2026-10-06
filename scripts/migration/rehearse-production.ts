@@ -19,7 +19,7 @@ for await (const chunk of createReadStream(snapshot)) digest.update(chunk);
 const sourceSha256 = digest.digest("hex");
 const password = randomBytes(32).toString("hex");
 const started = spawnSync("docker", ["run", "--rm", "-d", "-p", "127.0.0.1::5432",
-  "-e", "POSTGRES_PASSWORD", "-e", "POSTGRES_DB=jho_migration_rehearsal", "postgres:17"],
+  "-e", "POSTGRES_PASSWORD", "-e", "POSTGRES_DB=jho_migration_rehearsal", "postgres:18"],
 { encoding: "utf8", env: { ...process.env, POSTGRES_PASSWORD: password } });
 const container = started.stdout.trim();
 if (started.status !== 0 || !/^[a-f0-9]{64}$/.test(container)) throw new Error("Could not start rehearsal PostgreSQL");

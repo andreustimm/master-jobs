@@ -128,7 +128,7 @@ describe("termo pausado", () => {
     const visao = await termOverview({ candidateId }, new Date(AGORA));
     expect(visao.terms.find((t) => t.id === salvo.termId)!.status).toBe("paused");
     // A lista do quadro também enxerga o estado.
-    expect(listSavedTerms({ candidateId })).resolves.toBeTruthy();
+    await expect(listSavedTerms({ candidateId })).resolves.toBeTruthy();
   });
 
   it("UT-164 mexer em termo que não existe responde `not_found`", async () => {

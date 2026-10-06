@@ -13,7 +13,7 @@
 #
 # `runs-on:` de todo job é a mesma expressão, nunca um literal (issue #367,
 # ADR 0030 decisão 1/4): `vars.CI_RUNS_ON` ausente ou vazia mantém o runner
-# hospedado de hoje (`fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"')`); setada
+# hospedado de hoje (`fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"')`); setada
 # com JSON válido, troca o runner de todo job sem editar este arquivo. Um
 # valor SEM aspas (`self-hosted`, em vez de `'"self-hosted"'` ou
 # `'["self-hosted","linux","master-jobs"]'`) não é JSON válido: `fromJSON`
@@ -71,7 +71,7 @@ jobs:
     # Os gates curtos que não dependem de teste: changelogs, tracker de QA,
     # tipos e os contratos das skills de QA. Juntos custam menos que a
     # preparação de um runner, por isso dividem um.
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 10
 
     steps:
@@ -93,6 +93,15 @@ jobs:
           # ninguém lembrou de atualizar.
           node-version-file: package.json
           cache: pnpm
+
+      - uses: actions/setup-python@v7
+        # O tracker de QA e os contratos das skills rodam em Python. A versão
+        # vem de `.python-version` (o Renovate a sobe), e não do `python3` que
+        # a imagem do runner trouxer no dia. No runner próprio não há cache de
+        # ferramentas: a imagem (scripts/runner/Dockerfile) já traz `python3`.
+        if: runner.environment != 'self-hosted'
+        with:
+          python-version-file: .python-version
 
       - run: pnpm install --frozen-lockfile
 
@@ -117,6 +126,14 @@ jobs:
         # de `.claude/`; espelho ausente, divergente ou órfão reprova (G85).
         run: pnpm check:harness
 
+      - name: Versões explícitas
+        # Política de versões (issue #468, docs/engineering/versions.md): nada
+        # de `ubuntu-latest`, imagem sem tag ou Action sem versão — o que troca
+        # por fora do CI —, e a major do Node igual em todas as fontes. Qual é a
+        # versão mais nova é o Renovate quem diz; aqui só se garante que existe
+        # uma versão escrita para ele subir.
+        run: pnpm check:versions
+
       - name: Tracker de QA conforme o esquema
         # `docs/qa/state.csv` é visão gerada e ignorada pelo git, então o
         # esquema dos cenários só era conferido quando alguém rodava o
@@ -139,7 +156,7 @@ jobs:
     #
     # A cobertura de uma fatia é parcial e não diz nada sozinha: os limiares
     # ficam zerados aqui e são aplicados sobre o total, no job `cobertura`.
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 15
     strategy:
       # Uma fatia vermelha não cancela as outras: a lista completa de falhas
@@ -199,9 +216,11 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           name: blob-${{ matrix.fatia }}
-          path: .vitest-reports/*
-          # `.vitest-reports` começa com ponto, e o upload ignora arquivo
-          # oculto por padrão — sem isto o artefato sobe vazio.
+          # O reporter `blob` grava em `.vitest/blob/` desde o Vitest 5 (antes,
+          # `.vitest-reports/`), e `--merge-reports` lê do mesmo lugar.
+          path: .vitest/blob/*
+          # `.vitest` começa com ponto, e o upload ignora arquivo oculto por
+          # padrão — sem isto o artefato sobe vazio.
           include-hidden-files: true
           if-no-files-found: error
           # "Re-run failed jobs" reaproveita as fatias verdes e refaz só a
@@ -226,7 +245,7 @@ jobs:
     # `qualidade` reprova pela fatia vermelha de qualquer jeito.
     if: ${{ !cancelled() }}
     needs: testes
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 10
 
     steps:
@@ -247,7 +266,7 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           pattern: blob-*
-          path: .vitest-reports
+          path: .vitest/blob
           merge-multiple: true
 
       - name: Cobertura total contra os limiares
@@ -259,7 +278,7 @@ jobs:
     # O contrato de privacidade abre um Chromium real. Ele fica separado da
     # cobertura para não concorrer com os testes curtos, mas continua sendo
     # obrigatório no mesmo portão que autoriza a promoção.
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 10
 
     steps:
@@ -312,7 +331,7 @@ jobs:
         run: pnpm test:pwa-browser
 
   build:
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 15
 
     steps:
@@ -349,7 +368,7 @@ jobs:
     # código funciona", é "o banco acompanha o código". Um schema.ts alterado
     # sem migração correspondente passa em todos os testes — eles rodam sobre um
     # banco recriado do zero — e quebra só no ambiente que já tem dado.
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 10
 
     steps:
@@ -388,7 +407,7 @@ jobs:
     # registrada ao agregador e à promoção (`NON_BLOCKING_CI_JOBS` em
     # scripts/release/promotion-ci.ts).
     #
-    # Banco: o próprio `run-isolated.mjs` sobe um `postgres:17` descartável pelo
+    # Banco: o próprio `run-isolated.mjs` sobe um `postgres:18` descartável pelo
     # Docker do runner, preso a 127.0.0.1, com senha aleatória — o mesmo
     # caminho da máquina local. Um `services:` do Actions seria um segundo
     # caminho, que o harness não usa e que poderia divergir do primeiro; e
@@ -405,7 +424,7 @@ jobs:
     # de `main` exige, e 15 minutos de navegador só atrasam a PR de produção
     # (#303). `staging` recebe exatamente o SHA cujo push em `dev` já rodou o E2E.
     if: github.event_name != 'workflow_dispatch' && inputs.target-sha == ''
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 40
     permissions:
       contents: read
@@ -476,7 +495,7 @@ jobs:
     # falha, pulo ou cancelamento.
     if: ${{ always() }}
     needs: [contratos, testes, cobertura, pwa-browser, build, schema-e-migracao]
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 5
 
     steps:
@@ -490,7 +509,7 @@ jobs:
   validacao:
     if: inputs.target-sha != ''
     needs: [qualidade, schema-e-migracao]
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     outputs:
       sha: ${{ steps.alvo.outputs.sha }}
     steps:

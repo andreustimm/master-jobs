@@ -606,7 +606,7 @@ no push das três branches. Os gates correm em jobs paralelos:
 
 | Job | O que prova |
 |---|---|
-| `contratos` | changelogs prontos, tracker de QA, tipos, contratos das skills de QA |
+| `contratos` | changelogs prontos, versões explícitas ([política de versões](versions.md)), tracker de QA, tipos, contratos das skills de QA |
 | `testes` (4 fatias) | a suíte Vitest, cada fatia num runner com o próprio PostgreSQL em Docker |
 | `cobertura` | mescla os blobs das fatias e aplica o piso de `vitest.config.ts` sobre o total |
 | `pwa-browser` | a fronteira de privacidade do service worker num Chromium real |
@@ -687,16 +687,16 @@ o resultado no log. A porta 6543 (transação) continua recusada.
 Fase 2 da contingência de CI/deploy ([issue #367](https://github.com/andreustimm/master-jobs/issues/367),
 [ADR 0030](../adr/0030-contingencia-de-ci-e-deploy.md)). O `runs-on:` de todo
 job de `ci.yml` é uma única expressão, nunca um literal
-(`tests/ci-runner-selection.test.ts` reprova quem adicionar `runs-on:
-ubuntu-latest` de novo):
+(`tests/ci-runner-selection.test.ts` reprova quem adicionar um `runs-on:`
+literal de novo):
 
 ```yaml
 runs-on: ${{ github.event_name == 'pull_request' &&
   github.event.pull_request.head.repo.full_name != github.repository &&
-  'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+  'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
 ```
 
-- **Ausente ou vazia** (padrão): `ubuntu-latest`, o runner hospedado de hoje —
+- **Ausente ou vazia** (padrão): `ubuntu-26.04`, o runner hospedado de hoje —
   nada muda sem ação do dono (princípio 1/2 da ADR).
 - **Setada** com **JSON válido** (`gh variable set CI_RUNS_ON --body
   '["self-hosted","linux","master-jobs"]'`): todo job passa a rodar no runner
@@ -848,10 +848,13 @@ contêiner:
 **Voltar ao hospedado**, a qualquer momento e sem tocar na VPS:
 
 ```bash
-gh variable set CI_RUNS_ON --body '"ubuntu-latest"'   # ou: gh variable delete CI_RUNS_ON
+gh variable delete CI_RUNS_ON
 ```
 
-O próximo push já roda em `ubuntu-latest`. **Se havia execução do CI em fila
+Sem a variável, o próximo push já roda no runner hospedado padrão de `ci.yml`
+(hoje `ubuntu-26.04`). Apagar, em vez de gravar a etiqueta, é de propósito: a
+etiqueta muda quando o Renovate sobe a versão do Ubuntu, e um valor gravado na
+variável ficaria para trás. **Se havia execução do CI em fila
 ou em andamento esperando o runner próprio** no momento da troca, ela fica
 presa (nenhum runner com aquele label vai aparecer para pegá-la). Restrinja a
 `--workflow ci.yml` — cancelar um workflow alheio (`varredura.yml`,
@@ -1178,6 +1181,15 @@ banco (`server.address`). Por isso a peneira é outra lista de permissão:
 `tracePropagationTargets: []` impede o SDK de anexar `sentry-trace` e
 `baggage` às requisições de saída — o `baggage` levaria a chave pública, o
 release e o nome da transação a cada board consultado.
+
+**Ciclo de trace estático.** Desde o `@sentry/nextjs` 11 o padrão é
+`traceLifecycle: 'stream'`, que manda cada span em fluxo (`name`/`attributes`)
+e **ignora** `beforeSendTransaction`. As peneiras acima foram escritas para o
+formato estático, então `sentryServerOptions` fixa `traceLifecycle: 'static'`
+e `instrumentation.ts` marca a peneira de span com `Sentry.withStaticSpan` —
+sem a marca, o SDK nunca a chamaria. `tests/instrumentation-guard.test.ts`
+reprova se uma das duas sumir. O SDK 12 remove `beforeSendTransaction`: subir
+para ele exige reescrever a peneira para o formato em fluxo antes.
 
 A organização no Sentry está com a limpeza do lado do servidor **desligada**
 (`dataScrubber: false`, `scrubIPAddresses: false`, lido em 22/09/2026), então a

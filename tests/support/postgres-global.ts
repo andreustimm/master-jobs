@@ -7,7 +7,7 @@ import postgres from "postgres";
 export default async function setup() {
   const password = randomBytes(24).toString("hex");
   const started = spawnSync("docker", ["run", "--rm", "-d", "-p", "127.0.0.1::5432",
-    "-e", "POSTGRES_PASSWORD", "postgres:17"], { encoding: "utf8", env: { ...process.env, POSTGRES_PASSWORD: password } });
+    "-e", "POSTGRES_PASSWORD", "postgres:18"], { encoding: "utf8", env: { ...process.env, POSTGRES_PASSWORD: password } });
   const container = started.stdout.trim();
   if (started.status !== 0 || !/^[a-f0-9]{64}$/.test(container)) throw new Error("Docker PostgreSQL is required for tests");
   const cleanup = () => {

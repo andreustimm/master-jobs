@@ -442,6 +442,14 @@ export function sentryServerOptions(env: SentryServerEnv) {
     // 100% de amostragem — e o `0` deixaria de desligar. A taxa é nossa.
     tracesSampler: (_contexto?: unknown) => rate,
     tracePropagationTargets: [] as string[],
+    // Desde o SDK 11 o padrão é `stream`: spans saem em fluxo, cada um com
+    // `name`/`attributes`, e o SDK IGNORA `beforeSendTransaction`. As peneiras
+    // abaixo foram escritas e testadas para o formato estático (transação +
+    // `description`/`data`), então o ciclo fica estático de propósito. Quem
+    // chama `Sentry.init` marca `beforeSendSpan` com `withStaticSpan`, senão o
+    // SDK não a chama. Migrar para `stream` exige peneira nova para o formato
+    // em fluxo, antes do SDK 12 (que remove `beforeSendTransaction`).
+    traceLifecycle: "static" as const,
     beforeSend: scrubEvent,
     beforeSendTransaction: scrubTransaction,
     beforeSendSpan: scrubSpan,
