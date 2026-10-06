@@ -856,28 +856,6 @@ function projectTree(root) {
   return worktree ? worktree[1] || "/" : base;
 }
 
-/**
- * O git roda dentro de uma worktree de trabalho (`.claude/worktrees/<nome>`
- * ou `~/.codex/worktrees/<id>/<nome>`): pelo `-C`, ou pelo diretório atual.
- * Fora de `xargs`/`find`, e sem variável, crase ou curinga no caminho.
- */
-function runsInWorkWorktree(context) {
-  if (context.bulk) return false;
-  const env = context.env ?? NO_ENV;
-  let dir = context.place ?? env.cwd ?? null;
-  if (typeof dir !== "string" || dir === "" || /[$`*?[\]{}]/.test(dir)) return false;
-  if (!dir.startsWith("/") && !dir.startsWith("~")) {
-    if (!env.cwd) return false;
-    dir = `${env.cwd}/${dir}`;
-  }
-  if (dir.startsWith("~")) {
-    if (!env.home) return false;
-    dir = env.home + dir.slice(1);
-  }
-  const path = normalizePath(dir);
-  return /\/\.claude\/worktrees\/[^/]+(?:\/|$)/.test(path) || /\/\.codex\/worktrees\/[^/]+\/[^/]+(?:\/|$)/.test(path);
-}
-
 /** `base/path`, salvo quando `path` já é absoluto, `~` ou variável; sem base, o próprio `path`. */
 function joinPath(base, path) {
   if (!base || /^(?:\/|~|\$)/.test(path)) return path;
@@ -1446,7 +1424,7 @@ function optionPayloads(rest, short, long) {
 function judgeGitSubcommand(sub, rest, context) {
   switch (sub) {
     case "push":
-      return judgePush(rest, context);
+      return judgePush(rest);
     // Encanamento do push: mesmo destino, mesma proteção. `--stdin` lê os refs da entrada.
     case "send-pack":
     case "http-push":
@@ -1669,7 +1647,7 @@ const PUSH_VALUE = new Set(["--repo", "--receive-pack", "--exec", "--push-option
  * `--prune`, `--no-verify`, refspec com variável e push sem refspec
  * explícito perguntam.
  */
-function judgePush(rest, context = {}) {
+function judgePush(rest) {
   let worst = null;
   let everything = false;
   let deleting = false;
@@ -1701,11 +1679,7 @@ function judgePush(rest, context = {}) {
     positional.push(arg);
   }
   const refspecs = positional.slice(1);
-  // Sem refspec, sobe o branch atual. Numa worktree de trabalho ele é sempre
-  // `<tipo>/<slug>` (autorização do dono, 06/10/2026); na raiz é `dev`.
-  if (refspecs.length === 0 && !everything && !runsInWorkWorktree(context)) {
-    worst = stronger(worst, ask("git push sem refspec explícito pode ir para branch protegida"));
-  }
+  if (refspecs.length === 0 && !everything) worst = stronger(worst, ask("git push sem refspec explícito pode ir para branch protegida"));
   for (const spec of refspecs) {
     const bare = spec.replace(/^\+/, "");
     if (bare !== spec) worst = stronger(worst, ask("push forçado (+refspec)"));

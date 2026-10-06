@@ -866,27 +866,6 @@ describe("escrita fora da árvore do projeto, com a raiz informada pelo chamador
     expect(classifyRisk(command, env)?.decision).toBe("ask");
   });
 
-  it("git push sem refspec passa só dentro de worktree de trabalho (#472)", () => {
-    const fromRoot = { root: "/repo", cwd: "/repo", home: "/home/eu" };
-    for (const command of [
-      "git -C /repo/.claude/worktrees/wt push",
-      "git -C /repo/.claude/worktrees/wt push origin",
-      "git -C .claude/worktrees/wt push",
-    ]) {
-      expect(classifyRisk(command, fromRoot), command).toBeNull();
-    }
-    expect(classifyRisk("git push", env)).toBeNull();
-    for (const command of [
-      "git push",
-      "git -C /repo push",
-      "git -C /repo/.claude/worktrees/$X push",
-      "git -C /repo/.claude/worktrees/wt push --force",
-      "xargs -I@ git -C /repo/.claude/worktrees/@ push < lista",
-    ]) {
-      expect(classifyRisk(command, fromRoot)?.decision, command).toBe("ask");
-    }
-  });
-
   it("de dentro de um worktree, o repositório inteiro é o projeto (rodada 4 da #462)", () => {
     const fromWorktree = { root: "/repo/.claude/worktrees/a", cwd: "/repo/.claude/worktrees/a", home: "/home/eu" };
     for (const command of [
