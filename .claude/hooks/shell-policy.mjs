@@ -1512,6 +1512,9 @@ function judgeGitSubcommand(sub, rest, context) {
         const targets = dashDash === -1 ? args.filter((arg) => !arg.startsWith("-")) : [...args.slice(0, dashDash).filter((arg) => !arg.startsWith("-")), ...args.slice(dashDash + 1)];
         const forces = options.reduce((n, arg) => n + (arg === "--force" ? 1 : /^-[A-Za-z]+$/.test(arg) ? [...arg.slice(1)].filter((c) => c === "f").length : 0), 0);
         if (forces === 0) return null;
+        // Dentro de `xargs`/`find -exec` o alvo só existe na execução
+        // (`xargs -I@ … .claude/worktrees/@`): pergunta sempre.
+        if (context.bulk) return ask("git worktree remove --force em massa (xargs/find) monta o alvo na execução");
         // `-ff` remove worktree travada: a trava é de outra sessão, pergunta sempre.
         if (forces > 1) return ask("git worktree remove -ff passa por cima de worktree travada");
         // Worktree de trabalho sai sem pergunta, por autorização do dono

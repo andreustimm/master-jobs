@@ -349,6 +349,7 @@ const RISKY: readonly [string, Decision][] = [
   ["git worktree remove --force ../fora", "ask"],
   ["git worktree remove --force /tmp/wt", "ask"],
   ["git worktree remove -ff .claude/worktrees/x", "ask"],
+  ["xargs -I@ git worktree remove --force .claude/worktrees/@ < /tmp/lista", "ask"],
   ["git filter-branch --tree-filter x", "ask"],
   ["git update-ref -d refs/heads/x", "ask"],
   ["git reflog expire --all", "ask"],
