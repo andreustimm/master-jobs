@@ -13,6 +13,7 @@ import { StatusBadge } from "../../ui";
 import { applicationStatusOptions } from "../../status.ts";
 import { requirePage, requireSession } from "../../auth";
 import { getTranslator } from "../../i18n";
+import { LocalDate } from "../../local-date";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,10 @@ export default async function RecruiterCandidateHistory({
   params: Promise<{ candidateId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { t } = await getTranslator();
+  const { t, locale } = await getTranslator();
+  // "aplicado em {date}" com a data numa ilha que conhece o fuso de quem lê,
+  // como em `/pipeline`: o dia em UTC adiantava quem aplicou à noite.
+  const [appliedBefore, appliedAfter] = t("pipeline.appliedOn", { date: "\u0000" }).split("\u0000");
   const session = await requireSession();
   const { candidateId: raw } = await params;
 
@@ -123,9 +127,14 @@ export default async function RecruiterCandidateHistory({
               </div>
               <div className="mt-0.5 text-xs text-muted-foreground">
                 {row.companyName}
-                {row.appliedAt
-                  ? ` · ${t("pipeline.appliedOn", { date: row.appliedAt.slice(0, 10) })}`
-                  : ""}
+                {row.appliedAt ? (
+                  <>
+                    {" · "}
+                    {appliedBefore}
+                    <LocalDate iso={row.appliedAt} locale={locale} testId={`recruiter-applied-${row.jobId}`} />
+                    {appliedAfter}
+                  </>
+                ) : null}
               </div>
             </div>
           ))}

@@ -50,8 +50,8 @@ function navigationInFlight(): boolean {
  * Pedido de aplicação do formulário que contém `ref`; um por controle, o último vence.
  *
  * `changed`, quando dado, é conferido na hora do envio: a faixa serializa
- * campos vazios e selects que a URL de quem chegou não tem (`fitMax=`,
- * `cur=USD`), então comparar URLs não reconhece "nada mudou" ali.
+ * selects que a URL de quem chegou não tem (`cur=USD`), então comparar URLs
+ * não reconhece "nada mudou" ali.
  */
 export function useAutoSubmit(
   ref: RefObject<HTMLElement | null>,

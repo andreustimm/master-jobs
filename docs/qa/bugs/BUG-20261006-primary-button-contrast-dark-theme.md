@@ -1,6 +1,6 @@
 # BUG-20261006-primary-button-contrast-dark-theme: no tema escuro, botão primário e filtro ativo ficam abaixo do contraste AA
 
-- **Status:** open
+- **Status:** fixed
 - **Impact (user-side):** Friction
 - **Severity:** Medium · **Priority:** P2
 - **Persona Affected:** Andreus em triagem noturna (tema escuro)
@@ -36,7 +36,18 @@ Texto `#0b0d10` sobre o preenchimento primário `#296ef9` dá 4,34:1, abaixo do
 
 ## Fix
 
-<!-- filled when status moves to fixed -->
+- **Root cause:** a cópia do tema escuro dentro de
+  `@media (prefers-color-scheme: dark)` em `app/themes.css` tinha derivado da
+  escolha explícita: no tema HP herdado do sistema, `--primary` era `#296ef9`
+  (4,34:1 com `--primary-foreground` `#0b0d10`), enquanto o escuro escolhido
+  já usava `#4d8bff`. Quem tinha o sistema no escuro via todo preenchimento
+  primário abaixo do AA — por isso o mesmo achado em `/pipeline` e `/jobs`.
+- **Fix commit:** `891042f` (PR #499) — o bloco do sistema passa a
+  `--primary: #4d8bff`, igual à escolha explícita.
+- **Regression test:** `tests/design.test.ts` ("paints the dark mode the same
+  whether chosen or inherited from the system", que exige os dois blocos
+  escuros iguais em todos os temas, e "keeps primary-foreground on primary at
+  WCAG AA in every theme and mode").
 
 ## Verification
 

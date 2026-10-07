@@ -116,20 +116,20 @@ const DEFAULT_FIT = 45;
  * `fit=abc` used to reach the query as NaN and Postgres refused the page. An
  * empty field is a deliberate "every score"; an absent one keeps the default.
  */
-/**
- * Score da URL que não é número. Vazio não conta: campo vazio é escolha. Fora
- * da escala também não: é preso entre 0 e o teto, sem mudar o sentido.
- */
-export function unreadableFit(raw: string | undefined): boolean {
-  return raw !== undefined && raw.trim() !== "" && !Number.isFinite(Number(raw));
-}
-
 function boundedFit(raw: string | undefined, fallback: number): number {
   if (raw === undefined) return fallback;
   if (raw.trim() === "") return 0;
   const value = Number(raw);
   if (!Number.isFinite(value)) return fallback;
   return Math.min(Math.max(value, 0), FIT_MAX);
+}
+
+/**
+ * Score da URL que não é número. Vazio não conta: campo vazio é escolha. Fora
+ * da escala também não: é preso entre 0 e o teto, sem mudar o sentido.
+ */
+export function unreadableFit(raw: string | undefined): boolean {
+  return raw !== undefined && raw.trim() !== "" && !Number.isFinite(Number(raw));
 }
 
 function positiveInt(raw: string | undefined): number | null {
@@ -243,7 +243,9 @@ export function readFilters(
   const rawFitMax = one("fitMax");
   // Ignorar calado contradizia o contrato da URL: parâmetro inválido vira aviso.
   if (unreadableFit(one("fit")) || unreadableFit(rawFitMax)) notices.push("fit_invalid");
-  if (rawFitMax !== undefined && rawFitMax.trim() !== "") {
+  // Teto ilegível é ignorado, não vira o teto da escala: `?fitMax=abc` não pode
+  // filtrar como `?fitMax=100`.
+  if (rawFitMax !== undefined && rawFitMax.trim() !== "" && !unreadableFit(rawFitMax)) {
     state.fitMax = boundedFit(rawFitMax, FIT_MAX);
   }
   if (state.fitMax !== undefined && state.fit > state.fitMax) {

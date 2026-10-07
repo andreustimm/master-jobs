@@ -6,11 +6,11 @@ persona: Andreus em triagem noturna
 journey: J-preserve-application-decision
 expected: Os filtros combinam com o estágio, a lista e o contador de cada estágio mostram o mesmo conjunto, "ampliar busca" acha pelo sinônimo e pela grafia parecida, e o estado sobrevive a refresh e ao voltar do navegador
 entry_points: /pipeline; /pipeline?q=engenheiro&semantic=1&company=<empresa>
-qa_status: fail
+qa_status: untested
 bug_ids: BUG-20261006-pipeline-back-keeps-stale-picker-marks; BUG-20261006-pipeline-swapped-score-fields-stale; BUG-20261006-pipeline-active-stage-invisible; BUG-20261006-primary-button-contrast-dark-theme
-fix_status: pending
-retest_status:
-fix_commits:
+fix_status: fixed
+retest_status: pending
+fix_commits: 891042f
 evidence: docs/qa/reports/2026-10-06-qa-478-funil-filtros.md
 last_report: docs/qa/reports/2026-10-06-qa-478-funil-filtros.md
 overlaps: PIPE-undo-and-move-back; JOBS-search-synonyms

@@ -4,7 +4,7 @@
 // Boundary IN: `formatDay` e `channelLabel`, puros.
 // Boundary OUT: a ilha `LocalDate` no navegador (E2E `pipeline-filters`).
 import { describe, expect, it } from "vitest";
-import { channelLabel } from "../app/pipeline/channel.ts";
+import { channelLabel, channelOptionLabel } from "../app/pipeline/channel.ts";
 import { formatDay } from "../src/core/i18n/date.ts";
 import { translator } from "../src/core/i18n/index.ts";
 
@@ -31,5 +31,23 @@ describe("channelLabel", () => {
 
   it("canal fora da lista não tem rótulo: aparece como a pessoa gravou", () => {
     expect(channelLabel(translator("pt-BR").t, "evento da comunidade")).toBeUndefined();
+  });
+});
+
+describe("channelOptionLabel", () => {
+  const pt = translator("pt-BR").t;
+
+  it("valor sem gêmeo de caixa sai traduzido", () => {
+    const label = channelOptionLabel(pt, ["referral", "direct", "evento"]);
+    expect(label("referral")).toBe("indicação");
+    expect(label("direct")).toBe("direto");
+    expect(label("evento")).toBeUndefined();
+  });
+
+  it("valores que dariam o mesmo rótulo mostram o valor cru", () => {
+    const label = channelOptionLabel(pt, ["Referral", "referral", "direct"]);
+    expect(label("Referral")).toBeUndefined();
+    expect(label("referral")).toBeUndefined();
+    expect(label("direct")).toBe("direto");
   });
 });
