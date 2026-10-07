@@ -27,6 +27,7 @@ import {
   composeViolations,
   dockerfileViolations,
   imageViolation,
+  localPostgresViolations,
   nodeAlignmentViolations,
   workflowViolations,
 } from "../scripts/versions/check.ts";
@@ -184,32 +185,60 @@ describe("o repositório cumpre a política", () => {
 });
 
 describe("majors do PostgreSQL testadas", () => {
-  const majors = { latest: "18", production: "17" };
+  // Valores sintéticos, distintos entre si e longe dos reais: os números de
+  // verdade moram só em config/postgres-majors.json, e subir a produção não
+  // pode exigir editar este arquivo.
+  const majors = { latest: "31", local: "30", production: "29" };
 
-  it("o arquivo declara a da produção (Supabase 17) e a mais nova, nunca abaixo dela", () => {
+  it("o arquivo real declara as três chaves, na ordem production ≤ local ≤ latest, e o CI prova production e latest", () => {
     const declarado = readPostgresMajors();
-    expect(declarado.production).toBe("17");
-    expect(Number(declarado.latest)).toBeGreaterThanOrEqual(Number(declarado.production));
-    expect(testedPostgresMajors(declarado)).toContain(declarado.production);
+    expect(Object.keys(declarado).sort()).toEqual(["latest", "local", "production"]);
+    expect(Number(declarado.production)).toBeLessThanOrEqual(Number(declarado.local));
+    expect(Number(declarado.local)).toBeLessThanOrEqual(Number(declarado.latest));
+    expect(testedPostgresMajors(declarado)).toEqual([...new Set([declarado.production, declarado.latest])]);
   });
 
   it("sem variável, a mais nova; com ela, a major pedida entre as declaradas", () => {
-    expect(postgresTestImage({}, majors)).toBe("postgres:18");
-    expect(postgresTestImage({ JHO_TEST_POSTGRES_MAJOR: "  " }, majors)).toBe("postgres:18");
-    expect(postgresTestImage({ JHO_TEST_POSTGRES_MAJOR: "17" }, majors)).toBe("postgres:17");
+    expect(postgresTestImage({}, majors)).toBe("postgres:31");
+    expect(postgresTestImage({ JHO_TEST_POSTGRES_MAJOR: "  " }, majors)).toBe("postgres:31");
+    expect(postgresTestImage({ JHO_TEST_POSTGRES_MAJOR: "29" }, majors)).toBe("postgres:29");
   });
 
   it("major fora da lista, ou que não é major, recusa em vez de subir qualquer imagem", () => {
-    for (const pedido of ["16", "19", "latest", "17.6", "postgres:17"]) {
+    for (const pedido of ["28", "32", "latest", "29.6", "postgres:29"]) {
       expect(() => postgresTestImage({ JHO_TEST_POSTGRES_MAJOR: pedido }, majors), pedido).toThrow("fora de config/postgres-majors.json");
     }
-    expect(() => parsePostgresMajors('{"latest":"18"}')).toThrow("production");
-    expect(() => parsePostgresMajors('{"latest":"latest","production":"17"}')).toThrow("latest");
+    expect(() => parsePostgresMajors('{"latest":"31","local":"30"}')).toThrow("production");
+    expect(() => parsePostgresMajors('{"latest":"31","production":"29"}')).toThrow("local");
+    expect(() => parsePostgresMajors('{"latest":"latest","local":"30","production":"29"}')).toThrow("latest");
+  });
+
+  it("fora da ordem production ≤ local ≤ latest, o arquivo é recusado", () => {
+    expect(parsePostgresMajors('{"latest":"31","local":"31","production":"31"}')).toEqual({ latest: "31", local: "31", production: "31" });
+    for (const errado of [
+      '{"latest":"31","local":"30","production":"31"}',
+      '{"latest":"31","local":"29","production":"30"}',
+      '{"latest":"30","local":"31","production":"29"}',
+    ]) {
+      expect(() => parsePostgresMajors(errado), errado).toThrow("production ≤ local ≤ latest");
+    }
   });
 
   it("produção primeiro e sem repetir quando as duas coincidem", () => {
-    expect(testedPostgresMajors(majors)).toEqual(["17", "18"]);
-    expect(testedPostgresMajors({ latest: "18", production: "18" })).toEqual(["18"]);
+    expect(testedPostgresMajors(majors)).toEqual(["29", "31"]);
+    expect(testedPostgresMajors({ latest: "31", local: "31", production: "31" })).toEqual(["31"]);
+  });
+
+  it("o Compose local fica na major `local`, e uma tag de outra major reprova", () => {
+    const compose = (image: string) => `services:\n  db:\n    image: \${LOCAL_POSTGRES_IMAGE:-${image}}\n  minio:\n    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z\n`;
+    expect(localPostgresViolations("c.yml", compose("supabase/postgres:30.2.0.004"), "30")).toEqual([]);
+    expect(localPostgresViolations("c.yml", compose("supabase/postgres:30.2.0.004@sha256:" + "a".repeat(64)), "30")).toEqual([]);
+    expect(localPostgresViolations("c.yml", compose("supabase/postgres:31.0.0.001"), "30").map((v) => v.message)).toEqual([
+      expect.stringContaining("é PostgreSQL 31, mas `local` em config/postgres-majors.json diz 30"),
+    ]);
+    expect(localPostgresViolations("c.yml", compose("postgres:30"), "30").map((v) => v.message)).toEqual([
+      expect.stringContaining("achei 0"),
+    ]);
   });
 
   it("lê a major do `server_version_num`", () => {
@@ -262,11 +291,11 @@ describe("majors do PostgreSQL testadas", () => {
   });
 
   it("o CI escolhe major pela chave e fatia; o resto recusa", () => {
-    expect(parseMajorRunOptions([], majors)).toEqual({ majors: ["17", "18"], shard: null });
-    expect(parseMajorRunOptions(["--major=production", "--shard=1/2"], majors)).toEqual({ majors: ["17"], shard: "1/2" });
-    expect(parseMajorRunOptions(["--major=latest"], majors)).toEqual({ majors: ["18"], shard: null });
+    expect(parseMajorRunOptions([], majors)).toEqual({ majors: ["29", "31"], shard: null });
+    expect(parseMajorRunOptions(["--major=production", "--shard=1/2"], majors)).toEqual({ majors: ["29"], shard: "1/2" });
+    expect(parseMajorRunOptions(["--major=latest"], majors)).toEqual({ majors: ["31"], shard: null });
     expect(postgresMajorRunArgs(["tests/a.test.ts"], "2/2")).toEqual(["exec", "vitest", "run", "--shard=2/2", "tests/a.test.ts"]);
-    for (const errado of [["--major=17"], ["--major="], ["--shard=3/2"], ["--shard=0/2"], ["--shard=1"], ["17"]]) {
+    for (const errado of [["--major=29"], ["--major=local"], ["--major="], ["--shard=3/2"], ["--shard=0/2"], ["--shard=1"], ["29"]]) {
       expect(() => parseMajorRunOptions(errado, majors), errado.join(" ")).toThrow();
     }
   });
@@ -300,7 +329,7 @@ describe("majors do PostgreSQL testadas", () => {
 
   it("workflow e docs citam as chaves; os números moram só em config/postgres-majors.json", () => {
     const declarado = readPostgresMajors();
-    const numero = new RegExp(String.raw`postgres(?:ql)?(?::|\s+)(?:${declarado.production}|${declarado.latest})\b`, "i");
+    const numero = new RegExp(String.raw`postgres(?:ql)?(?::|\s+)(?:${declarado.production}|${declarado.local}|${declarado.latest})\b`, "i");
     for (const file of [".github/workflows/ci.yml", "docs/engineering/versions.md", "docs/qa/README.md"]) {
       expect(readFileSync(file, "utf8"), file).not.toMatch(numero);
     }
@@ -369,6 +398,25 @@ describe("renovate.json", () => {
     expect(matches.map((match) => match.groups?.currentValue)).toEqual([majors.latest]);
     const subido = text.replace(new RegExp(manager.matchStrings[0]!), `"latest": "${Number(majors.latest) + 1}"`);
     expect(testedPostgresMajors(parsePostgresMajors(subido))).toEqual([majors.production, String(Number(majors.latest) + 1)]);
+  });
+
+  it("o Renovate sobe a imagem Supabase do Compose local, inclusive de major", () => {
+    // A tag é o que ele lê; a chave `local` acompanha na mesma PR, porque
+    // `pnpm check:versions` reprova a divergência (e a major nova pede rever o
+    // bootstrap das extensões).
+    const manager = renovate.customManagers.find((entry) => entry.matchStrings.some((s) => s.includes("supabase/postgres")))! as (typeof renovate.customManagers)[number] & { versioningTemplate?: string };
+    expect(manager.managerFilePatterns).toEqual(["/^docker-compose\\.local\\.yml$/"]);
+    expect(manager.datasourceTemplate).toBe("docker");
+    const matches = [...readFileSync("docker-compose.local.yml", "utf8").matchAll(new RegExp(manager.matchStrings[0]!, "g"))];
+    expect(matches.map((match) => match.groups?.depName)).toEqual(["supabase/postgres"]);
+    const tag = matches[0]!.groups!.currentValue!;
+    expect(tag.split(".")[0]).toBe(readPostgresMajors().local);
+    // A major é parte da versão que o Renovate compara, então 18.x supera 17.x.
+    expect(new RegExp(manager.versioningTemplate!.replace(/^regex:/, "")).exec(tag)?.groups?.major).toBe(readPostgresMajors().local);
+    const bloqueios = renovate.packageRules.filter(
+      (rule) => rule.matchPackageNames?.includes("supabase/postgres") || (rule as { enabled?: boolean }).enabled === false,
+    );
+    expect(bloqueios).toEqual([]);
   });
 
   it("commit de manutenção, para não exigir fragmento de changelog nem disparar release", () => {

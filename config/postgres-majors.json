@@ -1,5 +1,6 @@
 {
-  "$comment": "Majors do PostgreSQL que o CI prova (docs/engineering/versions.md, issue #468). `latest` é a mais nova: padrão local, da suíte inteira e do ensaio, e é a que o Renovate sobe. `production` é a do Supabase de produção e só muda quando o dono atualizar o projeto. O job `banco-nas-majors`, exigido por `schema-e-migracao`, roda todo teste de banco e o ensaio em cada uma (`pnpm test:postgres-majors`).",
+  "$comment": "Majors do PostgreSQL do projeto (docs/engineering/versions.md, issue #468). `latest` é a mais nova publicada: padrão dos bancos descartáveis (suíte inteira e ensaio), e é a que o Renovate sobe. `production` é a do Supabase de produção e só muda quando o dono atualizar o projeto. `local` é a major da imagem `supabase/postgres` mais nova publicada, a do Compose local (docker-compose.local.yml): a Supabase pode publicar uma major depois do PostgreSQL, e `pnpm check:versions` reprova se a tag do Compose divergir desta chave. Sempre production ≤ local ≤ latest. O job `banco-nas-majors`, exigido por `schema-e-migracao`, roda todo teste de banco e o ensaio em `production` e `latest` (`pnpm test:postgres-majors`).",
   "latest": "18",
+  "local": "17",
   "production": "17"
 }

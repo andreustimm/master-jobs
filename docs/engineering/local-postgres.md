@@ -133,7 +133,10 @@ projeto ou os serviços HTTP do Supabase. O tag da imagem é fixado para tornar 
 teste repetível; `LOCAL_POSTGRES_IMAGE` permite testar outro tag após verificar
 `CREATE EXTENSION pgmq` e `CREATE EXTENSION vector` do zero. O padrão é a
 versão mais nova da distribuição, `supabase/postgres:17.11.0.004` (política de
-versões, [versions.md](versions.md)); o Renovate abre a PR que a sobe. O
+versões, [versions.md](versions.md)); o Renovate abre a PR que a sobe. A major
+dessa tag é a chave `local` de `config/postgres-majors.json`, que pode ficar
+abaixo da `latest` dos testes enquanto a Supabase não publica a major mais nova
+do PostgreSQL; `pnpm check:versions` reprova se a tag e a chave divergirem. O
 Supabase de produção pode estar atrás (foi observado em `17.6.1.166`) até o
 dono atualizá-lo no painel. A inicialização cria os papéis de bootstrap
 esperados pela imagem antes de habilitar as extensões. Se a tag mudar, destrua

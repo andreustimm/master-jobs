@@ -16,8 +16,9 @@ Três peças sustentam isso:
    a PR que as sobe. Ele **não mescla**: a PR segue o fluxo normal (ver "Como o
    Renovate opera").
 3. **Gate `pnpm check:versions`** ([`scripts/versions/check.ts`](../../scripts/versions/check.ts)),
-   no `pnpm check` e no job `contratos` do CI, reprova etiqueta flutuante e
-   major do Node divergente entre as fontes. Ele não consulta a rede: saber qual
+   no `pnpm check` e no job `contratos` do CI, reprova etiqueta flutuante,
+   major do Node divergente entre as fontes e imagem Supabase do Compose local
+   fora da major `local` de `config/postgres-majors.json`. Ele não consulta a rede: saber qual
    é a versão mais nova é papel do Renovate; o gate só garante que existe uma
    versão escrita para ele subir.
 
@@ -33,7 +34,7 @@ Três peças sustentam isso:
 | Dependências | `dependencies`/`devDependencies` e o lockfile | Renovate (`npm`, `rangeStrategy: bump`) e manutenção semanal do lockfile |
 | Python dos scripts | `.python-version` (lido pelo `actions/setup-python` do CI) e `ARG PYTHON_IMAGE` de `scripts/runner/Dockerfile` | Renovate (`pyenv`, `dockerfile`), em grupo |
 | Postgres dos testes e do ensaio de migração | `config/postgres-majors.json`: `latest` (a mais nova) e `production` (a do Supabase) | Renovate (regex, `docker`) só em `latest`; `production` é do dono |
-| Postgres e MinIO locais | `docker-compose.local.yml` (`${VAR:-imagem:tag}`) | Renovate (regex, `docker`) |
+| Postgres e MinIO locais | `docker-compose.local.yml` (`${VAR:-imagem:tag}`); a major do Postgres também na chave `local` de `config/postgres-majors.json` | Renovate (regex, `docker`) sobe a tag; numa major nova, a mesma PR sobe `local` (o gate reprova a divergência) |
 | Runner do GitHub na imagem própria | `ARG RUNNER_VERSION` de `scripts/runner/Dockerfile` | Renovate (o SHA-256 é do dono) |
 
 ## Limites que não são "versão velha"
@@ -65,13 +66,24 @@ Três peças sustentam isso:
   Supabase gerenciado, que sobe de major pelo painel, por decisão do dono.
   Testar só a mais nova deixaria sem prova a major que guarda o dado de
   verdade, então [`config/postgres-majors.json`](../../config/postgres-majors.json)
-  declara as duas. Os números moram só lá; código, workflow e docs citam as
-  chaves:
-  - `latest` é a mais nova: o padrão local, da suíte inteira e do ensaio de
-    corte; o Renovate a sobe.
+  declara as duas, e mais a do Compose local. Os números moram só lá (e na tag
+  da imagem local); código, workflow e docs citam as chaves, sempre na ordem
+  `production` ≤ `local` ≤ `latest`, que a leitura do arquivo recusa quebrar:
+  - `latest` é a mais nova publicada do PostgreSQL: o padrão dos bancos
+    descartáveis, da suíte inteira e do ensaio de corte; o Renovate a sobe.
   - `production` é a do Supabase de produção e só muda quando o dono atualizar
     o projeto; o Renovate não a alcança, e subir `latest` não a tira da lista
     (`tests/version-policy.test.ts`).
+  - `local` é a major da imagem `supabase/postgres` mais nova publicada, a do
+    Compose local ([local-postgres.md](local-postgres.md)). O banco local usa
+    a distribuição da Supabase porque precisa das extensões dela (`pgmq`,
+    `vector`) e da mesma inicialização da produção, e a Supabase publica uma
+    major depois do PostgreSQL: enquanto ela não publica a major de `latest`,
+    `local` fica abaixo — é a mais nova disponível, não uma versão
+    rebaixada. O Renovate sobe a tag; numa major nova, a mesma PR sobe `local`
+    e revê `docker/postgres/init`, porque `pnpm check:versions` reprova a tag
+    fora da major `local`. `local` não entra na matriz do CI, que prova
+    os extremos (`production` e `latest`).
 
   `pnpm test:postgres-majors` executa todo teste que usa PostgreSQL real —
   inclusive o ensaio (`scripts/migration/rehearse-production.ts`, sobre um

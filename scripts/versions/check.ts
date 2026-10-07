@@ -5,8 +5,9 @@
 // testa antes de ela chegar a produção. Uma etiqueta flutuante (`ubuntu-latest`,
 // `node:latest`, `actions/checkout@main`) troca de versão por fora, sem PR e sem
 // CI — foi o aviso de `ubuntu-latest` virar Ubuntu 26 em 19/10/2026 que abriu a
-// issue. Este gate reprova esse tipo de referência e confere que as várias
-// fontes da major do Node dizem a mesma coisa.
+// issue. Este gate reprova esse tipo de referência, confere que as várias
+// fontes da major do Node dizem a mesma coisa e que a imagem Supabase do
+// Compose local está na major `local` de config/postgres-majors.json.
 //
 // Ele NÃO sabe qual é a versão mais nova (não consulta rede): isso é do
 // Renovate. Aqui só se garante que existe uma versão explícita para ele subir.
@@ -14,6 +15,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import YAML from "yaml";
+import { parsePostgresMajors } from "./postgres-majors.ts";
 
 export type VersionViolation = { file: string; message: string };
 
@@ -147,6 +149,32 @@ export function composeViolations(file: string, content: string): VersionViolati
   return violations;
 }
 
+/** A imagem do Compose local que entrega o PostgreSQL com as extensões da Supabase. */
+export const LOCAL_POSTGRES_IMAGE = "supabase/postgres";
+
+/**
+ * A major do PostgreSQL local é a chave `local` de `config/postgres-majors.json`
+ * e a tag `supabase/postgres:<major>.…` do Compose: as duas andam juntas. O
+ * Renovate sobe a tag; numa major nova o bootstrap (`docker/postgres/init`)
+ * precisa ser revisto, e é este gate que obriga a PR a subir a chave também.
+ */
+export function localPostgresViolations(file: string, content: string, localMajor: string): VersionViolation[] {
+  const compose = YAML.parse(content) as { services?: Record<string, { image?: unknown } | undefined> } | null;
+  const images = Object.values(compose?.services ?? {})
+    .map((service) => (typeof service?.image === "string" ? composeDefault(service.image) : ""))
+    .filter((image) => image.startsWith(`${LOCAL_POSTGRES_IMAGE}:`));
+  if (images.length !== 1) {
+    return [{ file, message: `esperava um serviço com \`${LOCAL_POSTGRES_IMAGE}\`, achei ${images.length}` }];
+  }
+  const tag = images[0]!.split("@")[0]!.slice(LOCAL_POSTGRES_IMAGE.length + 1);
+  const major = /^(\d+)\./.exec(tag)?.[1];
+  if (major === localMajor) return [];
+  return [{
+    file,
+    message: `\`${images[0]}\` é PostgreSQL ${major ?? "?"}, mas \`local\` em config/postgres-majors.json diz ${localMajor}; suba os dois juntos e revise docker/postgres/init`,
+  }];
+}
+
 export type NodeSources = {
   engines: string;
   nvmrc: string;
@@ -192,7 +220,9 @@ function nodeImagesIn(file: string, content: string): { file: string; image: str
 }
 
 export const DOCKERFILES = ["Dockerfile", "scripts/runner/Dockerfile"];
-export const COMPOSE_FILES = ["docker-compose.local.yml"];
+export const LOCAL_COMPOSE_FILE = "docker-compose.local.yml";
+export const COMPOSE_FILES = [LOCAL_COMPOSE_FILE];
+export const POSTGRES_MAJORS_FILE = "config/postgres-majors.json";
 export const WORKFLOW_DIRECTORY = ".github/workflows";
 
 export function checkRepository(root: string): VersionViolation[] {
@@ -207,6 +237,10 @@ export function checkRepository(root: string): VersionViolation[] {
   for (const file of dockerfiles) violations.push(...dockerfileViolations(file, read(file)));
   for (const file of COMPOSE_FILES.filter((path) => existsSync(join(root, path)))) {
     violations.push(...composeViolations(file, read(file)));
+  }
+  if (existsSync(join(root, POSTGRES_MAJORS_FILE)) && existsSync(join(root, LOCAL_COMPOSE_FILE))) {
+    const { local } = parsePostgresMajors(read(POSTGRES_MAJORS_FILE));
+    violations.push(...localPostgresViolations(LOCAL_COMPOSE_FILE, read(LOCAL_COMPOSE_FILE), local));
   }
   const pkg = JSON.parse(read("package.json")) as {
     engines?: { node?: string };
@@ -224,7 +258,7 @@ export function checkRepository(root: string): VersionViolation[] {
 function main(): void {
   const violations = checkRepository(process.argv[2] ?? process.cwd());
   if (violations.length === 0) {
-    console.log("Versões explícitas: nenhuma etiqueta flutuante, e a major do Node é a mesma em todas as fontes.");
+    console.log("Versões explícitas: nenhuma etiqueta flutuante, a major do Node é a mesma em todas as fontes e o Compose local está na major `local`.");
     return;
   }
   for (const { file, message } of violations) console.error(`${file}: ${message}`);

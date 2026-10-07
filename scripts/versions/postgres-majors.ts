@@ -17,17 +17,35 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { forbiddenReach } from "../../tests/support/module-graph.ts";
 
-export type PostgresMajors = { latest: string; production: string };
+/**
+ * `latest`: a mais nova publicada (bancos descartáveis). `production`: a do
+ * Supabase de produção. `local`: a da imagem `supabase/postgres` mais nova
+ * publicada, a do Compose local — a Supabase pode publicar uma major depois
+ * do PostgreSQL, e o banco local precisa das extensões da distribuição dela.
+ */
+export type PostgresMajors = { latest: string; local: string; production: string };
 
 const MAJOR = /^\d+$/;
+const KEYS = ["latest", "local", "production"] as const;
 
+/**
+ * Lê e valida o arquivo. A ordem production ≤ local ≤ latest vale sempre: a
+ * produção roda numa major da Supabase, que não passa da mais nova dela, que
+ * não passa da mais nova do PostgreSQL. Fora dela é erro de edição.
+ */
 export function parsePostgresMajors(text: string): PostgresMajors {
   const parsed = JSON.parse(text) as Partial<Record<keyof PostgresMajors, unknown>>;
-  const latest = parsed.latest;
-  const production = parsed.production;
-  if (typeof latest !== "string" || !MAJOR.test(latest)) throw new Error("config/postgres-majors.json: `latest` precisa ser uma major (ex.: \"18\")");
-  if (typeof production !== "string" || !MAJOR.test(production)) throw new Error("config/postgres-majors.json: `production` precisa ser uma major (ex.: \"17\")");
-  return { latest, production };
+  for (const key of KEYS) {
+    const value = parsed[key];
+    if (typeof value !== "string" || !MAJOR.test(value)) throw new Error(`config/postgres-majors.json: \`${key}\` precisa ser uma major (ex.: "17")`);
+  }
+  const majors = { latest: parsed.latest as string, local: parsed.local as string, production: parsed.production as string };
+  if (!(Number(majors.production) <= Number(majors.local) && Number(majors.local) <= Number(majors.latest))) {
+    throw new Error(
+      `config/postgres-majors.json: a ordem é production ≤ local ≤ latest, não ${majors.production} / ${majors.local} / ${majors.latest}`,
+    );
+  }
+  return majors;
 }
 
 export function readPostgresMajors(): PostgresMajors {
