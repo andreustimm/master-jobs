@@ -216,6 +216,20 @@ export async function run(ctx) {
       (await page.getByTestId("pipeline-notice-range_swapped").count()) === 0 && same(await listed(page), [platform]),
       page.url());
 
+    // Termo recusado: o servidor devolve só o aviso, com a busca vazia, e o
+    // campo não pode apagar o que a pessoa digitou (só a faixa segue a URL).
+    await page.goto(`${BASE}/pipeline`, { waitUntil: "networkidle" });
+    await ready(page);
+    await page.getByTestId("pipeline-query").fill("R&D");
+    await page.waitForURL(() => new URL(page.url()).searchParams.get("q") === "R&D", { timeout: 15_000 });
+    await ready(page);
+    const rejected = {
+      notice: await page.getByTestId("pipeline-notice-term_invalid_char").count(),
+      value: await page.getByTestId("pipeline-query").inputValue(),
+    };
+    check("E2E-492 termo recusado: aviso e o texto digitado continua no campo",
+      rejected.notice === 1 && rejected.value === "R&D", JSON.stringify(rejected));
+
     // E2E-478-04: 375 px com o seletor aberto, e inglês sem português.
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto(`${BASE}/pipeline?q=engineer&semantic=1&company=${encodeURIComponent(alpha)}`, { waitUntil: "networkidle" });

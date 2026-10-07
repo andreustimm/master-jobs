@@ -123,11 +123,16 @@ export function useAutoSubmit(
  * texto que o formulário ainda não enviou E a pessoa estiver nele (ou houver
  * pedido pendente, que vai levar esse texto). Limpar, voltar, preset e a faixa
  * invertida que o servidor corrige continuam chegando ao campo.
+ *
+ * `followUrl` liga a correção pelo sinal da URL (abaixo), só para quem tem
+ * valor que o servidor reescreve — a faixa. Na busca, o termo recusado volta
+ * como aviso com `applied` vazio, e adotá-lo apagaria o texto da pessoa.
  */
 export function useAppliedValue(
   applied: string,
   root: RefObject<HTMLElement | null>,
   submitter: AutoSubmitter,
+  { followUrl = false }: { followUrl?: boolean } = {},
 ): AppliedField {
   const [value, setValue] = useState(applied);
   const latest = useRef(applied);
@@ -147,15 +152,19 @@ export function useAppliedValue(
     return () => form?.removeEventListener("submit", record);
   }, [root]);
 
-  // A URL de agora, só como sinal de "chegou resposta". O `applied` sozinho não
+  // A URL de agora, como sinal de "a navegação andou". O `applied` sozinho não
   // basta: a faixa invertida que o servidor troca pode voltar IGUAL à de antes
   // (75–80 aplicado, 80/75 enviado, 75–80 de volta), e aí ele não muda (#492).
+  // Não é garantia de resposta: no voltar/avançar o roteador confirma a URL
+  // antes do conteúdo (ver `navigation-transition.tsx`), e o campo pode adotar
+  // por um instante o `applied` de antes. O final continua certo: quando o
+  // `applied` novo chega diferente, o ramo de baixo o leva ao campo.
   const revision = useSearchParams()?.toString() ?? "";
   const seenRevision = useRef(revision);
 
   useEffect(() => {
     if (applied === seen.current) {
-      if (revision === seenRevision.current) return;
+      if (!followUrl || revision === seenRevision.current) return;
       seenRevision.current = revision;
       // Mesmo valor aplicado, URL nova: só corrige o campo se o que ele mostra
       // foi enviado e o servidor respondeu outra coisa. Texto não enviado
@@ -173,7 +182,7 @@ export function useAppliedValue(
     if (unsent && (focused || submitter.pending())) return;
     sent.current = applied;
     setValue(applied);
-  }, [applied, revision, root, submitter]);
+  }, [applied, followUrl, revision, root, submitter]);
 
   return {
     value,
