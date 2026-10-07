@@ -1190,6 +1190,14 @@ export const ptBR = {
     allStages: "todos",
     unknownStage: "Estágio desconhecido; mostrando o funil inteiro.",
     noneInStage: "Nenhuma candidatura neste estágio.",
+    broaden: "ampliar busca",
+    broadenHint:
+      "Também acha sinônimos em português e inglês e cargos com grafia parecida. Ainda não entende o sentido da frase.",
+    companyAll: "todas as empresas",
+    channel: "canal",
+    channelAll: "todos os canais",
+    noneMatching: "Nenhuma candidatura com estes filtros.",
+    clearFilters: "limpar filtros",
   },
   referrals: {
     title: "Referrals",

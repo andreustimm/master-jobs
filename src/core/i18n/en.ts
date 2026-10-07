@@ -1167,6 +1167,14 @@ export const en: Dictionary = {
     allStages: "all",
     unknownStage: "Unknown stage; showing the whole pipeline.",
     noneInStage: "No applications in this stage.",
+    broaden: "broaden search",
+    broadenHint:
+      "Also finds Portuguese and English synonyms and titles with similar spelling. It does not understand the meaning of a sentence yet.",
+    companyAll: "all companies",
+    channel: "channel",
+    channelAll: "all channels",
+    noneMatching: "No applications match these filters.",
+    clearFilters: "clear filters",
   },
   referrals: {
     title: "Referrals",

@@ -38,6 +38,7 @@ import * as navigation from "./navigation.mjs";
 import * as onboarding from "./onboarding.mjs";
 import * as passwordReset from "./password-reset.mjs";
 import * as pipeline from "./pipeline.mjs";
+import * as pipelineFilters from "./pipeline-filters.mjs";
 import * as publicCvFormat from "./public-cv-format.mjs";
 import * as publicFacts from "./public-facts.mjs";
 import * as publicImages from "./public-images.mjs";
@@ -81,6 +82,8 @@ export const AREAS = [
   { id: "recheck", run: recheck.run, requires: [] },
   { id: "visibility", run: visibility.run, requires: [] },
   { id: "pipeline", run: pipeline.run, requires: [] },
+  // Conta e funil próprios, gravados em setup.mjs (#478).
+  { id: "pipeline-filters", run: pipelineFilters.run, requires: [] },
   { id: "roles", run: roles.run, requires: [] },
   { id: "account", run: account.run, requires: [] },
   { id: "password-reset", run: passwordReset.run, requires: [] },
