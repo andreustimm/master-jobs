@@ -15,7 +15,8 @@ import {
   ROLES,
   setUserDisabled,
   updateUser,
-  removeRecruiterLink,
+  adminCancelRecruiterInvite,
+  adminRevokeRecruiterGrant,
   type Role,
 } from "../../src/contexts/auth/index.ts";
 import { ADMIN_COOKIE, currentSession, guard, SESSION_COOKIE } from "../auth";
@@ -196,24 +197,39 @@ export async function deleteUserAction(formData: FormData) {
   revalidatePath("/admin/users");
 }
 
+function positiveId(formData: FormData, name: string): number {
+  const value = Number(formData.get(name));
+  return Number.isSafeInteger(value) && value > 0 ? value : 0;
+}
+
 /**
- * Remove um vínculo recrutador↔candidato.
+ * Revoga uma concessão de acesso de recrutador (ADR-008, US-023).
  *
- * O admin **revoga** acesso, mas não o concede: criar o vínculo mora na área do
- * candidato, porque ele dá leitura de currículo e funil. Um admin capaz de
- * criá-lo leria dado alheio por procuração — bastaria vincular a si mesmo como
- * recrutador —, desviando da impersonação auditada, que é o único caminho
- * previsto para isso.
+ * O admin **revoga** acesso, mas não o concede: conceder mora na área do
+ * candidato, porque dá leitura de currículo e funil. Um admin capaz de
+ * conceder leria dado alheio por procuração — bastaria conceder a si mesmo
+ * como recrutador —, desviando da impersonação auditada, que é o único caminho
+ * previsto para isso. Não há action de conceder nem de convidar aqui.
  *
- * Recebe o id do VÍNCULO, não o par recrutador+candidato: assim nenhuma tela de
- * administração precisa passar um id de candidato adiante.
+ * A concessão fica `revoked`, com o nome deste admin no histórico do
+ * candidato, e o recrutador recebe o aviso de que a administração encerrou;
+ * nada é apagado. Recebe o id da CONCESSÃO: nenhuma tela de administração
+ * passa id de candidato adiante. Revogar o que já terminou devolve
+ * `already_ended`.
  */
-export async function unlinkAction(formData: FormData) {
-  await guard("user:manage");
-  const linkId = Number(formData.get("linkId"));
-  if (!Number.isFinite(linkId)) throw new Error("Vínculo inválido");
-  await removeRecruiterLink(linkId);
+export async function adminRevokeGrantAction(formData: FormData) {
+  const session = await guard("user:manage");
+  const result = await adminRevokeRecruiterGrant(session, positiveId(formData, "grantId"));
   revalidatePath("/admin/users");
+  return result.ok ? ({ ok: true, code: "revoked" } as const) : ({ ok: false, code: result.error } as const);
+}
+
+/** Cancela um convite pendente em nome do admin (US-023.AC-3); o convidado não é avisado. */
+export async function adminCancelInviteAction(formData: FormData) {
+  const session = await guard("user:manage");
+  const result = await adminCancelRecruiterInvite(session, positiveId(formData, "inviteId"));
+  revalidatePath("/admin/users");
+  return result.ok ? ({ ok: true, code: "cancelled" } as const) : ({ ok: false, code: result.error } as const);
 }
 
 /**

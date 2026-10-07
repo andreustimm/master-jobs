@@ -6,6 +6,7 @@ import {
   sweepEnvironmentAllowed,
   type SliceReport,
 } from "../../../../src/contexts/operations/index.ts";
+import { runRecruiterAccessMaintenance } from "../../../../src/contexts/auth/index.ts";
 import { comVigia } from "../../../timeout-watch.ts";
 import { cronDenied, ingestionDenied } from "../authorize.ts";
 
@@ -42,8 +43,11 @@ export async function GET(request: NextRequest) {
     if (blocked) return blocked;
   }
 
+  // O acesso de recrutador (#465, ADR-016) usa o relógio do contexto de
+  // autenticação, o mesmo do predicado de acesso; o instante da varredura só
+  // decide se a hora já virou.
   const report = await comVigia(`/api/cron/varredura?fatia=${parsed.slice}`, () =>
-    runSweep(parsed.slice, { alarm: raiseAlarm }),
+    runSweep(parsed.slice, { alarm: raiseAlarm, recruiterAccess: () => runRecruiterAccessMaintenance() }),
   );
   logReport(report);
   return NextResponse.json(report);

@@ -15,6 +15,7 @@ import {
   bashSpecifierMatches,
   classifyRisk,
   findCompound,
+  isKnownCommand,
   isReadOnlyStage,
   judgeShell,
   MAX_COMMAND,
@@ -759,6 +760,11 @@ describe("findCompound: pipe só de leitura e laço com corpo julgado", () => {
 
 const REAL_SETTINGS = JSON.parse(readFileSync(".claude/settings.json", "utf8")) as { permissions: Record<string, string[]> };
 const REAL_BASH = bashRulesFromSettings(REAL_SETTINGS)!;
+/**
+ * Lista estreita para provar o mecanismo do corpo de laço: desde a #481 a lista
+ * real libera `Bash` inteiro, e o laço não teria o que perguntar por ela.
+ */
+const NARROW_BASH = { allow: ["echo:*", "sleep:*", "git:*"], ask: [], deny: ["git push * main"] };
 
 describe("uma fonte de verdade para o risco de shell", () => {
   it("`.claude/settings.json` não repete o classificador em `ask` e não pergunta nada de `gh`", () => {
@@ -814,11 +820,24 @@ describe("uma fonte de verdade para o risco de shell", () => {
   });
 
   it("corpo de laço é julgado contra a lista allow, como se rodasse sozinho", () => {
-    expect(judgeShell("for f in a; do echo $f; done", REAL_BASH)).toBeNull();
-    expect(judgeShell("for f in a; do docker rm $f; done", REAL_BASH)).toMatchObject({ decision: "ask", kind: "body" });
-    expect(judgeShell("while docker ps; do sleep 1; done", REAL_BASH)).toMatchObject({ decision: "ask", kind: "body" });
+    expect(judgeShell("for f in a; do echo $f; done", NARROW_BASH)).toBeNull();
+    // `docker logs` não tem risco (#488 tornou `docker rm` risco): só a lista estreita pergunta.
+    expect(judgeShell("for f in a; do docker logs $f; done", NARROW_BASH)).toMatchObject({ decision: "ask", kind: "body" });
+    expect(judgeShell("while docker ps; do sleep 1; done", NARROW_BASH)).toMatchObject({ decision: "ask", kind: "body" });
     expect(judgeShell("for f in a; do echo $f; done", null)).toMatchObject({ decision: "ask", kind: "body" });
     expect(judgeShell("for f in a; do git push origin main; done", REAL_BASH)).toMatchObject({ decision: "deny" });
+  });
+
+  it("#481: `Bash` sem padrão na lista real libera o corpo; o risco continua com a política", () => {
+    expect(REAL_BASH.allow).toEqual([null]);
+    expect(judgeShell("for f in a; do docker logs $f; done", REAL_BASH)).toBeNull();
+    expect(judgeShell("while docker ps; do sleep 1; done", REAL_BASH)).toBeNull();
+    // #488: apagar contêiner pergunta, também no corpo.
+    expect(judgeShell("for f in a; do docker rm $f; done", REAL_BASH)).toMatchObject({ decision: "ask", kind: "risk" });
+    expect(judgeShell("for f in a; do rm -rf $f; done", REAL_BASH)).toMatchObject({ decision: "ask", kind: "risk" });
+    expect(judgeShell("for f in a; do git push --force origin $f; done", REAL_BASH)).toMatchObject({ decision: "ask" });
+    expect(judgeShell("for f in a; do sudo ls; done", REAL_BASH)).toMatchObject({ decision: "deny" });
+    expect(judgeShell("for f in a; do cat .env; done", REAL_BASH)).toMatchObject({ decision: "deny" });
   });
 
   it.each([
@@ -834,7 +853,7 @@ describe("uma fonte de verdade para o risco de shell", () => {
   });
 
   it("embutido não libera o resto do corpo", () => {
-    expect(judgeShell("while read l; do docker rm $l; done < f", REAL_BASH)).toMatchObject({ decision: "ask", kind: "body" });
+    expect(judgeShell("while read l; do docker logs $l; done < f", NARROW_BASH)).toMatchObject({ decision: "ask", kind: "body" });
     expect(judgeShell("if [ -f x ]; then git push origin main; fi", REAL_BASH)).toMatchObject({ decision: "deny" });
   });
 });
@@ -889,10 +908,10 @@ describe("escrita fora da árvore do projeto, com a raiz informada pelo chamador
     expect(classifyRisk("git -C /repo worktree add .claude/worktrees/x -b feat/x", env)).toBeNull();
   });
 
-  // Limites aceitos (G85): criar ou remover entrada vazia não perde dado
+  // Limites conhecidos (G85): criar ou remover entrada vazia não perde dado
   // existente, e o link simbólico exigiria olhar o disco — a política é pura.
   it.each(["touch ~/.zshrc", "mkdir -p ~/.config/novo", "rmdir ~/fora", "ln -s ~/.zshrc ./link", "echo x > ./link"])(
-    "limite aceito, registrado em G85: %s",
+    "limite conhecido, registrado em G85: %s",
     (command) => {
       expect(classifyRisk(command, env)).toBeNull();
     },
@@ -901,6 +920,254 @@ describe("escrita fora da árvore do projeto, com a raiz informada pelo chamador
   it("o diretório pessoal absoluto conta como `~` no `rm` recursivo", () => {
     expect(classifyRisk("rm -rf /home/eu", env)?.decision).toBe("deny");
     expect(classifyRisk("rm -rf /home/eu/www", env)?.decision).toBe("ask");
+  });
+});
+
+describe("#485: invólucro desconhecido, ferramenta fora do catálogo e segredo", () => {
+  const env = { root: "/repo", cwd: "/repo", home: "/home/eu" };
+
+  it.each<[string, Expected]>([
+    // Busca de sufixo: executável conhecido em qualquer posição do argv.
+    ["foo --bar git push --force origin x", "ask"],
+    ["/opt/x/bin/wrap -q /bin/rm -rf src", "ask"],
+    ["nice arch -arm64 xcrun git push origin main", "deny"],
+    ["docker run -v /:/host alpine rm -rf /host/etc", "ask"],
+    ["python3 x.py sudo ls", "deny"],
+    // Texto novo dentro de um sufixo (`env -S`) também é buscado.
+    ['wrap env -S "foo git push --force origin x"', "ask"],
+    // Invólucros nomeados, inclusive texto de shell entre aspas.
+    ['hyperfine --prepare "git reset --hard" "ls"', "ask"],
+    ['parallel "rm -rf {}" ::: a b', "ask"],
+    ['flock /tmp/l -c "git push --force origin x"', "ask"],
+    ["mise x node@20 -- vercel --prod", "ask"],
+    // Postgres: remoto por host, URL, conninfo, variável ou atribuição.
+    ["psql -h db.supabase.co -c 'delete from job'", "ask"],
+    ["psql --dbname=postgresql://u@db.x.co/p -c 'drop table x'", "ask"],
+    ["psql 'host=db.x.co dbname=p' -c 'update job set x=1'", "ask"],
+    ["PGHOST=db.x.co psql -c 'truncate job'", "ask"],
+    ['psql "$POSTGRES_URL" -f x.sql', "ask"],
+    ['psql "$DATABASE_URL" < x.sql', "ask"],
+    ['psql "$DATABASE_URL"', "ask"],
+    ['psql "$DATABASE_URL" -c "\\! rm -rf src"', "ask"],
+    ["pg_restore -d postgres://u@db.x.co/p dump.bin", "ask"],
+    ["pg_dump -f ~/dump.sql postgres://127.0.0.1/jobs", "ask"],
+    // Docker (#488).
+    ["docker rmi img", "ask"],
+    ["docker -H tcp://x container prune -f", "ask"],
+    ["docker volume rm v", "ask"],
+    ["docker network prune", "ask"],
+    ["docker builder prune -a", "ask"],
+    ["docker compose -f docker-compose.local.yml down --volumes", "ask"],
+    ["docker-compose down -v", "ask"],
+    ["docker compose rm -f", "ask"],
+    // Segredo.
+    ["env -u X", "ask"],
+    ["rtk env", "ask"],
+    ["typeset -x", "ask"],
+    ["export", "ask"],
+    ["security find-internet-password -s x -g", "deny"],
+    ["security export -k login.keychain -o x.p12", "deny"],
+    ["vercel pull --yes", "ask"],
+    // Nuvem, disco e sistema.
+    ["vercel api /v9/projects -f name=x", "ask"],
+    ["vercel api /v9/projects --method=patch", "ask"],
+    ["terraform apply plan.tfplan", "ask"],
+    ["kubectl -n prod delete pod x", "ask"],
+    ["aws ec2 terminate-instances --instance-ids i-1", "ask"],
+    ["newfs_apfs /dev/disk4", "ask"],
+    ["diskutil apfs deleteVolume disk3s1", "ask"],
+    ["truncate --size=0 x", "ask"],
+    ["defaults -currentHost write com.apple.x k v", "ask"],
+    ["crontab -e", "ask"],
+    ["unzip -o x.zip -d /etc/x", "ask"],
+    ["patch -o ~/.zshrc a x.diff", "ask"],
+    // Programa apontado por variável: o valor é julgado como comando.
+    ['GIT_SSH_COMMAND="rm -rf src" git fetch', "ask"],
+    ['GIT_SSH_COMMAND="git push --force origin main" git fetch', "deny"],
+    ['GIT_SSH_COMMAND="ssh -i k; rm -rf src" git fetch', "ask"],
+    ['GIT_SSH_COMMAND="ssh -o ProxyCommand=x" git fetch', "ask"],
+    ['GIT_SSH="rm -rf src" git fetch', "ask"],
+    ['GIT_EXTERNAL_DIFF="rm -rf src" git diff', "ask"],
+    ['GIT_EDITOR="git push --force origin main" git commit', "deny"],
+    ['GIT_SEQUENCE_EDITOR="rm -rf src" git rebase -i HEAD~2', "ask"],
+    ['GIT_ASKPASS="rm -rf src" git fetch', "ask"],
+    ['SSH_ASKPASS="rm -rf src" git fetch', "ask"],
+    ['GIT_PAGER="rm -rf src" git log', "ask"],
+    ['PAGER="rm -rf src" git log', "ask"],
+    ['MANPAGER="rm -rf src" man ls', "ask"],
+    ['GH_PAGER="git push --force origin main" gh pr view 1', "deny"],
+    ['EDITOR="rm -rf src" git commit', "ask"],
+    ['VISUAL="sudo ls" git commit', "deny"],
+    ['GH_EDITOR="rm -rf src" gh pr create', "ask"],
+    ['BROWSER="rm -rf src" gh pr view 1 --web', "ask"],
+    ['GH_BROWSER="rm -rf src" gh pr view 1 --web', "ask"],
+    ['env GIT_SSH_COMMAND="rm -rf src" git fetch', "ask"],
+    ['rtk GIT_PAGER="rm -rf src" git log', "ask"],
+    ['EDITOR="cat .env" git commit', "deny"],
+    ['GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0="rm -rf src" git log', "ask"],
+    ['GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.sshCommand GIT_CONFIG_VALUE_0="sudo ls" git fetch', "deny"],
+    ['GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.x GIT_CONFIG_VALUE_0="!rm -rf src" git x', "ask"],
+    ["GIT_CONFIG_PARAMETERS=\"'core.pager'='rm -rf src'\" git log", "ask"],
+    // `NOME+=valor` também atribui: o valor acrescentado é julgado.
+    ['GIT_EDITOR+="git push --force origin main" git commit', "deny"],
+    ['GIT_EXTERNAL_DIFF+="rm -rf src" git diff', "ask"],
+    ['EDITOR+="sudo ls" git commit', "deny"],
+    ['GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0+=core.pager GIT_CONFIG_VALUE_0="rm -rf src" git log', "ask"],
+    ["GIT_CONFIG_PARAMETERS+=\"'core.pager'='rm -rf src'\" git log", "ask"],
+    ['PGHOST+=db.prod psql -c "delete from job"', "ask"],
+    ["PATH+=:/x sudo ls", "deny"],
+    // `export`/`declare -x`/`typeset -x` no mesmo comando (laço, `if`) valem como a atribuição.
+    ['for i in 1; do export GIT_EXTERNAL_DIFF="rm -rf src"; git diff; done', "ask"],
+    ['for i in 1; do export GIT_EDITOR="git push --force origin main"; git commit; done', "deny"],
+    ['if true; then export GIT_SSH_COMMAND="rm -rf src"; git fetch; fi', "ask"],
+    ['for i in 1; do declare -x PAGER="rm -rf src"; man ls; done', "ask"],
+    ['for i in 1; do typeset -x PAGER="rm -rf src"; man ls; done', "ask"],
+    ['for i in 1; do export GIT_EDITOR+="sudo ls"; git commit; done', "deny"],
+    ['readonly PAGER="sudo ls"', "deny"],
+    // O programa recebe o arquivo do git: `rm` apaga; `GIT_EXTERNAL_DIFF` pergunta como `diff.external`.
+    ["GIT_EXTERNAL_DIFF=rm git diff", "ask"],
+    ['GIT_EXTERNAL_DIFF="rm -f" git diff', "ask"],
+    ["GIT_EXTERNAL_DIFF=trash git diff", "ask"],
+    ["GIT_EXTERNAL_DIFF=difft git diff", "ask"],
+    ["EDITOR=rm git commit", "ask"],
+    ["GIT_EDITOR=rm git commit", "ask"],
+    ["GIT_SEQUENCE_EDITOR=rm git rebase -i HEAD~2", "ask"],
+    ['VISUAL="rm -f" git commit', "ask"],
+    // `env -S` respeita aspas; grupo de opções (`-vS`) também; `\` do `env` pergunta.
+    ["env -S 'sh -c \"git push --force origin main\"'", "deny"],
+    ["env -S 'GIT_EDITOR=\"git push --force origin main\" git commit'", "deny"],
+    ["env -S 'GIT_EXTERNAL_DIFF=\"rm -rf src\" git diff'", "ask"],
+    ["env --split-string='sh -c \"git push --force origin main\"'", "deny"],
+    ["env -S\"sh -c 'rm -rf src'\"", "ask"],
+    ["env -vS 'git push --force origin main'", "deny"],
+    ["env -S 'GIT_EXTERNAL_DIFF=rm\\_-rf\\_src git diff'", "ask"],
+    // `ssh` do transporte: `-F`/`-E`/`-I` no grupo e provedor de biblioteca perguntam.
+    ['GIT_SSH_COMMAND="ssh -qF /tmp/c" git fetch', "ask"],
+    ['GIT_SSH_COMMAND="ssh -E /tmp/log" git fetch', "ask"],
+    ['GIT_SSH_COMMAND="ssh -oPKCS11Provider=/tmp/x.so" git fetch', "ask"],
+    ['GIT_SSH_COMMAND="ssh -o SecurityKeyProvider=/tmp/x.so" git fetch', "ask"],
+    ['GIT_PROXY_COMMAND="rm -rf src" git fetch', "ask"],
+    ['git -c core.gitProxy="rm -rf src" fetch', "ask"],
+    ['git config core.gitProxy "rm -rf src"', "ask"],
+    // `fd` com `-x`/`-X`/`--exec` executa o argv.
+    ["fd -Hx rm -rf", "ask"],
+    ["fd . --exec rm -rf {}", "ask"],
+  ])("pergunta ou nega: %s -> %s", (command, expected) => {
+    expect(classifyRisk(command, env)?.decision ?? null, command).toBe(expected);
+  });
+
+  it.each([
+    // Quem não executa o argv: a palavra é dado.
+    "grep -rn sudo src",
+    "rg -n 'git push --force' docs",
+    "echo rm -rf /",
+    "gh label create sudo",
+    "pnpm jho jobs search sudo",
+    "which docker",
+    "man rm",
+    // Executor de teste e `fd` sem `-x`: o argv é filtro.
+    "npx playwright test --grep sudo",
+    "pnpm exec playwright test --grep sudo",
+    "pytest -k sudo",
+    "npx vitest run sudo",
+    "vitest run env",
+    "pnpm vitest run env",
+    "pnpm exec vitest run env",
+    "npx jest -t sudo",
+    "fd sudo",
+    "fd env",
+    "fd -e ts sudo",
+    // Valor benigno em variável que executa programa.
+    "GIT_PAGER=cat git log",
+    'PAGER="less -R" git log',
+    "EDITOR=vim git commit",
+    "GIT_EDITOR=true git rebase --continue",
+    "GH_PAGER= gh pr view 1",
+    'GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" git fetch',
+    'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=user.name GIT_CONFIG_VALUE_0="rm -rf src" git log',
+    'EDITOR="code --wait" git commit',
+    "VISUAL=nano gh pr create",
+    'GIT_PAGER="delta --dark" git diff',
+    'GIT_SSH_COMMAND="ssh -p 2222" git push origin feat/x',
+    'GIT_SSH_COMMAND="ssh -oIdentityFile=~/.ssh/x" git fetch',
+    "PATH+=:/x ls",
+    "for i in 1; do export NODE_ENV=test; pnpm vitest run env; done",
+    "env -S 'pnpm vitest run env'",
+    // Rotina ao lado das famílias novas.
+    "docker ps",
+    "docker build -t x .",
+    "docker logs -f app",
+    "docker compose up -d",
+    "docker compose down",
+    "docker run --rm node:22 node -e 1",
+    "uv run pytest -k rm",
+    "uv run pytest tests/install tests/find tests/sudo",
+    "uv pip install x",
+    "make build",
+    "psql postgresql://jobs:jobs@127.0.0.1:5433/jobs -c 'drop table x'",
+    "psql -h localhost -c 'select 1'",
+    "psql -h /tmp -f x.sql",
+    'psql "$DATABASE_URL" -c "select count(*) from job"',
+    'psql "$DATABASE_URL" -l',
+    "pg_dump postgres://127.0.0.1/jobs",
+    "env FOO=1 node x.js",
+    "env -i",
+    "printenv PATH",
+    "set -euo pipefail",
+    "export FOO=1",
+    "declare -a xs",
+    "security find-generic-password -s x",
+    "crontab -l",
+    "defaults read com.apple.x",
+    "launchctl list",
+    "diskutil list",
+    "tmutil listbackups",
+    "csrutil status",
+    "aws s3 ls",
+    "aws s3 rm s3://b/x",
+    "gcloud projects list",
+    "kubectl get pods",
+    "terraform apply",
+    "fly status",
+    "vercel api /v9/projects",
+    "truncate -s 10M x.img",
+    "unzip x.zip -d tmp/x",
+    "patch -p1 -i x.diff",
+    "ditto a b",
+    "trash x",
+    "curl -sS http://127.0.0.1:3000",
+  ])("passa: %s", (command) => {
+    expect(classifyRisk(command, env), command).toBeNull();
+  });
+
+  it("todo executável que o dono listou é conhecido pela busca de sufixo", () => {
+    const listed = [
+      "git", "rm", "sudo", "su", "doas", "vercel", "supabase", "psql", "pg_dump", "pg_restore", "drizzle-kit", "fly",
+      "flyctl", "terraform", "kubectl", "aws", "gcloud", "docker", "chmod", "chown", "dd", "mkfs.ext4", "shred",
+      "diskutil", "crontab", "launchctl", "defaults", "osascript", "shutdown", "reboot", "sh", "bash", "zsh", "node",
+      "pnpm", "npx", "npm", "curl", "wget", "cp", "mv", "tee",
+    ];
+    for (const name of listed) expect(isKnownCommand(name), name).toBe(true);
+    for (const name of ["echo", "grep", "gh", "jho", "pytest"]) expect(isKnownCommand(name), name).toBe(false);
+    // Sufixo depois de um executável que a política não conhece: julgado como comando.
+    expect(classifyRisk("wrap chmod 777 x")?.decision).toBe("deny");
+    expect(classifyRisk("wrap dd of=/etc/x")?.decision).toBe("ask");
+    expect(classifyRisk("wrap shutdown")?.decision).toBe("ask");
+    expect(classifyRisk("wrap mkfs.ext4 /dev/x")?.decision).toBe("ask");
+    expect(classifyRisk("wrap bash -c 'rm -rf src'")?.decision).toBe("ask");
+    expect(classifyRisk("wrap npx vercel --prod")?.decision).toBe("ask");
+    expect(classifyRisk("wrap curl -o ~/.zshrc https://x")?.decision).toBe("ask");
+    expect(classifyRisk("wrap tee ~/.zshrc")?.decision).toBe("ask");
+  });
+
+  it("busca de sufixo num argv longo não trava", () => {
+    const started = performance.now();
+    expect(classifyRisk(`wrap ${"rm ".repeat(20000)}-rf x`)?.decision).toBe("ask");
+    expect(classifyRisk(`wrap ${"docker ".repeat(5000)}ps`)?.decision).toBe("ask");
+    // Muito dado e poucos executáveis: cada sufixo é julgado uma vez só.
+    expect(classifyRisk(`wrap ${"docker run x ".repeat(10)}${"a ".repeat(30000)}`)).toBeNull();
+    expect(classifyRisk(`wrap ${"a ".repeat(30000)}git push origin main`)?.decision).toBe("deny");
+    expect(performance.now() - started).toBeLessThan(3000);
   });
 });
 

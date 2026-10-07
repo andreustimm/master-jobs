@@ -18,6 +18,7 @@ type Fake = {
   alarms: string[][];
   budgets: number[];
   deadlines: number[];
+  accessRuns: number[];
 };
 
 function fake(opts: {
@@ -37,6 +38,7 @@ function fake(opts: {
   const alarms: string[][] = [];
   const budgets: number[] = [];
   const deadlines: number[] = [];
+  const accessRuns: number[] = [];
   const lastSynced = new Map(Object.entries(opts.lastSynced ?? {}));
   const iso = (ms: number) => new Date(ms).toISOString();
 
@@ -112,8 +114,12 @@ function fake(opts: {
     async alarm(report) {
       alarms.push(report.sources);
     },
+    async recruiterAccess(nowMs) {
+      accessRuns.push(nowMs);
+      return { expired: 2, invitesExpired: 1 };
+    },
   };
-  return { deps, time, rows, leases, synced, alarms, budgets, deadlines };
+  return { deps, time, rows, leases, synced, alarms, budgets, deadlines, accessRuns };
 }
 
 describe("fatia sync", () => {
@@ -301,6 +307,36 @@ describe("fatias de fila", () => {
     expect(report.errors).toBe(1);
     expect(f.rows).toHaveLength(1);
     expect(f.rows[0]).toMatchObject({ slice: "reconferencia", unit: null, errors: 1, error: expect.stringContaining("blocked") });
+  });
+});
+
+describe("acesso de recrutador na varredura (#465, ADR-016)", () => {
+  const MIN = 60_000;
+
+  it("IT-064 roda uma vez por hora sob manutencao:recruiter-access, em qualquer fatia, e as contagens vão para o detail", async () => {
+    const f = fake();
+    const first = await runSweepSlice("captura", f.deps);
+    f.time.now = START + 10 * MIN;
+    const early = await runSweepSlice("termos", f.deps);
+    f.time.now = START + 61 * MIN;
+    await runSweepSlice("sync", f.deps);
+
+    expect(f.accessRuns).toEqual([START, START + 61 * MIN]);
+    expect(f.leases.get("manutencao:recruiter-access")).toMatchObject({ claimedAt: null });
+    expect(first.detail).toEqual({ expired: 2, invitesExpired: 1 });
+    expect(early.detail).toEqual({ claimed: 3 });
+  });
+
+  it("IT-064 falha do trabalho de acesso vira erro da fatia, devolve a reserva e não apaga a métrica", async () => {
+    const f = fake();
+    f.deps.recruiterAccess = async () => {
+      throw new Error("banco fora");
+    };
+    const report = await runSweepSlice("captura", f.deps);
+
+    expect(report.errors).toBe(1);
+    expect(f.rows[0]).toMatchObject({ slice: "captura", unit: null, errors: 1, error: "banco fora" });
+    expect(f.leases.get("manutencao:recruiter-access")?.claimedAt).toBeNull();
   });
 });
 

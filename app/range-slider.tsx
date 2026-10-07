@@ -75,6 +75,7 @@ export function RangeSlider({
   testId,
   children,
   floorLimit = 0,
+  omitEmptyMin = false,
 }: {
   minName: string;
   maxName: string;
@@ -93,6 +94,12 @@ export function RangeSlider({
    * componente substituiu tinha `min={1}`; a restrição não veio junto.
    */
   floorLimit?: number;
+  /**
+   * Piso vazio fora da URL. Em Vagas `fit=` vazio é escolha ("toda nota") e
+   * difere do ausente (o corte padrão), então lá o campo vazio continua indo;
+   * no Funil ausente e vazio são o mesmo "sem piso".
+   */
+  omitEmptyMin?: boolean;
   /** Where the scale ends before a typed value stretches it. */
   ceiling: number;
   step: number;
@@ -157,7 +164,7 @@ export function RangeSlider({
           {labels.min}
           <Input
             type="number"
-            name={minName}
+            name={floor === "" && omitEmptyMin ? undefined : minName}
             min={floorLimit}
             max={limit}
             step={1}
@@ -174,7 +181,9 @@ export function RangeSlider({
           {labels.max}
           <Input
             type="number"
-            name={maxName}
+            // Teto vazio é "sem teto", que é a ausência do parâmetro: sem nome,
+            // o campo vazio não vai para a URL como `fitMax=` (#494).
+            name={roof === "" ? undefined : maxName}
             min={floorLimit}
             max={limit}
             step={1}

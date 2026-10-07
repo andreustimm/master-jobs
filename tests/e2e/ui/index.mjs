@@ -33,6 +33,7 @@ import * as jobsAccessibility from "./jobs-accessibility.mjs";
 import * as jobsDensity from "./jobs-density.mjs";
 import * as jobsLoading from "./jobs-loading.mjs";
 import * as jobsNew from "./jobs-new.mjs";
+import * as legal from "./legal.mjs";
 import * as logout from "./logout.mjs";
 import * as mobile from "./mobile.mjs";
 import * as navigation from "./navigation.mjs";
@@ -47,11 +48,14 @@ import * as publicProfile from "./public-profile.mjs";
 import * as pwa from "./pwa.mjs";
 import * as rateLimit from "./rate-limit.mjs";
 import * as recheck from "./recheck.mjs";
+import * as recruiterAccess from "./recruiter-access.mjs";
 import * as roles from "./roles.mjs";
 import * as searchRelevance from "./search-relevance.mjs";
 import * as searchSynonyms from "./search-synonyms.mjs";
+import * as recruiterDirectory from "./recruiter-directory.mjs";
 import * as recruiterLogoTransition from "./recruiter-logo-transition.mjs";
 import * as searches from "./searches.mjs";
+import * as signUp from "./sign-up.mjs";
 import * as slowFilters from "./slow-filters.mjs";
 import * as socialSignIn from "./social-sign-in.mjs";
 import * as staleTabLogin from "./stale-tab-login.mjs";
@@ -91,12 +95,22 @@ export const AREAS = [
   // Login social (#464): contas e identidades próprias de `setup.mjs`, emissor
   // falso do `run-isolated`; cada cenário em contexto próprio.
   { id: "social-sign-in", run: socialSignIn.run, requires: [] },
+  // Cadastro aberto (#464): contas novas pelo emissor falso e pelo código lido
+  // do sink de e-mail; cada cenário em contexto próprio, com IP próprio.
+  { id: "sign-up", run: signUp.run, requires: [] },
+  { id: "legal", run: legal.run, requires: [] },
   // Formas de entrar (#464, task_04): contas próprias de `setup.mjs`
   // (`account-methods-fixtures.mjs`), devolvidas ao estado inicial a cada
   // execução; o provedor é o emissor falso.
   { id: "account-methods", run: accountMethods.run, requires: [] },
+  // Acesso de recrutador (#465, task_02): contas próprias de `setup.mjs`
+  // (`recruiter-access-fixtures.mjs`), sem nada compartilhado a cada execução.
+  { id: "recruiter-access", run: recruiterAccess.run, requires: [] },
   { id: "jobs-new", run: jobsNew.run, requires: [] },
   { id: "public-profile", run: publicProfile.run, requires: [] },
+  // Diretório de recrutadores (#465): contas e perfis próprios de `setup.mjs`
+  // (`recruiter-directory-fixtures.mjs`); devolve a visibilidade de Rita.
+  { id: "recruiter-directory", run: recruiterDirectory.run, requires: [] },
   // Compara o histórico de novidades de quatro sessões: o dono (design),
   // recrutador e candidato (roles) e a sessão emprestada (aqui).
   { id: "admin", run: admin.run, requires: ["design", "roles"] },

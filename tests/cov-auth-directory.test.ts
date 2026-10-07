@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DB } from "../src/core/db/client.ts";
-import { authUser, candidate, recruiterCandidate } from "../src/core/db/schema.ts";
+import { authUser, candidate, recruiterGrant } from "../src/core/db/schema.ts";
 import {
   drizzleUserDirectory,
   otherActiveAdmins,
@@ -247,7 +247,7 @@ describe("UserDirectory: vínculo recrutador↔candidato", () => {
 
     await drizzleUserDirectory.linkCandidate(recruiter.id, cid, owner.id);
 
-    const [row] = await db.select().from(recruiterCandidate);
+    const [row] = await db.select().from(recruiterGrant);
     expect(row!.createdBy).toBe(owner.id);
   });
 
@@ -278,10 +278,10 @@ describe("UserDirectory: vínculo recrutador↔candidato", () => {
     expect(await drizzleUserDirectory.linksOf(r.id)).toEqual([]);
   });
 
-  it("unlinkById remove só o vínculo apontado", async () => {
+  it("revokeGrant encerra só a concessão apontada", async () => {
     // Revogar acesso demais é irritante; revogar de menos é o vazamento
-    // continuar valendo. Por isso a remoção é pelo id do vínculo, e não pelo
-    // par — nenhuma tela precisa citar o id do candidato para revogar.
+    // continuar valendo. Por isso a revogação é pelo id da concessão, e não
+    // pelo par — nenhuma tela precisa citar o id do candidato para revogar.
     const c1 = await makeCandidate(7);
     const c2 = await makeCandidate(8);
     const r = await drizzleUserDirectory.create({ email: "dois@local.test", roles: ["recruiter"] });
@@ -290,15 +290,14 @@ describe("UserDirectory: vínculo recrutador↔candidato", () => {
     await drizzleUserDirectory.linkCandidate(r.id, c2, r.id);
     const links = await drizzleUserDirectory.linksOf(r.id);
 
-    await drizzleUserDirectory.unlinkById(links[0]!.id);
+    expect(await drizzleUserDirectory.revokeGrant(links[0]!.id, r.id)).toMatchObject({ ok: true });
 
     expect(await drizzleUserDirectory.linkedCandidates(r.id)).toEqual([links[1]!.candidateId]);
   });
 
-  it("unlinkById de vínculo inexistente é no-op silencioso", async () => {
-    // Duplo clique em "remover", ou dois administradores na mesma tela. Falhar
-    // aqui só produziria erro numa ação que já atingiu o resultado desejado.
-    await expect(drizzleUserDirectory.unlinkById(12345)).resolves.toBeUndefined();
+  it("revokeGrant de concessão inexistente devolve not_found sem estourar", async () => {
+    // Id vem de formulário: entrada hostil normal. Nada é gravado.
+    await expect(drizzleUserDirectory.revokeGrant(12345, 1)).resolves.toEqual({ ok: false, error: "not_found" });
   });
 });
 

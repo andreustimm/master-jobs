@@ -12,7 +12,7 @@
  */
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { closeDb, getDb } from "../../src/core/db/client.ts";
-import { application, authEvent, authIdentity, authLoginToken, authUser, candidate, candidateDocument, candidateSkill, fxRate, job, jobScore, savedTerm, scoreTask, skill, targetAccount, termAttribution } from "../../src/core/db/schema.ts";
+import { application, authEvent, authIdentity, authLoginToken, authUser, candidate, candidateDocument, candidateSkill, fxRate, job, jobScore, recruiterAccessEvent, recruiterDirectoryQuery, recruiterGrant, recruiterInvite, savedTerm, scoreTask, skill, targetAccount, termAttribution } from "../../src/core/db/schema.ts";
 import { linkRecruiterToCandidate } from "../../src/contexts/auth/index.ts";
 import { seedOwner } from "../../src/contexts/auth/app/seed.ts";
 import { hashToken } from "../../src/contexts/auth/infra/drizzle-store.ts";
@@ -48,6 +48,8 @@ import { GAP_GUEST_FIXTURE } from "./gap-fixture.mjs";
 import { PIPELINE_FILTER_FIXTURE } from "./pipeline-filters-fixture.mjs";
 import { SOCIAL_FIXTURES } from "./social-fixtures.mjs";
 import { METHODS_FIXTURES } from "./account-methods-fixtures.mjs";
+import { DIRECTORY_FIXTURES } from "./recruiter-directory-fixtures.mjs";
+import { ACCESS_FIXTURES } from "./recruiter-access-fixtures.mjs";
 import { PUBLIC_CV_FIXTURE, PUBLIC_FACTS_OFF_FIXTURE, factColumns } from "./public-cv-format.mjs";
 import { isolationRefusal } from "./database-guard.mjs";
 
@@ -113,6 +115,14 @@ export const E2E_ROLES = {
   socialRecruiter: { email: SOCIAL_FIXTURES.recruiter.email, roles: ["recruiter"] },
   socialConflict: { email: SOCIAL_FIXTURES.conflict.email, roles: ["candidate"] },
   socialInvited: { email: SOCIAL_FIXTURES.invited.email, roles: ["candidate"], noPassword: true },
+  // Diretório de recrutadores (#465): ver `recruiter-directory-fixtures.mjs`.
+  directoryRecruiter: { email: DIRECTORY_FIXTURES.recruiter.email, roles: ["recruiter"] },
+  directoryAdmin: { email: DIRECTORY_FIXTURES.admin.email, roles: ["admin"] },
+  directoryRita: { email: DIRECTORY_FIXTURES.rita.account, roles: ["candidate"] },
+  // Acesso de recrutador (#465, task_02): ver `recruiter-access-fixtures.mjs`.
+  accessCandidate: { email: ACCESS_FIXTURES.candidate.email, roles: ACCESS_FIXTURES.candidate.roles },
+  accessRecruiter: { email: ACCESS_FIXTURES.recruiter.email, roles: ACCESS_FIXTURES.recruiter.roles },
+  accessFresh: { email: ACCESS_FIXTURES.fresh.email, roles: ACCESS_FIXTURES.fresh.roles },
   // Formas de entrar (#464, task_04): ver `account-methods-fixtures.mjs`.
   ...Object.fromEntries(
     Object.entries(METHODS_FIXTURES).map(([key, fixture]) => [
@@ -678,6 +688,29 @@ try {
     if (!fixture.noPassword) await setPassword(fixture.email, PASSWORD);
   }
 
+  // Acesso de recrutador (#465, task_02). A jornada concede, convida e revoga:
+  // a cada execução os candidatos da área voltam a não ter nada compartilhado
+  // — nem histórico, que é também o que o limite diário conta —, com os nomes
+  // do fixture e o recrutador com e-mail provado, que é quem recebe concessão
+  // direta em vez de convite.
+  const accessCandidates = [];
+  for (const fixture of [ACCESS_FIXTURES.candidate, ACCESS_FIXTURES.fresh]) {
+    const [user] = await getDb()
+      .select({ candidateId: authUser.candidateId })
+      .from(authUser)
+      .where(eq(authUser.email, fixture.email));
+    if (user?.candidateId == null) throw new Error(`candidato do acesso de recrutador não criado: ${fixture.email}`);
+    await getDb().update(candidate).set({ name: fixture.name }).where(eq(candidate.id, user.candidateId));
+    accessCandidates.push(user.candidateId);
+  }
+  await getDb().delete(recruiterAccessEvent).where(inArray(recruiterAccessEvent.candidateId, accessCandidates));
+  await getDb().delete(recruiterGrant).where(inArray(recruiterGrant.candidateId, accessCandidates));
+  await getDb().delete(recruiterInvite).where(inArray(recruiterInvite.candidateId, accessCandidates));
+  await getDb()
+    .update(authUser)
+    .set({ fullName: ACCESS_FIXTURES.recruiter.fullName, emailVerifiedAt: "2026-01-01T00:00:00.000Z" })
+    .where(eq(authUser.email, ACCESS_FIXTURES.recruiter.email));
+
   // #325: candidato sem conta, público e com o CV publicado, cujo texto veio
   // de PDF. `saveDocument` não regrava conteúdo igual, então rodar de novo
   // numa base reaproveitada é inofensivo.
@@ -757,7 +790,70 @@ try {
       });
   }
 
-  const [ownerUser] = await getDb().select({ id: authUser.id }).from(authUser).where(eq(authUser.email, EMAIL)).limit(1);
+  // Diretório de recrutadores (#465): Paula (Público), Rita (Recrutadores, com
+  // conta) e Pedro (Privado), devolvidos ao estado do fixture a cada execução —
+  // a área troca a visibilidade de Rita e a devolve, mas uma execução que pare
+  // no meio não pode herdar o estado para a próxima. O limite de busca do
+  // recrutador do diretório também recomeça.
+  {
+    const [ritaAccount] = await getDb()
+      .select({ candidateId: authUser.candidateId })
+      .from(authUser)
+      .where(eq(authUser.email, DIRECTORY_FIXTURES.rita.account))
+      .limit(1);
+    if (!ritaAccount?.candidateId) throw new Error("conta de Rita do diretório sem candidato");
+    const [anyJob] = await getDb().select({ id: job.id }).from(job).orderBy(job.id).limit(1);
+    for (const key of ["paula", "rita", "pedro"]) {
+      const fixture = DIRECTORY_FIXTURES[key];
+      const identity = { name: fixture.name, headline: fixture.headline, location: fixture.location, email: fixture.email };
+      let id = ritaAccount.candidateId;
+      if (key === "rita") await getDb().update(candidate).set(identity).where(eq(candidate.id, id));
+      else id = await ensureCandidate({ slug: fixture.slug, ...identity });
+      await getDb()
+        .update(candidate)
+        .set({
+          visibility: fixture.visibility,
+          publicCv: fixture.publicCv,
+          workModel: fixture.workModel,
+          publicWorkModel: fixture.publicWorkModel,
+        })
+        .where(eq(candidate.id, id));
+      await saveDocument({ candidateId: id, kind: "cv", label: "E2E CV do diretório", content: fixture.cv });
+      await getDb().delete(scoreTask).where(eq(scoreTask.candidateId, id));
+      for (const name of fixture.skills) {
+        const [existing] = await getDb().select({ id: skill.id }).from(skill).where(eq(skill.canonicalName, name)).limit(1);
+        const catalogRow = existing ?? (
+          await getDb()
+            .insert(skill)
+            .values({ slug: `e2e-${name.toLowerCase()}`, canonicalName: name, category: "framework", aliases: [] })
+            .onConflictDoUpdate({ target: skill.slug, set: { canonicalName: name } })
+            .returning({ id: skill.id })
+        )[0];
+        await getDb()
+          .insert(candidateSkill)
+          .values({ candidateId: id, skillId: catalogRow.id, status: "confirmed", occurrences: 1 })
+          .onConflictDoUpdate({ target: [candidateSkill.candidateId, candidateSkill.skillId], set: { status: "confirmed" } });
+      }
+      // O que é só do funil: nota e valor discutido numa candidatura.
+      if (anyJob) {
+        await getDb()
+          .insert(application)
+          .values({ candidateId: id, jobId: anyJob.id, status: "interviewing", notes: fixture.note, rateDiscussed: fixture.rate })
+          .onConflictDoUpdate({
+            target: [application.candidateId, application.jobId],
+            set: { notes: fixture.note, rateDiscussed: fixture.rate },
+          });
+      }
+    }
+    const [directoryRecruiter] = await getDb()
+      .select({ id: authUser.id })
+      .from(authUser)
+      .where(eq(authUser.email, DIRECTORY_FIXTURES.recruiter.email))
+      .limit(1);
+    await getDb().delete(recruiterDirectoryQuery).where(eq(recruiterDirectoryQuery.recruiterUserId, directoryRecruiter.id));
+  }
+
+  const [ownerUser] =await getDb().select({ id: authUser.id }).from(authUser).where(eq(authUser.email, EMAIL)).limit(1);
   const [linkedRecruiter] = await getDb()
     .select({ id: authUser.id })
     .from(authUser)
@@ -971,6 +1067,7 @@ try {
       jobId: fixture.id,
       status: fixture.status,
       channel: fixture.channel,
+      appliedAt: fixture.appliedAt ?? null,
     }))).onConflictDoNothing();
     await getDb().delete(scoreTask).where(eq(scoreTask.candidateId, funnelId));
   }

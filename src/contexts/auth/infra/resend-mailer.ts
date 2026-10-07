@@ -12,8 +12,8 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { mailSinkDir } from "../domain/oidc-config.ts";
-import { isLocalProcess, type AuthEnvironment } from "../domain/open-mode.ts";
+import { mailDelivery, mailSinkDir } from "../domain/oidc-config.ts";
+import type { AuthEnvironment } from "../domain/open-mode.ts";
 import type { Mailer, MailResult, OutgoingMail } from "../ports-mailer.ts";
 
 const ENDPOINT = "https://api.resend.com/emails";
@@ -161,15 +161,19 @@ export function fileMailer(dir: string): Mailer {
  * impossível de exercitar.
  */
 export function configuredMailer(env: AuthEnvironment = process.env): Mailer {
-  const sink = mailSinkDir(env);
-  if (sink !== null) return fileMailer(sink);
-  const key = env.RESEND_API_KEY?.trim();
-  const from = env.RESEND_FROM?.trim();
-  if (key && from) return resendMailer(key, from);
+  // A escolha é de `mailDelivery`, pura e testada; aqui só se monta o adapter.
   // Lista de permissão: o terminal só vale onde o processo se declara local
   // (`JHO_ENV=local`, via `isLocalProcess`, a mesma regra do modo aberto).
   // Produção, preview, `JHO_ENV` desconhecido, `VERCEL=1` e processo que não
   // declara nada omitem o corpo — valor inventado depois cai no lado seguro.
-  if (key || !isLocalProcess(env)) return withheldMailer;
-  return consoleMailer;
+  switch (mailDelivery(env)) {
+    case "file":
+      return fileMailer(mailSinkDir(env)!);
+    case "resend":
+      return resendMailer(env.RESEND_API_KEY!.trim(), env.RESEND_FROM!.trim());
+    case "console":
+      return consoleMailer;
+    case "withheld":
+      return withheldMailer;
+  }
 }

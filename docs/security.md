@@ -155,6 +155,9 @@ A correção:
   primeira conta da instalação (tabela vazia), nunca troca
   vínculo gravado e perdeu
   `--candidate`. `seedOwner` recusa um segundo e-mail sobre o candidato do dono.
+  O cadastro aberto (`/signup`, #464) cria o candidato pelo mesmo
+  `insertOwnCandidate`, na transação que cria a conta: sempre linha nova,
+  privada, nunca a de outra pessoa; o papel admin nunca sai dele.
 - **E2E:** `tests/e2e/database-guard.mjs` recusa `setup.mjs`, `ui.mjs` e
   `a11y.mjs` se qualquer URL de banco que `src/core/db/config.ts` consulta
   (`DATABASE_URL`, `DATABASE_MIGRATION_URL`, `POSTGRES_URL`,
@@ -191,12 +194,15 @@ where candidate_id is not null
 ```
 
 Enquanto a conta errada resolvia para o candidato do dono, ela podia vincular
-recrutadores a ele. Confira também os vínculos e remova os que o dono não criou:
+recrutadores a ele. Confira também os acessos e revogue pela administração os
+que o dono não criou. Desde a 0036 (#465) os vínculos antigos são concessões em
+`recruiter_grant`, e `recruiter_candidate` está congelada:
 
 ```sql
-select id, recruiter_user_id, created_by, created_at
-from production.recruiter_candidate
-where candidate_id = (select id from production.candidate where slug = 'default');
+select id, recruiter_user_id, recruiter_email, created_by, created_at
+from production.recruiter_grant
+where status = 'active'
+  and candidate_id = (select id from production.candidate where slug = 'default');
 ```
 
 O deploy do código pode vir antes da limpeza: a leitura já nega o candidato às
@@ -509,6 +515,18 @@ headline, localização e links por `containsContact()` e esvazia o que traz
 e-mail ou telefone, venha de onde vier; e a pessoa edita o nome em `/candidate`.
 A migração `0014` limpa os nomes já gravados. Detecção por padrão, com o mesmo
 limite declarado de `publicCvText()`, mais sequência de dez dígitos.
+
+**Diretório de perfis para recrutadores (#465).** `/recruiter/directory` e o
+perfil `/recruiter/directory/[id]` exigem sessão de recrutador
+(`candidate:discover`) e leem os perfis Recrutadores e Público pelo mesmo
+montador de `/p/` (`toAllowlistedProfile()`): nenhum campo sai ali que o perfil
+público não mostraria, e o texto do CV só com o segundo consentimento,
+filtrado. A busca casa só nome, headline e skill confirmada; perfil Privado
+não aparece nem responde (404 igual ao de id inexistente). Contra colheita em
+massa: 60 buscas ou perfis abertos por recrutador em 10 minutos, contados no
+banco (vale entre instâncias), e 20 cartões por página. A linha do limite
+guarda só quem buscou e quando. Ver G21–G23 em
+[rules/security.md](engineering/rules/security.md#g21).
 
 **Sem criptografia em repouso feita por este código.** Localmente, o
 PostgreSQL em Docker é legível por quem tem acesso à conta da máquina;

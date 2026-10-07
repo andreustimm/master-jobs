@@ -73,8 +73,10 @@ function VisibilityCard({
           action={setVisibilityAction}
           successMessage={t("feedback.success")}
           errorMessage={t("feedback.error")}
+          resultMessages={{ invalidVisibility: t("visibility.errorInvalid") }}
           dismissLabel={t("feedback.dismiss")}
           className="grid gap-2"
+          data-testid="visibility-form"
         >
           {options.map((option) => (
             <label
@@ -102,7 +104,12 @@ function VisibilityCard({
                     </span>
                   )}
                 </span>
-                <span className="type-body-sm block text-muted-foreground">{t(option.hint)}</span>
+                <span
+                  className="type-body-sm block text-muted-foreground"
+                  data-testid={`visibility-hint-${option.id}`}
+                >
+                  {t(option.hint)}
+                </span>
               </span>
             </label>
           ))}
@@ -110,13 +117,15 @@ function VisibilityCard({
           {/* Segundo consentimento, separado do primeiro.
               "Público" diz alcançável sem sessão; publicar o currículo inteiro
               é outra decisão, e derivá-la da primeira é como se publica um CV
-              sem querer. */}
+              sem querer. Vale para Recrutadores e Público (ADR-014): os dois
+              mostram o texto fora de uma concessão, sempre filtrado. */}
           <label className="mt-1 flex cursor-pointer items-start gap-2.5">
             <input
               type="checkbox"
               name="publicCv"
               defaultChecked={publicCv}
               className="mt-1 cursor-pointer"
+              data-testid="visibility-public-cv"
             />
             <span className="min-w-0">
               <span className="type-body-md block font-medium">{t("visibility.publishCv")}</span>

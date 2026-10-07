@@ -375,11 +375,12 @@ async function rescoreSlice(worker: string, budgetMs: number): Promise<QueueOutc
  * Executa uma fatia da varredura com os adapters de verdade.
  *
  * `alarm` vem de quem chama porque o destino do alarme (Sentry, log da função)
- * é da borda HTTP, não do contexto.
+ * é da borda HTTP, não do contexto. `recruiterAccess` também: é trabalho do
+ * contexto de autenticação, e a rota compõe os dois sem que um importe o outro.
  */
 export async function runSweep(
   slice: SweepSlice,
-  opts: { alarm: SweepDeps["alarm"] },
+  opts: { alarm: SweepDeps["alarm"]; recruiterAccess: SweepDeps["recruiterAccess"] },
 ): Promise<SliceReport> {
   if (SLICE_TOUCHES_THIRD_PARTIES[slice]) guardIngestion();
   const worker = `varredura-${randomUUID()}`;
@@ -442,5 +443,6 @@ export async function runSweep(
     recheck: (budgetMs) => recheckSlice(worker, budgetMs),
     rescore: (budgetMs) => rescoreSlice(worker, budgetMs),
     alarm: opts.alarm,
+    recruiterAccess: opts.recruiterAccess,
   });
 }

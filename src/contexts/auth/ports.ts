@@ -185,21 +185,30 @@ export type UserDirectory = {
    * ocorrido e não deixam de ter ocorrido. O candidato NÃO é apagado: conta e
    * candidato são coisas distintas, e apagar o currículo de alguém por causa
    * de uma conta removida seria dano colateral silencioso.
+   *
+   * As concessões ativas de recrutador da conta terminam como
+   * `ended_account_removed`, com histórico, na mesma transação (#465).
    */
   remove(userId: number): Promise<void>;
-  /** Candidatos que um recrutador acompanha. */
+  /** Candidatos que um recrutador acessa agora — o mesmo predicado da sessão. */
   linkedCandidates(recruiterUserId: number): Promise<number[]>;
-  /** Vínculos com id, para a tela poder removê-los sem citar o candidato. */
+  /** Concessões que valem agora, com o id, para a tela revogá-las sem citar o candidato. */
   linksOf(recruiterUserId: number): Promise<{ id: number; candidateId: number }[]>;
   /**
-   * Cria o vínculo.
+   * Grava concessão ativa com evento `system`. Só para fixture.
    *
    * `candidateId` vem de quem CONSENTE, nunca do admin: ver a nota em
-   * `drizzle-directory.ts` sobre por que admin não vincula.
+   * `drizzle-directory.ts` sobre por que admin não concede.
    */
   linkCandidate(recruiterUserId: number, candidateId: number, by: number): Promise<void>;
-  /** Remove pelo id do vínculo. Revogar acesso é seguro em qualquer direção. */
-  unlinkById(linkId: number): Promise<void>;
+  /**
+   * O administrador `by` revoga uma concessão pelo id: UPDATE condicional com
+   * histórico, nunca DELETE (ADR-008, ADR-012).
+   */
+  revokeGrant(
+    grantId: number,
+    by: number,
+  ): Promise<{ ok: true } | { ok: false; error: "already_ended" | "not_found" }>;
 };
 
 export type PasswordResult =

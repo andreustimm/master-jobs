@@ -662,7 +662,13 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   liberado por uma regra
   `allow` (ou é `cd`), e o que nenhuma regra libera é `ask` — isso fecha
   de uma vez invólucro, shell aninhado, `eval`, palavra reservada e aspas
-  `$'…'`, porque o que a leitura não reconhece como liberado pergunta. Edição
+  `$'…'`, porque o que a leitura não reconhece como liberado pergunta. Com a
+  lista real (#481), `Bash` sem padrão libera todo comando simples que `deny`
+  não pega, e esse fechamento deixa de valer: a lista libera o shell, e quem
+  decide o risco é a política (`judgeShell`), que roda antes da lista nos
+  três e é uma lista do que é proibido — o que ela não reconhece passa
+  (famílias cobertas e limites conhecidos em "O classificador" e
+  "Limites conhecidos", abaixo). Edição
   por `apply_patch` fora das regras de caminho é a exceção: fica com o sandbox
   e a aprovação que a pessoa escolheu no Codex (recomendado: `workspace-write`
   com `on-request`, ou mais estrito); o projeto não fixa esses valores, porque
@@ -677,14 +683,29 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   `tool.execute.before`, lançar `Error` bloqueia). Ele exporta
   `findCompound` (G63), `classifyRisk` e `judgeShell`, que junta os dois e,
   em laço, julga cada comando do corpo contra o `allow` do
-  `.claude/settings.json` — `Bash(for:*)` libera a forma, não o corpo. O
+  `.claude/settings.json` — a forma do laço não libera o corpo; com `Bash`
+  liberado, decidem o classificador e o `deny`. O
   `pnpm check:harness` reprova o plugin ausente ou que não importa a
-  política; ele não é gerado, porque não há o que traduzir.
+  política; ele não é gerado, porque não há o que traduzir. O OpenCode
+  depende do plugin carregado: sem ele, só valem os `deny` ancorados de
+  `opencode.json`. O hook do Claude Code é registrado com `|| exit 2`, como a
+  guarda do Codex: processo que falha bloqueia em vez de deixar passar.
 - **O classificador é a fonte do risco de shell.** `classifyRisk` julga por
   token, não por texto: corta em todo separador fora de aspas (inclusive
   corpo de laço, `$(…)`, crase e `sh -c '…'`), tira `rtk`/`rtk proxy`,
   atribuição, invólucro (`env`, `command`, `nohup`, `time`, `nice`,
-  `timeout`, `env -`, `script`…), lançador (`npx`, `npm exec`, `pnpm`,
+  `timeout`, `env -`, `script`, e desde a #485 `arch`, `coproc`, `noglob`,
+  `nocorrect`, `unbuffer`, `setsid`, `flock`, `chronic`, `entr`, `parallel`,
+  `hyperfine`, `sandbox-exec`, `taskpolicy`, `xcrun`, `uv run`,
+  `poetry run`, `bundle exec`, `direnv exec`, `mise exec`, `op run`,
+  `doppler run`, `dotenv` — com o texto entre aspas de `hyperfine`,
+  `parallel`, `entr` e `flock` julgado como shell), a busca de sufixo (#485:
+  em comando que a política não conhece, todo sufixo do argv que começa por
+  executável conhecido — `git`, `rm`, `sudo`, `vercel`, `supabase`, `psql`,
+  `docker`, `kubectl`, `aws`, shells, `node`/`pnpm`/`npx`, `curl`, `cp`… —
+  é julgado como comando, e vale a decisão mais forte; quem não executa o
+  argv, como `echo`, `grep`, `rg`, `gh` e `jho`, fica de fora, para
+  `grep -n sudo f` não virar `sudo`), lançador (`npx`, `npm exec`, `pnpm`,
   `pnpm exec`, `pnpm dlx`, `yarn`, `bun`, `bunx`, `node --run`,
   `node node_modules/…` — sem lista fechada de opções: a opção desconhecida
   sem `=` é lida como flag **e** como opção com valor, cada leitura é julgada
@@ -702,7 +723,9 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   `git -C .claude/worktrees/x commit -m "chore: restore foo"` não é
   `restore`. A rotina passa direto: leitura, edição no projeto, `git`, todo
   `gh` (decisão do dono: nenhum `gh` pergunta), `pnpm`/`npm`/`npx`, `rm` sem
-  recursão, `chmod`, `kill` e utilitários de texto e arquivo. Reescrever
+  recursão, `chmod`, `kill`, `docker ps/build/logs`, `make`, `uv run`,
+  `node`, `python3`, `psql` local, `curl` para `127.0.0.1` e utilitários de
+  texto e arquivo. Reescrever
   commit local (`commit --amend`, `rebase`, `rebase -i` em branch de
   trabalho) também é rotina, por decisão do dono: o portão da reescrita é o
   push para branch protegida.
@@ -808,10 +831,39 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     `env add/rm/update`, `blob del/rm`; `supabase db push/reset`,
     `db query`/`migration up` com `--linked`/`--db-url`, `migration repair`,
     `secrets`, `functions deploy/delete`, `projects delete`, `storage rm`,
-    `branches delete`; e os scripts
+    `branches delete`, `config push`; e os scripts
     `db:import-production*` e `perf:producao*` (por `pnpm`, `npm run` ou o
     arquivo direto no `node`, inclusive `pnpm node`, `yarn node`,
-    `pnpm exec node` e `npx node`).
+    `pnpm exec node` e `npx node`). Desde a #485, ferramentas fora do
+    catálogo do projeto: **banco** — `psql` em banco remoto (host ou URL
+    fora de `localhost`/`127.0.0.1`/socket, ou destino por variável como
+    `$DATABASE_URL`/`$POSTGRES_URL`) com `-c` de DDL/DML ou meta-comando que
+    escreve (`\!`, `\i`, `\copy`, `\o`, `\gexec`…), `-f`, entrada
+    redirecionada ou sessão sem `-c`, `pg_dump`/`pg_dumpall` e `pg_restore`
+    remotos, `drizzle-kit push` (banco local passa); **deploy e nuvem** —
+    `vercel api` com `DELETE`/`POST`/`PATCH`/`PUT` (ou campo, que vira
+    POST), `vercel teams rm`, `vercel git disconnect`,
+    `vercel integration remove`, `fly`/`flyctl` `deploy`, `secrets`, `scale`,
+    `destroy` e `apps|machine|volumes destroy`, `terraform`/`tofu` `destroy`
+    e `apply -auto-approve` ou com plano salvo, `kubectl delete`,
+    `aws … delete-*/terminate-*`, `aws s3 rm --recursive`,
+    `s3 rb --force` e `s3 sync --delete`, `gcloud … delete`; **Docker**
+    (#488) — `docker rm`, `rmi`, `container|image|volume|network|system|
+    builder rm|prune` e `compose rm`, `compose down -v/--volumes/--rmi`
+    (`ps`, `logs`, `build`, `compose up` passam, e o comando dentro de
+    `run`/`exec` é julgado pela busca de sufixo); **apagamento** —
+    `diskutil erase*`/`zeroDisk`/`partitionDisk`/`apfs delete*`,
+    `mkfs*`/`newfs*`, `shred`, `unlink`, `rimraf` (também por
+    `npx`/`pnpm dlx`), `trash -r`, `truncate -s 0` (ou tamanho negativo),
+    `tmutil delete*`; **sistema** — `crontab` que não seja `-l`,
+    `launchctl load|bootstrap|submit|enable`,
+    `defaults write|delete|import|rename`, `osascript`, `csrutil` fora de
+    `status`, `spctl --master-disable` e afins, `shutdown`, `reboot`,
+    `halt`, `poweroff`, e escrita fora do projeto por `unzip -d`, `ditto` e
+    `patch` (original, `-o`, `-r`, `-d`); **segredo** — `printenv`, `env` e
+    `set` sem argumento, `export`/`export -p`, `declare -x`/`typeset` sem
+    nome (imprimem o ambiente) e `vercel env pull`/`vercel pull` em
+    qualquer destino (gravam segredo em arquivo).
   - **Nega (`deny`):** push para `main`/`staging`/`dev` por qualquer refspec
     (`HEAD:main`, `refs/heads/main`, `heads/main`, `:main`, `$'\x6dain'`),
     `.env*` e `.linkedin.token.json` em qualquer palavra (`cat .env*`,
@@ -819,11 +871,20 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     laço) ou por curinga fora de aspas que o shell pode expandir para eles
     (`.en?`, `./.en[v]`, `.e*`), `sudo`/
     `doas`/`su`, `chmod` que deixa gravável por todos (`777`, `0777`,
-    `a+rwx`, `o+w`) e `rm` recursivo na raiz, num diretório de sistema de
-    primeiro nível (`/usr`, `/etc`, `/Users`…) ou no diretório pessoal;
-    subdiretório (`rm -rf /tmp/cache`, `rm -rf ~/www`) pergunta.
-- **O que fica no `.claude/settings.json`.** `allow` da rotina (com
-  `Bash(for:*)`, `while`, `until`, `if`, `case`); `ask` só para editar a
+    `a+rwx`, `o+w`), `rm` recursivo na raiz, num diretório de sistema de
+    primeiro nível (`/usr`, `/etc`, `/Users`…) ou no diretório pessoal —
+    subdiretório (`rm -rf /tmp/cache`, `rm -rf ~/www`) pergunta — e senha do
+    Keychain (#485: `security find-*-password -w/-g`, `dump-keychain`,
+    `export`).
+- **O que fica no `.claude/settings.json`.** `allow` com `Bash` sem padrão
+  (#481, pedido do dono): a lista libera o shell, e a política decide o
+  risco nos três harnesses — o hook do Claude Code devolve `ask`/`deny`, a
+  guarda do Codex bloqueia `ask` e `deny`, o plugin do OpenCode lança
+  `Error`. Antes, todo comando fora de uma lista de prefixos (`docker`,
+  `codex exec`, `opencode run`, script novo) caía em aprovação manual, e a
+  lista nunca cobria tudo; as entradas `Bash(...)` de `allow` saíram por
+  redundantes. No OpenCode a tradução vira `bash: { "*": "allow", …deny }`,
+  sem padrão `allow` além do `*`. `ask` só para editar a
   própria política (`.claude/settings.json`, `.claude/hooks/**`,
   `scripts/harness/**`, `opencode.json`, `.codex/**`, `.opencode/plugins/**`,
   com `**/` à frente para valer também dentro de `.claude/worktrees/<wt>/`),
@@ -852,18 +913,34 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   tradução recusa em vez de perder o deny, e a guarda do Codex só julga shell e
   patch) são diferenças do harness, não da política. O classificador não vê
   alias do git definido em config, script de shell chamado por arquivo
-  (`bash x.sh`), código passado a `node -e`/`python -c`, programa apontado por
-  variável de ambiente (`GIT_SSH_COMMAND`, `PAGER`, `GIT_EDITOR`) nem
+  (`bash x.sh`), código passado a `node -e`/`python -c` nem
   `git checkout <arquivo>` sem extensão e sem `/` (`git checkout Makefile`):
   separar arquivo de branch ali exige olhar o disco, e a política é pura —
   só `.`, `..`, `./x`, `x/` e `:x`, que nenhum ref aceita, perguntam.
-  Escrita fora do projeto, limites aceitos pelo dono (#462): `touch`,
+  Programa apontado por variável na atribuição do próprio comando
+  (`NOME=valor` ou `NOME+=valor`), ou por `export`/`declare`/`typeset`/
+  `local`/`readonly` com `NOME=valor` no mesmo comando (corpo de laço ou
+  `if`) — `GIT_SSH_COMMAND`, `GIT_SSH`, `GIT_PROXY_COMMAND`,
+  `GIT_EXTERNAL_DIFF`, `GIT_EDITOR`, `GIT_SEQUENCE_EDITOR`, `GIT_ASKPASS`,
+  `SSH_ASKPASS`, `GIT_PAGER`, `PAGER`, `MANPAGER`, `GH_PAGER`, `EDITOR`,
+  `VISUAL`, `GH_EDITOR`, `BROWSER`, `GH_BROWSER` — tem o valor julgado como
+  comando que recebe argumentos do git (o arquivo a editar, o host), como em
+  `xargs`: `EDITOR=rm git commit` pergunta, `EDITOR="code --wait"` passa.
+  `GIT_EXTERNAL_DIFF` sempre pergunta, como `diff.external`: o git passa o
+  arquivo do projeto ao programa. `GIT_CONFIG_KEY_n` com chave que executa
+  (inclusive `core.gitProxy`) vale como `git -c`, e `GIT_CONFIG_PARAMETERS`
+  pergunta. `GIT_SSH_COMMAND="ssh -i chave"` passa; com `ProxyCommand`,
+  `LocalCommand`, `KnownHostsCommand`, `PKCS11Provider`,
+  `SecurityKeyProvider` ou `-F`/`-E`/`-I` (também em grupo, `-qF`),
+  pergunta. `env -S '…'` é lido com as aspas, como o `env` faz; com `\`
+  (escape do `env`, não do shell), pergunta.
+  Escrita fora do projeto, limites conhecidos (#462): `touch`,
   `mkdir` e `rmdir` fora do projeto passam, porque não perdem dado
   existente; link simbólico não é resolvido — `ln -s ~/.zshrc ./link` e
   depois `echo x > ./link` passam, porque seguir o link exige olhar o disco
   e a política é pura (o sandbox do harness é a camada que vê o disco);
-  opção de saída de programa fora da tabela (`zip`, `unzip -d`, `rsync` já
-  pergunta) não é vista; `GIT_DIR=` vale para o `git` do mesmo comando, não
+  opção de saída de programa fora da tabela (`zip`; `unzip -d` entrou na
+  #485, `rsync` já pergunta) não é vista; `GIT_DIR=` vale para o `git` do mesmo comando, não
   para o de dentro de `sh -c`. Configuração pessoal: `git config -f<arq>`
   com o caminho colado na opção não é lido como fora do projeto, e config
   redirecionada ao projeto por variável (`GIT_CONFIG_GLOBAL=./x`,
@@ -872,9 +949,48 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   `git notes --ref refs/heads/main` não é
   vetor: o git prefixa `refs/notes/` (grava `refs/notes/refs/heads/main`, e
   `main` fica intacta), por isso não pergunta.
-  `Bash(node:*)`,
-  `Bash(npx:*)` e `Bash(rtk proxy:*)` liberam código arbitrário por desenho, e
-  o classificador só pega neles o risco que reconhece.
+  `Bash` liberado inteiro (#481) faz da política uma lista do que é
+  proibido: o que ela não reconhece passa. Limites conhecidos:
+  - **Código passado a interpretador** — `node -e`, `python3 -c`,
+    `perl -e`, `ruby -e`, `php -r`, `lua -e`, `awk 'BEGIN{system(…)}'`,
+    `sed 'e …'`, `ts-node`, `deno run`, `bun x.ts` — e **script por
+    arquivo** (`bash x.sh`, `source ./x.sh`, `make`, `just`, `task`): o
+    conteúdo não é lido.
+  - **Ferramenta fora das famílias acima**: outro cliente git (`hub`, `jj`),
+    `vercel link`, `supabase` fora dos subcomandos listados
+    (`db dump --linked`, `link`, `sql --linked`), instalação
+    de pacote fora do `brew` (`pip`, `cargo`, `gem`, `uv tool`,
+    `code --install-extension`), atributo e ACL de arquivo (`xattr`,
+    `chflags`, `setfacl`), rede e máquina (`nc`, `open -a`, `killall`,
+    `pmset`, `networksetup`), `fd -X`, e `pnpm db:push` (o script do
+    projeto que roda `drizzle-kit push`: a política não lê o
+    `package.json`).
+  - **Segredo fora de `.env*`**: `cat ~/.ssh/id_*`, `~/.aws/credentials`,
+    `~/.netrc`, `~/.npmrc`, `gh auth token`, `printenv VAR`/`echo $VAR` e
+    arquivo que um `vercel env pull` gravou com outro nome — só `.env*` e
+    `.linkedin.token.json` são negados por nome; `dotenv -- …` carrega o
+    `.env` como o `pnpm jho` (`--env-file-if-exists=.env`) faz na rotina.
+  - **Host do Postgres pelo ambiente**: `PGHOST` fora do prefixo do próprio
+    `psql` (exportado em outra chamada, ou por `export` antes do `psql` no
+    mesmo laço) não é visto; `psql` remoto com `-c` de `select` passa.
+  - **Postgres remoto fora das formas lidas**: URL colada na opção
+    (`psql -dpostgresql://…`), `service=` do `pg_service.conf` e
+    `select … into` (grava com cara de leitura) passam.
+  - **Segredo fora do Keychain**: `op read`, `doppler secrets get --plain`,
+    `security delete-generic-password` e `ps eww` (ambiente dos processos)
+    passam.
+  - **Comando remoto do Fly**: `fly ssh console -C "…"` roda na máquina
+    remota sem que o texto seja julgado.
+  - **Variável que a política não lê**: programa por variável fora da lista
+    acima (`BASH_ENV`, `NODE_OPTIONS=--require`) e variável exportada em
+    outra chamada passam: a política não guarda estado entre comandos.
+    `NOME=valor` solto ou com `export` no mesmo comando é julgado.
+  - **Busca de sufixo por palavra**: só o argv é lido; texto entre aspas só
+    é julgado como shell em `sh -c`, `eval`, `watch` e nos invólucros
+    `hyperfine`, `parallel`, `entr` e `flock` (`tmux new "…"` não é).
+  - **OpenCode sem o plugin**: `pnpm check:harness` reprova o plugin
+    ausente ou que não importa a política, mas uma sessão que não o carrega
+    fica só com os `deny` ancorados de `opencode.json`.
 - **Instruções.** Os três carregam só o `AGENTS.md`; as regras por domínio são
   lidas sob demanda pelo roteador da entrada. Carregar os seis arquivos de
   `docs/engineering/rules/` em `opencode.json > instructions` custaria ~26 mil
@@ -891,7 +1007,19 @@ prova, sobre o `.claude/settings.json` real, que Codex (guarda) e OpenCode
 (`opencode.json` + plugin) decidem igual ou mais forte que o Claude Code em
 todos os achados da revisão da #462 — com e sem `rtk`/`rtk proxy` —, que a
 rotina passa sem pergunta nos três e que o composto é recusado nos três com a
-mesma mensagem. `tests/shell-policy.test.ts` cobre o classificador em cada
+mesma mensagem; desde a #481, também que ferramenta fora da antiga lista
+(`docker ps`, `codex exec`, `opencode run`) passa nos três e que push
+forçado, `rm -rf`, `vercel --prod`, `.env`, `sudo` e push protegido dão a
+mesma decisão (`ask` ou `deny`) nos três; desde a #485, que os comandos
+dos achados da revisão L2 da #485 (invólucro desconhecido, ferramenta fora
+do catálogo, segredo, Docker da #488 e programa por variável de ambiente)
+que a política passou a cobrir dão `ask` ou `deny` nos três — o resto está
+nos limites conhecidos —, e que a
+rotina (`git -C <wt> commit`, `gh`, `pnpm`, `docker ps/build/logs`, `node`,
+`python3`, `make`, `uv run pytest`, `curl` local) continua passando.
+`tests/no-compound-bash.test.ts` prova que o registro do hook do Claude Code
+termina em `|| exit 2` e que o processo que falha sai com 2.
+`tests/shell-policy.test.ts` cobre o classificador em cada
 forma (pura, `rtk`, `git -C`, `git -c`, laço, `sh -c`, `xargs`,
 `find -exec`, invólucro e lançador). `tests/git-target.test.ts` monta um
 repositório descartável de verdade (remoto bare com `main`, `staging` e
@@ -916,9 +1044,12 @@ economia de saída, não proteção. `rtk proxy <comando>` só quando a saída b
 leia o log bruto quando o resultado importa.
 
 **Um comando de shell por chamada**, sem `&&`, `||` ou `;`. A lista de
-permissão do Claude Code (`.claude/settings.json`) casa pelo prefixo do
-comando: um composto não casa com o `allow` e cai em aprovação manual, e o dono
-vira fila. Duas exceções (#461):
+permissão (`.claude/settings.json`) libera o shell (`Bash` sem padrão, #481)
+e a política de shell, uma lista do que é proibido, decide o risco comando a
+comando (G85): o composto é
+recusado antes, porque juntar comandos esconde um atrás do outro, e o que a
+política não consegue separar cairia em aprovação manual — o dono vira fila.
+Duas exceções (#461):
 
 - **Pipe em que todo estágio só lê** — `cat`, `head`, `tail`, `wc`, `grep`,
   `rg`, `jq`, `sort`, `uniq`, `cut`, `tr`, `column`, `nl`, `ls`, e
@@ -937,9 +1068,9 @@ vira fila. Duas exceções (#461):
   continua julgado comando a comando — `&&`, `||`, `&`, subshell, heredoc,
   substituição, pipe fora da leitura e qualquer comando depois do `done`
   (salvo pipe de leitura: `for …; done | grep a`) seguem recusados, o
-  classificador de risco vê cada comando do corpo, e cada um precisa estar no
-  `allow` como se rodasse sozinho (`Bash(for:*)` libera a forma, não o
-  corpo); os embutidos `[`, `[[`, `:`, `true`, `false`, `read`, `test`,
+  classificador de risco vê cada comando do corpo, e cada um é conferido
+  contra a lista como se rodasse sozinho (a forma do laço não libera o
+  corpo; com `Bash` liberado, decidem o classificador e o `deny`); os embutidos `[`, `[[`, `:`, `true`, `false`, `read`, `test`,
   `break` e `continue` passam sem regra.
 
 Filtre saída com a flag do próprio programa (`--jq`, `--format`) e ponha
@@ -953,6 +1084,8 @@ mesma mensagem (`compoundMessage`):
   `.claude/settings.json` → `hooks.PreToolUse` com matcher `Bash` e caminho
   relativo ao projeto (`$CLAUDE_PROJECT_DIR`), recusa com saída 2 — fecha o
   composto ANTES da aprovação manual, sem depender de hook global do usuário.
+  O comando registrado termina em `|| exit 2`: se o processo do hook falhar,
+  o comando é bloqueado, não liberado.
   O mesmo hook devolve o risco do classificador (G85) como JSON de
   `PreToolUse` com `permissionDecision` `ask` ou `deny`; para `git` simples,
   antes de julgar, resolve o contexto real com o próprio git

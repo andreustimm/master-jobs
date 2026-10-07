@@ -584,9 +584,13 @@ describe("architecture inventory", () => {
       ["app/job-modal.tsx", new Set(["row.url", "externalApplyUrl"])],
       ["app/joblist.tsx", new Set(["r.url", "externalApplyUrl"])],
       ["app/jobs/[id]/page.tsx", new Set(["job.url", "externalApplyUrl"])],
-      ["app/p/[slug]/page.tsx", new Set(["profile.linkedinUrl", "profile.githubUrl"])],
+      // O corpo do perfil, comum a `/p/[slug]` e ao diretório de recrutadores (#465).
+      ["app/p/[slug]/profile-view.tsx", new Set(["profile.linkedinUrl", "profile.githubUrl"])],
       ["app/pipeline/page.tsx", new Set(["r.url"])],
       ["app/referrals/page.tsx", new Set(["externalUrl"])],
+      // Termos e Política em outra aba, para o formulário de cadastro não
+      // perder o que já foi digitado (#464, US-021).
+      ["app/signup/signup-form.tsx", new Set(["LEGAL_HREF.terms", "LEGAL_HREF.privacy"])],
     ]);
     /**
      * Âncoras que PRECISAM de navegação de página inteira na mesma aba, cada
@@ -597,6 +601,8 @@ describe("architecture inventory", () => {
      */
     const fullPageAnchors = new Map<string, Set<string>>([
       ["app/login/page.tsx", new Set(["startHref(id)"])],
+      // Os mesmos botões na tela de cadastro (#464, ADR-007).
+      ["app/signup/page.tsx", new Set(["startHref(id)"])],
       // "Conectar" na tela da conta é o mesmo início, com `intent=link` (task_04).
       ["app/account/page.tsx", new Set(["connectHref(method.provider)"])],
     ]);
@@ -701,6 +707,51 @@ describe("write-path invariants (ADR 0005)", () => {
     const guarded = retention.slice(retention.indexOf("export async function deleteClosedJobsWithoutApplication"));
     expect(guarded).toContain('.for("update")');
     expect(guarded).toContain("not exists (select 1 from ${application} a where a.job_id = ${job.id})");
+  });
+});
+
+describe("acesso de recrutador (#465, ADR-011, ADR-012)", () => {
+  const SCHEMA = "src/core/db/schema.ts";
+  const GRANT_READERS = [
+    "src/contexts/auth/infra/drizzle-store.ts",
+    "src/contexts/auth/infra/drizzle-directory.ts",
+    "src/contexts/auth/infra/drizzle-recruiter-access.ts",
+  ];
+  const PRODUCTION = [...SRC, ...APP];
+
+  it("IT-015 só os três adapters de acesso tocam recruiter_grant", () => {
+    // Um leitor que pulasse o predicado de `activeGrantCondition` reabriria o
+    // acesso que a revogação ou o prazo já fecharam (ADR-012, risco).
+    const offenders = PRODUCTION.filter(
+      (file) =>
+        file !== SCHEMA &&
+        !GRANT_READERS.includes(file) &&
+        /\brecruiterGrant\b|\brecruiter_grant\b/.test(stripComments(read(file))),
+    );
+    expect(offenders).toEqual([]);
+    expect(GRANT_READERS.every((file) => existsSync(file))).toBe(true);
+  });
+
+  it("IT-015 ninguém atualiza nem apaga o histórico de acesso", () => {
+    const offenders = PRODUCTION.filter((file) => {
+      const code = stripComments(read(file));
+      return (
+        /\.(update|delete)\(\s*recruiterAccessEvent\s*\)/.test(code) ||
+        /\b(update|delete\s+from)\s+(production\.)?"?recruiter_access_event\b/i.test(code)
+      );
+    });
+    expect(offenders).toEqual([]);
+  });
+
+  it("IT-015 recruiter_candidate está congelada: só o schema a nomeia", () => {
+    const offenders = PRODUCTION.filter(
+      (file) => file !== SCHEMA && /\brecruiterCandidate\b|\brecruiter_candidate\b/.test(stripComments(read(file))),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it("IT-015 as regras de acesso ficam no domínio puro", () => {
+    expect(PURE_CORE).toContain("src/contexts/auth/domain/recruiter-access.ts");
   });
 });
 
@@ -987,6 +1038,10 @@ describe("authorisation (AUTH-01)", () => {
     "app/recruiter/[candidateId]/page.tsx": {
       guard: 'requirePage("candidate:read", { kind: "candidate", candidateId })',
     },
+    // Diretório de perfis (#465, ADR-013): só recrutador, antes de qualquer
+    // leitura; as visibilidades são constante do servidor, não parâmetro.
+    "app/recruiter/directory/page.tsx": { guard: 'requirePage("candidate:discover")' },
+    "app/recruiter/directory/[id]/page.tsx": { guard: 'requirePage("candidate:discover")' },
     "app/referrals/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
     "app/searches/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
     "app/searches/tracks/[id]/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
@@ -1003,6 +1058,19 @@ describe("authorisation (AUTH-01)", () => {
     "app/p/[slug]/page.tsx": {
       exception:
         "portfólio público: `publicProfile()` monta por lista de permissão, 404 para não público, limite por IP no proxy",
+    },
+    // Cadastro aberto (#464, ADR-012): pré-conta por natureza.
+    "app/signup/page.tsx": {
+      exception:
+        "pré-conta: formulário de cadastro; lê só a pendência do próprio cookie (e-mail verificado no modo social) e a própria sessão, para mandar quem já entrou à sua tela",
+    },
+    "app/signup/verify/page.tsx": {
+      exception:
+        "pré-conta: etapa do código; lê só a pendência do próprio cookie (e-mail e espera do reenvio), nunca um id da URL",
+    },
+    "app/terms/page.tsx": { exception: "documento público: Termos de Uso versionados de `content/legal/`, sem dado de ninguém" },
+    "app/privacy/page.tsx": {
+      exception: "documento público: Política de Privacidade versionada de `content/legal/`, sem dado de ninguém",
     },
   };
 

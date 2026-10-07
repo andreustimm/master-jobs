@@ -169,8 +169,14 @@ Lacuna assumida se sinaliza, não se maquia.
 - **Não é rede social nem job board.** Não hospeda vaga nem redistribui acervo.
 - **Não é um LLM que decide.** LLM entra para redigir e para explicar, nunca
   para ranquear — ranking precisa ser reproduzível.
-- **Não é multi-tenant hoje.** A modelagem já é multi-candidato (`candidate`,
-  `candidate_document`, `candidate_skill`), mas o produto roda local, para um.
+- **Não é multi-tenant de organizações.** A modelagem é multi-candidato
+  (`candidate`, `candidate_document`, `candidate_skill`) e o cadastro é aberto
+  (#464): qualquer pessoa com e-mail verificado — pelo Google, pelo LinkedIn
+  ou por código enviado ao e-mail — cria a própria conta como **candidato**
+  (sai do cadastro com perfil e currículo) ou como **recrutador** (nasce sem
+  candidatos; só o candidato concede acesso, #465). Cada conta vê só o próprio
+  dado; admin continua só por convite, e não há times, empresas nem espaços
+  compartilhados.
 
 ---
 

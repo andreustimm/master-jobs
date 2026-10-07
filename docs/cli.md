@@ -266,7 +266,9 @@ pnpm jho db cleanup --apply
 O comando compacta `job.raw` e `job.description_html` apenas para fontes de
 rede, preservando o `workplaceType` mínimo quando existe. Ele limpa
 `job_page.html` apenas após extração bem-sucedida e protege toda vaga ligada a
-`application`. Turso não oferece `VACUUM`; a medição de storage
+`application`. Também apaga convites de recrutador `expired`, `cancelled` ou
+`superseded` decididos há mais de 30 dias (o histórico do candidato guarda o
+e-mail) e o registro de buscas do diretório com mais de um dia (#465). Turso não oferece `VACUUM`; a medição de storage
 usa páginas ocupadas via `dbstat`, que são liberadas pela atualização.
 
 ---
@@ -1351,6 +1353,11 @@ de vaga aberta. Silêncio seria indistinguível de defeito.
 ---
 
 ## Área `auth` — contas
+
+Contas de **candidato** e **recrutador** também nascem pelo cadastro aberto
+em `/signup` (#464): Google, LinkedIn ou e-mail e senha confirmados por
+código, com o currículo do candidato já no perfil. O primeiro acesso de uma
+instalação vazia e qualquer conta **admin** continuam só por aqui, pela CLI.
 
 ### `jho auth add-user <email> [--role <papéis>]`
 

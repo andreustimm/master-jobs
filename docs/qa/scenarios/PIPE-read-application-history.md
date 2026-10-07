@@ -7,7 +7,7 @@ journey: J-preserve-application-decision
 expected: O detalhe da vaga mostra cada mudança de estágio com data e a nota escrita naquele momento, e só do próprio candidato
 entry_points: /jobs/<id>
 qa_status: untested
-bug_ids: BUG-20260917-transition-note-never-readable
+bug_ids: BUG-20260917-transition-note-never-readable; BUG-20261007-job-history-day-in-utc
 fix_status: fixed
 retest_status: pending
 fix_commits: cb00cbb
@@ -29,3 +29,9 @@ própria candidatura tem a mesma natureza do funil.
 ("desfeito", riscado) e a mostrar o desfazer como linha própria ("desfazer: de
 X para Y"); a linha mais recente que pode ser desfeita tem o botão Desfazer. A
 nota continua na linha em que foi escrita.
+
+**Achado 07/10 (QA da #494):** a data de cada linha do histórico sai em UTC,
+enquanto o "aplicado em" do Funil já segue o fuso de quem lê; à noite em São
+Paulo, as duas telas discordam do dia da mesma candidatura
+(BUG-20261007-job-history-day-in-utc). O reteste da nota não foi feito nesta
+sessão. Relatório: `docs/qa/reports/2026-10-07-qa-494-funil-atritos.md`.

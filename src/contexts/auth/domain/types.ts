@@ -78,6 +78,14 @@ export const ACTIONS = [
    * alheia: só a sessão da dona liga (ADR-001, ADR-004).
    */
   "account:manage-methods",
+  /** Conceder, revogar, convidar e mudar o prazo do acesso de recrutador (#465). */
+  "access:manage",
+  /** Recrutador sugere vaga a candidato que lhe concedeu acesso (#465). */
+  "suggestion:create",
+  /** Candidato aceita ou recusa a sugestão (#465). */
+  "suggestion:decide",
+  /** Recrutador busca no diretório de perfis Recrutadores e Público (#465, ADR-013). */
+  "candidate:discover",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 

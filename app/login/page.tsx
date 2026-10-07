@@ -211,6 +211,19 @@ pnpm jho auth set-password ${"seu@email.com"}`}
             {t("login.forgot")}
           </TransitionLink>
 
+          {/* Cadastro aberto (#464): candidato ou recrutador se cadastra
+              sozinho. Admin continua só por convite (US-012). */}
+          <p className="type-body-sm mt-3 text-muted-foreground">
+            {t("login.noAccount")}{" "}
+            <TransitionLink
+              href="/signup"
+              data-testid="login-create-account"
+              className="text-[var(--primary-text)] underline"
+            >
+              {t("login.createAccount")}
+            </TransitionLink>
+          </p>
+
           <p className="type-body-sm mt-5 border-t border-[var(--color-hairline)] pt-4 text-muted-foreground">
             {t("login.magicLinkHint")}{" "}
             <code className="type-mono-sm rounded bg-[var(--color-cloud)] px-1 py-0.5">

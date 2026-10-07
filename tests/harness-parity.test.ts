@@ -388,8 +388,9 @@ const RISKY: readonly [string, Decision][] = [
   ["rm -rf /", "deny"],
   ["sudo ls", "deny"],
   ["cat .env", "deny"],
-  // Corpo de laço fora da lista allow.
-  ["for f in a; do docker rm $f; done", "ask"],
+  // Corpo de laço arriscado pela política (#481: a lista libera o resto).
+  ["for f in a; do rm -rf $f; done", "ask"],
+  ["for f in a; do sudo ls; done", "deny"],
   ["while true; do git push --force; done", "ask"],
   // Revisão da #462 (segunda rodada).
   ["git push origin @", "ask"],
@@ -511,8 +512,13 @@ const SAME: readonly [string, Decision][] = [
   ["while false; do echo a; done", "allow"],
   ["for f in a b; do echo $f; done", "allow"],
   ["for f in a b; do echo $f; done | /usr/bin/grep a", "allow"],
+  // #481: ferramenta fora da antiga lista passa; o risco no corpo, não.
+  ["for f in a; do docker logs $f; done", "allow"],
+  ["case $x in a|b) docker ps;; esac", "allow"],
+  // #488: apagar contêiner pergunta, também no corpo de laço.
   ["for f in a; do docker rm $f; done", "ask"],
-  ["case $x in a|b) docker ps;; esac", "ask"],
+  ["case $x in a|b) rm -rf build;; esac", "ask"],
+  ["for f in a; do git push --force origin $f; done", "ask"],
   ["pnpm node scripts/migration/production.ts --source snapshot.db --apply", "ask"],
   ["pnpm node --run db:import-production", "ask"],
   ["git send-pack --force git@github.com:o/r.git HEAD:refs/heads/dev", "deny"],
@@ -582,6 +588,217 @@ const COMPOUND: readonly string[] = [
   "for f in a; do echo $f; done | sh",
 ];
 
+/** #481: o que antes caía em aprovação manual só por não estar na lista. */
+const OUTSIDE_OLD_LIST: readonly string[] = [
+  "docker ps",
+  "docker compose ps",
+  "codex exec --model gpt-5.6-terra revisar",
+  "opencode run revisar",
+  "make build",
+  "uv run pytest",
+  "rtk docker ps",
+];
+
+/** #481: com `Bash` liberado, o risco sai da política, com a mesma decisão nos três. */
+const RISK_AFTER_481: readonly [string, Decision][] = [
+  ["git push --force origin feat/x", "ask"],
+  ["git push -f origin feat/x", "ask"],
+  ["rtk git push --force origin feat/x", "ask"],
+  ["rm -rf build", "ask"],
+  ["rtk rm -rf build", "ask"],
+  ["vercel --prod", "ask"],
+  ["npx vercel --prod", "ask"],
+  ["git reset --hard origin/dev", "ask"],
+  ["cat .env", "deny"],
+  ["cat app/.env.local", "deny"],
+  ["sudo ls", "deny"],
+  ["rtk sudo ls", "deny"],
+  ["git push origin main", "deny"],
+  ["rm -rf /", "deny"],
+  ["chmod 777 x", "deny"],
+];
+
+/**
+ * Revisão L2 da #485: os comandos dos achados 1 (invólucro desconhecido), 2
+ * (ferramenta fora do catálogo, com o Docker da #488), 3 (segredo) e da
+ * re-revisão (programa por variável de ambiente) que a política passou a
+ * cobrir dão a mesma decisão nos três harnesses; o resto está nos limites
+ * conhecidos do G85.
+ */
+const AFTER_485: readonly [string, Decision][] = [
+  // Achado 1: invólucro desconhecido.
+  ["coproc sudo ls", "deny"],
+  ["coproc git push --force origin x", "ask"],
+  ["coproc rm -rf src", "ask"],
+  ["noglob rm -rf src", "ask"],
+  ["noglob git push --force origin x", "ask"],
+  ["nocorrect git reset --hard", "ask"],
+  ["arch -arm64 rm -rf src", "ask"],
+  ["arch -arm64 git push --force origin x", "ask"],
+  ["arch -arm64 sudo ls", "deny"],
+  ["arch -arm64 vercel --prod", "ask"],
+  ["arch -arm64 git push origin main", "deny"],
+  ["uv run rm -rf src", "ask"],
+  ["uv run git push --force origin x", "ask"],
+  ["poetry run git reset --hard", "ask"],
+  ["bundle exec rm -rf src", "ask"],
+  ["direnv exec . git push --force origin x", "ask"],
+  ["mise exec -- vercel --prod", "ask"],
+  ["op run -- vercel --prod", "ask"],
+  ["doppler run -- git push -f", "ask"],
+  ["dotenv -- git push --force origin x", "ask"],
+  ["unbuffer git push --force origin x", "ask"],
+  ["setsid git push --force origin x", "ask"],
+  ["flock /tmp/l git push --force origin x", "ask"],
+  ["chronic git push --force origin x", "ask"],
+  ["sandbox-exec -p x rm -rf src", "ask"],
+  ["taskpolicy -b rm -rf src", "ask"],
+  ["xcrun rm -rf src", "ask"],
+  ["parallel git push --force origin ::: x", "ask"],
+  ["parallel rm -rf ::: src", "ask"],
+  ['hyperfine "git push --force origin x"', "ask"],
+  ["entr git push --force origin x", "ask"],
+  ["fd -x rm -rf", "ask"],
+  ["docker run -v /:/host alpine rm -rf /host/etc", "ask"],
+  ["docker exec x rm -rf /", "deny"],
+  // Achado 2: banco.
+  ['psql "$DATABASE_URL" -c "drop table job"', "ask"],
+  ['psql "$POSTGRES_URL" -f x.sql', "ask"],
+  ['psql postgres://u:p@db.supabase.co/postgres -c "truncate application"', "ask"],
+  ['pg_dump "$DATABASE_URL"', "ask"],
+  ["pg_restore -d postgres://u@db.x.co/p dump.bin", "ask"],
+  ["drizzle-kit push", "ask"],
+  ["npx drizzle-kit push", "ask"],
+  ["supabase config push", "ask"],
+  // Achado 2: deploy e nuvem.
+  ["fly deploy", "ask"],
+  ["flyctl deploy", "ask"],
+  ["fly secrets set X=1", "ask"],
+  ["fly apps destroy x", "ask"],
+  ["fly scale count 2", "ask"],
+  ["fly machine destroy x", "ask"],
+  ["vercel api /v9/projects -X DELETE", "ask"],
+  ["vercel api /v9/projects -X POST", "ask"],
+  ["vercel api /v9/projects --method PATCH", "ask"],
+  ["vercel teams rm x", "ask"],
+  ["vercel git disconnect", "ask"],
+  ["vercel integration remove x", "ask"],
+  // Achado 2: apagamento.
+  ["diskutil eraseDisk APFS X disk2", "ask"],
+  ["mkfs.ext4 /dev/sdb", "ask"],
+  ["shred -u x", "ask"],
+  ["truncate -s 0 src/a.ts", "ask"],
+  ["unlink x", "ask"],
+  ["trash -r src", "ask"],
+  ["rimraf src", "ask"],
+  ["npx rimraf src", "ask"],
+  ["pnpm dlx rimraf src", "ask"],
+  ["tmutil delete x", "ask"],
+  ["aws s3 rm s3://b --recursive", "ask"],
+  ["terraform destroy", "ask"],
+  ["terraform apply -auto-approve", "ask"],
+  ["kubectl delete ns prod", "ask"],
+  ["gcloud projects delete x", "ask"],
+  // Achado 2: sistema.
+  ["crontab -r", "ask"],
+  ["crontab -e", "ask"],
+  ["crontab x", "ask"],
+  ["launchctl load ~/Library/LaunchAgents/x.plist", "ask"],
+  ["launchctl bootstrap gui/501 x.plist", "ask"],
+  ["defaults write com.apple.x k v", "ask"],
+  ['osascript -e "do shell script \\"x\\""', "ask"],
+  ["csrutil disable", "ask"],
+  ["spctl --master-disable", "ask"],
+  ["shutdown -h now", "ask"],
+  ["reboot", "ask"],
+  ["unzip x.zip -d ~/", "ask"],
+  ["ditto x ~/Library/LaunchAgents/x.plist", "ask"],
+  ["patch ~/.zshrc x.diff", "ask"],
+  // Achado 2 / #488: Docker destrutivo.
+  ["docker rm x", "ask"],
+  ["docker rmi x", "ask"],
+  ["docker volume rm v", "ask"],
+  ["docker network rm n", "ask"],
+  ["docker system prune -af", "ask"],
+  ["docker compose down -v", "ask"],
+  // Achado 3: segredo.
+  ["printenv", "ask"],
+  ["env", "ask"],
+  ["set", "ask"],
+  ["export -p", "ask"],
+  ["declare -x", "ask"],
+  ["security find-generic-password -s x -w", "deny"],
+  ["security dump-keychain", "deny"],
+  ["vercel env pull", "ask"],
+  ["vercel env pull /tmp/s", "ask"],
+  ["vercel env pull .env.local", "deny"],
+  // Re-revisão: programa apontado por variável de ambiente.
+  ['GIT_SSH_COMMAND="rm -rf src" git fetch', "ask"],
+  ['GIT_EXTERNAL_DIFF="rm -rf src" git diff', "ask"],
+  ['GIT_EDITOR="git push --force origin main" git commit', "deny"],
+  ['GIT_SEQUENCE_EDITOR="rm -rf src" git rebase -i HEAD~2', "ask"],
+  ['GIT_ASKPASS="rm -rf src" git fetch', "ask"],
+  ['GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0="rm -rf src" git log', "ask"],
+  ['MANPAGER="rm -rf src" man ls', "ask"],
+  ['GH_PAGER="git push --force origin main" gh pr view 1', "deny"],
+  ['BROWSER="rm -rf src" gh pr view --web', "ask"],
+  // Segunda re-revisão: `+=`, `export` no laço, programa que recebe o arquivo, `env -S` com aspas, `ssh`.
+  ['GIT_EDITOR+="git push --force origin main" git commit', "deny"],
+  ['GIT_EXTERNAL_DIFF+="rm -rf src" git diff', "ask"],
+  ['EDITOR+="sudo ls" git commit', "deny"],
+  ["GIT_CONFIG_PARAMETERS+=\"'core.pager'='rm -rf src'\" git log", "ask"],
+  ['PGHOST+=db.prod psql -c "delete from job"', "ask"],
+  ['for i in 1; do export GIT_EXTERNAL_DIFF="rm -rf src"; git diff; done', "ask"],
+  ['if true; then export GIT_SSH_COMMAND="rm -rf src"; git fetch; fi', "ask"],
+  ['for i in 1; do declare -x PAGER="rm -rf src"; man ls; done', "ask"],
+  ["GIT_EXTERNAL_DIFF=rm git diff", "ask"],
+  ["EDITOR=rm git commit", "ask"],
+  ["env -S 'sh -c \"git push --force origin main\"'", "deny"],
+  ["env -S 'GIT_EXTERNAL_DIFF=\"rm -rf src\" git diff'", "ask"],
+  ['GIT_SSH_COMMAND="ssh -qF /tmp/c" git fetch', "ask"],
+  ['GIT_PROXY_COMMAND="rm -rf src" git fetch', "ask"],
+  ['git -c core.gitProxy="rm -rf src" fetch', "ask"],
+];
+
+/** #485: a rotina ao lado das famílias novas continua passando nos três. */
+const ROUTINE_485: readonly string[] = [
+  'git -C /repo/.claude/worktrees/wt commit -m "chore: x"',
+  "gh pr checks 485 -R andreustimm/master-jobs --watch",
+  "gh label create docker",
+  "pnpm typecheck",
+  "pnpm exec vitest run tests/shell-policy.test.ts",
+  "pnpm jho jobs search sudo",
+  "docker ps",
+  "docker build -t x .",
+  "docker logs -f app",
+  "docker compose up -d",
+  "node scripts/x.ts",
+  "python3 scripts/a.py",
+  "make build",
+  "uv run pytest",
+  "curl -sS http://127.0.0.1:3000",
+  "psql postgresql://jobs:jobs@127.0.0.1:5433/jobs -c 'select 1'",
+  "grep -rn sudo src",
+  "printenv PATH",
+  "set -e",
+  "crontab -l",
+  "npx playwright test --grep sudo",
+  "pnpm vitest run env",
+  "pytest -k sudo",
+  "fd env",
+  "GIT_PAGER=cat git log",
+  "EDITOR=vim git commit",
+  'EDITOR="code --wait" git commit',
+  "VISUAL=nano gh pr create",
+  'PAGER="less -FRX" gh pr diff 1',
+  'GIT_PAGER="delta --dark" git diff',
+  "GIT_EDITOR=true git commit",
+  'GIT_SSH_COMMAND="ssh -p 2222" git push origin feat/x',
+  'GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" git fetch',
+  "NODE_ENV=test pnpm vitest run env",
+  "PATH+=:/x ls",
+];
+
 describe("decisão real nos três harnesses (#461)", () => {
   for (const prefix of ["", "rtk ", "rtk proxy "]) {
     it.each(RISKY.filter(([command]) => !(prefix && /^(?:for|while) /.test(command))))(
@@ -617,6 +834,35 @@ describe("decisão real nos três harnesses (#461)", () => {
     expect(verdict.message).toBe(message);
     const hooks = await openCodeGuard;
     await expect(hooks["tool.execute.before"]({ tool: "bash", sessionID: "s", callID: "c" }, { args: { command } })).rejects.toThrow(message);
+  });
+
+  it("#481: a lista real libera o shell inteiro, sem `Bash(...)` redundante", () => {
+    expect(REAL_SETTINGS.permissions.allow).toContain("Bash");
+    expect(REAL_SETTINGS.permissions.allow!.filter((rule) => rule.startsWith("Bash("))).toEqual([]);
+  });
+
+  it.each(OUTSIDE_OLD_LIST)("#481: ferramenta fora da antiga lista passa nos três: %s", async (command) => {
+    expect(claude(command), "Claude Code").toBe("allow");
+    expect(codex(command), "Codex").toBe("allow");
+    expect(await openCode(command), "OpenCode").toBe("allow");
+  });
+
+  it.each(RISK_AFTER_481)("#481: risco continua decidido pela política, igual nos três: %s -> %s", async (command, expected) => {
+    expect(claude(command), "Claude Code").toBe(expected);
+    expect(codex(command), "Codex").toBe(expected);
+    expect(await openCode(command), "OpenCode").toBe(expected);
+  });
+
+  it.each(AFTER_485)("#485: achado da revisão L2 dá ask/deny igual nos três: %s -> %s", async (command, expected) => {
+    expect(claude(command), "Claude Code").toBe(expected);
+    expect(codex(command), "Codex").toBe(expected);
+    expect(await openCode(command), "OpenCode").toBe(expected);
+  });
+
+  it.each(ROUTINE_485)("#485: rotina continua passando nos três: %s", async (command) => {
+    expect(claude(command), "Claude Code").toBe("allow");
+    expect(codex(command), "Codex").toBe("allow");
+    expect(await openCode(command), "OpenCode").toBe("allow");
   });
 
   it("o plugin só julga `bash`", async () => {
@@ -671,7 +917,7 @@ describe("OpenCode: tradução gerada de `.claude/settings.json`", () => {
   it("reproduz a decisão do Claude Code nos casos que decidem", async () => {
     expect(openCodeDecide(permission, "bash", "rtk git push origin main")).toBe("deny");
     expect(openCodeDecide(permission, "bash", "git status")).toBe("allow");
-    expect(openCodeDecide(permission, "bash", "docker ps")).toBe("ask");
+    expect(openCodeDecide(permission, "bash", "docker ps")).toBe("allow");
     expect(openCodeDecide(permission, "bash", "rtk sudo ls")).toBe("deny");
     expect(openCodeDecide(permission, "bash", "rtk proxy sudo ls")).toBe("deny");
     expect(openCodeDecide(permission, "bash", "rtk rm -rf /")).toBe("deny");
@@ -728,6 +974,24 @@ describe("OpenCode: tradução gerada de `.claude/settings.json`", () => {
     expect(openCodePathPatterns("./**/*.pem")).toEqual(["*.pem"]);
     expect(openCodePathPatterns("~/.ssh/**")).toEqual(["~/.ssh/*"]);
     expect(openCodePathPatterns("/abs/x")).toEqual(["abs/x", "*/abs/x"]);
+  });
+
+  it("#481: `bash` gerado libera tudo em `*` e só restringe — nenhum padrão `allow` além dele", () => {
+    const bash = permission.bash as Record<string, Decision>;
+    expect(bash["*"]).toBe("allow");
+    const restricted = Object.entries(bash).filter(([pattern]) => pattern !== "*");
+    expect(restricted.length).toBeGreaterThan(0);
+    for (const [pattern, decision] of restricted) expect(["ask", "deny"], pattern).toContain(decision);
+    expect(bash["sudo *"]).toBe("deny");
+    expect(bash["rtk sudo *"]).toBe("deny");
+  });
+
+  it("#481: `Bash` sem padrão descarta o `allow` com padrão, em qualquer ordem da fonte", () => {
+    const expected = { "*": "allow", "rm *": "ask", "rtk rm *": "ask", "rtk proxy rm *": "ask", "sudo *": "deny", "rtk sudo *": "deny", "rtk proxy sudo *": "deny" };
+    for (const allow of [["Bash", "Bash(git:*)"], ["Bash(git:*)", "Bash"]]) {
+      const generated = toOpenCodePermission({ allow, ask: ["Bash(rm:*)"], deny: ["Bash(sudo *)"] });
+      expect(generated.bash, allow.join(", ")).toEqual(expected);
+    }
   });
 
   it("regra repetida em duas listas vai para a posição da mais forte", () => {
@@ -850,8 +1114,23 @@ describe("guarda do Codex", () => {
     expect(bash("rtk git push origin main")).toBe("deny");
     expect(bash("git push --force origin feat/x")).toBe("ask");
     expect(bash("pnpm check")).toBe("allow");
-    expect(bash("docker ps")).toBe("ask");
+    expect(bash("docker ps")).toBe("allow");
     expect(bash("rtk ls -la")).toBe("allow");
+  });
+
+  it("#481: `Bash` sem padrão libera o comando simples; composto e risco continuam com a política", () => {
+    const open = parseRules({ allow: ["Bash"], deny: ["Bash(sudo *)"] });
+    const bash = (command: string) => judge({ tool_name: "Bash", tool_input: { command } }, open, context);
+    expect(decideCommand(open, "docker ps")).toBe("allow");
+    expect(decideCommand(open, "codex exec revisar")).toBe("allow");
+    expect(bash("docker ps").decision).toBe("allow");
+    expect(bash("sudo ls").decision).toBe("deny");
+    expect(bash("rm -rf build")).toMatchObject({ decision: "ask", message: expect.stringContaining("rm") });
+    expect(bash("git push --force origin feat/x").decision).toBe("ask");
+    expect(bash("vercel --prod").decision).toBe("ask");
+    const compound = bash("git status && docker ps");
+    expect(compound.decision).toBe("deny");
+    expect(compound.message).toContain("Comando composto recusado");
   });
 
   it("patch que toca arquivo secreto é negado, com o caminho no motivo", () => {
