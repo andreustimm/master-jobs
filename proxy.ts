@@ -28,6 +28,13 @@ const PUBLIC = [
   // OIDC (cookie cifrado, `state`, PKCE), e o `intent=link` resolve a sessão
   // na própria rota.
   "/login",
+  // Cadastro aberto (#464, ADR-012): a tela, a etapa do código e as Server
+  // Actions delas, que respondem no mesmo caminho. O que protege é o cookie do
+  // cadastro, o código de uso único e os limites por e-mail e por IP.
+  "/signup",
+  // Termos e Política: quem decide se aceita ainda não tem conta (US-021).
+  "/terms",
+  "/privacy",
   "/p",
   "/offline.html",
   "/manifest.json",

@@ -587,6 +587,9 @@ describe("architecture inventory", () => {
       ["app/p/[slug]/page.tsx", new Set(["profile.linkedinUrl", "profile.githubUrl"])],
       ["app/pipeline/page.tsx", new Set(["r.url"])],
       ["app/referrals/page.tsx", new Set(["externalUrl"])],
+      // Termos e Política em outra aba, para o formulário de cadastro não
+      // perder o que já foi digitado (#464, US-021).
+      ["app/signup/signup-form.tsx", new Set(["LEGAL_HREF.terms", "LEGAL_HREF.privacy"])],
     ]);
     /**
      * Âncoras que PRECISAM de navegação de página inteira na mesma aba, cada
@@ -597,6 +600,8 @@ describe("architecture inventory", () => {
      */
     const fullPageAnchors = new Map<string, Set<string>>([
       ["app/login/page.tsx", new Set(["startHref(id)"])],
+      // Os mesmos botões na tela de cadastro (#464, ADR-007).
+      ["app/signup/page.tsx", new Set(["startHref(id)"])],
       // "Conectar" na tela da conta é o mesmo início, com `intent=link` (task_04).
       ["app/account/page.tsx", new Set(["connectHref(method.provider)"])],
     ]);
@@ -1048,6 +1053,19 @@ describe("authorisation (AUTH-01)", () => {
     "app/p/[slug]/page.tsx": {
       exception:
         "portfólio público: `publicProfile()` monta por lista de permissão, 404 para não público, limite por IP no proxy",
+    },
+    // Cadastro aberto (#464, ADR-012): pré-conta por natureza.
+    "app/signup/page.tsx": {
+      exception:
+        "pré-conta: formulário de cadastro; lê só a pendência do próprio cookie (e-mail verificado no modo social) e a própria sessão, para mandar quem já entrou à sua tela",
+    },
+    "app/signup/verify/page.tsx": {
+      exception:
+        "pré-conta: etapa do código; lê só a pendência do próprio cookie (e-mail e espera do reenvio), nunca um id da URL",
+    },
+    "app/terms/page.tsx": { exception: "documento público: Termos de Uso versionados de `content/legal/`, sem dado de ninguém" },
+    "app/privacy/page.tsx": {
+      exception: "documento público: Política de Privacidade versionada de `content/legal/`, sem dado de ninguém",
     },
   };
 

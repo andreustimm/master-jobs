@@ -1354,6 +1354,11 @@ de vaga aberta. Silêncio seria indistinguível de defeito.
 
 ## Área `auth` — contas
 
+Contas de **candidato** e **recrutador** também nascem pelo cadastro aberto
+em `/signup` (#464): Google, LinkedIn ou e-mail e senha confirmados por
+código, com o currículo do candidato já no perfil. O primeiro acesso de uma
+instalação vazia e qualquer conta **admin** continuam só por aqui, pela CLI.
+
 ### `jho auth add-user <email> [--role <papéis>]`
 
 Cria ou atualiza uma conta. `--role` aceita `admin`, `candidate` e

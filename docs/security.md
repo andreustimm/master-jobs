@@ -155,6 +155,9 @@ A correção:
   primeira conta da instalação (tabela vazia), nunca troca
   vínculo gravado e perdeu
   `--candidate`. `seedOwner` recusa um segundo e-mail sobre o candidato do dono.
+  O cadastro aberto (`/signup`, #464) cria o candidato pelo mesmo
+  `insertOwnCandidate`, na transação que cria a conta: sempre linha nova,
+  privada, nunca a de outra pessoa; o papel admin nunca sai dele.
 - **E2E:** `tests/e2e/database-guard.mjs` recusa `setup.mjs`, `ui.mjs` e
   `a11y.mjs` se qualquer URL de banco que `src/core/db/config.ts` consulta
   (`DATABASE_URL`, `DATABASE_MIGRATION_URL`, `POSTGRES_URL`,

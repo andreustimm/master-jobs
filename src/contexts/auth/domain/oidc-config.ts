@@ -276,3 +276,35 @@ export function mailSinkDir(env: AuthEnvironment): string | null {
   if (dir === null || !testOverridesAllowed(env)) return null;
   return dir;
 }
+
+/**
+ * Por onde o e-mail da conta sai neste ambiente (ADR-011).
+ *
+ * - `file`: sink em arquivo, só onde `mailSinkDir` deixa;
+ * - `resend`: chave e remetente configurados;
+ * - `console`: terminal, só num processo que se declara local e sem chave;
+ * - `withheld`: nenhum dos anteriores (Preview, deployment sem Resend, chave
+ *   pela metade). O corpo não sai — e por isso o cadastro manual fica
+ *   indisponível aí: o código não chegaria a ninguém.
+ */
+export type MailDelivery = "file" | "resend" | "console" | "withheld";
+
+export function mailDelivery(env: AuthEnvironment): MailDelivery {
+  if (mailSinkDir(env) !== null) return "file";
+  const key = value(env, "RESEND_API_KEY");
+  const from = value(env, "RESEND_FROM");
+  if (key !== null && from !== null) return "resend";
+  // Lista de permissão: o terminal só vale onde o processo se declara local.
+  // Chave presente com remetente faltando é intenção de enviar pela metade.
+  if (key !== null || !isLocalProcess(env)) return "withheld";
+  return "console";
+}
+
+/**
+ * O cadastro manual funciona aqui? Precisa de e-mail que saia (o código) e da
+ * chave do HMAC do IP (ADR-009). Fora disso, a tela avisa em vez de aceitar um
+ * cadastro que ninguém conseguiria confirmar.
+ */
+export function manualSignupAvailable(env: AuthEnvironment): boolean {
+  return mailDelivery(env) !== "withheld" && parseSignupIpSecret(env) !== null;
+}

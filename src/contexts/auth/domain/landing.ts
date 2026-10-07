@@ -1,7 +1,7 @@
 /**
  * Para onde a pessoa vai depois de entrar (#464, ADR-012).
  *
- * Puro. Duas regras:
+ * Puro. Duas regras principais:
  *
  * 1. **`next` só aceita caminho relativo do próprio site.** Um `next` absoluto
  *    — ou que o navegador lê como absoluto — transforma o login num
@@ -71,4 +71,28 @@ export function landingForSession(
 ): string {
   const roles = session.candidateId === null ? session.roles.filter((role) => role !== "candidate") : session.roles;
   return landingFor(roles, next);
+}
+
+/**
+ * O recrutador ainda não acompanha ninguém? (US-015)
+ *
+ * Só candidato concede acesso (G25, #465), e até lá a conta de recrutador não
+ * vê nada de candidato nenhum. A tela de acompanhados explica isso no lugar da
+ * lista vazia; com um vínculo, a lista de sempre volta (US-015.EC-1). Admin
+ * fica de fora: tem as telas de administração, não é recrutador sem trabalho.
+ */
+export function showsRecruiterEmptyState(session: {
+  roles: readonly string[];
+  linkedCandidateIds: readonly number[];
+}): boolean {
+  return session.roles.includes("recruiter") && !session.roles.includes("admin") && session.linkedCandidateIds.length === 0;
+}
+
+/**
+ * Para onde vai quem acabou de se cadastrar (US-004.AC-2, US-005.AC-1): o
+ * candidato, que já tem perfil e currículo, para o cockpit; o recrutador, que
+ * nasce sem candidatos, para a explicação de como o acesso chega.
+ */
+export function landingAfterSignup(role: "candidate" | "recruiter"): string {
+  return role === "candidate" ? "/" : "/recruiter";
 }
