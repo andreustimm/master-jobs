@@ -218,7 +218,7 @@ pnpm jho auth set-password ${"seu@email.com"}`}
             <TransitionLink
               href="/signup"
               data-testid="login-create-account"
-              className="text-[var(--primary-text)] hover:underline"
+              className="text-[var(--primary-text)] underline"
             >
               {t("login.createAccount")}
             </TransitionLink>
