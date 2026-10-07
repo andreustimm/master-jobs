@@ -1676,19 +1676,18 @@ export async function pipelineCounts(
 export async function pipelineFacets(candidateId: number): Promise<{ companies: string[]; channels: string[] }> {
   const db = getDb();
   const scope = and(eq(application.candidateId, candidateId), inFunnel());
-  const [companies, channels] = await Promise.all([
-    db
-      .selectDistinct({ value: job.companyName })
-      .from(application)
-      .innerJoin(job, eq(job.id, application.jobId))
-      .where(scope)
-      .orderBy(asc(job.companyName)),
-    db
-      .selectDistinct({ value: application.channel })
-      .from(application)
-      .where(and(scope, sql`coalesce(${application.channel}, '') <> ''`))
-      .orderBy(asc(application.channel)),
-  ]);
+  // Em série: quem chama já pode ter outra leitura em voo, e o pool é pequeno.
+  const companies = await db
+    .selectDistinct({ value: job.companyName })
+    .from(application)
+    .innerJoin(job, eq(job.id, application.jobId))
+    .where(scope)
+    .orderBy(asc(job.companyName));
+  const channels = await db
+    .selectDistinct({ value: application.channel })
+    .from(application)
+    .where(and(scope, sql`coalesce(${application.channel}, '') <> ''`))
+    .orderBy(asc(application.channel));
   return {
     companies: companies.map((row) => row.value),
     channels: channels.map((row) => row.value).filter((value): value is string => value !== null),

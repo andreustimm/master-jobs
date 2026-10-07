@@ -51,11 +51,10 @@ export default async function Pipeline({
   // Pedir uma página além do fim devolvia zero linhas, e a tela dizia "nada no
   // funil ainda" para quem TEM candidatura — a mesma mentira que a lista vazia
   // contaria num estágio desconhecido. Com os mesmos filtros da lista: o
-  // contador de um estágio é quantas linhas ele mostraria.
-  const [counts, facets] = await Promise.all([
-    pipelineCounts(candidateId, filters),
-    pipelineFacets(candidateId),
-  ]);
+  // contador de um estágio é quantas linhas ele mostraria. Em série, como o
+  // resto da página: o pool tem três conexões (V10-05 em architecture.test.ts).
+  const counts = await pipelineCounts(candidateId, filters);
+  const facets = await pipelineFacets(candidateId);
   // O total vem das contagens, não da página: paginar não muda quantas
   // candidaturas existem, e recontar por página faria o número piscar.
   const everything = Object.values(counts).reduce((sum, n) => sum + n, 0);
