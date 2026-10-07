@@ -1390,3 +1390,31 @@ apaga de `auth_signup` o pendente criado há mais de 24 h e o concluído há mai
 de 30 dias (`src/core/db/retention.ts`); a conta em `auth_user` fica. A
 importação do snapshot legado não transfere as duas tabelas (nascem vazias) e
 grava nulo nas colunas novas de `auth_user`.
+
+### Acesso do recrutador — `recruiter_grant`, `recruiter_invite`, `recruiter_access_event`, `recruiter_suggestion`, `recruiter_suggestion_by`, `recruiter_directory_query` (#465)
+
+Pela ADR-011 e pela ADR-012 de `.compozy/tasks/recrutador-acesso/`. A
+`0036_recrutador_acesso` só acrescenta: seis tabelas e uma etapa de dados que
+copia cada linha de `recruiter_candidate` para uma concessão `active` sem fim
+(e-mail atual da conta, `created_by` e `created_at` preservados) com um evento
+`grant_created` de ator `system`. `recruiter_candidate` fica **congelada**: sem
+leitura nem escrita no código (`tests/architecture.test.ts`), e a remoção é
+migração não aditiva, numa issue própria, com revisão humana.
+
+| Tabela | Chave e restrições | O que guarda |
+|---|---|---|
+| `recruiter_grant` | `id`; único parcial `(candidate_id, recruiter_user_id) WHERE status = 'active'`; `CHECK` de status e de "ativa tem recrutador"; candidato `cascade`, recrutador, convite, `created_by` e `revoked_by` `set null` | uma concessão do candidato a um recrutador: `recruiter_email` normalizado, `status` (`active` \| `revoked` \| `expired` \| `ended_account_removed`), `expires_at` (fim do dia escolhido, em UTC; nulo = sem fim) e `expiry_tz`, `ended_at`, `last_accessed_at`. Conceder de novo cria outra linha |
+| `recruiter_invite` | `id`; único `token_hash`; único parcial `(candidate_id, email) WHERE status = 'pending'`; `CHECK` de status; candidato `cascade`, contas `set null` | convite a quem não tem conta de recrutador: hash SHA-256 do token (nunca o token), validade de 7 dias, prazo escolhido para o acesso (`access_expires_at`, `expiry_tz`), quem criou, cancelou e aceitou, falha de entrega |
+| `recruiter_access_event` | `id`; índice `(candidate_id, at desc, id desc)`; `CHECK` de `kind` e `actor`; candidato `cascade`, o resto `set null` | histórico só de acréscimo de cada evento de compartilhamento, com o e-mail do recrutador copiado e, quando é o admin, o nome dele (`actor_name`). Nenhum código atualiza nem apaga linha |
+| `recruiter_suggestion` | `id`; único parcial `(candidate_id, job_id) WHERE status = 'pending'`; `CHECK` de status; candidato e vaga `cascade`, `application_id` `set null` | vaga sugerida a um candidato, `pending` \| `accepted` \| `declined`; a candidatura só nasce no aceite do candidato |
+| `recruiter_suggestion_by` | `id`; único `(suggestion_id, recruiter_user_id)`; `CHECK char_length(note) <= 500`; sugestão `cascade`, recrutador e concessão `set null` | quem sugeriu, com a nota e quando entrou num aviso por e-mail |
+| `recruiter_directory_query` | `id`; índice `(recruiter_user_id, at)`; recrutador `cascade` | um instante por busca no diretório, só para o limite por recrutador |
+
+**Quem tem acesso.** `linkedCandidatesFor` (`drizzle-store.ts`) é o único
+leitor de acesso: conta só concessão `active` com `expires_at` nulo ou depois
+de `clock()`, e só para conta com papel de recrutador. As telas do admin
+(`linkedCandidates`, `linksOf`) usam o mesmo predicado. Revogar é UPDATE
+condicional em `status = 'active'` com o evento na mesma transação — o segundo
+de dois pedidos simultâneos recebe `already_ended` —, e apagar a conta de um
+recrutador encerra antes as concessões ativas como `ended_account_removed`. A
+importação do snapshot legado não transfere as seis tabelas (nascem vazias).

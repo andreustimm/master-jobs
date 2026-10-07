@@ -1456,6 +1456,35 @@ export const ptBR = {
     recoveryIntro: "Alguém pediu para recuperar a senha desta conta.",
     recoveryExpiry: "O link vale {minutes} minutos e serve uma vez só.",
     recoveryIgnore: "Se não foi você, ignore: nada muda enquanto o link não for usado.",
+    // Acesso do recrutador (#465). Montados por `recruiter-emails.ts`; nunca
+    // levam currículo, funil, notas, piso salarial nem contato do perfil.
+    recruiterScope:
+      "Com o acesso você vê o funil de {candidate} (só leitura), o currículo atual como foi enviado e pode sugerir vagas. Notas, piso salarial, contatos do perfil e análises privadas nunca são compartilhados.",
+    recruiterInviteSubject: "{candidate} convidou você para acompanhar a busca no Master Jobs",
+    recruiterInviteIntro: "{candidate} quer compartilhar a busca de emprego com você no Master Jobs.",
+    recruiterInviteValidity: "O link vale até {date} (UTC) e serve uma vez só:",
+    recruiterInviteSameEmail:
+      "Crie a conta ou entre com este mesmo e-mail que recebeu o convite. Com outro endereço, o acesso não é liberado.",
+    recruiterInviteNeedsRecruiter: "O acesso exige uma conta de recrutador.",
+    recruiterInviteIgnore: "Se não conhece {candidate}, ignore este e-mail: nada é liberado sem o cadastro.",
+    recruiterGrantedSubject: "{candidate} deu acesso a você no Master Jobs",
+    recruiterGrantedIntro: "{candidate} deu a você acesso ao perfil no Master Jobs.",
+    recruiterNoEnd: "Sem data de fim: o acesso vale até a pessoa candidata revogar.",
+    recruiterEndsAt: "O acesso termina em {date} ({tz}).",
+    recruiterOpenLink: "Para abrir: {url}",
+    recruiterEndChangedSubject: "{candidate} mudou o prazo do seu acesso no Master Jobs",
+    recruiterEndChangedIntro: "{candidate} mudou a data de fim do seu acesso.",
+    recruiterNoLongerEnds: "O acesso não termina mais em uma data.",
+    recruiterEndedSubject: "Seu acesso ao perfil de {candidate} terminou",
+    recruiterEndedByCandidate: "{candidate} encerrou o seu acesso ao perfil no Master Jobs.",
+    recruiterEndedByAdmin: "O seu acesso ao perfil de {candidate} foi encerrado pela administração do serviço.",
+    recruiterEndedExpired: "O período de acesso ao perfil de {candidate} terminou.",
+    recruiterEndedAfter: "As vagas que você sugeriu continuam com a pessoa candidata.",
+    recruiterDigestSubject: "{recruiter} sugeriu vagas para você",
+    recruiterDigestIntro: "{recruiter} sugeriu {count} vaga(s) para você no Master Jobs:",
+    recruiterDigestItem: "• {title} — {company}",
+    recruiterDigestDecide: "Aceite ou recuse em: {url}",
+    recruiterDigestFunnel: "Nada entra no seu funil sem você aceitar.",
   },
 } as const;
 
