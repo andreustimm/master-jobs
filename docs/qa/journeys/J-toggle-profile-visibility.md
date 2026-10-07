@@ -13,7 +13,7 @@ journey:
   actions:
     - step: 1
       verb: Abrir a área do candidato e ler o cartão de visibilidade
-      expected_observable: As três opções (privado, recrutadores, público) aparecem, e o aviso "legível por qualquer um" fica sempre visível e legível — em qualquer tema e ambiente escolhido no seletor de aparência
+      expected_observable: As três opções (privado, recrutadores, público) aparecem, cada uma com a dica de quem encontra e lê o perfil — Recrutadores diz que alcança quem se cadastrou sozinho como recrutador —, o consentimento do currículo vale para Recrutadores e Público, e o aviso "legível por qualquer um" fica sempre visível e legível — em qualquer tema e ambiente escolhido no seletor de aparência
     - step: 2
       verb: Escolher "público" e salvar
       expected_observable: O feedback de sucesso aparece, e o link /p/<slug> passa a ser mostrado
@@ -22,7 +22,7 @@ journey:
       expected_observable: A escolha persiste e o aviso continua visível e legível
   goal:
     observable: A escolha de visibilidade e o aviso sobre o que ela expõe sobrevivem ao refresh, em qualquer tema
-    side_effects: [candidate.visibility alterado]
+    side_effects: [candidate.visibility alterado, candidate.public_cv mantido em Recrutadores e Público e apagado em Privado, perfil entra ou sai do diretório de recrutadores na requisição seguinte]
   true_end_state: Depois do refresh, a opção escolhida está marcada e o aviso continua com contraste suficiente para leitura
   exit:
     natural: Compartilhar o link público, ciente do que ele expõe

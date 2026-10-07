@@ -516,6 +516,18 @@ e-mail ou telefone, venha de onde vier; e a pessoa edita o nome em `/candidate`.
 A migração `0014` limpa os nomes já gravados. Detecção por padrão, com o mesmo
 limite declarado de `publicCvText()`, mais sequência de dez dígitos.
 
+**Diretório de perfis para recrutadores (#465).** `/recruiter/directory` e o
+perfil `/recruiter/directory/[id]` exigem sessão de recrutador
+(`candidate:discover`) e leem os perfis Recrutadores e Público pelo mesmo
+montador de `/p/` (`toAllowlistedProfile()`): nenhum campo sai ali que o perfil
+público não mostraria, e o texto do CV só com o segundo consentimento,
+filtrado. A busca casa só nome, headline e skill confirmada; perfil Privado
+não aparece nem responde (404 igual ao de id inexistente). Contra colheita em
+massa: 60 buscas ou perfis abertos por recrutador em 10 minutos, contados no
+banco (vale entre instâncias), e 20 cartões por página. A linha do limite
+guarda só quem buscou e quando. Ver G21–G23 em
+[rules/security.md](engineering/rules/security.md#g21).
+
 **Sem criptografia em repouso feita por este código.** Localmente, o
 PostgreSQL em Docker é legível por quem tem acesso à conta da máquina;
 criptografar aqui protegeria contra roubo do disco, o que o FileVault já faz

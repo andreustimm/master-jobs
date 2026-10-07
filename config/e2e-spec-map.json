@@ -472,6 +472,27 @@
       ]
     },
     {
+      "id": "recruiter-directory",
+      "modules": [
+        "tests/e2e/ui/recruiter-directory.mjs",
+        "tests/e2e/recruiter-directory-fixtures.mjs"
+      ],
+      "patterns": [
+        "app/p/[slug]/profile-view.tsx",
+        "app/candidate/public-facts-labels.ts",
+        "src/core/candidate-directory.ts",
+        "src/core/candidate-public.ts",
+        "src/core/public-cv.ts"
+      ],
+      "routes": [
+        "/",
+        "/candidate",
+        "/login",
+        "/recruiter/directory",
+        "/recruiter/directory/[id]"
+      ]
+    },
+    {
       "id": "admin",
       "modules": [
         "tests/e2e/ui/admin.mjs"

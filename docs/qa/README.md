@@ -105,6 +105,7 @@ importam:
 | Largura de 320 a 1024 px e conteúdo cortado | `OVERFLOW_SWEEP` |
 | Largura em 375, 768 e 1024 px com as trilhas | `OVERFLOW_SEARCHES_SWEEP` |
 | axe WCAG 2.2 AA a 1280 px | `AXE_SWEEP` |
+| Inglês, 375 px e axe como recrutador (#465) | `RECRUITER_SWEEP` |
 
 `tests/e2e-route-coverage.test.ts`, dentro do `pnpm check`, cruza a união
 dessas listas com o inventário de páginas de `tests/support/entry-inventory.ts`
@@ -112,7 +113,9 @@ dessas listas com o inventário de páginas de `tests/support/entry-inventory.ts
 nem em `UNMEASURED_PAGES` reprova.** Exceção precisa de motivo, precisa apontar
 para página que existe, e sai quando a página passa a ser medida. Hoje ficam
 fora, com o porquê escrito: a fixture `/transition-test`, as duas telas de
-recrutador e `/p/[slug]`.
+recrutador, o perfil do diretório (`/recruiter/directory/[id]`, medido pela
+área `recruiter-directory`) e `/p/[slug]`. A lista do diretório entra em
+`RECRUITER_SWEEP`, varrida com a sessão do recrutador da fixture.
 
 E as varreduras deixaram de aprovar o login no lugar da tela pedida:
 `gotoMeasured` confere resposta 2xx e **destino igual ao pedido**. Uma sessão
