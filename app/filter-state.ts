@@ -31,6 +31,8 @@ import { FIT_MAX, PAY_FILTER_MAX } from "./filter-scales.ts";
 export type FilterNotice =
   | TermError
   | "pay_invalid"
+  /** `fit` ou `fitMax` que não é número (`?fit=abc`): o lado ilegível é ignorado. */
+  | "fit_invalid"
   | "range_swapped"
   | "track_unknown"
   | "term_unknown"
@@ -120,6 +122,14 @@ function boundedFit(raw: string | undefined, fallback: number): number {
   const value = Number(raw);
   if (!Number.isFinite(value)) return fallback;
   return Math.min(Math.max(value, 0), FIT_MAX);
+}
+
+/**
+ * Score da URL que não é número. Vazio não conta: campo vazio é escolha. Fora
+ * da escala também não: é preso entre 0 e o teto, sem mudar o sentido.
+ */
+export function unreadableFit(raw: string | undefined): boolean {
+  return raw !== undefined && raw.trim() !== "" && !Number.isFinite(Number(raw));
 }
 
 function positiveInt(raw: string | undefined): number | null {
@@ -231,7 +241,11 @@ export function readFilters(
   }
 
   const rawFitMax = one("fitMax");
-  if (rawFitMax !== undefined && rawFitMax.trim() !== "") {
+  // Ignorar calado contradizia o contrato da URL: parâmetro inválido vira aviso.
+  if (unreadableFit(one("fit")) || unreadableFit(rawFitMax)) notices.push("fit_invalid");
+  // Teto ilegível é ignorado, não vira o teto da escala: `?fitMax=abc` não pode
+  // filtrar como `?fitMax=100`.
+  if (rawFitMax !== undefined && rawFitMax.trim() !== "" && !unreadableFit(rawFitMax)) {
     state.fitMax = boundedFit(rawFitMax, FIT_MAX);
   }
   if (state.fitMax !== undefined && state.fit > state.fitMax) {

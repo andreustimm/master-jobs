@@ -81,7 +81,7 @@ function deps(users: UserSummary[]): ImpersonationDeps & {
       linkedCandidates: async () => [],
       linksOf: async () => [],
       linkCandidate: async () => {},
-      unlinkById: async () => {},
+      revokeGrant: async () => ({ ok: true as const }),
     },
     audit: {
       record: async (e) => {

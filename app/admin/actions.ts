@@ -15,7 +15,7 @@ import {
   ROLES,
   setUserDisabled,
   updateUser,
-  removeRecruiterLink,
+  revokeRecruiterGrant,
   type Role,
 } from "../../src/contexts/auth/index.ts";
 import { ADMIN_COOKIE, currentSession, guard, SESSION_COOKIE } from "../auth";
@@ -197,22 +197,25 @@ export async function deleteUserAction(formData: FormData) {
 }
 
 /**
- * Remove um vínculo recrutador↔candidato.
+ * Revoga uma concessão de acesso de recrutador (ADR-008).
  *
- * O admin **revoga** acesso, mas não o concede: criar o vínculo mora na área do
- * candidato, porque ele dá leitura de currículo e funil. Um admin capaz de
- * criá-lo leria dado alheio por procuração — bastaria vincular a si mesmo como
- * recrutador —, desviando da impersonação auditada, que é o único caminho
+ * O admin **revoga** acesso, mas não o concede: conceder mora na área do
+ * candidato, porque dá leitura de currículo e funil. Um admin capaz de
+ * conceder leria dado alheio por procuração — bastaria conceder a si mesmo
+ * como recrutador —, desviando da impersonação auditada, que é o único caminho
  * previsto para isso.
  *
- * Recebe o id do VÍNCULO, não o par recrutador+candidato: assim nenhuma tela de
- * administração precisa passar um id de candidato adiante.
+ * A concessão fica `revoked`, com o nome deste admin no histórico do
+ * candidato; nada é apagado. Recebe o id da CONCESSÃO, não o par
+ * recrutador+candidato: nenhuma tela de administração passa id de candidato
+ * adiante. Revogar o que já terminou (duplo clique, dois admins) não é erro —
+ * o resultado pedido já vale.
  */
 export async function unlinkAction(formData: FormData) {
-  await guard("user:manage");
-  const linkId = Number(formData.get("linkId"));
-  if (!Number.isFinite(linkId)) throw new Error("Vínculo inválido");
-  await removeRecruiterLink(linkId);
+  const session = await guard("user:manage");
+  const grantId = Number(formData.get("linkId"));
+  if (!Number.isSafeInteger(grantId) || grantId <= 0) throw new Error("Vínculo inválido");
+  await revokeRecruiterGrant(grantId, session.userId);
   revalidatePath("/admin/users");
 }
 

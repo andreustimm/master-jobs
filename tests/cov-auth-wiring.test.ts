@@ -16,8 +16,8 @@ import {
   listUsers,
   passwordSignIn,
   recruiterLinks,
-  removeRecruiterLink,
   resolveSession,
+  revokeRecruiterGrant,
   revokeUserSessions,
   setUserDisabled,
   setUserRoles,
@@ -235,7 +235,7 @@ describe("vínculo de recrutador pela fachada", () => {
 
     const links = await recruiterLinks(rec.id);
     expect(links).toHaveLength(1);
-    await removeRecruiterLink(links[0]!.id);
+    expect(await revokeRecruiterGrant(links[0]!.id, dono.id)).toMatchObject({ ok: true });
 
     // Revogar tem de valer para a sessão JÁ ABERTA: os vínculos são relidos a
     // cada resolução, e não congelados no login.

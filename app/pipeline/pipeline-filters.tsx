@@ -10,7 +10,8 @@ import { chipClass, Row } from "../filters";
 import { RangeSlider } from "../range-slider";
 import { TransitionGetForm } from "../transition-get-form";
 import { TransitionLink } from "../transition-link";
-import { pipelineHref, toPipelineParams, type PipelineState } from "./filter-state";
+import { channelOptionLabel } from "./channel.ts";
+import { pipelineHref, toPipelineParams, type broadenHintKey, type PipelineState } from "./filter-state";
 
 /** O resto do estado, como campos ocultos de um formulário GET. */
 function Carry({ state, except }: { state: PipelineState; except: string[] }) {
@@ -25,6 +26,11 @@ function Carry({ state, except }: { state: PipelineState; except: string[] }) {
   );
 }
 
+/** Identidade do seletor: o conjunto marcado na URL, sem depender da ordem. */
+function pickerKey(chosen: readonly string[]): string {
+  return JSON.stringify([...chosen].sort());
+}
+
 /**
  * A barra de filtros do Funil (#478): as mesmas peças da de Vagas, com o
  * estado em `app/pipeline/filter-state.ts`. Empresas e canais vêm das
@@ -33,10 +39,13 @@ function Carry({ state, except }: { state: PipelineState; except: string[] }) {
 export function PipelineFilterBar({
   state,
   facets,
+  broadenHint,
   t,
 }: {
   state: PipelineState;
   facets: { companies: string[]; channels: string[] };
+  /** A chave de `broadenHintKey`, que só promete sinônimo com a lista ligada. */
+  broadenHint: ReturnType<typeof broadenHintKey>;
   t: Translator["t"];
 }) {
   const chosenCompanies = new Set(state.companies);
@@ -71,7 +80,7 @@ export function PipelineFilterBar({
         <Toggle
           href={pipelineHref(state, { semantic: state.semantic ? undefined : "1" })}
           active={state.semantic}
-          hint={t("pipeline.broadenHint")}
+          hint={t(broadenHint)}
           testId="pipeline-broaden"
         >
           {t("pipeline.broaden")}
@@ -83,7 +92,14 @@ export function PipelineFilterBar({
       <div className={grid}>
         {facets.companies.length > 0 && (
           <Row label={t("filters.company")}>
+            {/*
+              Chave pelo estado da URL, como o seletor de fontes de Vagas:
+              `defaultChecked` é DOM não controlado, e sem remontar, a marca de
+              uma empresa desfeita por Voltar ou "limpar" ficava na caixa e
+              voltava no Aplicar seguinte (#492). O mesmo vale para o canal.
+            */}
             <CheckboxPicker
+              key={pickerKey(state.companies)}
               action="/pipeline"
               carry={toPipelineParams(state).filter(([key]) => key !== "company")}
               name="company"
@@ -107,6 +123,7 @@ export function PipelineFilterBar({
         {facets.channels.length > 0 && (
           <Row label={t("pipeline.channel")}>
             <CheckboxPicker
+              key={pickerKey(state.channels)}
               action="/pipeline"
               carry={toPipelineParams(state).filter(([key]) => key !== "channel")}
               name="channel"
@@ -123,6 +140,7 @@ export function PipelineFilterBar({
               testId="pipeline-channel"
               optionTestId={(channel) => `pipeline-channel-option-${channel}`}
               userContent
+              optionLabel={channelOptionLabel(t, facets.channels)}
             />
           </Row>
         )}
@@ -142,6 +160,7 @@ export function PipelineFilterBar({
               limit={FIT_MAX}
               ceiling={FIT_MAX}
               step={FIT_SLIDER_STEP}
+              omitEmptyMin
               labels={{
                 min: t("filters.scoreMin"),
                 max: t("filters.scoreMax"),

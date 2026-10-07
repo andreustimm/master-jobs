@@ -450,8 +450,13 @@ Como `next build` checa tipos de todo `**/*.ts` do contexto, voltam só os
 arquivos que código do contexto importa: `.claude/hooks/` (a política de
 shell que `scripts/harness/` usa) e o leitor do grafo de módulos
 (`tests/support/module-graph.ts` e `entry-inventory.ts`, usados por
-`scripts/versions/`). `tests/dockerignore-imports.test.ts` reprova import de
-arquivo excluído ([#470](https://github.com/andreustimm/master-jobs/issues/470)).
+`scripts/versions/`). Os padrões de segredo e de banco local (`**/.env*`,
+`**/*.token.json`, `**/*.db` etc.) ficam no fim do arquivo, com `**/`: valem
+em qualquer profundidade e nenhuma reinclusão acima os reabre.
+`tests/dockerignore-imports.test.ts` reprova import de arquivo excluído
+([#470](https://github.com/andreustimm/master-jobs/issues/470)) e segredo
+dentro de diretório reincluído
+([#490](https://github.com/andreustimm/master-jobs/issues/490)).
 `fly.toml` fixa `primary_region = "gru"` (São Paulo, a região Fly mais
 próxima do Supabase de produção em `sa-east-1`, preservando o raciocínio de
 round-trip curto descrito em "Os três ambientes") e um health check HTTP

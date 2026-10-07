@@ -114,6 +114,16 @@ export const postSnapshotTables = new Set([
   // nem cadastro pendente. Nascem vazias.
   "auth_identity",
   "auth_signup",
+  // Acesso do recrutador (#465, ADR-011): nascem vazias. A cópia de
+  // `recruiter_candidate` para concessões ativas é a etapa de dados da 0036, que
+  // roda no alvo; uma importação feita depois dela traria vínculos sem
+  // concessão, e o recrutador ficaria sem acesso até o candidato conceder.
+  "recruiter_grant",
+  "recruiter_invite",
+  "recruiter_access_event",
+  "recruiter_suggestion",
+  "recruiter_suggestion_by",
+  "recruiter_directory_query",
 ]);
 
 const selectedJobs = `SELECT id FROM job WHERE

@@ -413,6 +413,7 @@ export const ptBR = {
     term_invalid_char: "O termo tem um caractere não aceito — use letras, números, espaço e + # . - /; a busca foi ignorada.",
     term_no_alnum: "O termo precisa de pelo menos uma letra ou número; a busca foi ignorada.",
     pay_invalid: "O valor da faixa precisa ser um número inteiro de 1 a 2.000.000; o filtro foi ignorado.",
+    fit_invalid: "O score precisa ser um número de 0 a 100; o valor ilegível foi ignorado.",
     range_swapped: "O mínimo estava acima do máximo; os dois foram trocados.",
     track_unknown: "Essa trilha não existe ou está arquivada; mostrando a principal.",
     term_unknown: "Esse termo salvo não existe; o filtro foi ignorado.",
@@ -1292,6 +1293,14 @@ export const ptBR = {
     jobsWrite: "vagas escrevem",
     jobs: "vagas",
   },
+  /** Os canais que `jho track --channel` documenta; outro valor aparece como a pessoa o gravou. */
+  channels: {
+    direct: "direto",
+    ats: "ATS",
+    referral: "indicação",
+    recruiter: "recrutador",
+    agency: "agência",
+  },
   pipeline: {
     title: "Funil",
     open: "abrir",
@@ -1308,6 +1317,7 @@ export const ptBR = {
     broaden: "ampliar busca",
     broadenHint:
       "Também acha sinônimos em português e inglês e cargos com grafia parecida. Ainda não entende o sentido da frase.",
+    broadenHintSpelling: "Também acha cargos com grafia parecida. Ainda não entende o sentido da frase.",
     companyAll: "todas as empresas",
     channel: "canal",
     channelAll: "todos os canais",
@@ -1536,6 +1546,35 @@ export const ptBR = {
     recoveryIntro: "Alguém pediu para recuperar a senha desta conta.",
     recoveryExpiry: "O link vale {minutes} minutos e serve uma vez só.",
     recoveryIgnore: "Se não foi você, ignore: nada muda enquanto o link não for usado.",
+    // Acesso do recrutador (#465). Montados por `recruiter-emails.ts`; nunca
+    // levam currículo, funil, notas, piso salarial nem contato do perfil.
+    recruiterScope:
+      "Com o acesso você vê o funil de {candidate} (só leitura), o currículo atual como foi enviado e pode sugerir vagas. Notas, piso salarial, contatos do perfil e análises privadas nunca são compartilhados.",
+    recruiterInviteSubject: "{candidate} convidou você para acompanhar a busca no Master Jobs",
+    recruiterInviteIntro: "{candidate} quer compartilhar a busca de emprego com você no Master Jobs.",
+    recruiterInviteValidity: "O link vale até {date} (UTC) e serve uma vez só:",
+    recruiterInviteSameEmail:
+      "Crie a conta ou entre com este mesmo e-mail que recebeu o convite. Com outro endereço, o acesso não é liberado.",
+    recruiterInviteNeedsRecruiter: "O acesso exige uma conta de recrutador.",
+    recruiterInviteIgnore: "Se não conhece {candidate}, ignore este e-mail: nada é liberado sem o cadastro.",
+    recruiterGrantedSubject: "{candidate} deu acesso a você no Master Jobs",
+    recruiterGrantedIntro: "{candidate} deu a você acesso ao perfil no Master Jobs.",
+    recruiterNoEnd: "Sem data de fim: o acesso vale até a pessoa candidata revogar.",
+    recruiterEndsAt: "O acesso termina em {date} ({tz}).",
+    recruiterOpenLink: "Para abrir: {url}",
+    recruiterEndChangedSubject: "{candidate} mudou o prazo do seu acesso no Master Jobs",
+    recruiterEndChangedIntro: "{candidate} mudou a data de fim do seu acesso.",
+    recruiterNoLongerEnds: "O acesso não termina mais em uma data.",
+    recruiterEndedSubject: "Seu acesso ao perfil de {candidate} terminou",
+    recruiterEndedByCandidate: "{candidate} encerrou o seu acesso ao perfil no Master Jobs.",
+    recruiterEndedByAdmin: "O seu acesso ao perfil de {candidate} foi encerrado pela administração do serviço.",
+    recruiterEndedExpired: "O período de acesso ao perfil de {candidate} terminou.",
+    recruiterEndedAfter: "As vagas que você sugeriu continuam com a pessoa candidata.",
+    recruiterDigestSubject: "{recruiter} sugeriu vagas para você",
+    recruiterDigestIntro: "{recruiter} sugeriu {count} vaga(s) para você no Master Jobs:",
+    recruiterDigestItem: "• {title} — {company}",
+    recruiterDigestDecide: "Aceite ou recuse em: {url}",
+    recruiterDigestFunnel: "Nada entra no seu funil sem você aceitar.",
   },
 } as const;
 

@@ -1,9 +1,10 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import {
   discoverEntries,
   exportedBindings,
@@ -15,7 +16,7 @@ import {
   routeMethods,
   stripComments,
 } from "./support/entry-inventory.ts";
-import { ambientReads, forbiddenReach, moduleEdges, type ForbiddenEdge } from "./support/module-graph.ts";
+import { ambientReads, forbiddenReach, moduleEdges, resolveLocal, type ForbiddenEdge } from "./support/module-graph.ts";
 
 /**
  * Executable architecture rules.
@@ -158,6 +159,46 @@ describe("erasable TypeScript (ADR 0006)", () => {
     // A regra antiga só lia `from "…"`: as grafias abaixo passavam sem extensão.
     const semExtensao = "import x from './x';\nexport * from './y';\nawait import('./z');";
     expect(moduleEdges(semExtensao).map((e) => e.specifier)).toEqual(["./x", "./y", "./z"]);
+  });
+});
+
+describe("resolveLocal — o arquivo que o especificador nomeia", () => {
+  // Raiz descartável: os casos não dependem de arquivo real do repositório.
+  const root = mkdtempSync(join(tmpdir(), "module-graph-"));
+  for (const file of [
+    "src/core/db/client.ts",
+    "src/core/ui/index.tsx",
+    "src/core/mail/index.ts",
+    "components/botao.tsx",
+    "scripts/util.ts",
+    "scripts/hook.mjs",
+  ]) {
+    mkdirSync(dirname(join(root, file)), { recursive: true });
+    writeFileSync(join(root, file), "export {};\n");
+  }
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+  const from = "app/page.tsx";
+
+  it("resolve os apelidos do tsconfig: `@core/*` e `@/*`", () => {
+    expect(resolveLocal(from, "@core/db/client", root)).toBe("src/core/db/client.ts");
+    expect(resolveLocal(from, "@core/db/client.ts", root)).toBe("src/core/db/client.ts");
+    expect(resolveLocal(from, "@/components/botao", root)).toBe("components/botao.tsx");
+  });
+
+  it("`.js` nomeia o `.ts` irmão, e `.js` real continua valendo", () => {
+    expect(resolveLocal("scripts/main.ts", "./util.js", root)).toBe("scripts/util.ts");
+    expect(resolveLocal("scripts/main.ts", "./hook.mjs", root)).toBe("scripts/hook.mjs");
+  });
+
+  it("diretório resolve para `index.ts` ou `index.tsx`", () => {
+    expect(resolveLocal(from, "@core/mail", root)).toBe("src/core/mail/index.ts");
+    expect(resolveLocal(from, "@core/ui", root)).toBe("src/core/ui/index.tsx");
+  });
+
+  it("pacote e arquivo inexistente não resolvem", () => {
+    expect(resolveLocal(from, "drizzle-orm", root)).toBeNull();
+    expect(resolveLocal(from, "@scope/pacote", root)).toBeNull();
+    expect(resolveLocal(from, "@core/nao-existe", root)).toBeNull();
   });
 });
 
@@ -665,6 +706,51 @@ describe("write-path invariants (ADR 0005)", () => {
     const guarded = retention.slice(retention.indexOf("export async function deleteClosedJobsWithoutApplication"));
     expect(guarded).toContain('.for("update")');
     expect(guarded).toContain("not exists (select 1 from ${application} a where a.job_id = ${job.id})");
+  });
+});
+
+describe("acesso de recrutador (#465, ADR-011, ADR-012)", () => {
+  const SCHEMA = "src/core/db/schema.ts";
+  const GRANT_READERS = [
+    "src/contexts/auth/infra/drizzle-store.ts",
+    "src/contexts/auth/infra/drizzle-directory.ts",
+    "src/contexts/auth/infra/drizzle-recruiter-access.ts",
+  ];
+  const PRODUCTION = [...SRC, ...APP];
+
+  it("IT-015 só os três adapters de acesso tocam recruiter_grant", () => {
+    // Um leitor que pulasse o predicado de `activeGrantCondition` reabriria o
+    // acesso que a revogação ou o prazo já fecharam (ADR-012, risco).
+    const offenders = PRODUCTION.filter(
+      (file) =>
+        file !== SCHEMA &&
+        !GRANT_READERS.includes(file) &&
+        /\brecruiterGrant\b|\brecruiter_grant\b/.test(stripComments(read(file))),
+    );
+    expect(offenders).toEqual([]);
+    expect(GRANT_READERS.every((file) => existsSync(file))).toBe(true);
+  });
+
+  it("IT-015 ninguém atualiza nem apaga o histórico de acesso", () => {
+    const offenders = PRODUCTION.filter((file) => {
+      const code = stripComments(read(file));
+      return (
+        /\.(update|delete)\(\s*recruiterAccessEvent\s*\)/.test(code) ||
+        /\b(update|delete\s+from)\s+(production\.)?"?recruiter_access_event\b/i.test(code)
+      );
+    });
+    expect(offenders).toEqual([]);
+  });
+
+  it("IT-015 recruiter_candidate está congelada: só o schema a nomeia", () => {
+    const offenders = PRODUCTION.filter(
+      (file) => file !== SCHEMA && /\brecruiterCandidate\b|\brecruiter_candidate\b/.test(stripComments(read(file))),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it("IT-015 as regras de acesso ficam no domínio puro", () => {
+    expect(PURE_CORE).toContain("src/contexts/auth/domain/recruiter-access.ts");
   });
 });
 

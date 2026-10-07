@@ -194,12 +194,15 @@ where candidate_id is not null
 ```
 
 Enquanto a conta errada resolvia para o candidato do dono, ela podia vincular
-recrutadores a ele. Confira também os vínculos e remova os que o dono não criou:
+recrutadores a ele. Confira também os acessos e revogue pela administração os
+que o dono não criou. Desde a 0036 (#465) os vínculos antigos são concessões em
+`recruiter_grant`, e `recruiter_candidate` está congelada:
 
 ```sql
-select id, recruiter_user_id, created_by, created_at
-from production.recruiter_candidate
-where candidate_id = (select id from production.candidate where slug = 'default');
+select id, recruiter_user_id, recruiter_email, created_by, created_at
+from production.recruiter_grant
+where status = 'active'
+  and candidate_id = (select id from production.candidate where slug = 'default');
 ```
 
 O deploy do código pode vir antes da limpeza: a leitura já nega o candidato às

@@ -275,6 +275,61 @@ describe("candidateScope", () => {
   });
 });
 
+describe("acesso de recrutador concedido pelo candidato (#465)", () => {
+  const seven = { kind: "candidate" as const, candidateId: 7 };
+  const eight = { kind: "candidate" as const, candidateId: 8 };
+  const candidateSession = (candidateId: number) => session({ roles: ["candidate"], candidateId });
+
+  it("UT-035 o candidato gerencia o acesso ao próprio perfil", () => {
+    expect(can(candidateSession(7), "access:manage", seven, NOW)).toEqual({ allowed: true });
+  });
+
+  it("UT-036 sessão emprestada não concede nem revoga", () => {
+    const borrowed = session({ roles: ["candidate"], candidateId: 7, impersonatedBy: 1 });
+    const decision = can(borrowed, "access:manage", seven, NOW);
+    expect(decision.allowed).toBe(false);
+    if (!decision.allowed) expect(decision.reason).toContain("sessão emprestada");
+  });
+
+  it("UT-037 recrutador, admin e outro candidato não gerenciam", () => {
+    expect(can(recruiter([7]), "access:manage", seven, NOW).allowed).toBe(false);
+    expect(can(admin(), "access:manage", seven, NOW).allowed).toBe(false);
+    expect(can(candidateSession(7), "access:manage", eight, NOW).allowed).toBe(false);
+    expect(can(candidateSession(7), "access:manage", { kind: "global" }, NOW).allowed).toBe(false);
+  });
+
+  it("UT-038 sugerir vaga exige concessão ativa na sessão", () => {
+    expect(can(recruiter([7]), "suggestion:create", seven, NOW).allowed).toBe(true);
+    expect(can(recruiter([8]), "suggestion:create", seven, NOW).allowed).toBe(false);
+    expect(can(candidateSession(7), "suggestion:create", seven, NOW).allowed).toBe(false);
+    expect(can(recruiter([7]), "suggestion:create", { kind: "global" }, NOW).allowed).toBe(false);
+  });
+
+  it("UT-039 decidir sugestão é do próprio candidato, fora de sessão emprestada", () => {
+    expect(can(candidateSession(7), "suggestion:decide", seven, NOW).allowed).toBe(true);
+    const borrowed = session({ roles: ["candidate"], candidateId: 7, impersonatedBy: 1 });
+    expect(can(borrowed, "suggestion:decide", seven, NOW).allowed).toBe(false);
+    expect(can(candidateSession(7), "suggestion:decide", eight, NOW).allowed).toBe(false);
+  });
+
+  it("UT-040 o diretório abre para recrutador, inclusive emprestado", () => {
+    expect(can(recruiter(), "candidate:discover", { kind: "global" }, NOW).allowed).toBe(true);
+    const borrowed = session({ roles: ["recruiter"], userId: 7, impersonatedBy: 9 });
+    expect(can(borrowed, "candidate:discover", { kind: "global" }, NOW).allowed).toBe(true);
+  });
+
+  it("UT-041 o diretório fecha para anônimo, candidato e admin", () => {
+    expect(can(null, "candidate:discover", { kind: "global" }, NOW).allowed).toBe(false);
+    expect(can(candidateSession(7), "candidate:discover", { kind: "global" }, NOW).allowed).toBe(false);
+    expect(can(admin(), "candidate:discover", { kind: "global" }, NOW).allowed).toBe(false);
+  });
+
+  it("UT-042 acesso concedido não é escrita no perfil nem no funil", () => {
+    expect(can(recruiter([7]), "candidate:write", seven, NOW).allowed).toBe(false);
+    expect(can(recruiter([7]), "application:write", seven, NOW).allowed).toBe(false);
+  });
+});
+
 describe("candidate:create — conta nova cria o próprio candidato", () => {
   it("permite só a conta de papel candidato ainda sem candidato", () => {
     expect(can(candidate(null), "candidate:create", { kind: "global" }, NOW).allowed).toBe(true);

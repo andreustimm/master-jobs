@@ -6,13 +6,13 @@ persona: Andreus em triagem
 journey: J-trust-the-filtered-board
 expected: Depois de limpar, de um preset ou de uma faixa trocada pelo servidor, os campos mostram o estado atual — e o Aplicar seguinte não ressuscita o valor antigo
 entry_points: /jobs; /jobs?pay=12000&payMax=6000; /jobs?fit=45
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence: evidence/2026-09-22-rc-1.22.0/log.txt
-last_report: docs/qa/reports/2026-09-22-release-candidate-1.22.0-full.md
+evidence: docs/qa/reports/2026-10-07-qa-494-funil-atritos.md; docs/qa/evidence/2026-10-07-qa-494-funil-atritos/08-vagas-fit-abc-aviso.png; docs/qa/evidence/2026-10-07-qa-494-funil-atritos/09-vagas-preset-sem-teto-vazio.png
+last_report: docs/qa/reports/2026-10-07-qa-494-funil-atritos.md
 overlaps: JOBS-pay-filter; JOBS-score-range; JOBS-source-multi-select
 ---
 
@@ -54,3 +54,40 @@ fazia):
 Full 1.22.0 (2026-09-22): Preset leva o campo mínimo ao valor da URL; Aplicar em seguida não ressuscita valor antigo; 70 aplicado e Voltar devolve 60 no campo. Limpar não foi exercitado.
 
 **Reset 2026-09-23 (#218):** os campos de busca, empresa, Score e faixa salarial deixaram de ser remontados por `key` a cada resposta; agora seguem a URL por `useAppliedValue`, que só preserva texto ainda não enviado no campo em foco. Refazer os quatro caminhos acima (faixa invertida, limpar, preset, fontes), agora também com o filtro aplicado sozinho, e conferir que a digitação em curso não é apagada pela resposta anterior (`JOBS-filters-auto-apply`).
+
+**QA 07/10 (canária da #492, `fix/funil-seletores` com `961558d`, que muda
+`useAppliedValue`; ambiente isolado, sem refresh entre os passos): `pass`.**
+`?pay=12000&payMax=6000` aberto mostra o aviso e 6000/12000. Faixa invertida
+igual à já aplicada — salário 6000–12000 com 12000/6000 digitado e score 60–80
+com 80/60 —: aviso, campos e controle deslizante na ordem certa, e o Aplicar
+seguinte envia o par certo sem aviso. "Limpar" do salário deixa os campos
+vazios e nem o Aplicar do salário nem o do Score o ressuscitam. "Aplicável
+hoje" leva o mínimo de 70 para 60 e esvazia o máximo; o Aplicar seguinte mantém
+60. Duas fontes marcadas, "limpar" e Voltar deixam zero marcadas, e marcar uma
+depois aplica só ela. Termo digitado logo depois de um Aplicar do Score, com a
+resposta a caminho, ficou no campo e foi aplicado (a janela da corrida não é
+controlável pelo driver; tentado, não provado). Relatório:
+`docs/qa/reports/2026-10-07-qa-492-funil-seletores.md`.
+
+**Reset 2026-10-07 (#494, PR #499):** o campo vazio do teto (Score e faixa
+salarial) deixou de ir para a URL — o Aplicar não manda mais `fitMax=` nem
+`payMax=` —, e `?fit=abc` ou `?fitMax=abc` agora mostra aviso, com o valor
+ilegível ignorado (o teto não vira 100). Refazer limpar, preset e faixa
+invertida conferindo que a URL não carrega teto vazio, e abrir `/jobs?fit=abc`
+e `/jobs?fitMax=abc`: aviso visível, corte padrão e teto vazio.
+
+**QA 07/10 (canária da #494, `fix/funil-atritos` em `c55f4fe9`; ambiente
+isolado, sem refresh entre os passos): `pass`.** Score só com mínimo 50 →
+`?fit=50`; salário só com mínimo 6000 → `pay=6000&cur=USD&per=year`, sem
+`payMax=`. Salário 12000/6000 → aviso de troca, campos e controle
+6000/12000, sem `fitMax=` vazio; o Aplicar seguinte →
+`pay=6000&payMax=12000` sem aviso. Score 80/60 → aviso, campos e controle
+60/80. "Limpar" do salário → `?fit=60&fitMax=80`, campos vazios; o Aplicar
+do salário e o do Score não o ressuscitam. "Aplicáveis hoje" a partir de 70
+→ `?fit=60&unblocked=1&named=1`, mínimo 60 e máximo vazio; o Aplicar do Score
+mantém 60, sem teto. `/jobs?fit=abc` e `/jobs?fitMax=abc`: aviso "O score
+precisa ser um número de 0 a 100; o valor ilegível foi ignorado.", campo em
+45 (corte padrão), máximo vazio e controle 45–100; 10 vagas. Refresh no fim
+igual. Atrito anotado: o Aplicar do salário com o mínimo vazio ainda grava
+`pay=` vazio (o piso; a #494 tratou só o teto). Relatório:
+`docs/qa/reports/2026-10-07-qa-494-funil-atritos.md`.

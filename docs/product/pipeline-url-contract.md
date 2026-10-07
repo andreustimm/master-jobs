@@ -36,7 +36,9 @@ sinônimos pt/en da lista curada (`config/search-synonyms.yaml`, só com
 (`word_similarity` ≥ `NEAR_THRESHOLD`, o mesmo limiar do grupo "termos
 parecidos" de Vagas). Busca pelo sentido da frase depende da
 [#370](https://github.com/andreustimm/master-jobs/issues/370); a tela diz
-"ampliar busca" e não promete semântica. Fica na URL mesmo sem consulta.
+"ampliar busca" e não promete semântica. A dica do botão só cita sinônimos
+quando a lista está em uso (`broadenHintKey`); desligada, fala só de grafia
+parecida. Fica na URL mesmo sem consulta.
 
 **Empresa e canal repetem, como `source` em Vagas.** As opções vêm das
 candidaturas da pessoa no funil (`pipelineFacets`), sem filtro, para a opção
@@ -45,7 +47,15 @@ alternativas; filtros diferentes valem todos juntos.
 
 **Score sem nota passa.** A faixa lê o score da trilha principal; candidatura
 sem nota aparece com qualquer faixa, como em Vagas (#279). Faixa invertida é
-trocada, com o aviso `range_swapped`.
+trocada, com o aviso `range_swapped`. Score que não é número (`?fit=abc`) é
+ignorado com o aviso `fit_invalid`, aqui e em Vagas; vazio é "sem limite" e
+não avisa, e fora de 0 a 100 é preso na escala. Campo vazio da faixa não vai
+para a URL: o primeiro Aplicar só com o mínimo grava `fit`, sem `fitMax=`.
+
+**Canal documentado aparece no idioma da tela.** `direct`, `ats`, `referral`,
+`recruiter` e `agency` (os de `jho track --channel`) saem pelo dicionário no
+selo da linha e no seletor; a URL continua com o valor gravado. Canal fora da
+lista aparece como a pessoa o gravou, marcado como dado dela.
 
 **Contador conta o que a lista mostraria.** Lista, total e contador de cada
 estágio passam pelos mesmos filtros (`pipelineConditions`). O estágio

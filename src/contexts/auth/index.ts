@@ -226,24 +226,29 @@ export function setUserDisabled(userId: number, disabled: boolean) {
   return drizzleUserDirectory.setDisabled(userId, disabled);
 }
 
-/** Vínculos de um recrutador, com id. Para a tela listar e remover. */
+/** Concessões ativas de um recrutador, com id. Para a tela listar e revogar. */
 export function recruiterLinks(recruiterUserId: number) {
   return drizzleUserDirectory.linksOf(recruiterUserId);
 }
 
 /**
- * Vincula um recrutador ao candidato.
+ * Grava uma concessão ativa do recrutador ao candidato, com evento `system`.
  *
- * Só o próprio candidato chama — o vínculo dá leitura de currículo e funil, e
- * admin criando um leria dado alheio por procuração.
+ * **Só fixture** (`tests/e2e/setup.mjs` e testes): concessão nasce do
+ * consentimento do candidato (#465). Nenhuma tela nem verbo da CLI chama isto
+ * — admin criando uma leria dado alheio por procuração.
  */
 export function linkRecruiterToCandidate(recruiterUserId: number, candidateId: number, by: number) {
   return drizzleUserDirectory.linkCandidate(recruiterUserId, candidateId, by);
 }
 
-/** Remove um vínculo. Revogar acesso é seguro vindo de admin ou do candidato. */
-export function removeRecruiterLink(linkId: number) {
-  return drizzleUserDirectory.unlinkById(linkId);
+/**
+ * O administrador `by` revoga uma concessão (ADR-008): fica `revoked`, com o
+ * nome dele no histórico do candidato. Revogar só reduz exposição; conceder,
+ * o admin nunca concede.
+ */
+export function revokeRecruiterGrant(grantId: number, by: number) {
+  return drizzleUserDirectory.revokeGrant(grantId, by);
 }
 
 /**
