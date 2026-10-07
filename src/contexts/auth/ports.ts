@@ -12,6 +12,28 @@
  * correct implementation and the clock already has `src/core/clock.ts`.
  */
 import type { Role, Session } from "./domain/types.ts";
+import type { OidcProviderId } from "./domain/oidc-config.ts";
+
+export type { OidcProviderId };
+
+/**
+ * O que o fluxo OIDC precisa lembrar entre o início e o retorno (#464).
+ *
+ * Vive só no cookie cifrado do fluxo (`infra/flow-cookie.ts`), por 10 minutos.
+ * `codeVerifier` é o segredo do PKCE: quem o tivesse trocaria o código do
+ * retorno por um token — por isso o cookie é cifrado, e não só assinado.
+ */
+export type OidcFlowState = {
+  provider: OidcProviderId;
+  state: string;
+  nonce: string;
+  codeVerifier: string;
+  intent: "signin" | "link";
+  /** Já passado por `safeNext` no início; conferido de novo no retorno. */
+  next: string | null;
+  /** ISO 8601. A validade de 10 minutos conta a partir daqui. */
+  createdAt: string;
+};
 
 export type NewSession = {
   userId: number;

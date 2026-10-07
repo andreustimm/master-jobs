@@ -127,7 +127,7 @@ describe("retenção do banco", () => {
       pageHtmlDays: 0,
     });
 
-    expect(result.applied).toEqual({ compactedJobs: 2, clearedPages: 1, prunedJobs: 1 });
+    expect(result.applied).toEqual({ compactedJobs: 2, clearedPages: 1, prunedJobs: 1, purgedSignups: 0 });
     const remaining = await db.select().from(job);
     expect(remaining).toHaveLength(1);
     expect(remaining[0]?.id).toBe(protectedId);
@@ -141,7 +141,7 @@ describe("retenção do banco", () => {
       pageHtmlDays: 0,
     });
     expect(second.candidates.onlineJobs).toBe(0);
-    expect(second.applied).toEqual({ compactedJobs: 0, clearedPages: 0, prunedJobs: 0 });
+    expect(second.applied).toEqual({ compactedJobs: 0, clearedPages: 0, prunedJobs: 0, purgedSignups: 0 });
   });
 });
 

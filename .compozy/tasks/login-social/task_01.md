@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: "Fundação: schema, domínio puro, flow cookie, e-mails e documentos legais"
 type: backend
 complexity: high
@@ -37,14 +37,14 @@ versionados.
 </requirements>
 
 ## Subtasks
-- [ ] 1.1 Schema Drizzle, migração aditiva, registro em `select-production.ts` e teste de upgrade.
-- [ ] 1.2 Parsers puros de configuração OIDC, limites de cadastro, sink e gate de emissor.
-- [ ] 1.3 Cookie cifrado do fluxo, `safeNext` e `landingFor`.
-- [ ] 1.4 Construtores de e-mail localizados e chaves i18n.
-- [ ] 1.5 `fileMailer` e seleção em `configuredMailer`.
-- [ ] 1.6 Documentos legais versionados e leitor.
-- [ ] 1.7 Purga de cadastros pendentes e concluídos no job de manutenção.
-- [ ] 1.8 Variáveis novas documentadas.
+- [x] 1.1 Schema Drizzle, migração aditiva, registro em `select-production.ts` e teste de upgrade.
+- [x] 1.2 Parsers puros de configuração OIDC, limites de cadastro, sink e gate de emissor.
+- [x] 1.3 Cookie cifrado do fluxo, `safeNext` e `landingFor`.
+- [x] 1.4 Construtores de e-mail localizados e chaves i18n.
+- [x] 1.5 `fileMailer` e seleção em `configuredMailer`.
+- [x] 1.6 Documentos legais versionados e leitor.
+- [x] 1.7 Purga de cadastros pendentes e concluídos no job de manutenção.
+- [x] 1.8 Variáveis novas documentadas.
 
 ## Implementation Details
 
@@ -84,12 +84,12 @@ Padrão de config pura: `src/core/storage/config.ts`. Padrão de mailer:
 
 Cases assigned from `_tests.md`, the test contract — read each ID's full definition there before writing tests.
 
-- [ ] UT-001, UT-002, UT-003, UT-004, UT-005, UT-006 — configuração e gates de ambiente
-- [ ] UT-030, UT-031, UT-032, UT-033, UT-034, UT-035 — flow cookie, `safeNext`, `landingFor`
-- [ ] UT-080, UT-081, UT-082, UT-083, UT-084, UT-085 — construtores de e-mail e sink
-- [ ] UT-100, UT-101 — documentos legais
-- [ ] IT-075 — sink ignorado em produção
-- [ ] IT-101, IT-102, IT-103 — upgrade, `ON DELETE`, purga
+- [x] UT-001, UT-002, UT-003, UT-004, UT-005, UT-006 — configuração e gates de ambiente
+- [x] UT-030, UT-031, UT-032, UT-033, UT-034, UT-035 — flow cookie, `safeNext`, `landingFor`
+- [x] UT-080, UT-081, UT-082, UT-083, UT-084, UT-085 — construtores de e-mail e sink
+- [x] UT-100, UT-101 — documentos legais
+- [x] IT-075 — sink ignorado em produção
+- [x] IT-101, IT-102, IT-103 — upgrade, `ON DELETE`, purga
 
 ## Success Criteria
 - Every assigned test case implemented and passing

@@ -2,7 +2,9 @@
 #
 # A captura já descarta HTML bruto assim que extrai texto e metadados. Esta
 # rotina recolhe payloads legados, páginas de versões antigas e vagas fechadas
-# sem candidatura. Nunca toca no histórico de application.
+# sem candidatura, e apaga cadastros (`auth_signup`) pendentes há mais de 24 h
+# ou concluídos há mais de 30 dias (#464). Nunca toca no histórico de
+# application nem nas contas.
 name: Manutenção do banco
 
 permissions:

@@ -1368,3 +1368,25 @@ podem cadastrar a mesma pessoa, cada uma com a própria linha, e
 `addContact` casa pela URL só dentro do candidato. Contato sem URL não colide.
 A importação do snapshot legado não transfere `target_account`
 (`exclude-unowned`): o snapshot não diz de quem é cada contato.
+
+### Login social e cadastro — `auth_identity`, `auth_signup` (#464)
+
+Do contexto `auth`, pela ADR-009 de `.compozy/tasks/login-social/`. A
+`0035_login_social` só acrescenta: as duas tabelas e seis colunas anuláveis em
+`auth_user`. As rotas e o cadastro que escrevem nelas chegam em tarefas
+seguintes da #464; hoje só a retenção mexe em `auth_signup`.
+
+| Tabela | Chave | O que guarda |
+|---|---|---|
+| `auth_identity` | `id`; únicos `(provider, subject)` e `(user_id, provider)`; `user_id` com `ON DELETE cascade` | identidade de Google ou LinkedIn ligada a uma conta: `subject` do provedor, `email_at_link` (o que o provedor afirmou no vínculo), `origin` (`automatic` \| `manual`), `linked_at`, `last_used_at`. Nada de perfil nem token (ADR-003). `CHECK` em `provider` e `origin` |
+| `auth_signup` | `id`; único `token_hash`; índices `(ip_hmac, completed_at)` e `(email, completed_at)`; `user_id` com `ON DELETE set null` | cadastro pendente (`kind` `manual` \| `social`) até a conclusão: e-mail normalizado, idioma, papel (`CHECK`: nulo, `candidate` ou `recruiter` — nunca `admin`), nome, título, texto do CV, hash da senha (manual), `provider`/`subject` (social), HMAC do código e tentativas, HMAC do IP, versões de termos, `expires_at`, `completed_at` |
+
+Colunas novas de `auth_user`, todas anuláveis e nulas nas contas anteriores:
+`email_verified_at`, `terms_version`, `privacy_version`, `terms_accepted_at`,
+`signup_origin` (`admin` \| `manual` \| `google` \| `linkedin`) e `locale`.
+
+**Retenção.** `jho db cleanup --apply` (o job semanal `manutencao-banco.yml`)
+apaga de `auth_signup` o pendente criado há mais de 24 h e o concluído há mais
+de 30 dias (`src/core/db/retention.ts`); a conta em `auth_user` fica. A
+importação do snapshot legado não transfere as duas tabelas (nascem vazias) e
+grava nulo nas colunas novas de `auth_user`.

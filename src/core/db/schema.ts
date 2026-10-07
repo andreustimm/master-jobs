@@ -12,6 +12,7 @@
  */
 import { sql } from "drizzle-orm";
 import {
+  check,
   index,
   integer,
   foreignKey,
@@ -1566,6 +1567,20 @@ export const authUser = production.table(
     candidateId: integer("candidate_id").references(() => candidate.id, { onDelete: "set null" }),
     disabledAt: text("disabled_at"),
     createdAt: text("created_at").notNull().default(now),
+    /**
+     * Quando o e-mail da conta foi provado: pelo provedor (login social) ou pelo
+     * código enviado no cadastro manual. Nulo em conta criada por admin, que
+     * nunca teve o endereço confirmado — e por isso a coluna é anulável.
+     */
+    emailVerifiedAt: text("email_verified_at"),
+    /** Versões dos Termos e da Política aceitas no cadastro (#464, ADR-009). */
+    termsVersion: text("terms_version"),
+    privacyVersion: text("privacy_version"),
+    termsAcceptedAt: text("terms_accepted_at"),
+    /** `admin` | `manual` | `google` | `linkedin`. Nulo em conta anterior à coluna. */
+    signupOrigin: text("signup_origin"),
+    /** Idioma dos e-mails da conta (`pt-BR` | `en`). Nulo cai no padrão. */
+    locale: text("locale"),
   },
   (t) => [
     uniqueIndex("auth_user_email_idx").on(t.email),
@@ -1695,8 +1710,102 @@ export const authEvent = production.table(
   (t) => [index("auth_event_at_idx").on(t.at)],
 );
 
+/**
+ * Identidade de um provedor de login social ligada a uma conta (#464, ADR-001).
+ *
+ * A chave é `(provider, subject)` — o identificador estável que o provedor dá
+ * à pessoa —, nunca o e-mail: o e-mail do provedor muda, e entrar por ele
+ * depois do primeiro vínculo deixaria quem herdou o endereço entrar na conta.
+ * `email_at_link` é só registro do que o provedor afirmou no vínculo.
+ *
+ * Nada de perfil mora aqui (ADR-003, regra 1): nem nome, nem foto, nem token.
+ * Desligar o provedor apaga a linha; apagar a conta apaga em cascata.
+ */
+export const authIdentity = production.table(
+  "auth_identity",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => authUser.id, { onDelete: "cascade" }),
+    /** `google` | `linkedin`. */
+    provider: text("provider").notNull(),
+    subject: text("subject").notNull(),
+    emailAtLink: text("email_at_link"),
+    /** `automatic` (e-mail verificado igual) | `manual` (pela tela da conta). */
+    origin: text("origin").notNull(),
+    linkedAt: text("linked_at").notNull().default(now),
+    /** Nulo até o primeiro login por esta identidade. */
+    lastUsedAt: text("last_used_at"),
+  },
+  (t) => [
+    uniqueIndex("auth_identity_subject_idx").on(t.provider, t.subject),
+    uniqueIndex("auth_identity_user_provider_idx").on(t.userId, t.provider),
+    check("auth_identity_provider_check", sql`${t.provider} in ('google', 'linkedin')`),
+    check("auth_identity_origin_check", sql`${t.origin} in ('automatic', 'manual')`),
+  ],
+);
+
+/**
+ * Cadastro pendente: social entre o consentimento e o envio do formulário, ou
+ * manual entre o envio e o código (#464, ADR-009).
+ *
+ * A conta só nasce na conclusão; até lá nada aqui entra, faz vínculo nem tem
+ * sessão. O IP nunca é gravado cru: `ip_hmac` é HMAC-SHA256 com
+ * `JHO_SIGNUP_IP_SECRET`, e serve só para o limite por IP. O código também não
+ * é gravado: `code_hash` é o HMAC dele.
+ *
+ * A retenção (`runDatabaseCleanup`) apaga pendente com mais de 24 h e concluído
+ * com mais de 30 dias. `user_id` vira nulo se a conta for apagada antes disso.
+ */
+export const authSignup = production.table(
+  "auth_signup",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    /** `manual` | `social`. */
+    kind: text("kind").notNull(),
+    /** SHA-256 do token do cookie do cadastro; nunca o token. */
+    tokenHash: text("token_hash").notNull(),
+    /** Normalizado (minúsculas, sem espaço nas pontas). */
+    email: text("email").notNull(),
+    locale: text("locale").notNull(),
+    /** `candidate` | `recruiter`; nulo enquanto o cadastro social não escolheu. */
+    role: text("role"),
+    name: text("name"),
+    headline: text("headline"),
+    cvText: text("cv_text"),
+    /** scrypt, só no cadastro manual. */
+    passwordHash: text("password_hash"),
+    /** Só no cadastro social. */
+    provider: text("provider"),
+    subject: text("subject"),
+    codeHash: text("code_hash"),
+    codeAttempts: integer("code_attempts").notNull().default(0),
+    codeSentAt: text("code_sent_at"),
+    ipHmac: text("ip_hmac").notNull(),
+    termsVersion: text("terms_version"),
+    privacyVersion: text("privacy_version"),
+    createdAt: text("created_at").notNull().default(now),
+    expiresAt: text("expires_at").notNull(),
+    completedAt: text("completed_at"),
+    userId: integer("user_id").references(() => authUser.id, { onDelete: "set null" }),
+  },
+  (t) => [
+    uniqueIndex("auth_signup_token_idx").on(t.tokenHash),
+    index("auth_signup_ip_idx").on(t.ipHmac, t.completedAt),
+    index("auth_signup_email_idx").on(t.email, t.completedAt),
+    check("auth_signup_kind_check", sql`${t.kind} in ('manual', 'social')`),
+    // Defesa em profundidade contra papel forjado (US-012.EC-1): a validação da
+    // ação já recusa `admin`, e o banco recusa de novo.
+    check("auth_signup_role_check", sql`${t.role} is null or ${t.role} in ('candidate', 'recruiter')`),
+    check("auth_signup_provider_check", sql`${t.provider} is null or ${t.provider} in ('google', 'linkedin')`),
+  ],
+);
+
 export type AuthUser = typeof authUser.$inferSelect;
 export type AuthSession = typeof authSession.$inferSelect;
+export type AuthIdentity = typeof authIdentity.$inferSelect;
+export type AuthSignup = typeof authSignup.$inferSelect;
 
 /* -------------------------------------------------------------------------- */
 /* Term captures (sourcing)                                                    */
