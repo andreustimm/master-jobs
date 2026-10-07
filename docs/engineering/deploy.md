@@ -620,12 +620,13 @@ no push das três branches. Os gates correm em jobs paralelos:
 
 | Job | O que prova |
 |---|---|
-| `contratos` | changelogs prontos, tracker de QA, tipos, contratos das skills de QA |
+| `contratos` | changelogs prontos, versões explícitas ([política de versões](versions.md)), tracker de QA, tipos, contratos das skills de QA |
 | `testes` (4 fatias) | a suíte Vitest, cada fatia num runner com o próprio PostgreSQL em Docker |
 | `cobertura` | mescla os blobs das fatias e aplica o piso de `vitest.config.ts` sobre o total |
 | `pwa-browser` | a fronteira de privacidade do service worker num Chromium real |
 | `build` | `next build`, com `.next/cache` reaproveitado entre execuções |
-| `schema-e-migracao` | `schema.ts` e `drizzle/` em sincronia |
+| `banco-nas-majors` (major × 2 fatias) | todo teste que usa PostgreSQL real, nas majors `production` e `latest` de `config/postgres-majors.json` ([política de versões](versions.md)) |
+| `schema-e-migracao` | `schema.ts` e `drizzle/` em sincronia, e `banco-nas-majors` aprovado (depende dele, com `if: always()`) |
 | `qualidade` | agregador: só passa quando todos os anteriores passaram |
 
 `qualidade` e `schema-e-migracao` são os nomes que a promoção e a proteção de
@@ -701,16 +702,16 @@ o resultado no log. A porta 6543 (transação) continua recusada.
 Fase 2 da contingência de CI/deploy ([issue #367](https://github.com/andreustimm/master-jobs/issues/367),
 [ADR 0030](../adr/0030-contingencia-de-ci-e-deploy.md)). O `runs-on:` de todo
 job de `ci.yml` é uma única expressão, nunca um literal
-(`tests/ci-runner-selection.test.ts` reprova quem adicionar `runs-on:
-ubuntu-latest` de novo):
+(`tests/ci-runner-selection.test.ts` reprova quem adicionar um `runs-on:`
+literal de novo):
 
 ```yaml
 runs-on: ${{ github.event_name == 'pull_request' &&
   github.event.pull_request.head.repo.full_name != github.repository &&
-  'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+  'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
 ```
 
-- **Ausente ou vazia** (padrão): `ubuntu-latest`, o runner hospedado de hoje —
+- **Ausente ou vazia** (padrão): `ubuntu-26.04`, o runner hospedado de hoje —
   nada muda sem ação do dono (princípio 1/2 da ADR).
 - **Setada** com **JSON válido** (`gh variable set CI_RUNS_ON --body
   '["self-hosted","linux","master-jobs"]'`): todo job passa a rodar no runner
@@ -862,10 +863,13 @@ contêiner:
 **Voltar ao hospedado**, a qualquer momento e sem tocar na VPS:
 
 ```bash
-gh variable set CI_RUNS_ON --body '"ubuntu-latest"'   # ou: gh variable delete CI_RUNS_ON
+gh variable delete CI_RUNS_ON
 ```
 
-O próximo push já roda em `ubuntu-latest`. **Se havia execução do CI em fila
+Sem a variável, o próximo push já roda no runner hospedado padrão de `ci.yml`
+(hoje `ubuntu-26.04`). Apagar, em vez de gravar a etiqueta, é de propósito: a
+etiqueta muda quando o Renovate sobe a versão do Ubuntu, e um valor gravado na
+variável ficaria para trás. **Se havia execução do CI em fila
 ou em andamento esperando o runner próprio** no momento da troca, ela fica
 presa (nenhum runner com aquele label vai aparecer para pegá-la). Restrinja a
 `--workflow ci.yml` — cancelar um workflow alheio (`varredura.yml`,
@@ -1143,7 +1147,16 @@ atualização de dependência e teste não.
 | **`authorization`** | **não** | é a credencial |
 | **`x-forwarded-for`, `x-real-ip`** | **não** | IP é dado pessoal |
 | Corpo da requisição | não | carrega CV, nota de funil e senha |
-| Identidade do usuário | não | `sendDefaultPii: false`, e `event.user` é apagado |
+| Identidade do usuário | não | `dataCollection.userInfo: false`, e `event.user` é apagado |
+
+Desde o SDK 11, a coleta automática é decidida por `dataCollection` (o antigo
+`sendDefaultPii` não existe mais) e cada campo omitido vale **ligado**.
+`sentryServerOptions` desliga todos: usuário, cookies, cabeçalhos, corpos,
+query string, GraphQL, IA generativa, dados de consulta, filas e variáveis de
+pilha; só `frameContextLines` fica no padrão, porque são linhas do nosso
+código. As peneiras `beforeSend*` continuam como segunda linha. O teste
+(`tests/support/sentry-client.ts`) entrega as opções a um `NodeClient` real e
+lê `getDataCollectionOptions()`; chave nova que o SDK resolver ligada reprova.
 
 A lista de cabeçalhos é de **permissão**: cabeçalho novo não vai até alguém
 decidir que pode. Cabeçalho fora da lista some por inteiro, em vez de aparecer
@@ -1194,6 +1207,15 @@ banco (`server.address`). Por isso a peneira é outra lista de permissão:
 `tracePropagationTargets: []` impede o SDK de anexar `sentry-trace` e
 `baggage` às requisições de saída — o `baggage` levaria a chave pública, o
 release e o nome da transação a cada board consultado.
+
+**Ciclo de trace estático.** Desde o `@sentry/nextjs` 11 o padrão é
+`traceLifecycle: 'stream'`, que manda cada span em fluxo (`name`/`attributes`)
+e **ignora** `beforeSendTransaction`. As peneiras acima foram escritas para o
+formato estático, então `sentryServerOptions` fixa `traceLifecycle: 'static'`
+e `instrumentation.ts` marca a peneira de span com `Sentry.withStaticSpan` —
+sem a marca, o SDK nunca a chamaria. `tests/instrumentation-guard.test.ts`
+reprova se uma das duas sumir. O SDK 12 remove `beforeSendTransaction`: subir
+para ele exige reescrever a peneira para o formato em fluxo antes.
 
 A organização no Sentry está com a limpeza do lado do servidor **desligada**
 (`dataScrubber: false`, `scrubIPAddresses: false`, lido em 22/09/2026), então a

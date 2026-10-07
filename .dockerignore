@@ -43,7 +43,7 @@ drizzle
 changelog.d
 docker
 docker-compose.local.yml
-.vitest-reports
+.vitest
 __pycache__
 
 AGENTS.md

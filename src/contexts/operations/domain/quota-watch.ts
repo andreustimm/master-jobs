@@ -138,7 +138,10 @@ export const PROMOTION_WORKFLOW = "promover-para-staging.yml";
  * chegando a `staging`, não há novo PR de produção nem novo deploy de `main`.
  * `actions`: a alavanca (Fase 2) é `CI_RUNS_ON`; recomendar não é o mesmo que
  * aplicar — aplicar de fato é decisão do dono, porque um runner self-hosted
- * que ainda não existe não pode receber tráfego de CI.
+ * que ainda não existe não pode receber tráfego de CI. A reversão APAGA a
+ * variável em vez de gravar uma etiqueta: sem ela, `ci.yml` cai no runner
+ * hospedado padrão, e uma etiqueta copiada aqui envelheceria a cada troca de
+ * versão do Ubuntu (issue #468).
  */
 function actionOf(trigger: QuotaTrigger): { action: string; reversalCommand: string } {
   if (trigger === "vercel") {
@@ -149,7 +152,7 @@ function actionOf(trigger: QuotaTrigger): { action: string; reversalCommand: str
   }
   return {
     action: 'recomendar `gh variable set CI_RUNS_ON --body \'["self-hosted","master-jobs"]\'` (só se o runner da Fase 2 já existir)',
-    reversalCommand: 'gh variable set CI_RUNS_ON --body \'"ubuntu-latest"\'',
+    reversalCommand: "gh variable delete CI_RUNS_ON",
   };
 }
 

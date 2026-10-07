@@ -115,7 +115,8 @@ describe("suíte fatiada", () => {
     // Uma fatia vermelha não pode pular a mesclagem que mostra as falhas.
     expect(coverage.if).toBe("${{ !cancelled() }}");
     const download = coverage.steps.find((step) => step.uses?.startsWith("actions/download-artifact@"))!;
-    expect(download.with).toMatchObject({ pattern: "blob-*", path: ".vitest-reports", "merge-multiple": true });
+    // `.vitest/blob` é onde o Vitest 5 grava e lê os blobs por padrão.
+    expect(download.with).toMatchObject({ pattern: "blob-*", path: ".vitest/blob", "merge-multiple": true });
     const merge = coverage.steps.find((step) => step.run?.includes("--merge-reports"))!;
     expect(merge.run).toBe("pnpm vitest run --merge-reports --coverage");
   });

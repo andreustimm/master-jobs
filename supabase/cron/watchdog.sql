@@ -293,7 +293,9 @@ begin
       reversao := 'gh workflow enable promover-para-staging.yml';
     else
       acao := 'recomendar gh variable set CI_RUNS_ON --body ''["self-hosted","master-jobs"]'' (só se o runner da Fase 2 já existir)';
-      reversao := 'gh variable set CI_RUNS_ON --body ''"ubuntu-latest"''';
+      -- Apagar a variável devolve o ci.yml ao runner hospedado padrão, sem
+      -- copiar aqui uma etiqueta do Ubuntu que envelhece (issue #468).
+      reversao := 'gh variable delete CI_RUNS_ON';
     end if;
   elsif decisao = 'aviso' then
     alertavel := true;
