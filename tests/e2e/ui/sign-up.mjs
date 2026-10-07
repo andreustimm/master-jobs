@@ -137,6 +137,21 @@ export async function run(ctx) {
     await page.locator('[data-testid="signup-terms"]').check();
   }
 
+  /**
+   * Formulário manual de recrutador; não envia. Os cenários do código (E2E-028,
+   * E2E-029) não dependem do papel, e recrutador não tem currículo para a fila
+   * de score pontuar contra o acervo inteiro.
+   */
+  async function fillManualRecruiter(page, { name, email }) {
+    await page.goto(`${BASE}/signup`, { waitUntil: "networkidle" });
+    await settled(page);
+    await page.locator('[data-testid="signup-role-recruiter"]').check();
+    await page.fill('[data-testid="signup-name"]', name);
+    await page.fill('[data-testid="signup-email"]', email);
+    await page.fill('[data-testid="signup-password"]', PASSWORD);
+    await page.locator('[data-testid="signup-terms"]').check();
+  }
+
   async function enterCode(page, code) {
     await settled(page);
     await page.fill('[data-testid="verify-code"]', code);
@@ -381,7 +396,7 @@ export async function run(ctx) {
   {
     const email = "e2e-cadastro-reenvio@local.test";
     const { context, page } = await fresh();
-    await fillManualCandidate(page, { name: "Reenvio E2E", email, marker: "Cadastro que testa o reenvio do codigo" });
+    await fillManualRecruiter(page, { name: "Reenvio E2E", email });
     await submitToVerify(page);
     const first = codeIn(await waitForMail(sink, email, (mail) => mail.subject === ptBR.email.codeSubject));
     const wrong = first === "000000" ? "111111" : "000000";
@@ -413,8 +428,12 @@ export async function run(ctx) {
       JSON.stringify({ enabled, status, codes: codes.length, disabledAgain }),
     );
     await enterCode(page, codeIn(codes[1]) ?? "000000");
-    await page.waitForURL((url) => url.pathname === "/", { timeout: 20_000 }).catch(() => undefined);
-    check("E2E-028 o código reenviado confirma o cadastro", new URL(page.url()).pathname === "/", page.url().replace(BASE, ""));
+    await page.waitForURL((url) => url.pathname === "/recruiter", { timeout: 20_000 }).catch(() => undefined);
+    check(
+      "E2E-028 o código reenviado confirma o cadastro",
+      new URL(page.url()).pathname === "/recruiter" && (await userByEmail(email)) !== null,
+      page.url().replace(BASE, ""),
+    );
     await context.close();
   }
 
@@ -422,7 +441,7 @@ export async function run(ctx) {
   {
     const email = "e2e-cadastro-volta@local.test";
     const { context, page } = await fresh();
-    await fillManualCandidate(page, { name: "Volta Depois E2E", email, marker: "Cadastro que sai e volta com o codigo" });
+    await fillManualRecruiter(page, { name: "Volta Depois E2E", email });
     await submitToVerify(page);
     const code = codeIn(await waitForMail(sink, email, (mail) => mail.subject === ptBR.email.codeSubject));
     // Sai para outra página e volta ao cadastro.
@@ -434,10 +453,10 @@ export async function run(ctx) {
     await page.waitForURL((url) => url.pathname === "/signup/verify", { timeout: 20_000 }).catch(() => undefined);
     await page.locator('[data-testid="verify-code"]').waitFor({ timeout: 15_000 }).catch(() => undefined);
     await enterCode(page, code ?? "000000");
-    await page.waitForURL((url) => url.pathname === "/", { timeout: 20_000 }).catch(() => undefined);
+    await page.waitForURL((url) => url.pathname === "/recruiter", { timeout: 20_000 }).catch(() => undefined);
     check(
       "E2E-029 voltar a /signup oferece 'Já tenho um código', e ele confirma o cadastro",
-      offered && new URL(page.url()).pathname === "/" && (await userByEmail(email)) !== null,
+      offered && new URL(page.url()).pathname === "/recruiter" && (await userByEmail(email)) !== null,
       JSON.stringify({ offered, at: page.url().replace(BASE, "") }),
     );
     await context.close();
