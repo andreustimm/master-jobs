@@ -262,6 +262,8 @@
         "app/filter-scales.ts",
         "app/filter-toggle.tsx",
         "app/range-slider.tsx",
+        "app/pay-range.tsx",
+        "app/auto-apply.ts",
         "src/core/synonyms.ts",
         "src/core/synonyms-load.ts"
       ],

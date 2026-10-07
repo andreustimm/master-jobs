@@ -125,17 +125,23 @@ describe("mapa de E2E — seleção", () => {
 
   it("peça de filtro que o Funil importa de Vagas seleciona as duas telas (#490)", () => {
     const jobs = selectE2E(MAP, ["app/jobs/(lista)/page.tsx"]).areas;
-    const shared = ["app/pipeline/pipeline-filters.tsx", "app/pipeline/filter-state.ts"]
-      .flatMap((file) =>
-        moduleEdges(readFileSync(file, "utf8"))
-          .map((edge) => (edge.specifier === null ? null : resolveLocal(file, edge.specifier)))
-          .filter((target): target is string => target !== null),
-      )
-      .filter((target) => target.startsWith("app/") && !target.startsWith("app/pipeline/"))
-      .filter((target) => selectE2E(MAP, [target]).mode === "affected");
+    // Fecho transitivo: o Funil carrega `filters.tsx`, que carrega `pay-range.tsx`.
+    const reached = new Set<string>();
+    const queue = ["app/pipeline/pipeline-filters.tsx", "app/pipeline/filter-state.ts"];
+    while (queue.length > 0) {
+      const file = queue.shift()!;
+      for (const edge of moduleEdges(readFileSync(file, "utf8"))) {
+        const target = edge.specifier === null ? null : resolveLocal(file, edge.specifier);
+        if (target === null || !target.startsWith("app/") || target.startsWith("app/pipeline/") || reached.has(target)) continue;
+        reached.add(target);
+        queue.push(target);
+      }
+    }
+    const shared = [...reached].filter((target) => selectE2E(MAP, [target]).mode === "affected");
     expect(shared).toContain("app/filters.tsx");
     expect(shared).toContain("app/checkbox-picker.tsx");
-    for (const file of new Set(shared)) {
+    expect(shared).toContain("app/pay-range.tsx");
+    for (const file of shared) {
       const areas = selectE2E(MAP, [file]).areas;
       expect(areas, file).toContain("pipeline-filters");
       expect(areas, file).toEqual(expect.arrayContaining(jobs));
