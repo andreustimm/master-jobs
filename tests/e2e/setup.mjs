@@ -45,6 +45,7 @@ import { scoreOne } from "../../src/core/scoring/apply.ts";
 import { SCORER_VERSION } from "../../src/core/scoring/score.ts";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
 import { GAP_GUEST_FIXTURE } from "./gap-fixture.mjs";
+import { PIPELINE_FILTER_FIXTURE } from "./pipeline-filters-fixture.mjs";
 import { SOCIAL_FIXTURES } from "./social-fixtures.mjs";
 import { PUBLIC_CV_FIXTURE, PUBLIC_FACTS_OFF_FIXTURE, factColumns } from "./public-cv-format.mjs";
 import { isolationRefusal } from "./database-guard.mjs";
@@ -102,6 +103,8 @@ export const E2E_ROLES = {
   // a área `candidate-gap` prova que as lacunas dela saem da busca dela, e não
   // do `profile.yaml` do dono nem das skills do próprio currículo (#427).
   gapGuest: { email: GAP_GUEST_FIXTURE.email, roles: ["candidate"] },
+  // Funil próprio e fixo da área `pipeline-filters` (#478).
+  pipelineFilters: { email: PIPELINE_FILTER_FIXTURE.email, roles: ["candidate"] },
   // Login social (#464): ver `social-fixtures.mjs`. A convidada nasce sem
   // senha, como as contas que um admin cria, para provar o primeiro acesso
   // pelo Google sem link mágico.
@@ -884,6 +887,62 @@ try {
     // Salvar currículo e editar a trilha enfileiram repontuação; a nota fixa
     // acima é o cenário, e o worker não pode trocá-la pela do scorer.
     await getDb().delete(scoreTask).where(eq(scoreTask.candidateId, guestId));
+  }
+
+  // #478: o funil fixo da área `pipeline-filters`, com nota na trilha
+  // principal da conta. `onConflictDoNothing` em tudo: numa base reaproveitada
+  // o estado já é este, e a área só lê.
+  const [funnelOwner] = await getDb()
+    .select({ candidateId: authUser.candidateId })
+    .from(authUser)
+    .where(eq(authUser.email, E2E_ROLES.pipelineFilters.email))
+    .limit(1);
+  if (funnelOwner?.candidateId !== null && funnelOwner?.candidateId !== undefined) {
+    const funnelId = funnelOwner.candidateId;
+    if (!(await ensurePrimaryTrack(funnelId))) await setMatchingProfile(funnelId, await loadProfile(true));
+    const funnelTrack = await ensurePrimaryTrack(funnelId);
+    if (!funnelTrack) throw new Error("E2E pipeline-filters account has no primary track");
+    const fixtures = PIPELINE_FILTER_FIXTURE.jobs;
+    await getDb().insert(job).values(fixtures.map((fixture) => ({
+      id: fixture.id,
+      fingerprint: `e2e:${fixture.id}`,
+      contentHash: `e2e:${fixture.id}`,
+      sourceId: "ashby:e2e",
+      externalId: String(fixture.id),
+      companyName: PIPELINE_FILTER_FIXTURE.companies[fixture.company],
+      title: fixture.title,
+      descriptionText: "Pipeline filter fixture.",
+      url: `https://jobs.example.com/${fixture.id}`,
+      raw: { e2e: true },
+    }))).onConflictDoNothing({ target: job.id });
+    await getDb().insert(jobScore).values(fixtures.map((fixture) => ({
+      candidateId: funnelId,
+      trackId: funnelTrack.id,
+      jobId: fixture.id,
+      fit: fixture.fit,
+      titleScore: 10,
+      keywordScore: 10,
+      seniorityScore: 10,
+      geoScore: 10,
+      compScore: 10,
+      freshnessScore: 5,
+      benefitScore: 5,
+      penalty: 0,
+      cluster: "other",
+      matchedKeywords: [],
+      missingKeywords: [],
+      reasons: [],
+      blockers: [],
+      scorerVersion: "e2e",
+      profileHash: "e2e",
+    }))).onConflictDoNothing({ target: [jobScore.candidateId, jobScore.trackId, jobScore.jobId] });
+    await getDb().insert(application).values(fixtures.map((fixture) => ({
+      candidateId: funnelId,
+      jobId: fixture.id,
+      status: fixture.status,
+      channel: fixture.channel,
+    }))).onConflictDoNothing();
+    await getDb().delete(scoreTask).where(eq(scoreTask.candidateId, funnelId));
   }
 
   const tokenFixtures = [
