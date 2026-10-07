@@ -960,11 +960,13 @@ it("wires the same CI jobs to the exact target with read-only credentials before
   expect(promotion.jobs.promover.needs).toEqual(["preparar", "validar"]);
   expect(ci.jobs.validacao.needs).toEqual(REQUIRED_CI_JOBS);
   for (const job of REQUIRED_CI_JOBS) {
-    // `qualidade` é o agregador e PRECISA de `always()`: sem ele, uma
-    // dependência vermelha faz o job ser pulado, e check obrigatório pulado
-    // conta como aprovado na proteção de branch. Qualquer outra condição
-    // poderia pular o gate.
-    expect(ci.jobs[job].if).toBe(job === "qualidade" ? "${{ always() }}" : undefined);
+    // Check obrigatório com dependência (`qualidade`, o agregador, e
+    // `schema-e-migracao`, que espera `banco-nas-majors`) PRECISA de
+    // `always()`: sem ele, uma dependência vermelha faz o job ser pulado, e
+    // check obrigatório pulado conta como aprovado na proteção de branch. Sem
+    // dependência, nenhuma condição. Qualquer outra poderia pular o gate.
+    expect(ci.jobs[job].if).toBe(ci.jobs[job].needs === undefined ? undefined : "${{ always() }}");
+    if (job === "qualidade") expect(ci.jobs[job].needs).toBeDefined();
     expect(ci.jobs[job]["continue-on-error"]).toBeUndefined();
   }
   // Todo job que lê código faz checkout do alvo exato, sem credencial persistida;

@@ -8,6 +8,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { selectProduction } from "./select-production.ts";
 import { importProduction } from "./import-production.ts";
+import { majorFromServerVersionNum, postgresTestImage, readPostgresMajors } from "../versions/postgres-majors.ts";
 
 // This command cannot take a destination URL. It only writes into the isolated
 // throwaway Docker database it creates, bound exclusively to loopback.
@@ -17,9 +18,12 @@ const selection = selectProduction(snapshot);
 const digest = createHash("sha256");
 for await (const chunk of createReadStream(snapshot)) digest.update(chunk);
 const sourceSha256 = digest.digest("hex");
+// Newest declared major by default; `JHO_TEST_POSTGRES_MAJOR=17` rehearses on
+// the production major (config/postgres-majors.json).
+const image = postgresTestImage(process.env, readPostgresMajors());
 const password = randomBytes(32).toString("hex");
 const started = spawnSync("docker", ["run", "--rm", "-d", "-p", "127.0.0.1::5432",
-  "-e", "POSTGRES_PASSWORD", "-e", "POSTGRES_DB=jho_migration_rehearsal", "postgres:17"],
+  "-e", "POSTGRES_PASSWORD", "-e", "POSTGRES_DB=jho_migration_rehearsal", image],
 { encoding: "utf8", env: { ...process.env, POSTGRES_PASSWORD: password } });
 const container = started.stdout.trim();
 if (started.status !== 0 || !/^[a-f0-9]{64}$/.test(container)) throw new Error("Could not start rehearsal PostgreSQL");
@@ -34,6 +38,9 @@ try {
     try { await sql`SELECT 1`; ready = true; break; } catch { await setTimeout(500); }
   }
   assert.ok(ready, "PostgreSQL readiness timeout");
+  const [version] = await sql`SHOW server_version_num`;
+  const postgresMajor = majorFromServerVersionNum(version!.server_version_num as string);
+  assert.equal(`postgres:${postgresMajor}`, image, "rehearsal PostgreSQL is not the requested major");
   const db = drizzle(sql);
   await migrate(db, { migrationsFolder: "drizzle/postgres" });
   const firstJournal = await sql`SELECT * FROM drizzle.__drizzle_migrations ORDER BY id`;
@@ -55,7 +62,7 @@ try {
     assert.equal(row!.id, Number(max[0]!.n) + 1);
     throw rollback;
   }), (error) => error === rollback);
-  console.log(JSON.stringify({ sourceSha256, ...result, migrationReplay: "unchanged",
+  console.log(JSON.stringify({ sourceSha256, postgresMajor, ...result, migrationReplay: "unchanged",
     rollback: "verified", occupiedTarget: "rejected", identityInsert: "verified" }, null, 2));
 } finally {
   await sql?.end({ timeout: 2 });

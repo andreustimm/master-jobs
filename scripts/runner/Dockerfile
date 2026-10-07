@@ -11,7 +11,7 @@
 #
 # O que fica DENTRO da imagem (nunca baixado em tempo de job, por isso o job
 # não precisa de sudo nem de rede para dependência de sistema):
-#   - Node e pnpm nas versões de package.json;
+#   - Node e pnpm nas versões de package.json; Python na de .python-version;
 #   - dependências de sistema e navegadores do Playwright (Chromium, WebKit);
 #   - o binário do runner do GitHub, com checksum verificado (M5);
 #   - Docker Engine, para um dockerd ISOLADO dentro do próprio contêiner do
@@ -32,19 +32,41 @@
 # "isolação" do dockerd interno seria teatro; com ele, o contêiner roda um
 # Docker completo por dentro sem escalar poder para fora de si mesmo
 # (re-revisão L2 de 29/09/2026, C1). Ver docs/engineering/deploy.md e ADR 0030.
-FROM node:24-bookworm-slim AS base
+#
+# Imagens fixadas por tag E digest, como no Dockerfile principal: a tag diz a
+# versão, o digest garante que o build de amanhã usa os mesmos bytes. O
+# Renovate sobe os dois juntos.
+ARG NODE_IMAGE=node:24-trixie-slim@sha256:173f125896c3b47ddf056734c7ea789d04595a6a08769a8f78e0df642781fb66
+# Python dos scripts na versão de `.python-version` (conferida abaixo), e não
+# o `python3` que o Debian traz no dia. Vem da imagem oficial, que já o
+# compilou: só o interpretador e a biblioteca padrão são copiados.
+ARG PYTHON_IMAGE=python:3.14.8-slim-trixie@sha256:f85c5697265c178cc6887276c55fe16cf3d14ca35c3df6a5eab3b360534a55d2
+FROM ${PYTHON_IMAGE} AS python
+
+FROM ${NODE_IMAGE} AS base
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Confere que a imagem base ainda serve a major exigida por engines.node —
-# falha cedo, no build, em vez de silenciosamente rodar Node errado.
-RUN node -e "if (!process.version.startsWith('v24.')) { \
-  console.error('Node ' + process.version + ' não é 24.x — atualize a tag da imagem base.'); \
-  process.exit(1); \
-}"
-
+# libffi, gdbm, ncursesw e readline: o que os módulos de extensão do Python
+# (ctypes, dbm.gnu, curses, readline) pedem e a base do Node não traz. O resto
+# (OpenSSL, SQLite, zlib, bz2, xz) já está na base.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl gnupg git jq unzip xz-utils util-linux \
+      libffi8 libgdbm6t64 libncursesw6 libreadline8t64 \
     && rm -rf /var/lib/apt/lists/*
+
+COPY --from=python /usr/local/bin/python3.14 /usr/local/bin/python3.14
+COPY --from=python /usr/local/lib/libpython3.14.so.1.0 /usr/local/lib/libpython3.14.so.1.0
+COPY --from=python /usr/local/lib/python3.14 /usr/local/lib/python3.14
+COPY .python-version /opt/build-context/.python-version
+# Falha no build se a imagem do Python e `.python-version` divergirem — o
+# Renovate sobe os dois no mesmo grupo, e este é o lembrete se não subir.
+RUN ln -s python3.14 /usr/local/bin/python3 \
+    && ln -s python3 /usr/local/bin/python \
+    && ldconfig \
+    && want="$(tr -d '[:space:]' < /opt/build-context/.python-version)" \
+    && have="$(python3 -c 'import platform; print(platform.python_version())')" \
+    && if [ "$have" != "$want" ]; then echo "Python $have não é $want (.python-version) — atualize PYTHON_IMAGE." >&2; exit 1; fi \
+    && python3 -c "import ssl, sqlite3, ctypes, bz2, lzma, zlib, readline, curses, dbm.gnu, csv, json"
 
 # Docker Engine, só para o dockerd ISOLADO de dentro do contêiner do job —
 # nunca para montar o socket do host.
@@ -63,11 +85,16 @@ WORKDIR /opt/build-context
 # repositório entra na imagem, e o `pnpm install` de verdade acontece no
 # checkout do próprio job, como em qualquer outro runner.
 COPY package.json ./package.json
-RUN NODE_WANTED="$(node -p "require('./package.json').engines.node")" \
-    && case "$(node -v)" in \
-         v24.*) : ;; \
-         *) echo "Node $(node -v) não satisfaz engines.node=${NODE_WANTED}"; exit 1 ;; \
-       esac \
+# Confere que a imagem base serve a MESMA major de engines.node — falha cedo,
+# no build, em vez de rodar Node errado em silêncio. A major vem do
+# package.json, não de um número repetido aqui: quando o Renovate sobe a tag
+# da imagem e o `engines` juntos, esta checagem acompanha sem edição.
+RUN node -e "const want = require('./package.json').engines.node.match(/\d+/)[0]; \
+  const have = process.versions.node.split('.')[0]; \
+  if (have !== want) { \
+    console.error('Node ' + process.version + ' não é ' + want + '.x (engines.node) — atualize a tag da imagem base.'); \
+    process.exit(1); \
+  }" \
     && PNPM_VERSION="$(node -p "require('./package.json').packageManager.split('@')[1]")" \
     && corepack enable \
     && corepack prepare "pnpm@${PNPM_VERSION}" --activate \
@@ -87,17 +114,17 @@ RUN NODE_WANTED="$(node -p "require('./package.json').engines.node")" \
 # install --with-deps`/`install-deps` quando `runner.environment ==
 # 'self-hosted'` (revisão L2, M2): os navegadores já estão aqui.
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
-ARG PLAYWRIGHT_VERSION=1.62.1
+ARG PLAYWRIGHT_VERSION=1.63.0
 RUN npx --yes "playwright@${PLAYWRIGHT_VERSION}" install --with-deps chromium webkit \
     && chmod -R a+rX "$PLAYWRIGHT_BROWSERS_PATH"
 
 # GitHub Actions runner — versão e checksum fixos. O checksum abaixo PRECISA
 # ser conferido pelo dono na página de release antes do primeiro build real
-# (https://github.com/actions/runner/releases/tag/v2.328.0, arquivo
-# actions-runner-linux-x64-2.328.0.tar.gz, campo SHA256) — o placeholder
+# (https://github.com/actions/runner/releases/tag/v2.338.0, arquivo
+# actions-runner-linux-x64-2.338.0.tar.gz, campo SHA256) — o placeholder
 # nunca bate com um download de verdade, e o build FALHA fechado até o dono
 # substituí-lo (revisão L2, M5: nunca aceitar tarball sem checksum batendo).
-ARG RUNNER_VERSION=2.328.0
+ARG RUNNER_VERSION=2.338.0
 ARG RUNNER_ARCH=x64
 ARG RUNNER_SHA256=PREENCHER_COM_O_SHA256_PUBLICADO_NA_PAGINA_DE_RELEASE
 RUN curl -fsSL -o /tmp/actions-runner.tar.gz \

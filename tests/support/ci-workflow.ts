@@ -23,18 +23,25 @@ export type CiJob = {
 export type CiWorkflow = { concurrency: { group: string }; jobs: Record<string, CiJob> };
 
 /**
+ * O runner hospedado padrão, com a versão do Ubuntu escrita (issue #468:
+ * `ubuntu-latest` troca de SO por fora do CI). O Renovate sobe esta etiqueta
+ * junto com a de `ci.yml` (`renovate.json`, gerenciador `github-runners`).
+ */
+export const HOSTED_RUNNER = "ubuntu-26.04";
+
+/**
  * A única expressão aceita em `runs-on:` de qualquer job de `ci.yml` (issue
  * #367, ADR 0030 decisões 1 e 4). `vars.CI_RUNS_ON` ausente ou vazia mantém
- * `ubuntu-latest`; setada, troca o runner de todo job sem editar o arquivo. A
+ * `HOSTED_RUNNER`; setada, troca o runner de todo job sem editar o arquivo. A
  * primeira metade é a guarda de fork: uma PR cuja `head.repo` difere de
- * `github.repository` sempre resolve para `ubuntu-latest`, mesmo com
+ * `github.repository` sempre resolve para `HOSTED_RUNNER`, mesmo com
  * `CI_RUNS_ON` apontando para o runner próprio — a mesma comparação de
  * `isForkPullRequest` (`scripts/github/fork-guard.ts`).
  */
 export const CANONICAL_RUNS_ON =
   "${{ github.event_name == 'pull_request' && " +
   "github.event.pull_request.head.repo.full_name != github.repository && " +
-  "'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '\"ubuntu-latest\"') }}";
+  `'${HOSTED_RUNNER}' || fromJSON(vars.CI_RUNS_ON || '"${HOSTED_RUNNER}"') }}`;
 
 /** Nome de todo job cujo `runs-on:` não é a expressão canônica — vazio quando conforme. */
 export function runsOnViolations(workflow: CiWorkflow): string[] {

@@ -131,9 +131,15 @@ Há paridade de PostgreSQL e das extensões, não de toda a plataforma. O banco
 local não tem backups/PITR, pooler, limites de plano, RLS configurado pelo
 projeto ou os serviços HTTP do Supabase. O tag da imagem é fixado para tornar o
 teste repetível; `LOCAL_POSTGRES_IMAGE` permite testar outro tag após verificar
-`CREATE EXTENSION pgmq` e `CREATE EXTENSION vector` do zero. O padrão é
-`supabase/postgres:17.6.1.171`, na mesma linha major/minor observada no
-Supabase de produção (`17.6.1.166`). A inicialização cria os papéis de
-bootstrap esperados pela imagem antes de habilitar as extensões. Se o patch da
-imagem mudar, destrua o volume e repita o smoke test antes de atualizar o
-valor versionado.
+`CREATE EXTENSION pgmq` e `CREATE EXTENSION vector` do zero. O padrão é a
+versão mais nova da distribuição, `supabase/postgres:17.11.0.004` (política de
+versões, [versions.md](versions.md)); o Renovate abre a PR que a sobe. A major
+dessa tag é a chave `local` de `config/postgres-majors.json`, que pode ficar
+abaixo da `latest` dos testes enquanto a Supabase não publica a major mais nova
+do PostgreSQL; `pnpm check:versions` reprova se a tag e a chave divergirem. O
+Supabase de produção pode estar atrás (foi observado em `17.6.1.166`) até o
+dono atualizá-lo no painel. A inicialização cria os papéis de bootstrap
+esperados pela imagem antes de habilitar as extensões. Se a tag mudar, destrua
+o volume e repita o smoke test: com a `17.11.0.004`, em volume novo,
+`verify.sql` mostrou PostgreSQL 17.11, `pgmq` 1.5.1 e `vector` 0.8.2, e as 34
+migrations aplicaram (06/10/2026).

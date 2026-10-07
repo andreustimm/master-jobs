@@ -2,9 +2,13 @@ name: master-jobs-local
 
 services:
   db:
-    # Production is PostgreSQL 17.6.1.x. Keep the same major/minor locally;
-    # the patch is pinned so a fresh extension install remains reproducible.
-    image: ${LOCAL_POSTGRES_IMAGE:-supabase/postgres:17.6.1.171}
+    # A versão mais nova da distribuição Supabase (política de versões, issue
+    # #468): o Renovate sobe esta tag por PR. A major é a chave `local` de
+    # config/postgres-majors.json, e `pnpm check:versions` reprova se as duas
+    # divergirem. A tag é fixa para que a instalação das extensões seja
+    # reproduzível; a produção (Supabase gerenciado) sobe por ação do dono no
+    # painel.
+    image: ${LOCAL_POSTGRES_IMAGE:-supabase/postgres:17.11.0.004}
     container_name: master-jobs-local-supabase-db
     restart: unless-stopped
     command:
