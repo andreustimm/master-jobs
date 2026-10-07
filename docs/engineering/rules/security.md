@@ -321,19 +321,37 @@ e a CSP não abre origem dele
 **Endereço.** `/p/` lê `public_slug`, nunca o `slug` interno; trocar o endereço
 faz o antigo responder 404 sem redirecionar (ADR 0024).
 
+**Segundo leitor: o diretório de recrutadores (#465).** `/recruiter/directory`,
+`/recruiter/directory/[id]` e a rota de imagem dele leem a MESMA lista de
+permissão: `publicProfile(slug)` é `allowlistedProfile({ slug }, ["public"])`, o
+diretório chama `allowlistedProfile({ id }, ["recruiters", "public"])`, e o
+mapeamento linha → perfil mora num lugar só, `toAllowlistedProfile()` (puro).
+As visibilidades são constante do servidor (`DIRECTORY_VISIBILITIES`); nenhum
+parâmetro da requisição amplia visibilidade nem campo. O cartão da busca é um
+recorte desse objeto, e a busca casa só nome, headline e skill confirmada —
+piso, nota e currículo nunca entram na consulta. Só recrutador entra
+(`candidate:discover`, guarda antes de qualquer leitura); o link `/p/` só sai
+para perfil Público. A regra não afrouxa: o que o diretório mostra é,
+campo a campo, o que `/p/` mostraria.
+
 Origem: AGENTS (invariante "`/p/[slug]`"). Prova:
 `tests/public-profile.test.ts`, `tests/public-name.test.ts`,
 `tests/public-slug.test.ts`, `tests/candidate-public-facts.test.ts`,
-`tests/candidate-images.test.ts`.
+`tests/candidate-images.test.ts`, `tests/candidate-directory.test.ts`,
+`tests/recruiter-directory.test.ts`.
 
 <a id="g22"></a>
 ## G22 — Perfil não público responde 404, não 403
 
 **Obrigação.** Perfil privado, inexistente ou com endereço revogado responde
-**404**. 403 confirmaria que o slug existe, e existência é informação.
+**404**. 403 confirmaria que o slug existe, e existência é informação. No
+diretório de recrutadores (#465), perfil Privado, id inexistente ou malformado
+e perfil que ficou Privado depois da busca respondem o mesmo 404; a busca não
+conta nem sugere perfil Privado.
 
-Origem: AGENTS (mesma invariante). Prova: `tests/public-slug.test.ts` e o
-serviço de perfil público; o status HTTP real é conferido no E2E.
+Origem: AGENTS (mesma invariante). Prova: `tests/public-slug.test.ts`,
+`tests/recruiter-directory.test.ts` e o serviço de perfil público; o status
+HTTP real é conferido no E2E.
 
 <a id="g23"></a>
 ## G23 — Texto do CV público exige segundo consentimento e continua filtrado
@@ -346,7 +364,12 @@ a seção do piso até o próximo nome de seção conhecido; na dúvida (seção
 valor, resto que ainda parece piso, valor com cara de dinheiro a até duas
 linhas da seção), o bloco inteiro. O consentimento não
 cria exceção tácita a G21. A rota é anônima: as expressões do filtro têm
-custo linear, travado em teste.
+custo linear, travado em teste. Desde #465 (ADR-014 do pacote
+`recrutador-acesso`), o mesmo consentimento vale para **Recrutadores** e
+**Público**: o diretório de recrutadores mostra o texto pelo mesmo
+`publicCvMarkdown()`, e voltar para Privado apaga o consentimento. Mudar a
+visibilidade ou o consentimento exige também `access:manage`, que a sessão
+emprestada não tem.
 
 **Limite declarado.** Detecção por padrão, com limite escrito em
 `src/core/public-cv.ts` e travado em teste: valor sem rótulo e telefone sem

@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: "Diretório de perfis para recrutadores"
 type: frontend
 complexity: high
@@ -36,12 +36,12 @@ as dicas de visibilidade e o consentimento do CV para Recrutadores (ADR-014).
 </requirements>
 
 ## Subtasks
-- [ ] 5.1 Refactor do montador da lista de permissão e testes de igualdade com `/p/`.
-- [ ] 5.2 Consulta do diretório (parse puro, SQL, dobra de acento, filtros, paginação).
-- [ ] 5.3 Limite de busca por recrutador.
-- [ ] 5.4 Páginas de lista e perfil e rota de imagem, com guarda.
-- [ ] 5.5 Visibilidade: guarda emprestada, consentimento do CV em Recrutadores, dicas.
-- [ ] 5.6 Inventário e spec E2E `tests/e2e/ui/recruiter-directory.mjs` com fixtures Pública, Recrutadores e Privada.
+- [x] 5.1 Refactor do montador da lista de permissão e testes de igualdade com `/p/`.
+- [x] 5.2 Consulta do diretório (parse puro, SQL, dobra de acento, filtros, paginação).
+- [x] 5.3 Limite de busca por recrutador.
+- [x] 5.4 Páginas de lista e perfil e rota de imagem, com guarda.
+- [x] 5.5 Visibilidade: guarda emprestada, consentimento do CV em Recrutadores, dicas.
+- [x] 5.6 Inventário e spec E2E `tests/e2e/ui/recruiter-directory.mjs` com fixtures Pública, Recrutadores e Privada.
 
 ## Implementation Details
 
@@ -74,17 +74,17 @@ Seguir a ADR-013, a ADR-014 e "Data flow" item 7 da TechSpec. A busca mora em
 
 Cases assigned from `_tests.md`, the test contract — read each ID's full definition there before writing tests.
 
-- [ ] UT-060, UT-061, UT-062, UT-063, UT-064, UT-065, UT-066, UT-067, UT-068 — parse da busca e limite
-- [ ] UT-069, UT-070, UT-071, UT-072, UT-073, UT-074 — lista de permissão, visibilidade e dicas
-- [ ] IT-144, IT-145, IT-146 — montador e igualdade com `/p/`
-- [ ] IT-147, IT-148, IT-149, IT-150, IT-151, IT-152, IT-153, IT-154 — busca, filtros e limite
-- [ ] IT-155, IT-156, IT-157 — mudança de visibilidade e consentimento
-- [ ] IT-158, IT-159, IT-160, IT-161, IT-162, IT-163 — perfil, imagem, guardas, sem efeito, links
-- [ ] IT-164, IT-165, IT-166, IT-167, IT-168 — dois papéis, vazio, `/p/` de Recrutadores, export e inventário
-- [ ] E2E-024, E2E-025 — busca, leitura e mudança de visibilidade
-- [ ] E2E-026, E2E-027 — recusas e campos privados ausentes
-- [ ] E2E-028 — 375 px e axe
-- [ ] E2E-029 — dicas de visibilidade
+- [x] UT-060, UT-061, UT-062, UT-063, UT-064, UT-065, UT-066, UT-067, UT-068 — parse da busca e limite
+- [x] UT-069, UT-070, UT-071, UT-072, UT-073, UT-074 — lista de permissão, visibilidade e dicas
+- [x] IT-144, IT-145, IT-146 — montador e igualdade com `/p/`
+- [x] IT-147, IT-148, IT-149, IT-150, IT-151, IT-152, IT-153, IT-154 — busca, filtros e limite
+- [x] IT-155, IT-156, IT-157 — mudança de visibilidade e consentimento
+- [x] IT-158, IT-159, IT-160, IT-161, IT-162, IT-163 — perfil, imagem, guardas, sem efeito, links
+- [x] IT-164, IT-165, IT-166, IT-167, IT-168 — dois papéis, vazio, `/p/` de Recrutadores, export e inventário
+- [x] E2E-024, E2E-025 — busca, leitura e mudança de visibilidade
+- [x] E2E-026, E2E-027 — recusas e campos privados ausentes
+- [x] E2E-028 — 375 px e axe
+- [x] E2E-029 — dicas de visibilidade
 
 ## Success Criteria
 - Every assigned test case implemented and passing

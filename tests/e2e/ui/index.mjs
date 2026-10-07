@@ -50,6 +50,7 @@ import * as recheck from "./recheck.mjs";
 import * as roles from "./roles.mjs";
 import * as searchRelevance from "./search-relevance.mjs";
 import * as searchSynonyms from "./search-synonyms.mjs";
+import * as recruiterDirectory from "./recruiter-directory.mjs";
 import * as recruiterLogoTransition from "./recruiter-logo-transition.mjs";
 import * as searches from "./searches.mjs";
 import * as slowFilters from "./slow-filters.mjs";
@@ -97,6 +98,9 @@ export const AREAS = [
   { id: "account-methods", run: accountMethods.run, requires: [] },
   { id: "jobs-new", run: jobsNew.run, requires: [] },
   { id: "public-profile", run: publicProfile.run, requires: [] },
+  // Diretório de recrutadores (#465): contas e perfis próprios de `setup.mjs`
+  // (`recruiter-directory-fixtures.mjs`); devolve a visibilidade de Rita.
+  { id: "recruiter-directory", run: recruiterDirectory.run, requires: [] },
   // Compara o histórico de novidades de quatro sessões: o dono (design),
   // recrutador e candidato (roles) e a sessão emprestada (aqui).
   { id: "admin", run: admin.run, requires: ["design", "roles"] },

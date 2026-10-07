@@ -56,6 +56,7 @@ describe("mapa de E2E — cobertura", () => {
       ...sweeps.OVERFLOW_SWEEP,
       ...sweeps.OVERFLOW_SEARCHES_SWEEP,
       ...sweeps.AXE_SWEEP.map(([, path]) => String(path)),
+      ...sweeps.RECRUITER_SWEEP,
     ].map((path) => new URL(path.replace("{track}", "1").replace("{term}", "1"), "http://sweep.invalid").pathname);
     const unmeasured = Object.keys(sweeps.UNMEASURED_PAGES).map(routeOfPage);
     const orphans = [...listed, ...unmeasured].filter((route) => areasServing(route).length === 0);

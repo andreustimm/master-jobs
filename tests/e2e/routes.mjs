@@ -121,6 +121,14 @@ export const AXE_SWEEP = [
 ];
 
 /**
+ * Telas que só abrem com papel de recrutador (#465): as varreduras acima rodam
+ * como dono, que não tem o papel e recebe 403. A área `recruiter-directory`
+ * percorre esta lista com a sessão do recrutador da fixture e mede, em cada
+ * rota, inglês sem português, 375 px sem estouro e axe WCAG 2.2 AA.
+ */
+export const RECRUITER_SWEEP = ["/recruiter/directory"];
+
+/**
  * Páginas fora das varreduras transversais, cada uma com o porquê.
  *
  * Exceção é decisão, não esquecimento: ela diz onde a página é exercitada e o
@@ -137,4 +145,6 @@ export const UNMEASURED_PAGES = {
     "só abre com papel de recrutador; ui.mjs a exercita por papel (ROLE_SCENARIOS), mas as varreduras rodam como dono",
   "app/recruiter/[candidateId]/page.tsx":
     "exige vínculo recrutador↔candidato; ui.mjs confere a negação por sonda (1, 999999, abc), sem varredura de idioma, largura ou axe",
+  "app/recruiter/directory/[id]/page.tsx":
+    "o id é de um candidato da fixture (Paula Pública, Rita Recrutadores), descoberto pela própria busca; recruiter-directory.mjs abre o perfil e mede 375 px, axe, inglês e a ausência dos campos privados",
 };

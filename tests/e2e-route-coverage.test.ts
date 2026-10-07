@@ -8,6 +8,7 @@ import {
   ENGLISH_SEARCHES_SWEEP,
   OVERFLOW_SEARCHES_SWEEP,
   OVERFLOW_SWEEP,
+  RECRUITER_SWEEP,
   UNMEASURED_PAGES,
 } from "./e2e/routes.mjs";
 
@@ -30,6 +31,7 @@ const SWEEPS: Record<string, readonly string[]> = {
   "largura": OVERFLOW_SWEEP,
   "largura (buscas)": OVERFLOW_SEARCHES_SWEEP,
   "axe": AXE_SWEEP.map(([, path]) => String(path)),
+  "recrutador (inglês, 375 px, axe)": RECRUITER_SWEEP,
 };
 
 /** `app/jobs/[id]/page.tsx` → segmentos `["jobs", "[id]"]`; `app/page.tsx` → `[]`. */
@@ -115,6 +117,7 @@ describe("V08-01 — nenhuma página fica fora da medição sem decisão", () =>
     expect(ui).toContain("portugueseLeaks(ENGLISH_SEARCHES_SWEEP.map(withSuiteIds))");
     expect(ui).toContain("for (const path of OVERFLOW_SWEEP)");
     expect(ui).toContain("OVERFLOW_SEARCHES_SWEEP.map(withSuiteIds)");
+    expect(ui).toContain("for (const path of RECRUITER_SWEEP)");
     expect(a11y).toContain("AXE_SWEEP.filter(([, path]) => path !== \"/login\")");
     expect(a11y).toContain("AXE_SWEEP.find(([, path]) => path === \"/login\")");
   });

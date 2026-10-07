@@ -38,13 +38,20 @@
  * chave) para a URL `/p/<endereço>/image/<tipo>?v=…`, e a rota que serve os
  * bytes pergunta de novo, a cada requisição, por `publicImageKeyForSlug()` —
  * perfil que deixou de ser público responde 404 também pela URL antiga.
+ *
+ * **Dois leitores, uma lista (#465, ADR-013).** O diretório de recrutadores lê
+ * os perfis Recrutadores e Público pelo MESMO montador: `allowlistedProfile()`
+ * recebe a chave (`slug` ou `id`) e as visibilidades fixadas em código por quem
+ * chama, e o mapeamento linha → perfil mora em `toAllowlistedProfile()`, puro.
+ * Uma segunda projeção para o diretório derivaria da primeira com o tempo; um
+ * campo novo só aparece nos dois lugares se entrar aqui.
  */
 import { createHash } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, type SQL } from "drizzle-orm";
 import { getDb } from "./db/client.ts";
 import { authUser, candidate, candidateDocument, candidateSkill, skill } from "./db/schema.ts";
-import { publicFactsFrom, type PublicFacts } from "./candidate-public-facts.ts";
-import { publicImageKeyFrom, type PublicImageKind } from "./public-images.ts";
+import { publicFactsFrom, type PublicFacts, type StoredFacts } from "./candidate-public-facts.ts";
+import { publicImageKeyFrom, type PublicImageKind, type StoredImages } from "./public-images.ts";
 import { containsContact, publicCvMarkdown, type KnownContact } from "./public-cv.ts";
 
 /**
@@ -73,6 +80,11 @@ export type PublicSkillGroup = {
 };
 
 export type PublicProfile = {
+  /**
+   * O endereço `/p/<slug>`, ou vazio quando o perfil não responde ali — um
+   * perfil Recrutadores lido pelo diretório não tem endereço público, e o
+   * `public_slug` guardado de quando ele era público não pode virar link.
+   */
   slug: string;
   /** Vazio quando a pessoa ainda não escolheu um nome publicável. */
   name: string;
@@ -128,77 +140,57 @@ export function groupPublicSkills(skills: readonly PublicSkill[]): PublicSkillGr
 }
 
 /**
- * Devolve o perfil, ou `null` quando ele não é público.
+ * Quem lê o perfil por esta lista, e por qual visibilidade.
  *
- * `null` e não um erro distinguível: 403 confirmaria que o slug existe, e
- * existência é informação. A instalação já se comporta assim onde importa —
- * `magicLink.complete()` devolve null tanto para token inválido quanto para
- * endereço desconhecido, e quem chama não distingue os dois.
+ * `/p/` passa `["public"]`; o diretório, `["recruiters", "public"]`. Nunca um
+ * valor que chegou na requisição: a lista é constante no módulo de quem chama
+ * (ADR-013), e `private` não cabe no tipo.
  */
-export async function publicProfile(slug: string): Promise<PublicProfile | null> {
-  const db = getDb();
+export type DirectoryVisibility = "recruiters" | "public";
+export type ProfileVisibilities = readonly [DirectoryVisibility, ...DirectoryVisibility[]];
 
-  const [row] = await db
-    .select({
-      id: candidate.id,
-      name: candidate.name,
-      headline: candidate.headline,
-      location: candidate.location,
-      linkedinUrl: candidate.linkedinUrl,
-      githubUrl: candidate.githubUrl,
-      visibility: candidate.visibility,
-      publicCv: candidate.publicCv,
-      // #327: valor e opt-in de cada fato, coluna a coluna. Lidos aqui, mas
-      // só saem pelo filtro de `publicFactsFrom()`.
-      workModel: candidate.workModel,
-      experienceLevel: candidate.experienceLevel,
-      availability: candidate.availability,
-      startTimeframe: candidate.startTimeframe,
-      openToRelocation: candidate.openToRelocation,
-      area: candidate.area,
-      languages: candidate.languages,
-      publicWorkModel: candidate.publicWorkModel,
-      publicExperienceLevel: candidate.publicExperienceLevel,
-      publicAvailability: candidate.publicAvailability,
-      publicStartTimeframe: candidate.publicStartTimeframe,
-      publicRelocation: candidate.publicRelocation,
-      publicArea: candidate.publicArea,
-      publicLanguages: candidate.publicLanguages,
-      // #327: chave e opt-in de cada imagem. A chave vira só uma versão opaca.
-      photoKey: candidate.photoKey,
-      coverKey: candidate.coverKey,
-      publicPhoto: candidate.publicPhoto,
-      publicCover: candidate.publicCover,
-      // Lidos para serem RETIRADOS do que sai, nunca devolvidos. O da conta
-      // importa porque o candidato criado pela CLI não tem `email` próprio.
-      email: candidate.email,
-      accountEmail: authUser.email,
-    })
-    .from(candidate)
-    .leftJoin(authUser, eq(authUser.candidateId, candidate.id))
-    // O endereço público, nunca o identificador interno: quem trocou de
-    // endereço não pode continuar alcançável pelo antigo nem pelo `slug`.
-    .where(eq(candidate.publicSlug, slug))
-    .limit(1);
+/** O endereço público ou o id interno — o diretório usa o id na URL (ADR-013). */
+export type ProfileKey = { slug: string } | { id: number };
 
-  // A checagem acontece AQUI, e não na página. Uma função que devolvesse o
-  // perfil e deixasse a decisão para quem renderiza seria usada errado no
-  // segundo lugar que a chamasse.
-  if (!row || row.visibility !== "public") return null;
-  const known: KnownContact = { emails: [row.email, row.accountEmail] };
+/**
+ * A linha que o montador lê: as colunas permitidas, os opt-ins e os e-mails
+ * cadastrados, lidos só para serem RETIRADOS do que sai.
+ */
+export type AllowlistRow = StoredFacts & StoredImages & {
+  publicSlug: string | null;
+  visibility: string;
+  name: string;
+  headline: string | null;
+  location: string | null;
+  linkedinUrl: string | null;
+  githubUrl: string | null;
+  publicCv: boolean;
+  /** E-mail do candidato e das contas ligadas a ele; nunca saem. */
+  knownEmails: readonly (string | null)[];
+};
+
+/** Uma skill CONFIRMADA como a consulta a traz, antes do filtro de contato. */
+export type AllowlistSkillRow = PublicSkill;
+
+/**
+ * Linha → perfil, por lista de permissão. Puro: sem banco, rede nem relógio.
+ *
+ * O objeto de saída é escrito chave a chave; o que a linha trouxer a mais
+ * (piso salarial, notas, e-mail) não tem para onde ir. `cvContent` só é lido
+ * com o segundo consentimento ligado e passa por `publicCvMarkdown()`.
+ *
+ * Não decide visibilidade — quem carrega a linha já recusou o que não cabe —,
+ * mas decide o ENDEREÇO: só perfil `public` tem `/p/`, e o `public_slug` de um
+ * perfil que deixou de ser público não sai como link.
+ */
+export function toAllowlistedProfile(
+  row: AllowlistRow,
+  skillRows: readonly AllowlistSkillRow[],
+  cvContent: string | null,
+): PublicProfile {
+  const known: KnownContact = { emails: row.knownEmails };
   const text = (value: string | null): string | null =>
     value === null || containsContact(value, known) ? null : value;
-
-  const skillRows = await db
-    .select({
-      name: skill.canonicalName,
-      category: skill.category,
-      level: candidateSkill.level,
-      occurrences: candidateSkill.occurrences,
-    })
-    .from(candidateSkill)
-    .innerJoin(skill, eq(skill.id, candidateSkill.skillId))
-    .where(and(eq(candidateSkill.candidateId, row.id), eq(candidateSkill.status, "confirmed")));
 
   // `level` é escrito por um humano (comentário no schema), então passa pelo
   // mesmo filtro do nome — não pela lista de permissão de COLUNA, que já
@@ -214,24 +206,8 @@ export async function publicProfile(slug: string): Promise<PublicProfile | null>
     )
     .map((s) => ({ name: s.name, category: s.category, level: s.level, occurrences: s.occurrences }));
 
-  let cv: string | null = null;
-  if (row.publicCv) {
-    const [doc] = await db
-      .select({ content: candidateDocument.content })
-      .from(candidateDocument)
-      .where(
-        and(
-          eq(candidateDocument.candidateId, row.id),
-          eq(candidateDocument.kind, "cv"),
-          eq(candidateDocument.isCurrent, true),
-        ),
-      )
-      .limit(1);
-    cv = doc ? publicCvMarkdown(doc.content, known) : null;
-  }
-
   return {
-    slug,
+    slug: row.visibility === "public" ? (row.publicSlug ?? "") : "",
     name: text(row.name.trim()) ?? "",
     headline: text(row.headline),
     location: text(row.location),
@@ -243,8 +219,151 @@ export async function publicProfile(slug: string): Promise<PublicProfile | null>
       photo: imageVersion(publicImageKeyFrom(row, "photo")),
       cover: imageVersion(publicImageKeyFrom(row, "cover")),
     },
-    cv,
+    cv: row.publicCv && cvContent !== null ? publicCvMarkdown(cvContent, known) : null,
   };
+}
+
+/**
+ * As colunas que o montador lê, num lugar só: o perfil e os cartões do
+ * diretório selecionam exatamente isto, e nada além.
+ */
+const ALLOWLIST_COLUMNS = {
+  id: candidate.id,
+  publicSlug: candidate.publicSlug,
+  name: candidate.name,
+  headline: candidate.headline,
+  location: candidate.location,
+  linkedinUrl: candidate.linkedinUrl,
+  githubUrl: candidate.githubUrl,
+  visibility: candidate.visibility,
+  publicCv: candidate.publicCv,
+  // #327: valor e opt-in de cada fato, coluna a coluna. Lidos aqui, mas
+  // só saem pelo filtro de `publicFactsFrom()`.
+  workModel: candidate.workModel,
+  experienceLevel: candidate.experienceLevel,
+  availability: candidate.availability,
+  startTimeframe: candidate.startTimeframe,
+  openToRelocation: candidate.openToRelocation,
+  area: candidate.area,
+  languages: candidate.languages,
+  publicWorkModel: candidate.publicWorkModel,
+  publicExperienceLevel: candidate.publicExperienceLevel,
+  publicAvailability: candidate.publicAvailability,
+  publicStartTimeframe: candidate.publicStartTimeframe,
+  publicRelocation: candidate.publicRelocation,
+  publicArea: candidate.publicArea,
+  publicLanguages: candidate.publicLanguages,
+  // #327: chave e opt-in de cada imagem. A chave vira só uma versão opaca.
+  photoKey: candidate.photoKey,
+  coverKey: candidate.coverKey,
+  publicPhoto: candidate.publicPhoto,
+  publicCover: candidate.publicCover,
+  // Lido para ser RETIRADO do que sai, nunca devolvido.
+  email: candidate.email,
+};
+
+/** Id de rota aceitável: inteiro positivo dentro do `integer` do PostgreSQL. */
+function validId(id: number): boolean {
+  return Number.isSafeInteger(id) && id > 0 && id <= 2_147_483_647;
+}
+
+function whereKey(key: ProfileKey): SQL | null {
+  // O endereço público, nunca o identificador interno: quem trocou de
+  // endereço não pode continuar alcançável pelo antigo nem pelo `slug`.
+  if ("slug" in key) return eq(candidate.publicSlug, key.slug);
+  return validId(key.id) ? eq(candidate.id, key.id) : null;
+}
+
+/**
+ * As linhas do montador para estes ids, com os e-mails das contas ligadas e
+ * as skills confirmadas. Duas consultas a mais por LOTE, não por candidato:
+ * os cartões de uma página do diretório chegam aqui juntos.
+ */
+export async function loadAllowlistRows(
+  where: SQL,
+  visibilities: ProfileVisibilities,
+): Promise<{ id: number; row: AllowlistRow; skills: AllowlistSkillRow[] }[]> {
+  const db = getDb();
+  const rows = (await db.select(ALLOWLIST_COLUMNS).from(candidate).where(where))
+    // A checagem acontece AQUI, e não na página. Uma função que devolvesse o
+    // perfil e deixasse a decisão para quem renderiza seria usada errado no
+    // segundo lugar que a chamasse.
+    .filter((row) => (visibilities as readonly string[]).includes(row.visibility));
+  if (rows.length === 0) return [];
+  const ids = rows.map((row) => row.id);
+
+  const [accounts, skillRows] = await Promise.all([
+    // O da conta importa porque o candidato criado pela CLI não tem `email`
+    // próprio — e todas as contas ligadas, não só uma qualquer.
+    db
+      .select({ candidateId: authUser.candidateId, email: authUser.email })
+      .from(authUser)
+      .where(inArray(authUser.candidateId, ids)),
+    db
+      .select({
+        candidateId: candidateSkill.candidateId,
+        name: skill.canonicalName,
+        category: skill.category,
+        level: candidateSkill.level,
+        occurrences: candidateSkill.occurrences,
+      })
+      .from(candidateSkill)
+      .innerJoin(skill, eq(skill.id, candidateSkill.skillId))
+      // Só as confirmadas. Detectada não é confirmada — regra 6 do CLAUDE.md.
+      .where(and(inArray(candidateSkill.candidateId, ids), eq(candidateSkill.status, "confirmed"))),
+  ]);
+
+  return rows.map(({ id, email, ...columns }) => ({
+    id,
+    row: {
+      ...columns,
+      knownEmails: [email, ...accounts.filter((account) => account.candidateId === id).map((account) => account.email)],
+    },
+    skills: skillRows
+      .filter((s) => s.candidateId === id)
+      .map((s) => ({ name: s.name, category: s.category, level: s.level, occurrences: s.occurrences })),
+  }));
+}
+
+/**
+ * Devolve o perfil pela lista de permissão, ou `null` quando ele não existe ou
+ * não está numa das visibilidades pedidas.
+ *
+ * `null` e não um erro distinguível: 403 confirmaria que o perfil existe, e
+ * existência é informação. A instalação já se comporta assim onde importa —
+ * `magicLink.complete()` devolve null tanto para token inválido quanto para
+ * endereço desconhecido, e quem chama não distingue os dois.
+ */
+export async function allowlistedProfile(
+  key: ProfileKey,
+  visibilities: ProfileVisibilities,
+): Promise<PublicProfile | null> {
+  const where = whereKey(key);
+  if (!where) return null;
+  const [found] = await loadAllowlistRows(where, visibilities);
+  if (!found) return null;
+
+  let cvContent: string | null = null;
+  if (found.row.publicCv) {
+    const [doc] = await getDb()
+      .select({ content: candidateDocument.content })
+      .from(candidateDocument)
+      .where(
+        and(
+          eq(candidateDocument.candidateId, found.id),
+          eq(candidateDocument.kind, "cv"),
+          eq(candidateDocument.isCurrent, true),
+        ),
+      )
+      .limit(1);
+    cvContent = doc?.content ?? null;
+  }
+  return toAllowlistedProfile(found.row, found.skills, cvContent);
+}
+
+/** O portfólio `/p/<slug>`: só perfil `public`, pelo endereço público. */
+export function publicProfile(slug: string): Promise<PublicProfile | null> {
+  return allowlistedProfile({ slug }, ["public"]);
 }
 
 /**
@@ -265,7 +384,22 @@ export function imageVersion(key: string | null): string | null {
  * precisa montar skills e currículo para decidir, e a decisão é a mesma —
  * `public_slug` (nunca o `slug` interno), `visibility = public`, opt-in.
  */
-export async function publicImageKeyForSlug(slug: string, kind: PublicImageKind): Promise<string | null> {
+export function publicImageKeyForSlug(slug: string, kind: PublicImageKind): Promise<string | null> {
+  return allowlistedImageKey({ slug }, kind, ["public"]);
+}
+
+/**
+ * A mesma decisão para qualquer leitor da lista: chave (`slug` ou `id`),
+ * visibilidades fixadas por quem chama e o opt-in do tipo. O diretório de
+ * recrutadores serve as imagens por aqui, com `["recruiters", "public"]`.
+ */
+export async function allowlistedImageKey(
+  key: ProfileKey,
+  kind: PublicImageKind,
+  visibilities: ProfileVisibilities,
+): Promise<string | null> {
+  const where = whereKey(key);
+  if (!where) return null;
   const [row] = await getDb()
     .select({
       visibility: candidate.visibility,
@@ -275,8 +409,8 @@ export async function publicImageKeyForSlug(slug: string, kind: PublicImageKind)
       publicCover: candidate.publicCover,
     })
     .from(candidate)
-    .where(eq(candidate.publicSlug, slug))
+    .where(where)
     .limit(1);
-  if (!row || row.visibility !== "public") return null;
+  if (!row || !(visibilities as readonly string[]).includes(row.visibility)) return null;
   return publicImageKeyFrom(row, kind);
 }

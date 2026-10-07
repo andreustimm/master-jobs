@@ -584,7 +584,8 @@ describe("architecture inventory", () => {
       ["app/job-modal.tsx", new Set(["row.url", "externalApplyUrl"])],
       ["app/joblist.tsx", new Set(["r.url", "externalApplyUrl"])],
       ["app/jobs/[id]/page.tsx", new Set(["job.url", "externalApplyUrl"])],
-      ["app/p/[slug]/page.tsx", new Set(["profile.linkedinUrl", "profile.githubUrl"])],
+      // O corpo do perfil, comum a `/p/[slug]` e ao diretório de recrutadores (#465).
+      ["app/p/[slug]/profile-view.tsx", new Set(["profile.linkedinUrl", "profile.githubUrl"])],
       ["app/pipeline/page.tsx", new Set(["r.url"])],
       ["app/referrals/page.tsx", new Set(["externalUrl"])],
     ]);
@@ -1032,6 +1033,10 @@ describe("authorisation (AUTH-01)", () => {
     "app/recruiter/[candidateId]/page.tsx": {
       guard: 'requirePage("candidate:read", { kind: "candidate", candidateId })',
     },
+    // Diretório de perfis (#465, ADR-013): só recrutador, antes de qualquer
+    // leitura; as visibilidades são constante do servidor, não parâmetro.
+    "app/recruiter/directory/page.tsx": { guard: 'requirePage("candidate:discover")' },
+    "app/recruiter/directory/[id]/page.tsx": { guard: 'requirePage("candidate:discover")' },
     "app/referrals/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
     "app/searches/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
     "app/searches/tracks/[id]/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
