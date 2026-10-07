@@ -113,6 +113,23 @@ import { checkCallbackState, flowKey, openFlow, sealFlow } from "./infra/flow-co
 import { configuredOidcProvider } from "./infra/oidc/providers.ts";
 import { MAX_ATTEMPTS, recentFailures } from "./infra/password-login.ts";
 export { MAX_CHANGE_ATTEMPTS } from "./infra/password-login.ts";
+import { randomBytes } from "node:crypto";
+import { candidateScope } from "./domain/policy.ts";
+import { drizzleRecruiterAccess } from "./infra/drizzle-recruiter-access.ts";
+import {
+  candidateAccessView,
+  cancelInvite,
+  changeEndDate,
+  dismissInvite,
+  expireRecruiterAccess,
+  grantAccess,
+  resendInvite,
+  revokeAccess,
+  type CandidateAccessView,
+  type GrantResult,
+  type RecruiterAccessDeps,
+  type SimpleResult,
+} from "./app/recruiter-access.ts";
 
 const deps: AuthDeps = {
   sessions: drizzleSessions,
@@ -223,6 +240,118 @@ export function linkRecruiterToCandidate(recruiterUserId: number, candidateId: n
  */
 export function revokeRecruiterGrant(grantId: number, by: number) {
   return drizzleUserDirectory.revokeGrant(grantId, by);
+}
+
+/* -------------------------- Acesso de recrutador --------------------------- */
+
+export { HISTORY_PAGE_SIZE, historyPageOf } from "./app/recruiter-access.ts";
+export type { CandidateAccessView, GrantResult, SimpleResult as AccessResultSimple } from "./app/recruiter-access.ts";
+export type { AdminCandidateAccess, GrantRow, HistoryRow, InviteRow } from "./ports-recruiter-access.ts";
+
+function accessDeps(origin: string | null = null): RecruiterAccessDeps {
+  return {
+    store: drizzleRecruiterAccess,
+    mailer: () => configuredMailer(),
+    audit: drizzleAuthRepository,
+    now: () => clock().now(),
+    origin,
+    newToken: () => {
+      const token = randomBytes(32).toString("base64url");
+      return { token, hash: hashToken(token) };
+    },
+  };
+}
+
+/**
+ * O candidato cujo acesso esta sessão administra — o DELA, e só fora de
+ * empréstimo (G24, G40). Segunda barreira além do `guard` da action, como
+ * `assertOwnSession`: estas funções recebem a sessão e podem ser chamadas de
+ * outro lugar amanhã.
+ */
+function ownAccessScope(session: Session): number {
+  const candidateId = candidateScope(session);
+  authorize(session, "access:manage", candidateId === null ? { kind: "global" } : { kind: "candidate", candidateId });
+  return candidateId as number;
+}
+
+/** Concede ou convida pelo e-mail (US-001, US-002). `origin` monta os links (G17). */
+export function grantRecruiterAccess(
+  session: Session,
+  input: { email: string; endDate: string; tz: string },
+  origin: string | null,
+): Promise<GrantResult> {
+  const candidateId = ownAccessScope(session);
+  return grantAccess({ candidateId, actorUserId: session.userId, ...input }, accessDeps(origin));
+}
+
+/** O candidato revoga (US-008). Id de concessão de outro candidato é `not_found`. */
+export function revokeRecruiterAccess(session: Session, grantId: number): Promise<SimpleResult> {
+  const candidateId = ownAccessScope(session);
+  return revokeAccess({ grantId, candidateId, actor: "candidate", actorUserId: session.userId }, accessDeps());
+}
+
+/** Põe, move ou tira a data de fim de uma concessão (US-006.AC-3). */
+export function setRecruiterGrantEndDate(
+  session: Session,
+  input: { grantId: number; endDate: string; tz: string },
+  origin: string | null,
+): Promise<SimpleResult> {
+  const candidateId = ownAccessScope(session);
+  return changeEndDate({ candidateId, actorUserId: session.userId, ...input }, accessDeps(origin));
+}
+
+export function resendRecruiterInvite(session: Session, inviteId: number, origin: string | null): Promise<SimpleResult> {
+  const candidateId = ownAccessScope(session);
+  return resendInvite({ inviteId, candidateId, actorUserId: session.userId }, accessDeps(origin));
+}
+
+export function cancelRecruiterInvite(session: Session, inviteId: number): Promise<SimpleResult> {
+  const candidateId = ownAccessScope(session);
+  return cancelInvite({ inviteId, candidateId, actor: "candidate", actorUserId: session.userId }, accessDeps());
+}
+
+export function dismissRecruiterInvite(session: Session, inviteId: number): Promise<SimpleResult> {
+  const candidateId = ownAccessScope(session);
+  return dismissInvite({ inviteId, candidateId }, accessDeps());
+}
+
+/**
+ * O admin revoga (ADR-008, US-023): o recrutador é avisado de que a
+ * administração encerrou, e o histórico do candidato leva o nome do admin.
+ * Não conta no limite do candidato. Conceder, o admin nunca concede.
+ */
+export function adminRevokeRecruiterGrant(session: Session | null, grantId: number): Promise<SimpleResult> {
+  authorize(session, "user:manage");
+  const admin = session as Session;
+  return revokeAccess({ grantId, candidateId: null, actor: "admin", actorUserId: admin.userId }, accessDeps());
+}
+
+/** O admin cancela um convite pendente, em nome próprio (US-023.AC-3). */
+export function adminCancelRecruiterInvite(session: Session | null, inviteId: number): Promise<SimpleResult> {
+  authorize(session, "user:manage");
+  const admin = session as Session;
+  return cancelInvite({ inviteId, candidateId: null, actor: "admin", actorUserId: admin.userId }, accessDeps());
+}
+
+/**
+ * A seção de acesso de `/account`: concessões, convites e histórico do
+ * candidato da sessão. Sessão emprestada lê (US-012.EC-5); escrever, não.
+ */
+export function recruiterAccessView(session: Session, historyPage: number): Promise<CandidateAccessView> {
+  const candidateId = candidateScope(session);
+  authorize(session, "candidate:read", candidateId === null ? { kind: "global" } : { kind: "candidate", candidateId });
+  return candidateAccessView({ candidateId: candidateId as number, historyPage }, accessDeps());
+}
+
+/** Concessões ativas e convites pendentes por candidato, para `/admin/users` (US-023.AC-1). */
+export function adminRecruiterAccess(session: Session | null, candidateIds: readonly number[]) {
+  authorize(session, "user:manage");
+  return drizzleRecruiterAccess.adminOverview(candidateIds, clock().iso());
+}
+
+/** O trabalho horário da varredura: expira concessões e convites vencidos (ADR-016). */
+export function runRecruiterAccessMaintenance(): Promise<{ expired: number; invitesExpired: number }> {
+  return expireRecruiterAccess(accessDeps());
 }
 
 /**

@@ -375,6 +375,31 @@
       ]
     },
     {
+      "id": "recruiter-access",
+      "modules": [
+        "tests/e2e/ui/recruiter-access.mjs",
+        "tests/e2e/recruiter-access-fixtures.mjs"
+      ],
+      "patterns": [
+        "app/account/**",
+        "app/admin/actions.ts",
+        "app/admin/users/**",
+        "app/admin/user-modal-styles.ts",
+        "src/contexts/auth/app/recruiter-access.ts",
+        "src/contexts/auth/app/recruiter-emails.ts",
+        "src/contexts/auth/domain/recruiter-access.ts",
+        "src/contexts/auth/infra/drizzle-recruiter-access.ts",
+        "src/contexts/auth/ports-recruiter-access.ts"
+      ],
+      "routes": [
+        "/account",
+        "/admin/users",
+        "/login",
+        "/recruiter",
+        "/recruiter/[id]"
+      ]
+    },
+    {
       "id": "jobs-new",
       "modules": [
         "tests/e2e/ui/jobs-new.mjs"

@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: "Candidato concede, convida, limita e revoga; histórico, admin e varredura"
 type: backend
 complexity: high
@@ -38,13 +38,13 @@ consentimento nascer e morrer pela mão do candidato (G25, LGPD art. 18 VII).
 </requirements>
 
 ## Subtasks
-- [ ] 2.1 Serviço e loja de concessões e convites com trava, limites e histórico.
-- [ ] 2.2 Server Actions do candidato e da área de acesso em `/account` (formulário, lista, convites, histórico paginado).
-- [ ] 2.3 Data de fim com fuso do navegador (campo oculto, rótulo do fuso, recaída em UTC).
-- [ ] 2.4 Envio dos e-mails pós-commit e registro de falha.
-- [ ] 2.5 Revogação e cancelamento pelo admin em `/admin/users`, com nome do admin no histórico.
-- [ ] 2.6 Job horário de expiração e expurgo semanal.
-- [ ] 2.7 Inventário, fixtures E2E (candidata, recrutador com conta) e cenários por papel.
+- [x] 2.1 Serviço e loja de concessões e convites com trava, limites e histórico.
+- [x] 2.2 Server Actions do candidato e da área de acesso em `/account` (formulário, lista, convites, histórico paginado).
+- [x] 2.3 Data de fim com fuso do navegador (campo oculto, rótulo do fuso, recaída em UTC).
+- [x] 2.4 Envio dos e-mails pós-commit e registro de falha.
+- [x] 2.5 Revogação e cancelamento pelo admin em `/admin/users`, com nome do admin no histórico.
+- [x] 2.6 Job horário de expiração e expurgo semanal.
+- [x] 2.7 Inventário, fixtures E2E (candidata, recrutador com conta) e cenários por papel.
 
 ## Implementation Details
 
@@ -84,19 +84,19 @@ admin) e "Data Models" da TechSpec. A seção mora em
 
 Cases assigned from `_tests.md`, the test contract — read each ID's full definition there before writing tests.
 
-- [ ] IT-016, IT-017, IT-018, IT-019, IT-020, IT-021, IT-022, IT-023, IT-024, IT-025, IT-026, IT-027 — concessão
-- [ ] IT-028, IT-029, IT-030, IT-031, IT-032 — convite
-- [ ] IT-033, IT-034, IT-035, IT-036, IT-037 — limites
-- [ ] IT-038, IT-039, IT-040, IT-041, IT-042, IT-043 — revogação
-- [ ] IT-044, IT-045, IT-046, IT-047, IT-048, IT-049 — data de fim
-- [ ] IT-050, IT-051, IT-052, IT-053, IT-054, IT-055 — reenvio, cancelamento e dispensa
-- [ ] IT-056, IT-057, IT-058, IT-059, IT-060 — nova concessão, histórico e listas
-- [ ] IT-061, IT-062, IT-063, IT-064, IT-065 — varredura e expurgo
-- [ ] IT-066, IT-067, IT-068, IT-069, IT-070 — admin
-- [ ] IT-071, IT-072, IT-073, IT-074, IT-075, IT-076, IT-077, IT-078 — sessão emprestada, id forjado, CLI e inventário
-- [ ] E2E-001, E2E-002, E2E-003, E2E-004, E2E-005, E2E-006 — jornada do candidato
-- [ ] E2E-007, E2E-008 — admin e sessão emprestada
-- [ ] E2E-009 — 375 px e axe
+- [x] IT-016, IT-017, IT-018, IT-019, IT-020, IT-021, IT-022, IT-023, IT-024, IT-025, IT-026, IT-027 — concessão
+- [x] IT-028, IT-029, IT-030, IT-031, IT-032 — convite
+- [x] IT-033, IT-034, IT-035, IT-036, IT-037 — limites
+- [x] IT-038, IT-039, IT-040, IT-041, IT-042, IT-043 — revogação
+- [x] IT-044, IT-045, IT-046, IT-047, IT-048, IT-049 — data de fim
+- [x] IT-050, IT-051, IT-052, IT-053, IT-054, IT-055 — reenvio, cancelamento e dispensa
+- [x] IT-056, IT-057, IT-058, IT-059, IT-060 — nova concessão, histórico e listas
+- [x] IT-061, IT-062, IT-063, IT-064, IT-065 — varredura e expurgo
+- [x] IT-066, IT-067, IT-068, IT-069, IT-070 — admin
+- [x] IT-071, IT-072, IT-073, IT-074, IT-075, IT-076, IT-077, IT-078 — sessão emprestada, id forjado, CLI e inventário
+- [x] E2E-001, E2E-002, E2E-003, E2E-004, E2E-005, E2E-006 — jornada do candidato
+- [x] E2E-007, E2E-008 — admin e sessão emprestada
+- [x] E2E-009 — 375 px e axe
 
 ## Success Criteria
 - Every assigned test case implemented and passing

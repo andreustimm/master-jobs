@@ -47,6 +47,7 @@ import * as publicProfile from "./public-profile.mjs";
 import * as pwa from "./pwa.mjs";
 import * as rateLimit from "./rate-limit.mjs";
 import * as recheck from "./recheck.mjs";
+import * as recruiterAccess from "./recruiter-access.mjs";
 import * as roles from "./roles.mjs";
 import * as searchRelevance from "./search-relevance.mjs";
 import * as searchSynonyms from "./search-synonyms.mjs";
@@ -95,6 +96,9 @@ export const AREAS = [
   // (`account-methods-fixtures.mjs`), devolvidas ao estado inicial a cada
   // execução; o provedor é o emissor falso.
   { id: "account-methods", run: accountMethods.run, requires: [] },
+  // Acesso de recrutador (#465, task_02): contas próprias de `setup.mjs`
+  // (`recruiter-access-fixtures.mjs`), sem nada compartilhado a cada execução.
+  { id: "recruiter-access", run: recruiterAccess.run, requires: [] },
   { id: "jobs-new", run: jobsNew.run, requires: [] },
   { id: "public-profile", run: publicProfile.run, requires: [] },
   // Compara o histórico de novidades de quatro sessões: o dono (design),

@@ -12,7 +12,7 @@
  */
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { closeDb, getDb } from "../../src/core/db/client.ts";
-import { application, authEvent, authIdentity, authLoginToken, authUser, candidate, candidateDocument, candidateSkill, fxRate, job, jobScore, savedTerm, scoreTask, skill, targetAccount, termAttribution } from "../../src/core/db/schema.ts";
+import { application, authEvent, authIdentity, authLoginToken, authUser, candidate, candidateDocument, candidateSkill, fxRate, job, jobScore, recruiterAccessEvent, recruiterGrant, recruiterInvite, savedTerm, scoreTask, skill, targetAccount, termAttribution } from "../../src/core/db/schema.ts";
 import { linkRecruiterToCandidate } from "../../src/contexts/auth/index.ts";
 import { seedOwner } from "../../src/contexts/auth/app/seed.ts";
 import { hashToken } from "../../src/contexts/auth/infra/drizzle-store.ts";
@@ -48,6 +48,7 @@ import { GAP_GUEST_FIXTURE } from "./gap-fixture.mjs";
 import { PIPELINE_FILTER_FIXTURE } from "./pipeline-filters-fixture.mjs";
 import { SOCIAL_FIXTURES } from "./social-fixtures.mjs";
 import { METHODS_FIXTURES } from "./account-methods-fixtures.mjs";
+import { ACCESS_FIXTURES } from "./recruiter-access-fixtures.mjs";
 import { PUBLIC_CV_FIXTURE, PUBLIC_FACTS_OFF_FIXTURE, factColumns } from "./public-cv-format.mjs";
 import { isolationRefusal } from "./database-guard.mjs";
 
@@ -113,6 +114,10 @@ export const E2E_ROLES = {
   socialRecruiter: { email: SOCIAL_FIXTURES.recruiter.email, roles: ["recruiter"] },
   socialConflict: { email: SOCIAL_FIXTURES.conflict.email, roles: ["candidate"] },
   socialInvited: { email: SOCIAL_FIXTURES.invited.email, roles: ["candidate"], noPassword: true },
+  // Acesso de recrutador (#465, task_02): ver `recruiter-access-fixtures.mjs`.
+  accessCandidate: { email: ACCESS_FIXTURES.candidate.email, roles: ACCESS_FIXTURES.candidate.roles },
+  accessRecruiter: { email: ACCESS_FIXTURES.recruiter.email, roles: ACCESS_FIXTURES.recruiter.roles },
+  accessFresh: { email: ACCESS_FIXTURES.fresh.email, roles: ACCESS_FIXTURES.fresh.roles },
   // Formas de entrar (#464, task_04): ver `account-methods-fixtures.mjs`.
   ...Object.fromEntries(
     Object.entries(METHODS_FIXTURES).map(([key, fixture]) => [
@@ -677,6 +682,29 @@ try {
       .where(eq(authUser.id, user.id));
     if (!fixture.noPassword) await setPassword(fixture.email, PASSWORD);
   }
+
+  // Acesso de recrutador (#465, task_02). A jornada concede, convida e revoga:
+  // a cada execução os candidatos da área voltam a não ter nada compartilhado
+  // — nem histórico, que é também o que o limite diário conta —, com os nomes
+  // do fixture e o recrutador com e-mail provado, que é quem recebe concessão
+  // direta em vez de convite.
+  const accessCandidates = [];
+  for (const fixture of [ACCESS_FIXTURES.candidate, ACCESS_FIXTURES.fresh]) {
+    const [user] = await getDb()
+      .select({ candidateId: authUser.candidateId })
+      .from(authUser)
+      .where(eq(authUser.email, fixture.email));
+    if (user?.candidateId == null) throw new Error(`candidato do acesso de recrutador não criado: ${fixture.email}`);
+    await getDb().update(candidate).set({ name: fixture.name }).where(eq(candidate.id, user.candidateId));
+    accessCandidates.push(user.candidateId);
+  }
+  await getDb().delete(recruiterAccessEvent).where(inArray(recruiterAccessEvent.candidateId, accessCandidates));
+  await getDb().delete(recruiterGrant).where(inArray(recruiterGrant.candidateId, accessCandidates));
+  await getDb().delete(recruiterInvite).where(inArray(recruiterInvite.candidateId, accessCandidates));
+  await getDb()
+    .update(authUser)
+    .set({ fullName: ACCESS_FIXTURES.recruiter.fullName, emailVerifiedAt: "2026-01-01T00:00:00.000Z" })
+    .where(eq(authUser.email, ACCESS_FIXTURES.recruiter.email));
 
   // #325: candidato sem conta, público e com o CV publicado, cujo texto veio
   // de PDF. `saveDocument` não regrava conteúdo igual, então rodar de novo

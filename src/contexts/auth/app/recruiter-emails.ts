@@ -16,6 +16,7 @@
  * como foi digitada e nada a interpreta.
  */
 import { translator, type LocaleId } from "../../../core/i18n/index.ts";
+import type { AccessEndCause } from "../ports-recruiter-access.ts";
 
 export type RecruiterEmail = { subject: string; text: string };
 
@@ -124,7 +125,7 @@ export function endDateChangedEmail(input: {
 }
 
 /** Por que o acesso acabou. O candidato não dá motivo, e o e-mail não inventa um (US-008.AC-3). */
-export type AccessEndCause = "candidate" | "admin" | "expired";
+export type { AccessEndCause };
 
 /** Acesso encerrado (US-008.AC-3, US-010.AC-2, US-017): só a causa, sem link — a página já responde 404. */
 export function accessEndedEmail(input: {
