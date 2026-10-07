@@ -1,6 +1,6 @@
 # BUG-20261006-pipeline-swapped-score-fields-stale: no Funil, a faixa de score invertida é trocada com aviso, mas os campos continuam invertidos
 
-- **Status:** open
+- **Status:** verified
 - **Impact (user-side):** Trust-Damage
 - **Severity:** Medium · **Priority:** P2
 - **Persona Affected:** Andreus em triagem noturna
@@ -45,7 +45,28 @@ reenvia o par invertido.
 ## Fix
 
 <!-- filled when status moves to fixed -->
+- **Root cause:** `useAppliedValue` (`app/auto-submit.tsx`) só reagia quando o
+  valor aplicado mudava. A faixa invertida que o servidor troca volta igual à
+  já aplicada (75–80 aplicado, 80/75 enviado, 75–80 de volta), então o campo
+  ficava no par invertido e o Aplicar seguinte o reenviava.
+- **Fix commit:** `961558d` (PR [#496](https://github.com/andreustimm/master-jobs/pull/496)) —
+  o hook também observa a URL: com o mesmo valor aplicado e URL nova, o campo
+  que enviou outra coisa adota o valor do servidor; texto não enviado continua
+  da pessoa. O hook é compartilhado com `/jobs`.
+- **Regression test:** `tests/e2e/ui/pipeline-filters.mjs` (faixa invertida
+  igual à aplicada sem refresh; reprovava antes da correção, segundo o commit).
 
 ## Verification
 
 <!-- filled when status moves to verified -->
+- **Retested:** 2026-10-07, Andreus em triagem noturna, J-preserve-application-decision,
+  1280 px, pt-BR, build standalone de `fix/funil-seletores` em ambiente isolado ·
+  **Report:** docs/qa/reports/2026-10-07-qa-492-funil-seletores.md
+- **Result:** com `stage=applied&channel=direct&channel=referral&fit=75&fitMax=80`
+  montado pela tela, digitar 80/75 e Aplicar → aviso "O mínimo estava acima do
+  máximo; os dois foram trocados.", campos e controle deslizante em 75/80, lista
+  só com a vaga 9; o Aplicar seguinte grava `fit=75&fitMax=80` sem aviso. O
+  mesmo partindo de `/pipeline?fit=75&fitMax=80` aberto direto. Canária em
+  `/jobs`: score 60–80 com 80/60 e salário 6000–12000 com 12000/6000 corrigem
+  os campos e estabilizam no Aplicar seguinte. Evidência:
+  `docs/qa/evidence/2026-10-07-qa-492-funil-seletores/04-faixa-invertida-campos-75-80.png`.
