@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: "Login social: OIDC, rotas, vínculo automático e provedor falso"
 type: backend
 complexity: critical
@@ -35,15 +35,15 @@ Também traz a emenda da regra 1 do LinkedIn, que precisa sair junto.
 </requirements>
 
 ## Subtasks
-- [ ] 2.1 Dependência `oauth4webapi`, porta e adapters Google/LinkedIn.
-- [ ] 2.2 Decisão pura de identidade e serviço de login/vínculo automático.
-- [ ] 2.3 Rotas de início e callback com cookie do fluxo e `next` seguro.
-- [ ] 2.4 Botões no `/login`, mensagens de erro do dicionário e estado indisponível.
-- [ ] 2.5 Pendência social gravada para o cadastro.
-- [ ] 2.6 Eventos de auditoria e janela de tentativas compartilhada.
-- [ ] 2.7 Provedor OIDC falso e cenários E2E por papel.
-- [ ] 2.8 Registros de rota pública e de transporte de saída.
-- [ ] 2.9 Emenda da regra 1, G01 e política do LinkedIn.
+- [x] 2.1 Dependência `oauth4webapi`, porta e adapters Google/LinkedIn.
+- [x] 2.2 Decisão pura de identidade e serviço de login/vínculo automático.
+- [x] 2.3 Rotas de início e callback com cookie do fluxo e `next` seguro.
+- [x] 2.4 Botões no `/login`, mensagens de erro do dicionário e estado indisponível.
+- [x] 2.5 Pendência social gravada para o cadastro.
+- [x] 2.6 Eventos de auditoria e janela de tentativas compartilhada.
+- [x] 2.7 Provedor OIDC falso e cenários E2E por papel.
+- [x] 2.8 Registros de rota pública e de transporte de saída.
+- [x] 2.9 Emenda da regra 1, G01 e política do LinkedIn.
 
 ## Implementation Details
 
@@ -76,14 +76,14 @@ Modelo de callback: `app/login/callback/route.ts`; sessão: `src/contexts/auth/a
 
 Cases assigned from `_tests.md`, the test contract — read each ID's full definition there before writing tests.
 
-- [ ] UT-020, UT-021, UT-022, UT-023, UT-024, UT-025, UT-026, UT-027, UT-028, UT-029, UT-036, UT-037, UT-038 — decisão de identidade
-- [ ] UT-040, UT-041, UT-042, UT-043, UT-044, UT-045, UT-046, UT-047 — adapters OIDC
-- [ ] IT-001, IT-002, IT-003, IT-004, IT-005, IT-006, IT-007, IT-008, IT-009, IT-010, IT-011, IT-012, IT-013 — login e vínculo
-- [ ] IT-055 — admin entra por login social
-- [ ] IT-065, IT-104, IT-105 — rotas e gate de emissor
-- [ ] IT-100 — adapter contra o emissor falso
-- [ ] E2E-001, E2E-002, E2E-003, E2E-004, E2E-005, E2E-006, E2E-007, E2E-008, E2E-009, E2E-010 — jornadas de login social
-- [ ] E2E-022, E2E-023 — disponibilidade dos botões
+- [x] UT-020, UT-021, UT-022, UT-023, UT-024, UT-025, UT-026, UT-027, UT-028, UT-029, UT-036, UT-037, UT-038 — decisão de identidade
+- [x] UT-040, UT-041, UT-042, UT-043, UT-044, UT-045, UT-046, UT-047 — adapters OIDC
+- [x] IT-001, IT-002, IT-003, IT-004, IT-005, IT-006, IT-007, IT-008, IT-009, IT-010, IT-011, IT-012, IT-013 — login e vínculo
+- [x] IT-055 — admin entra por login social
+- [x] IT-065, IT-104, IT-105 — rotas e gate de emissor
+- [x] IT-100 — adapter contra o emissor falso
+- [x] E2E-001, E2E-002, E2E-003, E2E-004, E2E-005, E2E-006, E2E-007, E2E-008, E2E-009, E2E-010 — jornadas de login social
+- [x] E2E-022, E2E-023 — disponibilidade dos botões
 
 ## Success Criteria
 - Every assigned test case implemented and passing

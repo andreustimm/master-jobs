@@ -23,6 +23,10 @@ const SESSION_COOKIE = "jho_session";
 // `/offline.html` é gerado sem layout ou sessão e instalado sem credenciais.
 // Exigir sessão aqui transformaria a entrada segura num redirect autenticado.
 const PUBLIC = [
+  // Inclui `/login/oauth/<provedor>` e `/login/oauth/<provedor>/callback`, o
+  // início e o retorno do login social (#464): a autorização ali é o fluxo
+  // OIDC (cookie cifrado, `state`, PKCE), e o `intent=link` resolve a sessão
+  // na própria rota.
   "/login",
   "/p",
   "/offline.html",
@@ -106,6 +110,12 @@ export function proxy(request: NextRequest) {
   const url = request.nextUrl.clone();
   url.pathname = "/login";
   url.search = "";
+  // O endereço pedido viaja como `next`, para o login social devolver a pessoa
+  // a ele (US-001.EC-8). Só página navegada: API não tem para onde voltar. Quem
+  // segue o `next` o confere de novo com `safeNext` — aqui ele é só recado.
+  if (request.method === "GET" && !pathname.startsWith("/api/") && pathname !== "/") {
+    url.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
+  }
   return NextResponse.redirect(url);
 }
 

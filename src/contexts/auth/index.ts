@@ -70,6 +70,30 @@ import { changeOwnPassword, type ChangePasswordResult } from "./infra/password-l
 import { AuthorizationError } from "./domain/policy.ts";
 import { SESSION_DAYS } from "./app/session.ts";
 import { clock } from "../../core/clock.ts";
+import type { LocaleId } from "../../core/i18n/index.ts";
+import { beginSocial, finishSocial, type SocialConfig, type SocialDeps } from "./app/oidc-login.ts";
+import {
+  availableProviders,
+  parseSessionSecret,
+  parseSignupIpSecret,
+  type OidcProviderId,
+} from "./domain/oidc-config.ts";
+import type { AuthEnvironment } from "./domain/open-mode.ts";
+import { resolvePublicOrigin, type RequestOrigin } from "./domain/public-origin.ts";
+import {
+  accountContact,
+  consumeFlowState,
+  findLinkedUser,
+  findUserByEmail,
+  identityOfUser,
+  linkIdentity,
+  touchIdentity,
+  userHasProvider,
+} from "./infra/drizzle-identities.ts";
+import { createSocialSignup, signupIpHmac } from "./infra/drizzle-signups.ts";
+import { checkCallbackState, flowKey, openFlow, sealFlow } from "./infra/flow-cookie.ts";
+import { configuredOidcProvider } from "./infra/oidc/providers.ts";
+import { MAX_ATTEMPTS, recentFailures } from "./infra/password-login.ts";
 export { MAX_CHANGE_ATTEMPTS } from "./infra/password-login.ts";
 
 const deps: AuthDeps = {
@@ -326,6 +350,87 @@ export function beginImpersonation(actor: Session | null, targetUserId: number) 
 
 export function endImpersonation(borrowed: Session | null, token: string) {
   return stopImpersonation(borrowed, token, directoryDeps);
+}
+
+/* ------------------------------ Login social ------------------------------ */
+
+export { FLOW_COOKIE, FLOW_TTL_MS } from "./infra/flow-cookie.ts";
+export { SIGNUP_COOKIE, SOCIAL_SIGNUP_MINUTES } from "./infra/drizzle-signups.ts";
+export { isOidcProvider, type OidcProviderId } from "./domain/oidc-config.ts";
+export { landingFor, landingForSession, safeNext } from "./domain/landing.ts";
+export type { SocialError } from "./app/oidc-login.ts";
+
+/**
+ * O que o login social precisa do ambiente, lido a cada requisição — o mesmo
+ * motivo de `configuredMailer`: o teste troca a variável entre casos.
+ */
+function socialConfig(env: AuthEnvironment, request: RequestOrigin): SocialConfig {
+  const secret = parseSessionSecret(env);
+  const key = secret.status === "configured" ? flowKey(secret.secret) : null;
+  const now = () => new Date(clock().now());
+  return {
+    available: availableProviders(env),
+    origin: resolvePublicOrigin(env, request),
+    provider: (id) => configuredOidcProvider(id, env, { now }),
+    sealFlow: key === null ? null : (flow) => sealFlow(flow, key),
+    readFlow: (sealed, callbackState) => {
+      if (key === null) return null;
+      const check = checkCallbackState(openFlow(sealed, key, now()), callbackState);
+      return check.ok ? check.flow : null;
+    },
+    signupIpSecret: parseSignupIpSecret(env),
+  };
+}
+
+const socialDeps: SocialDeps = {
+  sessions: drizzleSessions,
+  repository: drizzleAuthRepository,
+  identities: {
+    findLinkedUser,
+    findUserByEmail,
+    userHasProvider,
+    linkIdentity,
+    touchIdentity,
+    identityOfUser,
+    accountContact,
+    consumeFlowState,
+  },
+  signups: { createSocialSignup, ipHmac: signupIpHmac },
+  attempts: { recentFailures, max: MAX_ATTEMPTS },
+  mailer: () => configuredMailer(),
+  now: () => new Date(clock().now()),
+};
+
+/**
+ * Os provedores que a tela de login mostra, nesta ordem (ADR-005). Vazio fora
+ * de produção e local, sem segredo do fluxo ou sem credencial.
+ */
+export function socialProviders(env: AuthEnvironment = process.env): OidcProviderId[] {
+  return availableProviders(env);
+}
+
+/** `GET /login/oauth/[provider]`. Ver `app/oidc-login.ts`. */
+export function startSocialSignIn(
+  input: { provider: string; intent: string | null; next: string | null; session: Session | null; request: RequestOrigin },
+  env: AuthEnvironment = process.env,
+) {
+  return beginSocial(input, socialConfig(env, input.request), socialDeps);
+}
+
+/** `GET /login/oauth/[provider]/callback`. Ver `app/oidc-login.ts`. */
+export function finishSocialSignIn(
+  input: {
+    provider: string;
+    callbackUrl: URL;
+    sealedFlow: string | null;
+    session: Session | null;
+    clientIp: string;
+    locale: LocaleId;
+    request: RequestOrigin;
+  },
+  env: AuthEnvironment = process.env,
+) {
+  return finishSocial(input, socialConfig(env, input.request), socialDeps);
 }
 
 /**

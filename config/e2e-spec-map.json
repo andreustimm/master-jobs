@@ -295,6 +295,36 @@
       ]
     },
     {
+      "id": "social-sign-in",
+      "modules": [
+        "tests/e2e/ui/social-sign-in.mjs",
+        "tests/e2e/fake-oidc.mjs",
+        "tests/e2e/social-fixtures.mjs"
+      ],
+      "patterns": [
+        "app/login/oauth/**",
+        "app/login/redirect303.ts",
+        "src/contexts/auth/app/oidc-login.ts",
+        "src/contexts/auth/domain/identity-resolution.ts",
+        "src/contexts/auth/domain/landing.ts",
+        "src/contexts/auth/domain/oidc-config.ts",
+        "src/contexts/auth/infra/drizzle-identities.ts",
+        "src/contexts/auth/infra/drizzle-signups.ts",
+        "src/contexts/auth/infra/flow-cookie.ts",
+        "src/contexts/auth/infra/oidc/**",
+        "public/icons/google.svg",
+        "public/icons/linkedin.svg"
+      ],
+      "routes": [
+        "/",
+        "/jobs",
+        "/jobs/[id]",
+        "/login",
+        "/login/oauth/[provider]",
+        "/login/oauth/[provider]/callback"
+      ]
+    },
+    {
       "id": "jobs-new",
       "modules": [
         "tests/e2e/ui/jobs-new.mjs"

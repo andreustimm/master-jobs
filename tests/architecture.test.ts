@@ -547,6 +547,16 @@ describe("architecture inventory", () => {
       ["app/pipeline/page.tsx", new Set(["r.url"])],
       ["app/referrals/page.tsx", new Set(["externalUrl"])],
     ]);
+    /**
+     * Âncoras que PRECISAM de navegação de página inteira na mesma aba, cada
+     * uma com o porquê. O início do login social (#464, ADR-012) responde 303
+     * para o Google/LinkedIn e grava o cookie do fluxo: pelo roteador do App
+     * Router viraria RSC fetch — e o prefetch começaria fluxos que ninguém
+     * pediu, cada um gravando cookie e consultando o provedor.
+     */
+    const fullPageAnchors = new Map<string, Set<string>>([
+      ["app/login/page.tsx", new Set(["startHref(id)"])],
+    ]);
     const offenders: string[] = [];
 
     for (const file of APP) {
@@ -559,6 +569,7 @@ describe("architecture inventory", () => {
         const literalHref = /\bhref="([^"]*)"/.exec(compact)?.[1];
         if (literalHref?.startsWith("#")) continue;
         const href = /\bhref=\{([^}]+)\}/.exec(compact)?.[1]?.trim();
+        if (href && fullPageAnchors.get(file)?.has(href)) continue;
         const nativeNavigation = /\bdownload(?:\s|=)/.test(compact) || /\btarget="_blank"/.test(compact);
         if (!href || !allowedRawAnchors.get(file)?.has(href) || !nativeNavigation) {
           offenders.push(`${file}:${compact}`);
@@ -940,7 +951,7 @@ describe("authorisation (AUTH-01)", () => {
     "app/transition-test/page.tsx": { guard: 'requirePage("job:read")' },
     "app/login/page.tsx": {
       exception:
-        "pré-sessão: formulário de entrada; lê só se EXISTE alguma conta, para mostrar os comandos de primeiro acesso",
+        "pré-sessão: formulário de entrada; lê só se EXISTE alguma conta (comandos de primeiro acesso) e a própria sessão, para mandar quem já entrou à sua tela",
     },
     "app/login/forgot/page.tsx": { exception: "pré-sessão: formulário de recuperação; não lê dado nenhum" },
     "app/login/reset/page.tsx": {
@@ -962,6 +973,20 @@ describe("authorisation (AUTH-01)", () => {
     "app/login/callback/route.ts": {
       methods: ["GET"],
       why: "pré-sessão: o link mágico de uso único é a autorização e cria a sessão",
+    },
+    // Login social (#464, ADR-012): o início é pré-sessão por natureza; o
+    // `intent=link` resolve e autoriza a sessão dentro da própria rota
+    // (`account:write`, que nega sessão emprestada) antes de sair para o
+    // provedor.
+    "app/login/oauth/[provider]/route.ts": {
+      methods: ["GET"],
+      why: "pré-sessão: só redireciona ao provedor com o cookie cifrado do fluxo; `intent=link` exige `account:write` na rota",
+    },
+    // O retorno: a autorização é o fluxo OIDC — cookie cifrado e autenticado,
+    // `state` conferido e queimado no servidor, PKCE e ID token validado.
+    "app/login/oauth/[provider]/callback/route.ts": {
+      methods: ["GET"],
+      why: "pré-sessão: cookie do fluxo + `state` de uso único + PKCE + ID token validado criam a sessão",
     },
     // O cron não tem sessão para validar: a Vercel o chama sem cookie. Ele
     // se autentica com `CRON_SECRET` em `authorization`, comparado em tempo

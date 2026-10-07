@@ -35,6 +35,50 @@ export type OidcFlowState = {
   createdAt: string;
 };
 
+/**
+ * O que sai de um provedor OIDC depois de validado o ID token (ADR-008).
+ *
+ * Só isto, e de propósito (ADR-003, regra 1): o par `(provider, subject)` é a
+ * identidade; o e-mail e a afirmação de verificação servem só para o vínculo
+ * automático (ADR-001). Nome, foto, título, URL de perfil e os tokens do
+ * provedor nunca saem do adapter — não há campo onde caberiam.
+ */
+export type VerifiedIdentity = {
+  provider: OidcProviderId;
+  subject: string;
+  /** Normalizado; `null` quando o provedor não mandou e-mail. */
+  email: string | null;
+  /** `true` só quando o provedor afirma, no token, que verificou o e-mail. */
+  emailVerified: boolean;
+};
+
+export type OidcStart = { url: string; flow: OidcFlowState };
+
+/**
+ * Por que o retorno do provedor não virou identidade.
+ *
+ * - `cancelled`: a pessoa recusou no consentimento (`access_denied`);
+ * - `provider_error`: o provedor respondeu erro ou não respondeu (descoberta,
+ *   token, JWKS) — "não conseguimos falar com o Google";
+ * - `invalid_response`: respondeu, mas o ID token não passou na validação
+ *   (assinatura, `iss`, `aud`, `exp`, `nonce`).
+ */
+export type OidcFailure = "cancelled" | "provider_error" | "invalid_response";
+
+export type OidcCompletion = { ok: true; identity: VerifiedIdentity } | { ok: false; reason: OidcFailure };
+
+/**
+ * Porta do login social (ADR-008): Google e LinkedIn diferem só em emissor,
+ * escopos e leitura das afirmações; o resto do contexto não sabe qual.
+ */
+export type OidcProvider = {
+  readonly id: OidcProviderId;
+  /** URL de autorização com PKCE S256, `state` e `nonce`, e o estado a guardar no cookie. */
+  start(input: { redirectUri: string; intent: OidcFlowState["intent"]; next: string | null }): Promise<OidcStart>;
+  /** Troca o código e valida o ID token. Erro de provedor é valor, nunca exceção. */
+  complete(input: { redirectUri: string; callbackUrl: URL; flow: OidcFlowState }): Promise<OidcCompletion>;
+};
+
 export type NewSession = {
   userId: number;
   expiresAt: string;
