@@ -1436,6 +1436,9 @@ function judgeGit(args, context) {
     const value = eq === -1 ? "" : entry.slice(eq + 1);
     if (GIT_EXEC_KEY.test(key)) worst = stronger(worst, ask(`git -c ${key} executa programa ou desliga os hooks`));
     if (key.startsWith("alias.") && value.trimStart().startsWith("!")) worst = stronger(worst, ask("alias do git que roda shell"));
+    // `remote.<r>.push`, `push.default=upstream`, `branch.<b>.merge`, `url.*.pushInsteadOf`:
+    // trocam o destino do push por fora do refspec que se lê (#476).
+    if (/^(?:push|remote|branch|url)\./.test(key)) worst = stronger(worst, ask(`git -c ${key} pode trocar o destino do push`));
   }
   const sub = args[k];
   const rest = args.slice(k + 1);
@@ -1912,7 +1915,7 @@ function judgePush(rest, verified = null) {
       }
     }
     // Sem `:destino`, `remote.<r>.push` na configuração pode trocar o destino.
-    if (colon === -1 && verified && !safe) worst = stronger(worst, ask("git push com configuração que pode trocar o destino"));
+    if (colon === -1 && verified && !safe) worst =stronger(worst, ask("git push com configuração que pode trocar o destino"));
     // Apagar ref remoto (`:x` ou `--delete x`): branch de trabalho `<tipo>/<slug>`
     // passa; tag (regra 22: toda tag SemVer tem Release) e nome sem `/` perguntam.
     if ((deleting || (colon === 0 && bare.length > 1)) && (target.startsWith("tags/") || !target.includes("/"))) {

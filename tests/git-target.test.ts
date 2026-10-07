@@ -203,6 +203,11 @@ describe("os quatro Critical da primeira versão: o git de verdade empurraria br
     expect(dryRun(wt, ["push", "--dry-run", "--porcelain"], { GIT_DIR: `${root}/.git` })).toContain("refs/heads/dev:refs/heads/dev");
     expect(dryRun(root, ["-c", "push.default=upstream", "-C", wtUp, "push", "--dry-run", "--porcelain"])).toContain("refs/heads/feat/up:refs/heads/dev");
     expect(dryRun(root, ["-c", "remote.origin.push=HEAD:main", "-C", wt, "push", "--dry-run", "--porcelain"])).toContain(":refs/heads/main");
+    // Juiz da #502: refspec sem `:` desviado por `-c`/`--config-env`.
+    expect(dryRun(wtUp, ["-c", "remote.origin.push=refs/heads/feat/up:refs/heads/dev", "push", "--dry-run", "--porcelain", "origin", "feat/up"])).toContain("refs/heads/feat/up:refs/heads/dev");
+    expect(dryRun(wt, ["-c", "remote.origin.push=refs/heads/feat/x:refs/heads/main", "push", "--dry-run", "--porcelain", "origin", "feat/x"])).toContain("refs/heads/feat/x:refs/heads/main");
+    expect(dryRun(wtUp, ["-c", "push.default=upstream", "push", "--dry-run", "--porcelain", "origin", "feat/up"])).toContain("refs/heads/feat/up:refs/heads/dev");
+    expect(dryRun(wtUp, ["--config-env=push.default=PD", "push", "--dry-run", "--porcelain", "origin", "feat/up"], { PD: "upstream" })).toContain("refs/heads/feat/up:refs/heads/dev");
   });
 });
 
@@ -268,7 +273,12 @@ describe("os três chamadores dão a mesma decisão", () => {
     // Critical 3: configuração na linha de comando.
     ["-c push.default=upstream com upstream origin/dev", () => `git -c push.default=upstream -C ${wtUp} push`, () => root, "ask"],
     ["-c remote.origin.push=HEAD:main", () => `git -c remote.origin.push=HEAD:main -C ${wt} push`, () => root, "ask"],
-    ["--config-env", () => `git --config-env=push.default=X -C ${wt} push`, () => root, "ask"],
+    // Juiz da #502 (C1): `-c`/`--config-env` que desvia o refspec sem `:`.
+    ["-c remote.origin.push leva feat/up para dev", () => "git -c remote.origin.push=refs/heads/feat/up:refs/heads/dev push origin feat/up", () => wtUp, "ask"],
+    ["-c remote.origin.push leva feat/x para main", () => "git -c remote.origin.push=refs/heads/feat/x:refs/heads/main push origin feat/x", () => wt, "ask"],
+    ["-c push.default=upstream com refspec", () => "git -c push.default=upstream push origin feat/up", () => wtUp, "ask"],
+    ["--config-env push.default com refspec", () => "PD=upstream git --config-env=push.default=PD push origin feat/up", () => wtUp, "ask"],
+    ["--config-env",() => `git --config-env=push.default=X -C ${wt} push`, () => root, "ask"],
     // Critical 4: diretório trocado por invólucro ou shell aninhado.
     ["env -C para a principal", () => `env -C ${root} git push`, () => wt, "ask"],
     ["env --chdir para a principal", () => `env --chdir=${root} git push`, () => wt, "ask"],

@@ -768,7 +768,9 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     `refs/tags/…`), `-C` com `..`, remoto legado em `remotes/`/`branches/`
     e `checkout`/`switch --ignore-other-worktrees` para branch protegida
     perguntam. O diretório é o `workdir` do comando quando o Codex ou o
-    OpenCode o informa.
+    OpenCode o informa. Em qualquer contexto, `-c`/`--config-env` de
+    `push.*`, `remote.*`, `branch.*` ou `url.*` pergunta: troca o destino do
+    push por fora do refspec que se lê.
   - **Pergunta (`ask`):** perda de trabalho fora do contexto conferido
     acima (push forçado ou `+ref`, `--no-verify`, push sem refspec, `HEAD`
     sem destino; `reset --hard/--merge`; `clean`; `checkout -- <caminho>`,
