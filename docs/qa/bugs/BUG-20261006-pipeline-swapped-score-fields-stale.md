@@ -49,10 +49,12 @@ reenvia o par invertido.
   valor aplicado mudava. A faixa invertida que o servidor troca volta igual à
   já aplicada (75–80 aplicado, 80/75 enviado, 75–80 de volta), então o campo
   ficava no par invertido e o Aplicar seguinte o reenviava.
-- **Fix commit:** `961558d` (PR [#496](https://github.com/andreustimm/master-jobs/pull/496)) —
-  o hook também observa a URL: com o mesmo valor aplicado e URL nova, o campo
-  que enviou outra coisa adota o valor do servidor; texto não enviado continua
-  da pessoa. O hook é compartilhado com `/jobs`.
+- **Fix commit:** `961558d` e `d15d705` (PR [#496](https://github.com/andreustimm/master-jobs/pull/496)) —
+  com a opção `followUrl`, ligada só pelos campos de faixa (`RangeSlider`,
+  score e salário em `/pipeline` e `/jobs`), o hook também observa a URL: com
+  o mesmo valor aplicado e URL nova, o campo que enviou outra coisa adota o
+  valor do servidor; texto não enviado continua da pessoa. A busca não usa a
+  opção, para não apagar o termo recusado.
 - **Regression test:** `tests/e2e/ui/pipeline-filters.mjs` (faixa invertida
   igual à aplicada sem refresh; reprovava antes da correção, segundo o commit).
 

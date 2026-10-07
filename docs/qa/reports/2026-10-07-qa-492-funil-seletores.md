@@ -12,6 +12,12 @@
   standalone (`next build --webpack`), PostgreSQL descartável em loopback,
   login real por senha. Nunca produção. Ambiente encerrado ao fim (runner saiu
   com código 0 e o diretório temporário foi removido).
+- **Fora da sessão:** `d15d705`, posterior a este build, tornou opcional
+  (`followUrl`) a observação da URL no hook e a deixou só nos campos de faixa;
+  o caminho da faixa exercido aqui não muda, e a busca volta ao comportamento
+  de `origin/dev`. O termo recusado na busca não foi exercido nesta sessão:
+  está coberto pelo E2E `pipeline-filters` ("termo recusado mantém o texto"),
+  só no Funil.
 - **Início:** 2026-10-07 00:00 BRT · **Status:** closed
 
 ## Personas

@@ -2,7 +2,7 @@
 
 ### Corrigido
 
-- `/pipeline` (#492): os `CheckboxPicker` de empresa e canal ganham `key` pelo conjunto marcado na URL, como o seletor de fontes de `/jobs`; voltar, avançar ou "limpar" deixavam a caixa marcada (`defaultChecked` não controlado) e o Aplicar seguinte ressuscitava o filtro. `useAppliedValue` (`app/auto-submit.tsx`) passa a observar a URL (`useSearchParams`) além do valor aplicado: quando o servidor devolve o mesmo valor de antes para um campo que enviou outro (faixa de score invertida igual à aplicada), o campo adota o valor da URL. Vale também para `/jobs`.
+- `/pipeline` (#492): os `CheckboxPicker` de empresa e canal ganham `key` pelo conjunto marcado na URL, como o seletor de fontes de `/jobs`; voltar, avançar ou "limpar" deixavam a caixa marcada (`defaultChecked` não controlado) e o Aplicar seguinte ressuscitava o filtro. `useAppliedValue` (`app/auto-submit.tsx`) ganha a opção `followUrl`, ligada só pelos campos do `RangeSlider` (score e salário, em `/pipeline` e `/jobs`): com ela, o campo observa a URL (`useSearchParams`) além do valor aplicado, e quando o servidor devolve o mesmo valor de antes para um campo que enviou outro (faixa invertida igual à aplicada), adota o valor da URL. A busca (`AutoApplyInput`) não usa a opção, para não apagar o termo recusado.
 
 ## pt-BR
 
