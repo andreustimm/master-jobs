@@ -128,6 +128,39 @@ function positiveInt(raw: string | undefined): number | null {
   return Number.isSafeInteger(value) && value > 0 ? value : null;
 }
 
+export type SearchQueryState = NonNullable<FilterState["query"]>;
+
+/**
+ * A consulta `q` analisada, como Vagas e Funil a leem.
+ *
+ * Cada termo e cada frase passa pela mesma validação do termo de sempre; um
+ * pedaço inválido invalida a consulta inteira e vira aviso. Só os termos soltos
+ * expandem pelo dicionário; a frase entre aspas é literal.
+ */
+export function readSearchQuery(
+  raw: string | undefined,
+  dictionary: SynonymDictionary,
+): { query?: SearchQueryState; notice?: TermError } {
+  if (raw === undefined || raw.trim() === "") return {};
+  const parsed = parseQuery(raw);
+  const terms: ValidTerm[] = [];
+  const phrases: ValidTerm[] = [];
+  let error: TermError | undefined;
+  for (const [list, into] of [[parsed.terms, terms], [parsed.phrases, phrases]] as const) {
+    for (const part of list) {
+      const valid = validateTerm(part);
+      if (valid.ok) into.push(valid.value);
+      else error ??= valid.code;
+    }
+  }
+  if (error) return { notice: error };
+  if (terms.length + phrases.length === 0) return {};
+  const query: SearchQueryState = { raw: raw.trim().replace(/\s+/g, " "), terms, phrases };
+  const synonyms = synonymMapOf(expandTerms(terms, dictionary));
+  if (Object.keys(synonyms).length > 0) query.synonyms = synonyms;
+  return { query };
+}
+
 /**
  * `dictionary` é a lista de sinônimos (#370): por omissão a da composição, que
  * só tem conteúdo com `SEARCH_SYNONYMS_ENABLED` ligada. Vazia, a leitura é a de
@@ -173,30 +206,13 @@ export function readFilters(
   const company = one("company")?.trim().slice(0, 80);
   if (company) state.company = company;
 
-  const q = one("q");
-  if (q !== undefined && q.trim() !== "") {
-    // Cada termo e cada frase passa pela mesma validação do termo de sempre;
-    // um pedaço inválido invalida a consulta inteira, como antes.
-    const parsed = parseQuery(q);
-    const terms: ValidTerm[] = [];
-    const phrases: ValidTerm[] = [];
-    let error: TermError | undefined;
-    for (const [list, into] of [[parsed.terms, terms], [parsed.phrases, phrases]] as const) {
-      for (const part of list) {
-        const valid = validateTerm(part);
-        if (valid.ok) into.push(valid.value);
-        else error ??= valid.code;
-      }
-    }
-    if (error) notices.push(error);
-    else if (terms.length + phrases.length > 0) {
-      state.query = { raw: q.trim().replace(/\s+/g, " "), terms, phrases };
-      // Só os termos soltos expandem; a frase entre aspas é literal.
-      const synonyms = synonymMapOf(expandTerms(terms, dictionary));
-      if (Object.keys(synonyms).length > 0) state.query.synonyms = synonyms;
-      // Um termo só, sem frase: é o termo que se salva e se busca nas plataformas.
-      if (terms.length === 1 && phrases.length === 0) state.term = terms[0];
-    }
+  const search = readSearchQuery(one("q"), dictionary);
+  if (search.notice) notices.push(search.notice);
+  if (search.query) {
+    state.query = search.query;
+    const { terms, phrases } = search.query;
+    // Um termo só, sem frase: é o termo que se salva e se busca nas plataformas.
+    if (terms.length === 1 && phrases.length === 0) state.term = terms[0];
   }
 
   const track = one("track");

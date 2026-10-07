@@ -4,7 +4,6 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { ChevronDownIcon } from "lucide-react";
 import type { Translator } from "../src/core/i18n/index.ts";
 import { WORK_MODES, type SavedTermSummary, type Track } from "../src/contexts/matching/index.ts";
 import { href, toParams, type BoardRoute, type FilterState } from "./filter-state";
@@ -12,6 +11,7 @@ import { PayRange } from "./pay-range";
 import { RangeSlider } from "./range-slider";
 import { FIT_MAX, FIT_SLIDER_STEP } from "./filter-scales.ts";
 import { TransitionGetForm } from "./transition-get-form";
+import { CheckboxPicker } from "./checkbox-picker";
 import { AutoApplyInput } from "./auto-submit";
 import { TransitionLink } from "./transition-link";
 
@@ -52,7 +52,7 @@ export type Facets = {
   sources: string[];
 };
 
-const chipClass = (active: boolean) =>
+export const chipClass = (active: boolean) =>
   cn(
     buttonVariants({ variant: active ? "default" : "outline", size: "sm" }),
     "h-7 px-2.5 type-micro font-normal",
@@ -72,7 +72,7 @@ const userChipClass = (active: boolean) =>
  * offer chips with the same words — PHP, Laravel — so the name alone cannot
  * tell them apart, and the sentence does.
  */
-function Row({
+export function Row({
   label,
   hint,
   children,
@@ -111,18 +111,8 @@ function Carry({ state, except }: { state: FilterState; except: string[] }) {
  * Sources as a closed multi-select, not a row of chips.
  *
  * Every adapter adds a chip, and the row already wrapped over three lines
- * before the next board landed; the list only grows. A native `<details>` is
- * the whole disclosure: no portal, so the checkboxes stay inside the GET form
- * and one Apply carries the lot — choosing three sources with chips meant three
- * round trips.
- *
- * The open list sits IN FLOW and pushes the rows below it. A floating panel is
- * the usual shape, and it was cut off at every width: `Card` clips its content,
- * and letting this one card not clip only moves the problem to the next
- * ancestor with a scroll area. In flow, nothing can clip it, at any width.
- *
- * Apply lives inside the panel, next to the choosing. Below a 288px list it
- * would be off screen exactly when it is needed.
+ * before the next board landed; the list only grows. The shape and its
+ * reasons live in `CheckboxPicker`.
  */
 function SourcePicker({
   base,
@@ -142,56 +132,19 @@ function SourcePicker({
       : t("filters.sourceCount", { count: chosen.size, total: sources.length });
 
   return (
-    <TransitionGetForm
+    <CheckboxPicker
       action={base}
-      className="flex flex-wrap items-start gap-2"
-      data-testid="filters-source-form"
-    >
-      <Carry state={state} except={["source", "page"]} />
-      <details className="group w-56" data-testid="filters-source-combo">
-        <summary
-          className="flex h-8 cursor-pointer list-none items-center justify-between gap-2 rounded-lg border border-input px-2.5 type-body-md text-foreground select-none [&::-webkit-details-marker]:hidden"
-          data-testid="filters-source-summary"
-        >
-          {summary}
-          <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-        </summary>
-        <div className="mt-1 rounded-lg bg-card ring-1 ring-foreground/10">
-          <div className="max-h-64 overflow-y-auto p-1">
-            {sources.map((kind) => (
-              <label
-                key={kind}
-                className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-2 font-mono type-body-md hover:bg-muted"
-              >
-                <input
-                  type="checkbox"
-                  name="source"
-                  value={kind}
-                  defaultChecked={chosen.has(kind)}
-                  className="size-4 accent-primary"
-                  data-testid={`filter-source-${kind}`}
-                />
-                {kind}
-              </label>
-            ))}
-          </div>
-          <div className="border-t border-hairline p-2">
-            <Button type="submit" variant="outline" size="sm" data-testid="filters-source-submit">
-              {t("filters.apply")}
-            </Button>
-          </div>
-        </div>
-      </details>
-      {chosen.size > 0 && (
-        <TransitionLink
-          href={href(base, state, { source: undefined })}
-          className={chipClass(false)}
-          data-testid="filters-source-clear"
-        >
-          {t("filters.clear")}
-        </TransitionLink>
-      )}
-    </TransitionGetForm>
+      carry={toParams(state).filter(([key]) => key !== "source" && key !== "page")}
+      name="source"
+      options={sources}
+      chosen={chosen}
+      summary={summary}
+      clearHref={href(base, state, { source: undefined })}
+      applyLabel={t("filters.apply")}
+      clearLabel={t("filters.clear")}
+      testId="filters-source"
+      optionTestId={(kind) => `filter-source-${kind}`}
+    />
   );
 }
 
