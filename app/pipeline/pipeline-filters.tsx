@@ -25,6 +25,11 @@ function Carry({ state, except }: { state: PipelineState; except: string[] }) {
   );
 }
 
+/** Identidade do seletor: o conjunto marcado na URL, sem depender da ordem. */
+function pickerKey(chosen: readonly string[]): string {
+  return JSON.stringify([...chosen].sort());
+}
+
 /**
  * A barra de filtros do Funil (#478): as mesmas peças da de Vagas, com o
  * estado em `app/pipeline/filter-state.ts`. Empresas e canais vêm das
@@ -86,7 +91,14 @@ export function PipelineFilterBar({
       <div className={grid}>
         {facets.companies.length > 0 && (
           <Row label={t("filters.company")}>
+            {/*
+              Chave pelo estado da URL, como o seletor de fontes de Vagas:
+              `defaultChecked` é DOM não controlado, e sem remontar, a marca de
+              uma empresa desfeita por Voltar ou "limpar" ficava na caixa e
+              voltava no Aplicar seguinte (#492). O mesmo vale para o canal.
+            */}
             <CheckboxPicker
+              key={pickerKey(state.companies)}
               action="/pipeline"
               carry={toPipelineParams(state).filter(([key]) => key !== "company")}
               name="company"
@@ -110,6 +122,7 @@ export function PipelineFilterBar({
         {facets.channels.length > 0 && (
           <Row label={t("pipeline.channel")}>
             <CheckboxPicker
+              key={pickerKey(state.channels)}
               action="/pipeline"
               carry={toPipelineParams(state).filter(([key]) => key !== "channel")}
               name="channel"

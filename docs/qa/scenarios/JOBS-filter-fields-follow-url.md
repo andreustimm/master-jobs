@@ -6,13 +6,13 @@ persona: Andreus em triagem
 journey: J-trust-the-filtered-board
 expected: Depois de limpar, de um preset ou de uma faixa trocada pelo servidor, os campos mostram o estado atual — e o Aplicar seguinte não ressuscita o valor antigo
 entry_points: /jobs; /jobs?pay=12000&payMax=6000; /jobs?fit=45
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence: evidence/2026-09-22-rc-1.22.0/log.txt
-last_report: docs/qa/reports/2026-09-22-release-candidate-1.22.0-full.md
+evidence: docs/qa/reports/2026-10-07-qa-492-funil-seletores.md; docs/qa/evidence/2026-10-07-qa-492-funil-seletores/jobs-score-invertido-60-80.png
+last_report: docs/qa/reports/2026-10-07-qa-492-funil-seletores.md
 overlaps: JOBS-pay-filter; JOBS-score-range; JOBS-source-multi-select
 ---
 
@@ -54,3 +54,17 @@ fazia):
 Full 1.22.0 (2026-09-22): Preset leva o campo mínimo ao valor da URL; Aplicar em seguida não ressuscita valor antigo; 70 aplicado e Voltar devolve 60 no campo. Limpar não foi exercitado.
 
 **Reset 2026-09-23 (#218):** os campos de busca, empresa, Score e faixa salarial deixaram de ser remontados por `key` a cada resposta; agora seguem a URL por `useAppliedValue`, que só preserva texto ainda não enviado no campo em foco. Refazer os quatro caminhos acima (faixa invertida, limpar, preset, fontes), agora também com o filtro aplicado sozinho, e conferir que a digitação em curso não é apagada pela resposta anterior (`JOBS-filters-auto-apply`).
+
+**QA 07/10 (canária da #492, `fix/funil-seletores` com `961558d`, que muda
+`useAppliedValue`; ambiente isolado, sem refresh entre os passos): `pass`.**
+`?pay=12000&payMax=6000` aberto mostra o aviso e 6000/12000. Faixa invertida
+igual à já aplicada — salário 6000–12000 com 12000/6000 digitado e score 60–80
+com 80/60 —: aviso, campos e controle deslizante na ordem certa, e o Aplicar
+seguinte envia o par certo sem aviso. "Limpar" do salário deixa os campos
+vazios e nem o Aplicar do salário nem o do Score o ressuscitam. "Aplicável
+hoje" leva o mínimo de 70 para 60 e esvazia o máximo; o Aplicar seguinte mantém
+60. Duas fontes marcadas, "limpar" e Voltar deixam zero marcadas, e marcar uma
+depois aplica só ela. Termo digitado logo depois de um Aplicar do Score, com a
+resposta a caminho, ficou no campo e foi aplicado (a janela da corrida não é
+controlável pelo driver; tentado, não provado). Relatório:
+`docs/qa/reports/2026-10-07-qa-492-funil-seletores.md`.
