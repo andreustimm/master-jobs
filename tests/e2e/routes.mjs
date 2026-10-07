@@ -57,6 +57,13 @@ export const ENGLISH_ANONYMOUS_SWEEP = [
   // headline, localização e skills marcados `data-user-content` — só o rótulo
   // do CTA, das seções e das categorias vem do dicionário.
   "/p/e2e-cv-formatado",
+  // Cadastro aberto (#464): sem cookie, `/signup` é o formulário manual e
+  // `/signup/verify` explica o cadastro vencido. Termos e Política: o corpo
+  // declara `lang`, e a varredura confere título, versão e navegação.
+  "/signup",
+  "/signup/verify",
+  "/terms",
+  "/privacy",
 ];
 
 /** Interface em inglês depois de a suíte criar trilhas e termos (task_05 de term-search). */
@@ -118,6 +125,12 @@ export const AXE_SWEEP = [
   // Perfil público (#326): a varredura roda autenticada como dono, mas a
   // página ignora sessão — o mesmo candidato fixo de `public-cv-format.mjs`.
   ["public profile", "/p/e2e-cv-formatado"],
+  // Cadastro aberto (#464, E2E-024): varridas numa aba anônima — com sessão,
+  // `/signup` manda para a tela do papel.
+  ["signup", "/signup"],
+  ["signup verify", "/signup/verify"],
+  ["terms", "/terms"],
+  ["privacy", "/privacy"],
 ];
 
 /**
@@ -127,6 +140,12 @@ export const AXE_SWEEP = [
  * rota, inglês sem português, 375 px sem estouro e axe WCAG 2.2 AA.
  */
 export const RECRUITER_SWEEP = ["/recruiter/directory"];
+
+/**
+ * As páginas do AXE_SWEEP que só existem sem sessão: `a11y.mjs` varre `/login`
+ * antes de entrar e as outras numa aba anônima, depois do percurso do dono.
+ */
+export const AXE_PRE_SESSION = ["/login", "/signup", "/signup/verify"];
 
 /**
  * Páginas fora das varreduras transversais, cada uma com o porquê.

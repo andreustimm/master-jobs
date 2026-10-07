@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: "Cadastro em tela única (social e manual com código)"
 type: frontend
 complexity: high
@@ -37,15 +37,15 @@ do recrutador; e as páginas públicas `/terms` e `/privacy`.
 </requirements>
 
 ## Subtasks
-- [ ] 3.1 Regras puras de cadastro e código.
-- [ ] 3.2 Serviço de cadastro (início manual, código, reenvio, confirmação, conclusão social) e loja.
-- [ ] 3.3 Limite por IP com reserva sob concorrência.
-- [ ] 3.4 Tela `/signup` (modo social e manual) e `/signup/verify`.
-- [ ] 3.5 Boas-vindas e "conta já existe".
-- [ ] 3.6 Estado vazio do recrutador.
-- [ ] 3.7 Páginas `/terms` e `/privacy`.
-- [ ] 3.8 Registros de rota/ação pública e E2E.
-- [ ] 3.9 Docs de produto (visão, personas, primeiro acesso).
+- [x] 3.1 Regras puras de cadastro e código.
+- [x] 3.2 Serviço de cadastro (início manual, código, reenvio, confirmação, conclusão social) e loja.
+- [x] 3.3 Limite por IP com reserva sob concorrência.
+- [x] 3.4 Tela `/signup` (modo social e manual) e `/signup/verify`.
+- [x] 3.5 Boas-vindas e "conta já existe".
+- [x] 3.6 Estado vazio do recrutador.
+- [x] 3.7 Páginas `/terms` e `/privacy`.
+- [x] 3.8 Registros de rota/ação pública e E2E.
+- [x] 3.9 Docs de produto (visão, personas, primeiro acesso).
 
 ## Implementation Details
 
@@ -78,18 +78,18 @@ Seguir "Data flow" (itens 2 e 3), "API Endpoints" e "Data Models" da TechSpec.
 
 Cases assigned from `_tests.md`, the test contract — read each ID's full definition there before writing tests.
 
-- [ ] UT-060, UT-061, UT-062, UT-063, UT-064, UT-065, UT-066, UT-067, UT-068, UT-069 — regras de cadastro e limite
-- [ ] UT-070, UT-071, UT-072, UT-073, UT-074, UT-075, UT-076, UT-077, UT-078, UT-079 — cadastro manual e código
-- [ ] IT-020, IT-021, IT-022, IT-023, IT-024, IT-025, IT-026, IT-027, IT-028, IT-029, IT-030, IT-031 — conclusão do cadastro
-- [ ] IT-032, IT-033, IT-034, IT-035 — limite por IP e não criação por login
-- [ ] IT-066 — recrutador com acesso não vê estado vazio
-- [ ] IT-070, IT-071, IT-072, IT-073, IT-074, IT-076, IT-077, IT-078, IT-079, IT-080, IT-081, IT-082, IT-083 — código e confirmação
-- [ ] IT-084, IT-085 — boas-vindas e falha de envio
-- [ ] IT-094 — versões legais
-- [ ] E2E-011, E2E-012, E2E-013, E2E-014, E2E-015 — cadastro social e recusas
-- [ ] E2E-024 — 375 px e axe das telas novas
-- [ ] E2E-025, E2E-026, E2E-027, E2E-028, E2E-029 — cadastro manual com código
-- [ ] E2E-031 — páginas legais
+- [x] UT-060, UT-061, UT-062, UT-063, UT-064, UT-065, UT-066, UT-067, UT-068, UT-069 — regras de cadastro e limite
+- [x] UT-070, UT-071, UT-072, UT-073, UT-074, UT-075, UT-076, UT-077, UT-078, UT-079 — cadastro manual e código
+- [x] IT-020, IT-021, IT-022, IT-023, IT-024, IT-025, IT-026, IT-027, IT-028, IT-029, IT-030, IT-031 — conclusão do cadastro
+- [x] IT-032, IT-033, IT-034, IT-035 — limite por IP e não criação por login
+- [x] IT-066 — recrutador com acesso não vê estado vazio
+- [x] IT-070, IT-071, IT-072, IT-073, IT-074, IT-076, IT-077, IT-078, IT-079, IT-080, IT-081, IT-082, IT-083 — código e confirmação
+- [x] IT-084, IT-085 — boas-vindas e falha de envio
+- [x] IT-094 — versões legais
+- [x] E2E-011, E2E-012, E2E-013, E2E-014, E2E-015 — cadastro social e recusas
+- [x] E2E-024 — 375 px e axe das telas novas
+- [x] E2E-025, E2E-026, E2E-027, E2E-028, E2E-029 — cadastro manual com código
+- [x] E2E-031 — páginas legais
 
 ## Success Criteria
 - Every assigned test case implemented and passing

@@ -23,9 +23,12 @@
 # Todo comando de shell no Codex vai prefixado com `rtk` (G63); a lista de
 # comandos está em docs/cli.md.
 #
-# `approval_policy` e `sandbox_mode` ficam de fora de propósito: comando que
-# nenhuma regra libera a guarda já bloqueia, e a edição que o Claude Code
-# pergunta por omissão o Codex resolve pelo sandbox e pela aprovação da pessoa. Fixar um valor aqui
+# `approval_policy` e `sandbox_mode` ficam de fora de propósito: a guarda
+# bloqueia o que a política de shell proíbe (uma lista do que é proibido, com
+# `Bash` liberado na lista desde a #481: o que ela não reconhece passa), e a
+# edição que o Claude Code pergunta por omissão o Codex resolve pelo sandbox e
+# pela aprovação da pessoa — por isso o sandbox continua sendo a camada que
+# segura o resto. Fixar um valor aqui
 # sobrescreveria também a escolha pessoal mais estrita (`untrusted`,
 # `read-only`) — a camada de projeto vence a do usuário. Recomendado:
 # `workspace-write` com `on-request`, ou mais estrito.

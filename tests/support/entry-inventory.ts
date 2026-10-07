@@ -221,6 +221,35 @@ export const UNGUARDED_BY_DESIGN = new Map<string, { file: string; why: string }
       why: "pré-sessão: o token de uso único é a autorização, queimado antes de gravar",
     },
   ],
+  // Cadastro aberto (#464, ADR-007): quem se cadastra ainda não tem sessão.
+  [
+    "startManualSignup",
+    {
+      file: "app/signup/actions.ts",
+      why: "pré-conta: valida e grava só a pendência (sem conta, sem sessão); limite por IP na ação, cinco envios por e-mail por hora, resposta idêntica para e-mail com conta",
+    },
+  ],
+  [
+    "completeSocialSignup",
+    {
+      file: "app/signup/actions.ts",
+      why: "pré-conta: o cookie da pendência social (token de 32 bytes, 15 min, uso único) é a autorização; papel só candidato ou recrutador; limite por IP na transação",
+    },
+  ],
+  [
+    "confirmSignupCode",
+    {
+      file: "app/signup/actions.ts",
+      why: "pré-conta: cookie da pendência + código de uso único (HMAC, 15 min, trava em 5 erros) autorizam; limite por IP na transação",
+    },
+  ],
+  [
+    "resendSignupCode",
+    {
+      file: "app/signup/actions.ts",
+      why: "pré-conta: só reenvia para o e-mail da pendência do próprio cookie; 60 s entre envios e cinco por hora",
+    },
+  ],
   [
     "setLocaleAction",
     {

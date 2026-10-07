@@ -10,6 +10,7 @@ import { chipClass, Row } from "../filters";
 import { RangeSlider } from "../range-slider";
 import { TransitionGetForm } from "../transition-get-form";
 import { TransitionLink } from "../transition-link";
+import { channelOptionLabel } from "./channel.ts";
 import { pipelineHref, toPipelineParams, type broadenHintKey, type PipelineState } from "./filter-state";
 
 /** O resto do estado, como campos ocultos de um formulário GET. */
@@ -139,6 +140,7 @@ export function PipelineFilterBar({
               testId="pipeline-channel"
               optionTestId={(channel) => `pipeline-channel-option-${channel}`}
               userContent
+              optionLabel={channelOptionLabel(t, facets.channels)}
             />
           </Row>
         )}
@@ -158,6 +160,7 @@ export function PipelineFilterBar({
               limit={FIT_MAX}
               ceiling={FIT_MAX}
               step={FIT_SLIDER_STEP}
+              omitEmptyMin
               labels={{
                 min: t("filters.scoreMin"),
                 max: t("filters.scoreMax"),

@@ -257,6 +257,8 @@
       ],
       "patterns": [
         "app/checkbox-picker.tsx",
+        "app/local-date.tsx",
+        "src/core/i18n/date.ts",
         "app/filters.tsx",
         "app/filter-state.ts",
         "app/filter-scales.ts",
@@ -269,6 +271,7 @@
       ],
       "routes": [
         "/login",
+        "/jobs",
         "/pipeline"
       ]
     },
@@ -349,6 +352,55 @@
       ]
     },
     {
+      "id": "sign-up",
+      "modules": [
+        "tests/e2e/ui/sign-up.mjs",
+        "tests/e2e/fake-oidc.mjs",
+        "tests/e2e/mail-sink.mjs"
+      ],
+      "patterns": [
+        "app/signup/**",
+        "app/recruiter/page.tsx",
+        "src/contexts/auth/app/signup.ts",
+        "src/contexts/auth/domain/signup-rules.ts",
+        "src/contexts/auth/infra/drizzle-signups.ts",
+        "src/contexts/auth/app/account-emails.ts",
+        "src/contexts/auth/infra/resend-mailer.ts"
+      ],
+      "routes": [
+        "/",
+        "/candidate",
+        "/jobs",
+        "/login",
+        "/login/oauth/[provider]",
+        "/login/oauth/[provider]/callback",
+        "/privacy",
+        "/recruiter",
+        "/recruiter/[id]",
+        "/signup",
+        "/signup/verify",
+        "/terms"
+      ]
+    },
+    {
+      "id": "legal",
+      "modules": [
+        "tests/e2e/ui/legal.mjs"
+      ],
+      "patterns": [
+        "app/legal-document.tsx",
+        "app/terms/**",
+        "app/privacy/**",
+        "content/legal/**",
+        "src/core/legal.ts"
+      ],
+      "routes": [
+        "/privacy",
+        "/signup",
+        "/terms"
+      ]
+    },
+    {
       "id": "account-methods",
       "modules": [
         "tests/e2e/ui/account-methods.mjs",
@@ -369,6 +421,31 @@
         "/login",
         "/login/oauth/[provider]",
         "/login/oauth/[provider]/callback"
+      ]
+    },
+    {
+      "id": "recruiter-access",
+      "modules": [
+        "tests/e2e/ui/recruiter-access.mjs",
+        "tests/e2e/recruiter-access-fixtures.mjs"
+      ],
+      "patterns": [
+        "app/account/**",
+        "app/admin/actions.ts",
+        "app/admin/users/**",
+        "app/admin/user-modal-styles.ts",
+        "src/contexts/auth/app/recruiter-access.ts",
+        "src/contexts/auth/app/recruiter-emails.ts",
+        "src/contexts/auth/domain/recruiter-access.ts",
+        "src/contexts/auth/infra/drizzle-recruiter-access.ts",
+        "src/contexts/auth/ports-recruiter-access.ts"
+      ],
+      "routes": [
+        "/account",
+        "/admin/users",
+        "/login",
+        "/recruiter",
+        "/recruiter/[id]"
       ]
     },
     {
@@ -478,7 +555,11 @@
         "/login/forgot",
         "/login/reset",
         "/pipeline",
-        "/referrals"
+        "/privacy",
+        "/referrals",
+        "/signup",
+        "/signup/verify",
+        "/terms"
       ]
     },
     {
@@ -809,7 +890,11 @@
         "/jobs/new",
         "/login",
         "/pipeline",
-        "/referrals"
+        "/privacy",
+        "/referrals",
+        "/signup",
+        "/signup/verify",
+        "/terms"
       ]
     }
   ]

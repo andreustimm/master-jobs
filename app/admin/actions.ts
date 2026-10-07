@@ -15,7 +15,8 @@ import {
   ROLES,
   setUserDisabled,
   updateUser,
-  revokeRecruiterGrant,
+  adminCancelRecruiterInvite,
+  adminRevokeRecruiterGrant,
   type Role,
 } from "../../src/contexts/auth/index.ts";
 import { ADMIN_COOKIE, currentSession, guard, SESSION_COOKIE } from "../auth";
@@ -196,27 +197,39 @@ export async function deleteUserAction(formData: FormData) {
   revalidatePath("/admin/users");
 }
 
+function positiveId(formData: FormData, name: string): number {
+  const value = Number(formData.get(name));
+  return Number.isSafeInteger(value) && value > 0 ? value : 0;
+}
+
 /**
- * Revoga uma concessão de acesso de recrutador (ADR-008).
+ * Revoga uma concessão de acesso de recrutador (ADR-008, US-023).
  *
  * O admin **revoga** acesso, mas não o concede: conceder mora na área do
  * candidato, porque dá leitura de currículo e funil. Um admin capaz de
  * conceder leria dado alheio por procuração — bastaria conceder a si mesmo
  * como recrutador —, desviando da impersonação auditada, que é o único caminho
- * previsto para isso.
+ * previsto para isso. Não há action de conceder nem de convidar aqui.
  *
  * A concessão fica `revoked`, com o nome deste admin no histórico do
- * candidato; nada é apagado. Recebe o id da CONCESSÃO, não o par
- * recrutador+candidato: nenhuma tela de administração passa id de candidato
- * adiante. Revogar o que já terminou (duplo clique, dois admins) não é erro —
- * o resultado pedido já vale.
+ * candidato, e o recrutador recebe o aviso de que a administração encerrou;
+ * nada é apagado. Recebe o id da CONCESSÃO: nenhuma tela de administração
+ * passa id de candidato adiante. Revogar o que já terminou devolve
+ * `already_ended`.
  */
-export async function unlinkAction(formData: FormData) {
+export async function adminRevokeGrantAction(formData: FormData) {
   const session = await guard("user:manage");
-  const grantId = Number(formData.get("linkId"));
-  if (!Number.isSafeInteger(grantId) || grantId <= 0) throw new Error("Vínculo inválido");
-  await revokeRecruiterGrant(grantId, session.userId);
+  const result = await adminRevokeRecruiterGrant(session, positiveId(formData, "grantId"));
   revalidatePath("/admin/users");
+  return result.ok ? ({ ok: true, code: "revoked" } as const) : ({ ok: false, code: result.error } as const);
+}
+
+/** Cancela um convite pendente em nome do admin (US-023.AC-3); o convidado não é avisado. */
+export async function adminCancelInviteAction(formData: FormData) {
+  const session = await guard("user:manage");
+  const result = await adminCancelRecruiterInvite(session, positiveId(formData, "inviteId"));
+  revalidatePath("/admin/users");
+  return result.ok ? ({ ok: true, code: "cancelled" } as const) : ({ ok: false, code: result.error } as const);
 }
 
 /**

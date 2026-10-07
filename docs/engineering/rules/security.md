@@ -202,11 +202,15 @@ Origem: AGENTS (invariante "Admin não lê dado privado"). Prova:
 recrutador↔candidato, e nenhuma conta nova é apontada para candidato
 existente: os dois seriam leitura de CV alheio por procuração. Conta nova de
 papel candidato cria o **próprio** candidato (linha nova, privada, com a
-identidade digitada — nunca a do `profile.yaml`).
+identidade digitada — nunca a do `profile.yaml`). Desde a #465 o vínculo é uma
+concessão (`recruiter_grant`): só a seção de acesso de `/account` concede ou
+convida, por `access:manage`, que nega sessão emprestada; o admin revoga e
+cancela, nunca concede, e a CLI não tem verbo para isso.
 
 Origem: AGENTS (mesma invariante). Detalhes: [security.md](../../security.md)
 (Achado 5, "Conta nova cria o próprio candidato"). Prova:
-`tests/candidate-onboarding.test.ts`, `tests/candidate-ownership.test.ts`.
+`tests/candidate-onboarding.test.ts`, `tests/candidate-ownership.test.ts`,
+`tests/recruiter-access-actions.test.ts`.
 
 <a id="g17"></a>
 ## G17 — Recuperar senha não revela quem está cadastrado

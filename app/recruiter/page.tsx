@@ -1,6 +1,7 @@
 import { TransitionLink } from "../transition-link";
 import { Card } from "@/components/ui/card";
 import { recruiterCandidateSummaries } from "../../src/contexts/pursuit/index.ts";
+import { showsRecruiterEmptyState } from "../../src/contexts/auth/index.ts";
 import { applicationStatusOptions } from "../status.ts";
 import { requirePage } from "../auth";
 import { getTranslator } from "../i18n";
@@ -26,7 +27,23 @@ export default async function RecruiterHistory() {
         {t("recruiter.lead")}
       </p>
 
-      {summaries.length === 0 ? (
+      {showsRecruiterEmptyState(session) ? (
+        // Recrutador sem ninguém que lhe tenha dado acesso (US-015): explica
+        // de onde o acesso vem, em vez de uma lista vazia sem motivo. Com um
+        // vínculo, a lista de sempre volta (US-015.EC-1).
+        <Card className="grid gap-3 p-6" data-testid="recruiter-empty">
+          <h2 className="type-display-xs" data-testid="recruiter-empty-state">
+            {t("recruiter.emptyTitle")}
+          </h2>
+          <p className="type-body-md max-w-[62ch] text-muted-foreground">{t("recruiter.emptyBody")}</p>
+          <p className="type-body-sm text-muted-foreground">
+            {t("recruiter.emptyJobs")}{" "}
+            <TransitionLink href="/jobs" className="text-[var(--primary-text)] underline" data-testid="recruiter-empty-jobs">
+              {t("recruiter.emptyJobsLink")}
+            </TransitionLink>
+          </p>
+        </Card>
+      ) : summaries.length === 0 ? (
         <Card className="p-6 text-sm text-muted-foreground" data-testid="recruiter-empty">
           {t("recruiter.noCandidates")}
         </Card>
