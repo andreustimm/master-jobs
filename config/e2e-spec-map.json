@@ -63,6 +63,7 @@
         "app/filter-toggle.tsx",
         "app/pay-range.tsx",
         "app/range-slider.tsx",
+        "app/checkbox-picker.tsx",
         "app/job-modal.tsx",
         "app/job-countries.tsx",
         "app/triage-button.tsx",
@@ -256,6 +257,11 @@
       ],
       "patterns": [
         "app/checkbox-picker.tsx",
+        "app/filters.tsx",
+        "app/filter-state.ts",
+        "app/filter-scales.ts",
+        "app/filter-toggle.tsx",
+        "app/range-slider.tsx",
         "src/core/synonyms.ts",
         "src/core/synonyms-load.ts"
       ],

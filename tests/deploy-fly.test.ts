@@ -4,8 +4,9 @@
 //   workflow que publica/implanta é estritamente manual.
 // Boundary IN: Dockerfile, fly.toml, package.json e o workflow, lidos como
 //   texto/YAML — o mesmo contrato que o Fly e o GHCR realmente aplicam.
-// Boundary OUT: a execução real do build (docker build/run), verificada à
-//   parte, e o deploy no Fly, que só o dono aciona.
+// Boundary OUT: a execução real do build (docker build/run), que nenhum CI
+//   automático roda — é manual, no teste local ou no workflow disparado pelo
+//   dono —, e o deploy no Fly, que só o dono aciona.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import YAML from "yaml";
@@ -137,8 +138,8 @@ describe("Dockerfile e .dockerignore — nenhum segredo de produção na imagem"
   });
 
   it("exclui .env* do contexto de build", () => {
-    expect(DOCKERIGNORE).toMatch(/^\.env$/m);
-    expect(DOCKERIGNORE).toMatch(/^\.env\.\*$/m);
+    expect(DOCKERIGNORE).toMatch(/^\*\*\/\.env$/m);
+    expect(DOCKERIGNORE).toMatch(/^\*\*\/\.env\.\*$/m);
   });
 
   it("espelha os padrões sensíveis do .gitignore (o que o Git nunca versiona)", () => {

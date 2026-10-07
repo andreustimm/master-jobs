@@ -17,6 +17,7 @@ import { applicationStatusOptions } from "../status.ts";
 import { requireOwnCandidatePage } from "../auth";
 import { getTranslator } from "../i18n";
 import {
+  broadenHintKey,
   clearPipelineFiltersHref,
   hasPipelineFilters,
   pipelineHref,
@@ -97,7 +98,7 @@ export default async function Pipeline({
         </Card>
       )}
 
-      <PipelineFilterBar state={state} facets={facets} t={t} />
+      <PipelineFilterBar state={state} facets={facets} broadenHint={broadenHintKey()} t={t} />
 
       <div className="mb-8 flex flex-wrap gap-2.5">
         <TransitionLink href={href({ stage: null })} data-testid="pipeline-filter-all" data-count={everything}>

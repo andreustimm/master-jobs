@@ -85,6 +85,17 @@ export function readPipelineFilters(params: Params, dictionary: SynonymDictionar
   };
 }
 
+/**
+ * A chave da dica de "ampliar busca". Só promete sinônimo quando a lista está
+ * em uso: `SEARCH_SYNONYMS_ENABLED` ligada e arquivo válido. Desligada (o
+ * padrão), ampliar acha só título de grafia parecida.
+ */
+export function broadenHintKey(
+  dictionary: SynonymDictionary = searchSynonyms(),
+): "pipeline.broadenHint" | "pipeline.broadenHintSpelling" {
+  return dictionary.lookup.size > 0 ? "pipeline.broadenHint" : "pipeline.broadenHintSpelling";
+}
+
 /** O estado como parâmetros, em ordem estável. Página e avisos nunca viajam. */
 export function toPipelineParams(state: PipelineState): Array<[string, string]> {
   const params: Array<[string, string]> = [];

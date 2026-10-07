@@ -21,6 +21,7 @@ import { planGates } from "../scripts/gates/impact.ts";
 import * as sweeps from "./e2e/routes.mjs";
 import { AREAS, PREFIX, SMOKE, selectAreas } from "./e2e/ui/index.mjs";
 import { discoverEntries } from "./support/entry-inventory.ts";
+import { moduleEdges, resolveLocal } from "./support/module-graph.ts";
 
 const ROOT = process.cwd();
 const MAP = loadE2EMap(ROOT);
@@ -120,6 +121,25 @@ describe("mapa de E2E — seleção", () => {
     expect(selectE2E(MAP, ["tests/e2e/ui/pwa.mjs"]).areas).toEqual(["pwa"]);
     expect(selectE2E(MAP, ["app/theme-switch.tsx"]).areas).toEqual(["themes"]);
     expect(selectE2E(MAP, ["app/joblist.tsx"]).areas).toEqual(selectE2E(MAP, ["app/jobs/(lista)/page.tsx"]).areas);
+  });
+
+  it("peça de filtro que o Funil importa de Vagas seleciona as duas telas (#490)", () => {
+    const jobs = selectE2E(MAP, ["app/jobs/(lista)/page.tsx"]).areas;
+    const shared = ["app/pipeline/pipeline-filters.tsx", "app/pipeline/filter-state.ts"]
+      .flatMap((file) =>
+        moduleEdges(readFileSync(file, "utf8"))
+          .map((edge) => (edge.specifier === null ? null : resolveLocal(file, edge.specifier)))
+          .filter((target): target is string => target !== null),
+      )
+      .filter((target) => target.startsWith("app/") && !target.startsWith("app/pipeline/"))
+      .filter((target) => selectE2E(MAP, [target]).mode === "affected");
+    expect(shared).toContain("app/filters.tsx");
+    expect(shared).toContain("app/checkbox-picker.tsx");
+    for (const file of new Set(shared)) {
+      const areas = selectE2E(MAP, [file]).areas;
+      expect(areas, file).toContain("pipeline-filters");
+      expect(areas, file).toEqual(expect.arrayContaining(jobs));
+    }
   });
 
   it("pnpm gates passa as áreas ao E2E, ou nada quando a suíte é inteira", () => {

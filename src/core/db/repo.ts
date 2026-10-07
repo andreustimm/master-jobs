@@ -1651,7 +1651,17 @@ function pipelineConditions(candidateId: number, filters: PipelineFilters): SQL[
   return conditions;
 }
 
-/** Funnel counts for the dashboard header, under the funnel filters when given. */
+/**
+ * Funnel counts for the dashboard header, under the funnel filters when given.
+ *
+ * Sem filtro, as junções ficam mesmo sem uso, e isso é barato (#490): medido
+ * com 20 mil vagas (cada uma com `job_page` de ~14 KB e nota) e 3 mil
+ * candidaturas do candidato, 1,8 ms por consulta contra 0,9 ms da contagem só
+ * em `application`. O planner descarta a junção com `job_page` (chave única,
+ * nenhuma coluna lida) e faz merge join pelos índices de `job` e `job_score`.
+ * Montar a consulta sem as junções economizaria menos de 1 ms e criaria um
+ * segundo caminho que pode divergir de `pipelineRows`.
+ */
 export async function pipelineCounts(
   candidateId: number,
   filters: PipelineFilters = {},

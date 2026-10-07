@@ -10,7 +10,7 @@ import { chipClass, Row } from "../filters";
 import { RangeSlider } from "../range-slider";
 import { TransitionGetForm } from "../transition-get-form";
 import { TransitionLink } from "../transition-link";
-import { pipelineHref, toPipelineParams, type PipelineState } from "./filter-state";
+import { pipelineHref, toPipelineParams, type broadenHintKey, type PipelineState } from "./filter-state";
 
 /** O resto do estado, como campos ocultos de um formulário GET. */
 function Carry({ state, except }: { state: PipelineState; except: string[] }) {
@@ -33,10 +33,13 @@ function Carry({ state, except }: { state: PipelineState; except: string[] }) {
 export function PipelineFilterBar({
   state,
   facets,
+  broadenHint,
   t,
 }: {
   state: PipelineState;
   facets: { companies: string[]; channels: string[] };
+  /** A chave de `broadenHintKey`, que só promete sinônimo com a lista ligada. */
+  broadenHint: ReturnType<typeof broadenHintKey>;
   t: Translator["t"];
 }) {
   const chosenCompanies = new Set(state.companies);
@@ -71,7 +74,7 @@ export function PipelineFilterBar({
         <Toggle
           href={pipelineHref(state, { semantic: state.semantic ? undefined : "1" })}
           active={state.semantic}
-          hint={t("pipeline.broadenHint")}
+          hint={t(broadenHint)}
           testId="pipeline-broaden"
         >
           {t("pipeline.broaden")}
