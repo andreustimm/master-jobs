@@ -34,6 +34,7 @@ export function CheckboxPicker({
   testId,
   optionTestId,
   userContent = false,
+  optionLabel,
 }: {
   action: Route;
   /** The rest of the URL state, carried as hidden inputs. */
@@ -50,6 +51,11 @@ export function CheckboxPicker({
   optionTestId: (value: string) => string;
   /** Options typed by a person (a company, a channel), not by the product. */
   userContent?: boolean;
+  /**
+   * O nome de um valor conhecido no idioma da tela (um canal documentado).
+   * `undefined` mostra o valor como veio, com a marca de `userContent`.
+   */
+  optionLabel?: (value: string) => string | undefined;
 }) {
   return (
     <TransitionGetForm action={action} className="flex flex-wrap items-start gap-2" data-testid={`${testId}-form`}>
@@ -66,7 +72,9 @@ export function CheckboxPicker({
         </summary>
         <div className="mt-1 rounded-lg bg-card ring-1 ring-foreground/10">
           <div className="max-h-64 overflow-y-auto p-1">
-            {options.map((option) => (
+            {options.map((option) => {
+              const label = optionLabel?.(option);
+              return (
               <label
                 key={option}
                 className={cn(
@@ -82,9 +90,10 @@ export function CheckboxPicker({
                   className="size-4 shrink-0 accent-primary"
                   data-testid={optionTestId(option)}
                 />
-                {userContent ? <span data-user-content>{option}</span> : option}
+                {label !== undefined ? label : userContent ? <span data-user-content>{option}</span> : option}
               </label>
-            ))}
+              );
+            })}
           </div>
           <div className="border-t border-hairline p-2">
             <Button type="submit" variant="outline" size="sm" data-testid={`${testId}-submit`}>

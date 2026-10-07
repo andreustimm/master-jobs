@@ -337,6 +337,7 @@ export const ptBR = {
     term_invalid_char: "O termo tem um caractere não aceito — use letras, números, espaço e + # . - /; a busca foi ignorada.",
     term_no_alnum: "O termo precisa de pelo menos uma letra ou número; a busca foi ignorada.",
     pay_invalid: "O valor da faixa precisa ser um número inteiro de 1 a 2.000.000; o filtro foi ignorado.",
+    fit_invalid: "O score precisa ser um número de 0 a 100; o valor ilegível foi ignorado.",
     range_swapped: "O mínimo estava acima do máximo; os dois foram trocados.",
     track_unknown: "Essa trilha não existe ou está arquivada; mostrando a principal.",
     term_unknown: "Esse termo salvo não existe; o filtro foi ignorado.",
@@ -1215,6 +1216,14 @@ export const ptBR = {
     realGaps: "lacunas reais",
     jobsWrite: "vagas escrevem",
     jobs: "vagas",
+  },
+  /** Os canais que `jho track --channel` documenta; outro valor aparece como a pessoa o gravou. */
+  channels: {
+    direct: "direto",
+    ats: "ATS",
+    referral: "indicação",
+    recruiter: "recrutador",
+    agency: "agência",
   },
   pipeline: {
     title: "Funil",

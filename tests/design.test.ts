@@ -22,6 +22,30 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 const read = (f: string) => readFileSync(f, "utf8");
+
+/** As variáveis de cor declaradas no bloco cujo seletor é exatamente `selector`. */
+function themeBlock(css: string, selector: string): Record<string, string> {
+  const at = css.indexOf(`${selector} {`);
+  if (at < 0) throw new Error(`bloco ausente: ${selector}`);
+  const body = css.slice(css.indexOf("{", at) + 1, css.indexOf("}", at));
+  const vars: Record<string, string> = {};
+  for (const match of body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) vars[match[1] ?? ""] = (match[2] ?? "").trim().toLowerCase();
+  return vars;
+}
+
+function luminance(hex: string): number {
+  const linear = (i: number) => {
+    const c = Number.parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * linear(1) + 0.7152 * linear(3) + 0.0722 * linear(5);
+}
+
+function contrast(a: string | undefined, b: string | undefined): number {
+  if (!a || !b) return 0;
+  const [x, y] = [luminance(a), luminance(b)];
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
 const COMPONENTS = [...walk("app"), ...walk("components")];
 
 describe("design tokens", () => {
@@ -50,6 +74,37 @@ describe("design tokens", () => {
     for (const id of ["hp", "huly", "graphy"]) {
       expect(themes, `${id} escolha explícita`).toContain(`[data-theme="${id}"][data-mode="dark"]`);
       expect(themes, `${id} sistema`).toContain(`[data-theme="${id}"]:not([data-mode="light"])`);
+    }
+  });
+
+  it("paints the dark mode the same whether chosen or inherited from the system", () => {
+    // A cópia do escuro dentro de `@media (prefers-color-scheme: dark)` tinha
+    // derivado: no HP, `--primary` #296ef9 (4,34:1 com o texto escuro) contra
+    // #4d8bff na escolha explícita. Quem tinha o SO no escuro via o botão
+    // primário abaixo do AA (#494).
+    const themes = stripComments(read("app/themes.css"));
+    const media = themes.slice(themes.indexOf("@media (prefers-color-scheme: dark)"));
+    for (const id of ["hp", "huly", "graphy"]) {
+      const explicit = themeBlock(themes, `[data-theme="${id}"][data-mode="dark"]`);
+      const system = themeBlock(media, `[data-theme="${id}"]:not([data-mode="light"])`);
+      expect(system, id).toEqual(explicit);
+    }
+  });
+
+  it("keeps primary-foreground on primary at WCAG AA in every theme and mode", () => {
+    const themes = stripComments(read("app/themes.css"));
+    const media = themes.slice(themes.indexOf("@media (prefers-color-scheme: dark)"));
+    for (const id of ["hp", "huly", "graphy"]) {
+      const light = themeBlock(themes, `[data-theme="${id}"]`);
+      const blocks = {
+        light,
+        dark: { ...light, ...themeBlock(themes, `[data-theme="${id}"][data-mode="dark"]`) },
+        system: { ...light, ...themeBlock(media, `[data-theme="${id}"]:not([data-mode="light"])`) },
+      };
+      for (const [mode, vars] of Object.entries(blocks)) {
+        const ratio = contrast(vars["--primary"], vars["--primary-foreground"]);
+        expect(ratio, `${id} ${mode}: ${vars["--primary-foreground"]} sobre ${vars["--primary"]}`).toBeGreaterThanOrEqual(4.5);
+      }
     }
   });
 

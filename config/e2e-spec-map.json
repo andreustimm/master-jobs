@@ -257,6 +257,8 @@
       ],
       "patterns": [
         "app/checkbox-picker.tsx",
+        "app/local-date.tsx",
+        "src/core/i18n/date.ts",
         "app/filters.tsx",
         "app/filter-state.ts",
         "app/filter-scales.ts",
@@ -269,6 +271,7 @@
       ],
       "routes": [
         "/login",
+        "/jobs",
         "/pipeline"
       ]
     },

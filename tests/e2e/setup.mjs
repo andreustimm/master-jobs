@@ -971,6 +971,7 @@ try {
       jobId: fixture.id,
       status: fixture.status,
       channel: fixture.channel,
+      appliedAt: fixture.appliedAt ?? null,
     }))).onConflictDoNothing();
     await getDb().delete(scoreTask).where(eq(scoreTask.candidateId, funnelId));
   }

@@ -25,16 +25,28 @@ import {
   toPipelineFilters,
 } from "./filter-state";
 import { PipelineFilterBar } from "./pipeline-filters";
+import { channelLabel } from "./channel.ts";
+import { LocalDate } from "../local-date";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * O cartão do estágio escolhido. Era só `border-[var(--primary)]`, sem largura
+ * de borda: a cor mudava numa borda de 0 px e nada se via (#494). O `Card`
+ * desenha o contorno com `ring-1`; o escolhido troca por um anel de 2 px na cor
+ * primária, e `aria-current` diz o mesmo a quem não vê.
+ */
+const ACTIVE_STAGE = "ring-2 ring-primary";
 
 export default async function Pipeline({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { t } = await getTranslator();
+  const { t, locale } = await getTranslator();
   const { candidateId } = await requireOwnCandidatePage("candidate:read");
+  // "aplicado em {date}" com a data numa ilha que conhece o fuso de quem lê.
+  const [appliedBefore, appliedAfter] = t("pipeline.appliedOn", { date: "\u0000" }).split("\u0000");
 
   const params = await searchParams;
   const one = (key: string) => {
@@ -101,13 +113,13 @@ export default async function Pipeline({
       <PipelineFilterBar state={state} facets={facets} broadenHint={broadenHintKey()} t={t} />
 
       <div className="mb-8 flex flex-wrap gap-2.5">
-        <TransitionLink href={href({ stage: null })} data-testid="pipeline-filter-all" data-count={everything}>
-          <Card
-            className={cn(
-              "min-w-[96px] gap-0 px-4 py-2.5",
-              stage === null && "border-[var(--primary)]",
-            )}
-          >
+        <TransitionLink
+          href={href({ stage: null })}
+          data-testid="pipeline-filter-all"
+          data-count={everything}
+          aria-current={stage === null ? "true" : undefined}
+        >
+          <Card className={cn("min-w-[96px] gap-0 px-4 py-2.5", stage === null && ACTIVE_STAGE)}>
             <div className="font-mono text-2xl font-bold tabular-nums">{everything}</div>
             <div className="mt-0.5 font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
               {t("pipeline.allStages")}
@@ -124,13 +136,9 @@ export default async function Pipeline({
               href={href({ stage: value })}
               data-testid={`pipeline-filter-${value}`}
               data-count={counts[value] ?? 0}
+              aria-current={stage === value ? "true" : undefined}
             >
-              <Card
-                className={cn(
-                  "min-w-[96px] gap-0 px-4 py-2.5",
-                  stage === value && "border-[var(--primary)]",
-                )}
-              >
+              <Card className={cn("min-w-[96px] gap-0 px-4 py-2.5", stage === value && ACTIVE_STAGE)}>
                 <div className="font-mono text-2xl font-bold tabular-nums">{counts[value] ?? 0}</div>
                 <div className="mt-0.5 font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
                   {label}
@@ -201,14 +209,21 @@ export default async function Pipeline({
                     </Badge>
                   )}
                   {r.channel && (
-                    <Badge variant="outline" className="font-mono type-micro">
-                      {r.channel}
+                    <Badge variant="outline" className="font-mono type-micro" data-testid={`pipeline-channel-${r.jobId}`}>
+                      {channelLabel(t, r.channel) ?? <span data-user-content>{r.channel}</span>}
                     </Badge>
                   )}
                 </div>
                 <div className="mt-0.5 text-xs text-muted-foreground">
                   {r.companyName}
-                  {r.appliedAt ? ` · ${t("pipeline.appliedOn", { date: r.appliedAt.slice(0, 10) })}` : ""}
+                  {r.appliedAt ? (
+                    <>
+                      {" · "}
+                      {appliedBefore}
+                      <LocalDate iso={r.appliedAt} locale={locale} testId={`pipeline-applied-${r.jobId}`} />
+                      {appliedAfter}
+                    </>
+                  ) : null}
                 </div>
                 {r.nextAction && (
                   <div className="mt-0.5 text-xs text-muted-foreground">
