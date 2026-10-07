@@ -6,7 +6,7 @@ persona: Andreus em triagem
 journey: J-trust-the-filtered-board
 expected: Depois de limpar, de um preset ou de uma faixa trocada pelo servidor, os campos mostram o estado atual — e o Aplicar seguinte não ressuscita o valor antigo
 entry_points: /jobs; /jobs?pay=12000&payMax=6000; /jobs?fit=45
-qa_status: pass
+qa_status: untested
 bug_ids:
 fix_status:
 retest_status:
@@ -68,3 +68,10 @@ depois aplica só ela. Termo digitado logo depois de um Aplicar do Score, com a
 resposta a caminho, ficou no campo e foi aplicado (a janela da corrida não é
 controlável pelo driver; tentado, não provado). Relatório:
 `docs/qa/reports/2026-10-07-qa-492-funil-seletores.md`.
+
+**Reset 2026-10-07 (#494, PR #499):** o campo vazio do teto (Score e faixa
+salarial) deixou de ir para a URL — o Aplicar não manda mais `fitMax=` nem
+`payMax=` —, e `?fit=abc` ou `?fitMax=abc` agora mostra aviso, com o valor
+ilegível ignorado (o teto não vira 100). Refazer limpar, preset e faixa
+invertida conferindo que a URL não carrega teto vazio, e abrir `/jobs?fit=abc`
+e `/jobs?fitMax=abc`: aviso visível, corte padrão e teto vazio.

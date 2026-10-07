@@ -62,6 +62,14 @@ com os campos e o controle deslizante em 75/80, e o Aplicar seguinte envia
 75/80 sem aviso — pela tela e por `/pipeline?fit=75&fitMax=80` aberto direto.
 Os passos 1, 2, 3, 5 e 7 não foram refeitos; continuam sem verificar a vaga
 fechada, a candidatura sem nota e a busca ampliada com a lista desligada.
-Seguem abertos, sem bloquear o cenário, os dois atritos anteriores à #478
-(estágio ativo invisível e contraste do botão primário no tema escuro).
 Relatório: `docs/qa/reports/2026-10-07-qa-492-funil-seletores.md`.
+
+**Reset 2026-10-07 (#494, PR #499):** os dois atritos anteriores à #478
+(estágio ativo invisível e contraste do botão primário no tema escuro) foram
+corrigidos, com mais quatro ajustes da tela. Conferir, além dos passos acima:
+o cartão do estágio escolhido tem anel visível e `aria-current`, e os outros
+não; "aplicado em" mostra o dia no fuso de quem lê (candidatura às 23:45 em
+São Paulo não vira o dia seguinte); o canal documentado aparece traduzido no
+selo e no seletor (`referral` → "indicação"); `?fit=abc` mostra aviso; o
+primeiro Aplicar só com o mínimo do score não grava `fitMax=` na URL; no tema
+escuro herdado do sistema, o botão primário passa no contraste AA.
