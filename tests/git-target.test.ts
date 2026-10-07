@@ -243,7 +243,10 @@ describe("os três chamadores dão a mesma decisão", () => {
     ["push --all", () => "git push --all", () => wt, "ask"],
     ["push --mirror", () => "git push --mirror", () => wt, "ask"],
     ["push --prune", () => "git push --prune origin feat/x", () => wt, "ask"],
-    ["push apaga tag", () => "git push origin :refs/tags/v1.0.0", () => wt, "ask"],
+    ["push matching (:)", () => "git push origin :", () => wt, "ask"],
+    ["push matching forçado (+:)", () => "git push origin +:", () => wt, "ask"],
+    ["push matching na principal", () => "git push origin :", () => root, "ask"],
+    ["push apaga tag",() => "git push origin :refs/tags/v1.0.0", () => wt, "ask"],
     ["push para outro remoto escrito", () => "git push upstream", () => wt, "ask"],
     // Critical 1: diretório comum sob `.claude/worktrees/` e atalhos para a principal.
     ["push em diretório comum sob .claude/worktrees", () => `git -C ${plainDir} push`, () => root, "ask"],

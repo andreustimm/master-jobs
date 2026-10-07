@@ -1743,6 +1743,12 @@ function judgePush(rest, verified = null) {
     const colon = bare.indexOf(":");
     let target = pushDestination(colon === -1 ? bare : bare.slice(colon + 1));
     if (PROTECTED_BRANCHES.has(target)) return deny(`push direto para ${target}`);
+    // `:` (ou `+:`) é o push "matching": todo branch com o mesmo nome no remoto, `dev` inclusive.
+    if (target === "") {
+      worst = stronger(worst, ask(`git push ${spec} empurra todos os branches de mesmo nome`));
+      destinations.push(null);
+      continue;
+    }
     // `$VAR`, curinga e o `{}` de `find -exec`/`xargs -I`: o destino só aparece na hora.
     if (/[$`*{]/.test(bare)) {
       worst = stronger(worst, ask("refspec com variável ou curinga"));
