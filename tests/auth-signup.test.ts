@@ -25,7 +25,7 @@ import {
   authUser,
   candidate,
   candidateDocument,
-  recruiterCandidate,
+  recruiterGrant,
 } from "../src/core/db/schema.ts";
 import { clock } from "../src/core/clock.ts";
 import { runDatabaseCleanup } from "../src/core/db/retention.ts";
@@ -139,7 +139,7 @@ const mails = (): Mail[] =>
     .sort()
     .map((file) => JSON.parse(readFileSync(join(sink, file), "utf8")) as Mail);
 
-async function countOf(table: typeof authUser | typeof candidate | typeof authSignup | typeof authIdentity | typeof recruiterCandidate) {
+async function countOf(table: typeof authUser | typeof candidate | typeof authSignup | typeof authIdentity | typeof recruiterGrant) {
   const [row] = await db.select({ n: count() }).from(table);
   return row?.n ?? 0;
 }
@@ -343,7 +343,7 @@ describe("conclusão do cadastro social (IT-020–IT-031)", () => {
     const [user] = await db.select().from(authUser);
     expect(user).toMatchObject({ roles: ["recruiter"], candidateId: null });
     expect(await countOf(candidate)).toBe(0);
-    expect(await countOf(recruiterCandidate)).toBe(0);
+    expect(await countOf(recruiterGrant)).toBe(0);
     const session = await drizzleSessions.resolve(result.value.token);
     expect(session?.linkedCandidateIds).toEqual([]);
     expect(mails()[0]!.text).toContain(ptBR.email.welcomeRecruiter);
@@ -430,7 +430,13 @@ describe("estado vazio do recrutador (IT-066)", () => {
     expect(showsRecruiterEmptyState(before)).toBe(true);
 
     const [granted] = await db.insert(candidate).values({ slug: "quem-concede", name: "Quem Concede" }).returning();
-    await db.insert(recruiterCandidate).values({ recruiterUserId: before.userId, candidateId: granted!.id });
+    // O acesso concedido pelo candidato (#465): uma concessão ativa.
+    await db.insert(recruiterGrant).values({
+      recruiterUserId: before.userId,
+      recruiterEmail: "rita@exemplo.com",
+      candidateId: granted!.id,
+      status: "active",
+    });
     const after = (await drizzleSessions.resolve(result.value.token))!;
     expect(after.linkedCandidateIds).toEqual([granted!.id]);
     expect(showsRecruiterEmptyState(after)).toBe(false);
