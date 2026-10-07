@@ -218,6 +218,33 @@ describe("busca", () => {
     },
   );
 
+  it("IT-149 campo que a lista de permissão esvazia (contato no texto) não casa: nem headline, nem nome, nem localização", async () => {
+    await db
+      .update(candidate)
+      .set({ headline: "Fale comigo 11 91234-5678 ana@corp-secreta.example" })
+      .where(eq(candidate.id, rita));
+    expect((await allowlistedProfile({ id: rita }, DIRECTORY_VISIBILITIES))?.headline).toBeNull();
+    for (const q of ["91234-5678", "corp-secreta.example", "fale comigo"]) {
+      expect((await search({ q })).total, q).toBe(0);
+    }
+    // O que o cartão mostra continua casando.
+    expect(names(await search({ q: "rita react" }))).toEqual(["Rita Recrutadores"]);
+
+    const hidden = await ensureCandidate({
+      slug: "tania",
+      name: "Tânia (11) 3456-7890",
+      location: "Curitiba · tania@corp-secreta.example",
+    });
+    await setVisibility(hidden, "recruiters");
+    const profile = await allowlistedProfile({ id: hidden }, DIRECTORY_VISIBILITIES);
+    expect(profile?.name).toBe("");
+    expect(profile?.location).toBeNull();
+    for (const q of ["3456-7890", "tania"]) expect((await search({ q })).total, q).toBe(0);
+    for (const location of ["corp-secreta", "curitiba"]) expect((await search({ location })).total, location).toBe(0);
+    // Sem texto nem localização, o perfil continua listado — só não casa pelo que esconde.
+    expect((await search({})).cards.map((card) => card.id)).toContain(hidden);
+  });
+
   it("IT-150 'Pedro Privado' não acha, nem para quem tem concessão dele", async () => {
     expect((await search({ q: "Pedro Privado" })).total).toBe(0);
     expect((await search({ q: "pedro" })).cards).toEqual([]);

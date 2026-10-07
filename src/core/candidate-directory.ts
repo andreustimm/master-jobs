@@ -10,8 +10,12 @@
  *   Nenhum parâmetro da requisição chega ao filtro de visibilidade nem à lista
  *   de campos; parâmetro desconhecido é ignorado por `parseDirectoryQuery()`.
  * - **O texto casa só o que o cartão mostra:** nome, headline e skill
- *   CONFIRMADA. Piso salarial, notas e currículo nunca entram na consulta —
- *   procurar pelo valor do piso não pode responder "achei alguém".
+ *   CONFIRMADA, e a localização casa a localização mostrada. Piso salarial,
+ *   notas e currículo nunca entram na consulta — procurar pelo valor do piso
+ *   não pode responder "achei alguém". E "mostra" é depois da lista de
+ *   permissão: o campo que `toAllowlistedProfile()` esvazia por trazer contato
+ *   também não casa, senão o recrutador digitaria um telefone escondido e
+ *   descobriria de quem é (`matchesShown`).
  * - **Nada conta perfil Privado.** O total é o das linhas visíveis que casaram;
  *   o vazio é o mesmo com ou sem perfis privados na instalação.
  *
@@ -161,6 +165,10 @@ export type DirectoryResult = {
  * Onde cada termo pode casar: nome, headline ou o nome de uma skill
  * confirmada, sem diferenciar caixa nem acento. Termos se juntam por `and`.
  * O padrão vai como parâmetro ligado, nunca interpolado.
+ *
+ * No banco isto é só PRÉ-FILTRO, condição necessária: casa o valor guardado,
+ * e o valor guardado pode ter contato que a lista de permissão esconde. Quem
+ * decide é `matchesShown`, sobre o perfil já montado.
  */
 function termCondition(term: ValidTerm): SQL {
   const pattern = termRegexSql(term.term);
@@ -196,34 +204,33 @@ function conditions(query: DirectoryQuery): SQL[] {
 }
 
 /**
- * Uma página do diretório, por nome e depois id. Página além da última vira a
- * última (US-026.EC-5); sem resultado, página 1 e nenhum cartão.
+ * A busca casa o perfil pelo que ele MOSTRA, já passado pela lista de
+ * permissão: nome, headline e skills do cartão para o texto, a localização
+ * mostrada para o filtro. Campo esvaziado por trazer contato vale vazio aqui
+ * também. Puro; a mesma dobra e a mesma regex do pré-filtro do banco.
  */
-export async function searchDirectory(query: DirectoryQuery): Promise<DirectoryResult> {
-  // Texto dado e nada válido nele: vazio, sem ir ao banco.
-  if (query.textGiven && query.terms.length === 0) return { cards: [], total: 0, page: 1, pageCount: 1 };
+export function matchesShown(
+  profile: Pick<PublicProfile, "name" | "headline" | "location" | "skills">,
+  query: Pick<DirectoryQuery, "terms" | "location">,
+): boolean {
+  const fields = [profile.name, profile.headline ?? "", ...profile.skills.map((item) => item.name)].map(foldAccents);
+  for (const term of query.terms) {
+    const pattern = new RegExp(termRegexSql(term.term), "i");
+    if (!fields.some((field) => pattern.test(field))) return false;
+  }
+  return query.location === null || foldAccents(profile.location ?? "").includes(foldAccents(query.location));
+}
 
-  const db = getDb();
-  const where = and(...conditions(query))!;
-  const [{ total } = { total: 0 }] = await db.select({ total: count() }).from(candidate).where(where);
-  if (total === 0) return { cards: [], total: 0, page: 1, pageCount: 1 };
-  const pageCount = Math.ceil(total / DIRECTORY_PAGE_SIZE);
-  const page = Math.min(query.page, pageCount);
+const EMPTY: DirectoryResult = { cards: [], total: 0, page: 1, pageCount: 1 };
 
-  const ids = (
-    await db
-      .select({ id: candidate.id })
-      .from(candidate)
-      .where(where)
-      .orderBy(asc(candidate.name), asc(candidate.id))
-      .limit(DIRECTORY_PAGE_SIZE)
-      .offset((page - 1) * DIRECTORY_PAGE_SIZE)
-  ).map((row) => row.id);
-
-  // O cartão sai do MESMO montador do perfil, sem o currículo: um campo que o
-  // `/p/` não libera não tem por onde chegar aqui. A visibilidade é conferida
-  // de novo na carga — entre a página de ids e esta leitura o perfil pode ter
-  // ficado privado, e então ele some do cartão.
+/**
+ * Os cartões destes ids, na ordem dada. O cartão sai do MESMO montador do
+ * perfil, sem o currículo: um campo que o `/p/` não libera não tem por onde
+ * chegar aqui. A visibilidade é conferida de novo na carga — entre a consulta
+ * dos ids e esta leitura o perfil pode ter ficado privado, e então ele some.
+ */
+async function loadCards(ids: number[], query: DirectoryQuery): Promise<DirectoryCard[]> {
+  if (ids.length === 0) return [];
   const loaded = await loadAllowlistRows(inArray(candidate.id, ids), DIRECTORY_VISIBILITIES);
   const byId = new Map(loaded.map((item) => [item.id, item]));
   const cards: DirectoryCard[] = [];
@@ -231,6 +238,7 @@ export async function searchDirectory(query: DirectoryQuery): Promise<DirectoryR
     const item = byId.get(id);
     if (!item) continue;
     const profile = toAllowlistedProfile(item.row, item.skills, null);
+    if (!matchesShown(profile, query)) continue;
     cards.push({
       id,
       name: profile.name,
@@ -240,7 +248,42 @@ export async function searchDirectory(query: DirectoryQuery): Promise<DirectoryR
       facts: profile.facts,
     });
   }
-  return { cards, total, page, pageCount };
+  return cards;
+}
+
+/**
+ * Uma página do diretório, por nome e depois id. Página além da última vira a
+ * última (US-026.EC-5); sem resultado, página 1 e nenhum cartão.
+ */
+export async function searchDirectory(query: DirectoryQuery): Promise<DirectoryResult> {
+  // Texto dado e nada válido nele: vazio, sem ir ao banco.
+  if (query.textGiven && query.terms.length === 0) return EMPTY;
+
+  const db = getDb();
+  const where = and(...conditions(query))!;
+  const ordered = () =>
+    db.select({ id: candidate.id }).from(candidate).where(where).orderBy(asc(candidate.name), asc(candidate.id));
+
+  if (query.terms.length > 0 || query.location !== null) {
+    // Com texto ou localização, o banco só pré-filtra pelo valor guardado; a
+    // decisão é de `matchesShown` sobre o perfil montado. Então o total e a
+    // página saem DEPOIS dela — contar no banco contaria quem só casou por um
+    // campo escondido.
+    const matched = await loadCards((await ordered()).map((row) => row.id), query);
+    if (matched.length === 0) return EMPTY;
+    const pageCount = Math.ceil(matched.length / DIRECTORY_PAGE_SIZE);
+    const page = Math.min(query.page, pageCount);
+    const start = (page - 1) * DIRECTORY_PAGE_SIZE;
+    return { cards: matched.slice(start, start + DIRECTORY_PAGE_SIZE), total: matched.length, page, pageCount };
+  }
+
+  // Sem texto nem localização, nada casa por campo: conta e pagina no banco.
+  const [{ total } = { total: 0 }] = await db.select({ total: count() }).from(candidate).where(where);
+  if (total === 0) return EMPTY;
+  const pageCount = Math.ceil(total / DIRECTORY_PAGE_SIZE);
+  const page = Math.min(query.page, pageCount);
+  const ids = (await ordered().limit(DIRECTORY_PAGE_SIZE).offset((page - 1) * DIRECTORY_PAGE_SIZE)).map((row) => row.id);
+  return { cards: await loadCards(ids, query), total, page, pageCount };
 }
 
 /**
