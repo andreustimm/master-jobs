@@ -5,6 +5,7 @@
 // Boundary OUT: a consulta SQL (tests/pipeline-filters.test.ts) e a tela (E2E).
 import { describe, expect, it } from "vitest";
 import {
+  broadenHintKey,
   clearPipelineFiltersHref,
   hasPipelineFilters,
   pipelineHref,
@@ -12,7 +13,10 @@ import {
   toPipelineFilters,
   toPipelineParams,
 } from "../app/pipeline/filter-state.ts";
-import { buildSynonymDictionary } from "../src/core/synonyms.ts";
+import { en } from "../src/core/i18n/en.ts";
+import { ptBR } from "../src/core/i18n/pt-BR.ts";
+import { buildSynonymDictionary, EMPTY_SYNONYMS } from "../src/core/synonyms.ts";
+import { resetSynonymsCache, searchSynonyms } from "../src/core/synonyms-load.ts";
 
 const dictionary = buildSynonymDictionary({ groups: [["engenheiro", "engineer"]] });
 
@@ -127,5 +131,23 @@ describe("links do funil", () => {
     expect(hasPipelineFilters(state)).toBe(true);
     expect(hasPipelineFilters(readPipelineFilters({ stage: "applied", semantic: "1" }, dictionary))).toBe(false);
     expect(pipelineHref(readPipelineFilters({}, dictionary))).toBe("/pipeline");
+  });
+});
+
+describe("broadenHintKey — a dica só promete o que a busca faz (#490)", () => {
+  it("com SEARCH_SYNONYMS_ENABLED desligada (o padrão), não promete sinônimo", () => {
+    resetSynonymsCache();
+    expect(broadenHintKey(searchSynonyms({}))).toBe("pipeline.broadenHintSpelling");
+    expect(broadenHintKey(EMPTY_SYNONYMS)).toBe("pipeline.broadenHintSpelling");
+    for (const locale of [ptBR, en]) {
+      expect(locale.pipeline.broadenHintSpelling).not.toMatch(/sinônimo|synonym/i);
+    }
+  });
+
+  it("com a lista ligada e carregada, promete sinônimo", () => {
+    resetSynonymsCache();
+    expect(broadenHintKey(searchSynonyms({ SEARCH_SYNONYMS_ENABLED: "1" }))).toBe("pipeline.broadenHint");
+    expect(broadenHintKey(dictionary)).toBe("pipeline.broadenHint");
+    resetSynonymsCache();
   });
 });

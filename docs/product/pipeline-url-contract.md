@@ -36,7 +36,9 @@ sinônimos pt/en da lista curada (`config/search-synonyms.yaml`, só com
 (`word_similarity` ≥ `NEAR_THRESHOLD`, o mesmo limiar do grupo "termos
 parecidos" de Vagas). Busca pelo sentido da frase depende da
 [#370](https://github.com/andreustimm/master-jobs/issues/370); a tela diz
-"ampliar busca" e não promete semântica. Fica na URL mesmo sem consulta.
+"ampliar busca" e não promete semântica. A dica do botão só cita sinônimos
+quando a lista está em uso (`broadenHintKey`); desligada, fala só de grafia
+parecida. Fica na URL mesmo sem consulta.
 
 **Empresa e canal repetem, como `source` em Vagas.** As opções vêm das
 candidaturas da pessoa no funil (`pipelineFacets`), sem filtro, para a opção

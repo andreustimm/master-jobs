@@ -10,9 +10,9 @@ qa_status: untested
 bug_ids: BUG-20261006-pipeline-back-keeps-stale-picker-marks; BUG-20261006-pipeline-swapped-score-fields-stale; BUG-20261006-pipeline-active-stage-invisible; BUG-20261006-primary-button-contrast-dark-theme
 fix_status: fixed
 retest_status: pending
-fix_commits: 891042f
-evidence: docs/qa/reports/2026-10-06-qa-478-funil-filtros.md
-last_report: docs/qa/reports/2026-10-06-qa-478-funil-filtros.md
+fix_commits: 961558d6701ebe980553f282b42c9e842194c112; 891042f; 7415e40
+evidence: docs/qa/reports/2026-10-07-qa-492-funil-seletores.md; docs/qa/evidence/2026-10-07-qa-492-funil-seletores/06-voltar-empresa-desmarcada.png; docs/qa/evidence/2026-10-07-qa-492-funil-seletores/04-faixa-invertida-campos-75-80.png
+last_report: docs/qa/reports/2026-10-07-qa-492-funil-seletores.md
 overlaps: PIPE-undo-and-move-back; JOBS-search-synonyms
 ---
 
@@ -26,7 +26,8 @@ A conferir, com refresh e leitura independente (o detalhe de cada vaga):
    de vaga já fechada; entre aspas, a frase exata.
 3. "Ampliar busca" com `SEARCH_SYNONYMS_ENABLED` ligada: "engenheiro" também
    traz "Engineer"; um cargo com uma letra trocada aparece; a tela não fala em
-   semântica. Desligada a flag, só a grafia parecida amplia.
+   semântica. Desligada a flag, só a grafia parecida amplia, e a dica do
+   botão não menciona sinônimos.
 4. Canal e faixa de score combinam com o estágio; candidatura sem nota passa
    por qualquer faixa.
 5. Filtros sem resultado dizem isso e oferecem "limpar filtros", que mantém o
@@ -50,3 +51,17 @@ Ficaram sem verificar: vaga fechada achável pelo texto, candidatura sem nota em
 qualquer faixa e a busca ampliada com a lista de sinônimos desligada (o
 ambiente isolado a liga sempre).
 Relatório: `docs/qa/reports/2026-10-06-qa-478-funil-filtros.md`.
+
+**Reteste 07/10 (`fix/funil-seletores`, PR #496, correção `961558d`; ambiente
+isolado): `pass` nos passos 4 e 6, sem refresh entre os passos.** Voltar,
+avançar e "limpar" deixam as caixas de empresa e canal iguais à URL, e o
+Aplicar seguinte filtra só pelo que foi marcado (inclusive em
+`?q=engenheiro&semantic=1&company=Vercel&stage=applied` → voltar duas vezes →
+Gopher). Com `fit=75&fitMax=80` aplicado, digitar 80/75 mostra o aviso de troca
+com os campos e o controle deslizante em 75/80, e o Aplicar seguinte envia
+75/80 sem aviso — pela tela e por `/pipeline?fit=75&fitMax=80` aberto direto.
+Os passos 1, 2, 3, 5 e 7 não foram refeitos; continuam sem verificar a vaga
+fechada, a candidatura sem nota e a busca ampliada com a lista desligada.
+Seguem abertos, sem bloquear o cenário, os dois atritos anteriores à #478
+(estágio ativo invisível e contraste do botão primário no tema escuro).
+Relatório: `docs/qa/reports/2026-10-07-qa-492-funil-seletores.md`.

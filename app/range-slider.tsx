@@ -115,8 +115,9 @@ export function RangeSlider({
   const selectChanged = useRef(false);
   const changed = useRef<() => boolean>(() => true);
   const submitter = useAutoSubmit(root, changed);
-  const floorField = useAppliedValue(min === undefined ? "" : String(min), root, submitter);
-  const roofField = useAppliedValue(max === undefined ? "" : String(max), root, submitter);
+  // A faixa invertida volta trocada pelo servidor, às vezes igual à já aplicada (#492).
+  const floorField = useAppliedValue(min === undefined ? "" : String(min), root, submitter, { followUrl: true });
+  const roofField = useAppliedValue(max === undefined ? "" : String(max), root, submitter, { followUrl: true });
   const { value: floor, set: setFloor } = floorField;
   const { value: roof, set: setRoof } = roofField;
   useEffect(() => {
