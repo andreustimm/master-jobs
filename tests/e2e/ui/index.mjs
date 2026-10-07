@@ -14,6 +14,7 @@
  * inteira já provou.
  */
 import * as account from "./account.mjs";
+import * as accountMethods from "./account-methods.mjs";
 import * as admin from "./admin.mjs";
 import * as adminCatalog from "./admin-catalog.mjs";
 import * as auth from "./auth.mjs";
@@ -38,6 +39,7 @@ import * as navigation from "./navigation.mjs";
 import * as onboarding from "./onboarding.mjs";
 import * as passwordReset from "./password-reset.mjs";
 import * as pipeline from "./pipeline.mjs";
+import * as pipelineFilters from "./pipeline-filters.mjs";
 import * as publicCvFormat from "./public-cv-format.mjs";
 import * as publicFacts from "./public-facts.mjs";
 import * as publicImages from "./public-images.mjs";
@@ -81,12 +83,18 @@ export const AREAS = [
   { id: "recheck", run: recheck.run, requires: [] },
   { id: "visibility", run: visibility.run, requires: [] },
   { id: "pipeline", run: pipeline.run, requires: [] },
+  // Conta e funil próprios, gravados em setup.mjs (#478).
+  { id: "pipeline-filters", run: pipelineFilters.run, requires: [] },
   { id: "roles", run: roles.run, requires: [] },
   { id: "account", run: account.run, requires: [] },
   { id: "password-reset", run: passwordReset.run, requires: [] },
   // Login social (#464): contas e identidades próprias de `setup.mjs`, emissor
   // falso do `run-isolated`; cada cenário em contexto próprio.
   { id: "social-sign-in", run: socialSignIn.run, requires: [] },
+  // Formas de entrar (#464, task_04): contas próprias de `setup.mjs`
+  // (`account-methods-fixtures.mjs`), devolvidas ao estado inicial a cada
+  // execução; o provedor é o emissor falso.
+  { id: "account-methods", run: accountMethods.run, requires: [] },
   { id: "jobs-new", run: jobsNew.run, requires: [] },
   { id: "public-profile", run: publicProfile.run, requires: [] },
   // Compara o histórico de novidades de quatro sessões: o dono (design),

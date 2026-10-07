@@ -5,9 +5,16 @@
  * quem aplica é `app/oidc-login.ts`.
  */
 import { createHash } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { getDb } from "../../../core/db/client.ts";
 import { authIdentity, authLoginToken, authUser } from "../../../core/db/schema.ts";
+import {
+  canDisconnect,
+  type AccountMethodsRecord,
+  type IdentityOrigin,
+  type IdentityRecord,
+  type UnlinkOutcome,
+} from "../domain/methods.ts";
 import type { OidcProviderId } from "../domain/oidc-config.ts";
 import type { Role } from "../domain/types.ts";
 import type { Identity } from "../ports.ts";
@@ -126,6 +133,136 @@ export async function accountContact(userId: number): Promise<{ email: string; l
     .where(eq(authUser.id, userId))
     .limit(1);
   return row ?? null;
+}
+
+/* --------------------------- Formas de entrar ---------------------------- */
+
+function toIdentityRecord(row: {
+  provider: string;
+  origin: string;
+  linkedAt: string;
+  lastUsedAt: string | null;
+}): IdentityRecord {
+  // As restrições `check` da tabela garantem os dois domínios.
+  return {
+    provider: row.provider as OidcProviderId,
+    origin: row.origin as IdentityOrigin,
+    linkedAt: row.linkedAt,
+    lastUsedAt: row.lastUsedAt,
+  };
+}
+
+/** A conta e as identidades ligadas. O hash da senha nunca sai daqui, só o fato de existir. */
+export async function accountMethods(userId: number): Promise<AccountMethodsRecord | null> {
+  const db = getDb();
+  const [user] = await db
+    .select({
+      email: authUser.email,
+      locale: authUser.locale,
+      passwordHash: authUser.passwordHash,
+      disabledAt: authUser.disabledAt,
+      termsVersion: authUser.termsVersion,
+      privacyVersion: authUser.privacyVersion,
+      termsAcceptedAt: authUser.termsAcceptedAt,
+    })
+    .from(authUser)
+    .where(eq(authUser.id, userId))
+    .limit(1);
+  if (!user) return null;
+  const identities = await db
+    .select({
+      provider: authIdentity.provider,
+      origin: authIdentity.origin,
+      linkedAt: authIdentity.linkedAt,
+      lastUsedAt: authIdentity.lastUsedAt,
+    })
+    .from(authIdentity)
+    .where(eq(authIdentity.userId, userId))
+    .orderBy(asc(authIdentity.provider));
+  return {
+    email: user.email,
+    locale: user.locale,
+    hasPassword: user.passwordHash !== null,
+    disabled: user.disabledAt !== null,
+    identities: identities.map(toIdentityRecord),
+    terms: {
+      termsVersion: user.termsVersion,
+      privacyVersion: user.privacyVersion,
+      acceptedAt: user.termsAcceptedAt,
+    },
+  };
+}
+
+/** O id da conta deste e-mail (normalizado aqui), para a CLI. */
+export async function userIdByEmail(email: string): Promise<number | null> {
+  const [row] = await getDb()
+    .select({ id: authUser.id })
+    .from(authUser)
+    .where(eq(authUser.email, email.trim().toLowerCase()))
+    .limit(1);
+  return row?.id ?? null;
+}
+
+/** Provedores ligados por conta, para a lista do admin (US-011.AC-1). */
+export async function providersByUser(): Promise<Map<number, OidcProviderId[]>> {
+  const rows = await getDb()
+    .select({ userId: authIdentity.userId, provider: authIdentity.provider })
+    .from(authIdentity)
+    .orderBy(asc(authIdentity.userId), asc(authIdentity.provider));
+  const byUser = new Map<number, OidcProviderId[]>();
+  for (const row of rows) {
+    const list = byUser.get(row.userId) ?? [];
+    list.push(row.provider as OidcProviderId);
+    byUser.set(row.userId, list);
+  }
+  return byUser;
+}
+
+/**
+ * Desliga o provedor, a menos que seja a última forma de entrar (ADR-004).
+ *
+ * A conferência e a remoção rodam na mesma transação, com a linha da conta
+ * travada (`FOR UPDATE`): dois desligamentos simultâneos de uma conta sem
+ * senha com Google e LinkedIn passam um de cada vez, e o segundo vê só um
+ * provedor sobrando — "último método" (US-008.EC-1). Sem a trava, os dois
+ * leriam dois provedores e apagariam um cada, deixando a conta sem porta.
+ */
+export async function unlinkIdentityChecked(userId: number, provider: OidcProviderId): Promise<UnlinkOutcome> {
+  return getDb().transaction(async (tx) => {
+    const [user] = await tx
+      .select({ passwordHash: authUser.passwordHash })
+      .from(authUser)
+      .where(eq(authUser.id, userId))
+      .for("update");
+    if (!user) return "no_account";
+    const linked = await tx
+      .select({ provider: authIdentity.provider })
+      .from(authIdentity)
+      .where(eq(authIdentity.userId, userId));
+    const providers = linked.map((row) => row.provider as OidcProviderId);
+    if (!providers.includes(provider)) return "not_linked";
+    if (!canDisconnect({ hasPassword: user.passwordHash !== null, providers }, provider)) return "last_method";
+    await tx.delete(authIdentity).where(and(eq(authIdentity.userId, userId), eq(authIdentity.provider, provider)));
+    return "unlinked";
+  });
+}
+
+/**
+ * Grava a PRIMEIRA senha (US-009). `false` quando a conta já tem senha, está
+ * desabilitada ou sumiu — trocar senha existente é outro caminho, que prova a
+ * atual e derruba as sessões.
+ *
+ * Não encerra sessão nenhuma (US-009.EC-2): acrescentar uma porta não é
+ * suspeita de invasão. O `WHERE password_hash IS NULL` faz duas requisições
+ * simultâneas gravarem uma só.
+ */
+export async function setFirstPassword(userId: number, hash: string): Promise<boolean> {
+  const rows = await getDb()
+    .update(authUser)
+    .set({ passwordHash: hash })
+    .where(and(eq(authUser.id, userId), isNull(authUser.passwordHash), isNull(authUser.disabledAt)))
+    .returning({ id: authUser.id });
+  return rows.length > 0;
 }
 
 /**

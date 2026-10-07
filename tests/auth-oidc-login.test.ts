@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DB } from "../src/core/db/client.ts";
 import { authEvent, authIdentity, authSession, authSignup, authUser, candidate } from "../src/core/db/schema.ts";
 import { clock } from "../src/core/clock.ts";
+import { disconnectProvider, type MethodsDeps } from "../src/contexts/auth/app/account-methods.ts";
 import { beginSocial, finishSocial, type SocialConfig, type SocialDeps } from "../src/contexts/auth/app/oidc-login.ts";
 import * as identities from "../src/contexts/auth/infra/drizzle-identities.ts";
 import { createSocialSignup, signupIpHmac, signupTokenHash } from "../src/contexts/auth/infra/drizzle-signups.ts";
@@ -63,6 +64,20 @@ const config: SocialConfig = {
   },
   signupIpSecret: "segredo-do-ip",
 };
+
+/** O serviço de desligar com o mesmo sink e relógio do fluxo social (US-019). */
+function methodsDeps(): MethodsDeps {
+  return {
+    store: identities,
+    repository: drizzleAuthRepository,
+    mailer: () => fileMailer(sink),
+    hashPassword: async () => {
+      throw new Error("não usado aqui");
+    },
+    available: () => ["google", "linkedin"],
+    now,
+  };
+}
 
 function deps(): SocialDeps {
   return {
@@ -502,7 +517,7 @@ describe("início do fluxo (US-001.EC-8, US-014)", () => {
   });
 });
 
-describe("ligar pela conta (US-007, base para a task_04)", () => {
+describe("ligar pela conta (US-007)", () => {
   async function sessionOf(userId: number, impersonatedBy: number | null = null): Promise<Session> {
     const token = await drizzleSessions.create({
       userId,
@@ -512,7 +527,24 @@ describe("ligar pela conta (US-007, base para a task_04)", () => {
     return (await drizzleSessions.resolve(token))!;
   }
 
-  it("sessão própria liga com origem manual, mesmo sem e-mail verificado, e volta à conta", async () => {
+  it("IT-040 sessão própria liga o Google de outro e-mail: origem manual, evento e o e-mail da conta não muda", async () => {
+    const ana = await seedUser("ana@x.com");
+    const session = await sessionOf(ana);
+    const result = await signInVia("google", { sub: "g-ana", email: "ana.pessoal@gmail.com" }, { intent: "link", session });
+    expect(result).toEqual({ kind: "redirect", location: "/account?linked=google" });
+    const rows = await db.select().from(authIdentity);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ userId: ana, provider: "google", subject: "g-ana", origin: "manual" });
+    expect(Date.parse(rows[0]!.linkedAt)).toBeGreaterThan(Date.now() - 60_000);
+    const [user] = await db.select().from(authUser).where(eq(authUser.id, ana));
+    expect(user!.email).toBe("ana@x.com");
+    const linked = await events("identity_linked");
+    expect(linked.map((event) => [event.userId, event.detail])).toEqual([[ana, "google: manual"]]);
+    // Ligar não abre sessão nova: quem liga já está dentro.
+    expect(await db.select().from(authSession).where(eq(authSession.userId, ana))).toHaveLength(1);
+  });
+
+  it("IT-041 o LinkedIn sem e-mail verificado liga pela conta mesmo assim", async () => {
     const ana = await seedUser("ana@x.com");
     const session = await sessionOf(ana);
     const result = await signInVia(
@@ -525,6 +557,75 @@ describe("ligar pela conta (US-007, base para a task_04)", () => {
     expect(row).toMatchObject({ userId: ana, provider: "linkedin", origin: "manual" });
     const [user] = await db.select().from(authUser).where(eq(authUser.id, ana));
     expect(user!.email).toBe("ana@x.com");
+  });
+
+  it("IT-042 identidade já ligada a outra conta: 'taken' e nenhuma das duas muda", async () => {
+    const ana = await seedUser("ana@x.com");
+    const bia = await seedUser("bia@x.com");
+    await linkSeed(bia, "google", "g-bia");
+    const session = await sessionOf(ana);
+    await expect(
+      signInVia("google", { sub: "g-bia", email: "bia@x.com" }, { intent: "link", session }),
+    ).resolves.toEqual({ kind: "redirect", location: "/account?error=taken&provider=google" });
+    const rows = await db.select().from(authIdentity);
+    expect(rows.map((row) => `${row.userId}:${row.provider}:${row.subject}`)).toEqual([`${bia}:google:g-bia`]);
+    expect(await events("identity_linked")).toHaveLength(0);
+  });
+
+  it("IT-043 provedor já ligado à conta: recusa sem mudar nada", async () => {
+    const ana = await seedUser("ana@x.com");
+    await linkSeed(ana, "linkedin", "li-ana");
+    const session = await sessionOf(ana);
+    await expect(
+      signInVia("linkedin", { sub: "li-ana-2", email: "ana@x.com" }, { intent: "link", session }),
+    ).resolves.toEqual({ kind: "redirect", location: "/account?error=already_linked&provider=linkedin" });
+    const rows = await db.select().from(authIdentity);
+    expect(rows.map((row) => row.subject)).toEqual(["li-ana"]);
+  });
+
+  it("IT-044 a sessão expirou durante o consentimento: manda entrar de novo e nada é ligado", async () => {
+    const ana = await seedUser("ana@x.com");
+    const session = await sessionOf(ana);
+    fake.setBehavior("google", { sub: "g-ana", email: "ana@x.com" });
+    const prepared = await prepare("google", { intent: "link", session });
+    await expect(prepared.finish({ session: null })).resolves.toEqual({
+      kind: "redirect",
+      location: "/login?next=%2Faccount",
+    });
+    expect(await db.select().from(authIdentity)).toHaveLength(0);
+    expect((await events("oidc_failed")).map((event) => event.detail)).toEqual(["google: session_required (vínculo)"]);
+  });
+
+  it("IT-086 ligar e desligar mandam um aviso cada, nomeando o provedor e quem fez", async () => {
+    const ana = await seedUser("ana@x.com", { password: "senha-certa-da-ana" });
+    const session = await sessionOf(ana);
+    await signInVia("google", { sub: "g-ana", email: "ana@x.com" }, { intent: "link", session });
+    let mails = sinkMails();
+    expect(mails).toHaveLength(1);
+    expect(mails[0]).toMatchObject({ to: "ana@x.com", subject: "Google foi ligado à sua conta do Master Jobs" });
+    expect(mails[0]!.text).toContain("por você, na tela da conta");
+
+    await expect(
+      disconnectProvider({ userId: ana, provider: "google", actor: { by: "cli" } }, methodsDeps()),
+    ).resolves.toEqual({ ok: true });
+    mails = sinkMails();
+    expect(mails).toHaveLength(2);
+    expect(mails[1]).toMatchObject({ to: "ana@x.com", subject: "Google foi desligado da sua conta do Master Jobs" });
+    // A CLI é o operador: para quem recebe, "um administrador".
+    expect(mails[1]!.text).toContain("por um administrador");
+    for (const mail of mails) expect(mail.text).not.toContain("g-ana");
+  });
+
+  it("IT-087 ligar e logo desligar: dois avisos, na ordem", async () => {
+    const ana = await seedUser("ana@x.com", { password: "senha-certa-da-ana" });
+    const session = await sessionOf(ana);
+    await signInVia("linkedin", { sub: "li-ana", email: "ana@x.com" }, { intent: "link", session });
+    await disconnectProvider({ userId: ana, provider: "linkedin", actor: { by: "self" } }, methodsDeps());
+    expect(sinkMails().map((mail) => mail.subject)).toEqual([
+      "LinkedIn foi ligado à sua conta do Master Jobs",
+      "LinkedIn foi desligado da sua conta do Master Jobs",
+    ]);
+    expect((await events("identity_unlinked")).map((event) => event.detail)).toEqual(["linkedin: self"]);
   });
 
   it("sem sessão o início manda entrar; sessão emprestada não liga", async () => {

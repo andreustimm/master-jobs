@@ -556,6 +556,8 @@ describe("architecture inventory", () => {
      */
     const fullPageAnchors = new Map<string, Set<string>>([
       ["app/login/page.tsx", new Set(["startHref(id)"])],
+      // "Conectar" na tela da conta é o mesmo início, com `intent=link` (task_04).
+      ["app/account/page.tsx", new Set(["connectHref(method.provider)"])],
     ]);
     const offenders: string[] = [];
 
@@ -1021,11 +1023,11 @@ describe("authorisation (AUTH-01)", () => {
     },
     // Login social (#464, ADR-012): o início é pré-sessão por natureza; o
     // `intent=link` resolve e autoriza a sessão dentro da própria rota
-    // (`account:write`, que nega sessão emprestada) antes de sair para o
-    // provedor.
+    // (`account:manage-methods`, que nega sessão emprestada) antes de sair
+    // para o provedor.
     "app/login/oauth/[provider]/route.ts": {
       methods: ["GET"],
-      why: "pré-sessão: só redireciona ao provedor com o cookie cifrado do fluxo; `intent=link` exige `account:write` na rota",
+      why: "pré-sessão: só redireciona ao provedor com o cookie cifrado do fluxo; `intent=link` exige `account:manage-methods` na rota",
     },
     // O retorno: a autorização é o fluxo OIDC — cookie cifrado e autenticado,
     // `state` conferido e queimado no servidor, PKCE e ID token validado.

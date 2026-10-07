@@ -25,9 +25,11 @@ import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { clock } from "../../../core/clock.ts";
 import { getDb } from "../../../core/db/client.ts";
 import { authLoginToken, authUser } from "../../../core/db/schema.ts";
+import { DEFAULT_LOCALE, isLocale, type LocaleId } from "../../../core/i18n/index.ts";
 import { checkPassword } from "../domain/password.ts";
 import type { Mailer } from "../ports-mailer.ts";
 import type { AuthRepository, SessionStore } from "../ports.ts";
+import { recoveryEmail } from "./account-emails.ts";
 
 export const RESET_MINUTES = 60;
 
@@ -58,16 +60,20 @@ export type ResetDeps = {
  * **Sempre devolve `{ sent: true }`.** O booleano não é informação sobre a
  * conta — é confirmação de que o pedido foi aceito. Quem chama não consegue
  * distinguir endereço cadastrado de desconhecido, e é assim de propósito.
+ *
+ * O e-mail sai no idioma da conta (`auth_user.locale`); sem ele, no idioma da
+ * tela em que o pedido foi feito (US-020, ADR-011).
  */
 export async function requestPasswordReset(
   email: string,
   deps: ResetDeps,
+  requestLocale: LocaleId = DEFAULT_LOCALE,
 ): Promise<{ sent: true }> {
   const normalised = email.trim().toLowerCase();
   const db = getDb();
 
   const [user] = await db
-    .select({ id: authUser.id, disabledAt: authUser.disabledAt })
+    .select({ id: authUser.id, disabledAt: authUser.disabledAt, locale: authUser.locale })
     .from(authUser)
     .where(eq(authUser.email, normalised))
     .limit(1);
@@ -94,19 +100,10 @@ export async function requestPasswordReset(
     if (Number(recent?.n ?? 0) < RESET_MAX_PER_HOUR) {
       const expiresAt = new Date(clock().now() + RESET_MINUTES * 60_000).toISOString();
       const token = await deps.issue(normalised, expiresAt);
+      const locale = isLocale(user?.locale ?? undefined) ? (user!.locale as LocaleId) : requestLocale;
+      const mail = recoveryEmail({ locale, url: deps.linkFor(token), minutes: RESET_MINUTES });
 
-      const result = await deps.mailer.send({
-        to: normalised,
-        subject: "Recuperar o acesso ao Master Jobs",
-        text: [
-          "Alguém pediu para recuperar a senha desta conta.",
-          "",
-          deps.linkFor(token),
-          "",
-          `O link vale ${RESET_MINUTES} minutos e serve uma vez só.`,
-          "Se não foi você, ignore: nada muda enquanto o link não for usado.",
-        ].join("\n"),
-      });
+      const result = await deps.mailer.send({ to: normalised, subject: mail.subject, text: mail.text });
 
       await deps.audit.record({
         kind: result.ok ? "reset_requested" : "reset_send_failed",

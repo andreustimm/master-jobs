@@ -249,6 +249,22 @@
       ]
     },
     {
+      "id": "pipeline-filters",
+      "modules": [
+        "tests/e2e/ui/pipeline-filters.mjs",
+        "tests/e2e/pipeline-filters-fixture.mjs"
+      ],
+      "patterns": [
+        "app/checkbox-picker.tsx",
+        "src/core/synonyms.ts",
+        "src/core/synonyms-load.ts"
+      ],
+      "routes": [
+        "/login",
+        "/pipeline"
+      ]
+    },
+    {
       "id": "roles",
       "modules": [
         "tests/e2e/ui/roles.mjs"
@@ -319,6 +335,29 @@
         "/",
         "/jobs",
         "/jobs/[id]",
+        "/login",
+        "/login/oauth/[provider]",
+        "/login/oauth/[provider]/callback"
+      ]
+    },
+    {
+      "id": "account-methods",
+      "modules": [
+        "tests/e2e/ui/account-methods.mjs",
+        "tests/e2e/account-methods-fixtures.mjs",
+        "tests/e2e/fake-oidc.mjs"
+      ],
+      "patterns": [
+        "app/account/**",
+        "app/admin/actions.ts",
+        "app/admin/users/**",
+        "src/contexts/auth/app/account-methods.ts",
+        "src/contexts/auth/domain/methods.ts",
+        "src/contexts/auth/infra/drizzle-identities.ts"
+      ],
+      "routes": [
+        "/account",
+        "/admin/users",
         "/login",
         "/login/oauth/[provider]",
         "/login/oauth/[provider]/callback"

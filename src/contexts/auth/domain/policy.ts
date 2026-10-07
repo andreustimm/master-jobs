@@ -112,6 +112,15 @@ export function can(
       if (borrowed) return deny("sessão emprestada não altera a conta do alvo");
       return isAdmin || isCandidate || isRecruiter ? ALLOW : deny("requer sessão válida");
 
+    case "account:manage-methods":
+      // Como se entra na conta é da dona dela (G24): ligar um provedor numa
+      // sessão emprestada daria ao admin uma porta permanente na conta do
+      // alvo, e desligar trancaria a pessoa para fora com a cara dela. O admin
+      // desliga pela administração (`user:manage`), em nome próprio, e nunca
+      // liga — não há ação para isso.
+      if (borrowed) return deny("sessão emprestada não mexe nas formas de entrar do alvo");
+      return isAdmin || isCandidate || isRecruiter ? ALLOW : deny("requer sessão válida");
+
     case "candidate:write":
     case "application:write":
       // Escrita em dado de candidato é só de quem é aquele candidato. Um

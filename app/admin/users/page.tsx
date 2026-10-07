@@ -4,9 +4,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  listUsers,
+  listUsersWithMethods,
   recruiterLinks,
   ROLES,
+  type OidcProviderId,
   type Role,
   type UserSummary,
 } from "../../../src/contexts/auth/index.ts";
@@ -15,6 +16,7 @@ import { requirePage } from "../../auth";
 import { getTranslator } from "../../i18n";
 import { MutationFeedbackForm } from "../../mutation-feedback";
 import {
+  adminDisconnectProviderAction,
   createUserAction,
   impersonateAction,
   toggleDisabledAction,
@@ -40,13 +42,17 @@ const ROLE_LABEL = {
   recruiter: "admin.roleRecruiter",
 } as const satisfies Record<Role, TranslationKey>;
 
+function providerLabel(provider: OidcProviderId, t: Translator["t"]): string {
+  return provider === "google" ? t("email.providerGoogle") : t("email.providerLinkedin");
+}
+
 export default async function AdminUsersPage() {
   const { t, locale } = await getTranslator();
   // Guard antes de ler qualquer coisa. `user:manage` só existe para admin, e
   // uma sessão emprestada perde a ação em bloco.
   const session = await requirePage("user:manage");
 
-  const users = await listUsers();
+  const users = await listUsersWithMethods();
   const links = new Map<number, { id: number; candidateId: number }[]>();
   for (const user of users) {
     if (user.roles.includes("recruiter")) links.set(user.id, await recruiterLinks(user.id));
@@ -119,7 +125,7 @@ function UserRow({
   locale,
   t,
 }: {
-  user: UserSummary;
+  user: UserSummary & { providers: OidcProviderId[] };
   linked: { id: number; candidateId: number }[];
   isSelf: boolean;
   locale: string;
@@ -190,6 +196,52 @@ function UserRow({
               ))}
             </div>
           )}
+
+          {/* Formas de entrar (#464, US-011): quais provedores e se há senha.
+              `div` pelo mesmo motivo do bloco de vínculos: cada provedor
+              carrega um `form`. Admin só desliga — ligar não existe aqui. */}
+          <div
+            className="type-meta flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground"
+            data-testid="user-methods"
+          >
+            <span>{t("admin.methods")}:</span>
+            {user.hasPassword && (
+              <Badge variant="outline" className="type-micro" data-testid="user-method-password">
+                {t("admin.methodPassword")}
+              </Badge>
+            )}
+            {user.providers.map((provider) => (
+              <span key={provider} className="inline-flex items-center gap-1" data-testid={`user-method-${provider}`}>
+                <Badge variant="outline" className="type-micro">
+                  {providerLabel(provider, t)}
+                </Badge>
+                <MutationFeedbackForm
+                  action={adminDisconnectProviderAction}
+                  successMessage={t("admin.providerUnlinked")}
+                  errorMessage={t("feedback.error")}
+                  resultMessages={{
+                    unlinked: t("admin.providerUnlinked"),
+                    last_method: t("account.errorLastMethod"),
+                    not_linked: t("account.errorNotLinked"),
+                    no_account: t("account.errorNotLinked"),
+                  }}
+                  dismissLabel={t("feedback.dismiss")}
+                  className="inline"
+                >
+                  <input type="hidden" name="userId" value={user.id} />
+                  <input type="hidden" name="provider" value={provider} />
+                  <button
+                    type="submit"
+                    className="min-h-11 cursor-pointer underline-offset-2 hover:underline xl:min-h-0"
+                    data-testid={`user-disconnect-${provider}`}
+                  >
+                    {t("admin.disconnectProvider", { provider: providerLabel(provider, t) })}
+                  </button>
+                </MutationFeedbackForm>
+              </span>
+            ))}
+            {!user.hasPassword && user.providers.length === 0 && <span>{t("admin.methodNone")}</span>}
+          </div>
 
           <div className="flex flex-wrap items-center gap-3">
             {/* Papéis viraram leitura aqui. Editar mora na modal desde que o

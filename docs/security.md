@@ -229,11 +229,37 @@ candidate` dá à conta desvinculada um candidato próprio.
 
 A tela existe para qualquer papel e age sempre sobre `session.userId`; nenhum
 id vem da URL nem do formulário (`account:read` para ver, `account:write` para
-mudar, em `src/contexts/auth/domain/policy.ts`).
+mudar nome e senha, `account:manage-methods` para as formas de entrar, em
+`src/contexts/auth/domain/policy.ts`).
 
 - **Trocar a senha exige a senha atual.** Sem ela, um cookie roubado viraria
-  posse permanente da conta. Conta que entra só por link não define a primeira
-  senha por aqui — usa a recuperação.
+  posse permanente da conta.
+- **Primeira senha sem senha atual (#464, US-009).** Conta sem senha — a que
+  entra só por Google/LinkedIn ou por link — define a primeira senha na própria
+  tela, com as regras de sempre (mínimo de 12). É decisão do dono no PRD da
+  #464: a pessoa que se cadastrou pelo provedor precisa de uma porta que não
+  dependa dele. O risco aceito é o que a regra acima evita para quem já tem
+  senha: uma sessão roubada de conta sem senha pode criar uma. Contém o risco:
+  a gravação só vale com `password_hash` nulo (`WHERE password_hash IS NULL`),
+  então não substitui senha existente; fica `password_set` na auditoria; e a
+  sessão emprestada não chega aqui. Definir a primeira senha **não** derruba
+  sessões; trocar uma existente continua derrubando.
+- **Formas de entrar (#464, ADR-004).** A tela lista senha (definida ou não) e
+  cada provedor com data de vínculo, último uso, origem (`automatic` pelo
+  e-mail verificado ou `manual` pela tela) e "não disponível aqui" — nunca
+  sujeito, e-mail, nome ou foto do provedor. "Conectar" é o GET
+  `/login/oauth/<provedor>?intent=link`; "Desligar" recusa a última forma de
+  entrar (sem senha e sem outro provedor; o link mágico não conta, porque só a
+  CLI o emite). A conferência e a remoção rodam numa transação com a linha de
+  `auth_user` travada (`FOR UPDATE`): dois desligamentos simultâneos não deixam
+  a conta sem porta. Cada vínculo e desvínculo grava `identity_linked` /
+  `identity_unlinked` (`self`, `admin <e-mail> (#id)` ou `cli`) e manda o aviso
+  por e-mail à conta; falha de envio vira `email_send_failed` e não desfaz nada.
+- **Admin só desliga** provedor de outra conta (`/admin/users`, `user:manage`),
+  com a mesma proteção do último método — para conta comprometida sem outra
+  porta, a saída é desabilitar. Não existe ação, função nem comando que ligue
+  provedor na conta de outra pessoa; a CLI (`jho auth unlink`) também só
+  desliga.
 - **Limite de tentativas: 5 por conta em 15 minutos**, certas ou erradas. A
   tentativa é gravada em `auth_event` (`password_change_attempt`) ANTES de ser
   contada, então uma rajada concorrente não passa junta pelo limite. Senha nova
@@ -244,10 +270,11 @@ mudar, em `src/contexts/auth/domain/policy.ts`).
   continuo dentro", e um cookie copiado antes da troca também morre. Fica
   registrado `password_changed` com o número de sessões encerradas.
 - **Sessão emprestada não escreve na conta do alvo** — nem senha, nem nome,
-  mesmo quando o alvo é admin. A política nega `account:write` por
-  `impersonatedBy !== null` antes de olhar papel, e a composição
-  (`changePasswordForSession`, `renameForSession`) nega de novo. A tela abre
-  para leitura, sem formulário.
+  nem formas de entrar, mesmo quando o alvo é admin. A política nega
+  `account:write` e `account:manage-methods` por `impersonatedBy !== null`
+  antes de olhar papel, e a composição (`changePasswordForSession`,
+  `renameForSession`, `disconnectOwnProvider`, `setFirstPasswordForSession`)
+  nega de novo. A tela abre para leitura, sem formulário nem botão.
 - **Nome de exibição** é editável e registra `profile_updated`.
 
 **Decisão: troca de e-mail fica só com admin (`/admin/users`).** O e-mail é o
@@ -295,7 +322,7 @@ As exceções, e o que substitui a sessão em cada uma:
 | `setLocaleAction`, `setAppearanceAction` | preferência de interface em cookie próprio, sem dado de ninguém |
 | `/login`, `/login/forgot`, `/login/reset` | pré-sessão; `/login` só pergunta se existe alguma conta e, com sessão válida, manda à tela do papel |
 | `/login/callback` | link mágico de uso único |
-| `/login/oauth/[provider]` | pré-sessão: só redireciona ao provedor com o cookie cifrado do fluxo (AES-256-GCM, 10 min, escopo `/login/oauth`); provedor fora da lista do ambiente recusa (ADR-005 da #464); `intent=link` exige `account:write`, que nega sessão emprestada |
+| `/login/oauth/[provider]` | pré-sessão: só redireciona ao provedor com o cookie cifrado do fluxo (AES-256-GCM, 10 min, escopo `/login/oauth`); provedor fora da lista do ambiente recusa (ADR-005 da #464); `intent=link` exige `account:manage-methods`, que nega sessão emprestada |
 | `/login/oauth/[provider]/callback` | `state` do cookie conferido em tempo constante e queimado no servidor (vale uma vez), PKCE S256, ID token validado no JWKS (`iss`, `aud`, `exp`, `nonce`, assinatura); vínculo automático só com e-mail verificado; recusas neutras e na mesma janela de tentativas da senha |
 | `/api/cron/recheck` | `CRON_SECRET` em tempo constante; 503 sem ele |
 | `/api/cron/watchdog` | `CRON_SECRET` em tempo constante; 503 sem ele — checagem manual/de teste do vigia de cota (ADR 0030); o agendador de produção é `supabase/cron/watchdog.sql`, que nunca chama esta rota |
