@@ -14,7 +14,7 @@
 // como um plugin.
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { resolveGitTarget } from "../../.claude/hooks/push-target.mjs";
+import { resolveGitTarget, workingDirectory } from "../../.claude/hooks/push-target.mjs";
 import { bashRulesFromSettings, blockMessage, judgeShell } from "../../.claude/hooks/shell-policy.mjs";
 
 const SETTINGS = new URL("../../.claude/settings.json", import.meta.url);
@@ -36,9 +36,12 @@ export const ShellGuard = async ({ directory, worktree } = {}) => ({
     }
     // Fora de repositório git o OpenCode dá `worktree` "/": aí a raiz é o diretório.
     const root = worktree && worktree !== "/" ? worktree : directory;
+    // O `bash` do OpenCode roda em `args.workdir` quando ele vem (relativo ao
+    // diretório da sessão): é ali que o comando age, não em `directory`.
+    const cwd = workingDirectory(directory, output.args.workdir);
     // Contexto real do git (#476): checkout principal ou worktree, destino do push.
-    const gitTarget = resolveGitTarget(command, { cwd: directory });
-    const verdict = judgeShell(command, rules, { root, cwd: directory, home: homedir(), gitTarget });
+    const gitTarget = resolveGitTarget(command, { cwd });
+    const verdict = judgeShell(command, rules, { root, cwd, home: homedir(), gitTarget });
     if (verdict) throw new Error(blockMessage(verdict, "OpenCode"));
   },
 });

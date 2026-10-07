@@ -737,7 +737,15 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     lista abaixo (tag, `--all`/`--mirror`/`--prune`, reescrita de
     histórico, poda de objetos, ref protegida local, git que executa
     programa). Push de branch de trabalho a partir da checkout principal
-    também passa forçado, porque o destino é conferido.
+    também passa forçado, porque o destino é conferido. Refspec sem `:`
+    só conta como destino conhecido quando é o branch atual (`HEAD`/`@`
+    inclusive; com `push.default=upstream`, o destino é o `@{push}`): outro
+    nome forçado, ref simbólica (`main-worktree/HEAD`, `worktrees/<n>/HEAD`,
+    branch que é symref), tag forçada (`--tags`, `tag <nome>`,
+    `refs/tags/…`), `-C` com `..`, remoto legado em `remotes/`/`branches/`
+    e `checkout`/`switch --ignore-other-worktrees` para branch protegida
+    perguntam. O diretório é o `workdir` do comando quando o Codex ou o
+    OpenCode o informa.
   - **Pergunta (`ask`):** perda de trabalho fora do contexto conferido
     acima (push forçado ou `+ref`, `--no-verify`, push sem refspec, `HEAD`
     sem destino; `reset --hard/--merge`; `clean`; `checkout -- <caminho>`,

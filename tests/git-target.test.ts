@@ -230,8 +230,17 @@ describe("os três chamadores dão a mesma decisão", () => {
     ["commit --no-verify", () => "git commit --no-verify -m x", () => wt, "pass"],
     ["rebase", () => "git rebase origin/dev", () => wt, "pass"],
     ["branch -D de trabalho", () => "git branch -D feat/velha", () => wt, "pass"],
-    // Push para fora da checkout principal com destino de trabalho: passa.
-    ["push forçado de branch de trabalho a partir da principal", () => "git push --force origin feat/x", () => root, "pass"],
+    // Refspec sem `:` que não é o branch atual: o git o resolve localmente
+    // (ref simbólica, upstream), então o destino forçado não é conhecido.
+    ["push forçado de outro branch a partir da principal", () => "git push --force origin feat/x", () => root, "ask"],
+    // Rodada 1 da L2: ref simbólica, link com `..`, tag forçada, worktree alheia.
+    ["push forçado de main-worktree/HEAD", () => "git push -f origin main-worktree/HEAD", () => wt, "ask"],
+    ["push de worktrees/<n>/HEAD", () => "git push origin worktrees/em-dev/HEAD", () => wt, "ask"],
+    ["reset --hard por -C com link e ..", () => `git -C ${link}/sub/.. reset --hard`, () => wt, "ask"],
+    ["push -f --tags", () => "git push -f --tags", () => wt, "ask"],
+    ["push -f de tag por nome", () => "git push -f origin tag v1.0.0", () => wt, "ask"],
+    ["push -f de refs/tags", () => "git push -f origin refs/tags/v1.0.0", () => wt, "ask"],
+    ["switch --ignore-other-worktrees para dev", () => "git switch --ignore-other-worktrees dev", () => wt, "ask"],
     // Destino real protegido: nega ou pergunta.
     ["push forçado para dev", () => "git push --force origin dev", () => wt, "deny"],
     ["push HEAD:main", () => "git push origin HEAD:main", () => wt, "deny"],
@@ -283,6 +292,34 @@ describe("os três chamadores dão a mesma decisão", () => {
 
   it.each(cases)("%s", async (_name, command, cwd, expected) => {
     expect(await decisions(command(), cwd())).toEqual([expected, expected, expected]);
+  });
+
+  it("workdir do Codex e do OpenCode decide o diretório", async () => {
+    const codexAt = (workdir: string) => judge({ tool_name: "Bash", tool_input: { command: "git reset --hard", workdir }, cwd: wt }, CODEX_RULES, { root, home });
+    expect(codexAt(root).decision).not.toBe("allow");
+    expect(codexAt(wt).decision).toBe("allow");
+    const plugin = await ShellGuard({ directory: wt, worktree: root });
+    await expect(plugin["tool.execute.before"]({ tool: "bash" }, { args: { command: "git reset --hard", workdir: root } })).rejects.toThrow();
+    await expect(plugin["tool.execute.before"]({ tool: "bash" }, { args: { command: "git reset --hard", workdir: wt } })).resolves.toBeUndefined();
+  });
+
+  it("tag local com nome de branch protegida não faz a worktree em dev virar de trabalho", () => {
+    git(root, "tag", "dev");
+    try {
+      expect(claude("git reset --hard", wtDev)).toBe("ask");
+    } finally {
+      git(root, "tag", "-d", "dev");
+    }
+  });
+
+  it("remoto legado em .git/remotes torna o push inseguro", () => {
+    mkdirSync(join(root, ".git/remotes"), { recursive: true });
+    writeFileSync(join(root, ".git/remotes/up"), "URL: x\nPush: refs/heads/dev:refs/heads/dev\n");
+    try {
+      expect(resolveGitTarget("git push", { cwd: wt })?.push?.safe).toBe(false);
+    } finally {
+      rmSync(join(root, ".git/remotes"), { recursive: true, force: true });
+    }
   });
 
   it("contexto de outro comando ou de outro diretório não vale", () => {

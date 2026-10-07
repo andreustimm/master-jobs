@@ -13,8 +13,8 @@
 // ou estouro do tempo devolvem `null`, e o git volta a ser julgado só pelo
 // texto — o push sem refspec, o forçado e o que descarta trabalho perguntam.
 import { spawnSync } from "node:child_process";
-import { realpathSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
+import { readdirSync, realpathSync } from "node:fs";
+import { isAbsolute, join, resolve } from "node:path";
 import { plainGitCommand } from "./shell-policy.mjs";
 
 /** Teto do conjunto de chamadas ao git, bem abaixo do tempo-limite do hook. */
@@ -54,14 +54,51 @@ function parseConfig(output) {
 const truthy = (value) => value === null || !FALSE_VALUES.has(value.toLowerCase());
 
 /**
+ * Remoto legado (`<dir>/remotes/<nome>` com `Push:`, `<dir>/branches/<nome>`):
+ * o git o lê fora da configuração, e o destino escapa da conferência. Pasta
+ * ausente é a normal; qualquer entrada, ou erro que não seja ausência, conta.
+ * @param {string[]} dirs
+ */
+function hasLegacyRemotes(dirs) {
+  for (const dir of dirs) {
+    for (const name of ["remotes", "branches"]) {
+      try {
+        if (readdirSync(join(dir, name)).length > 0) return true;
+      } catch (error) {
+        if (/** @type {NodeJS.ErrnoException} */ (error).code !== "ENOENT") return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Branches locais que são ref simbólica (`refs/heads/atalho` → `refs/heads/dev`):
+ * empurrar `atalho` atualiza o destino do alvo, não `atalho`.
+ * @param {(args: string[], ok?: number[]) => string} git
+ */
+function symbolicBranches(git) {
+  const names = [];
+  for (const line of git(["for-each-ref", "--format=%(refname)%00%(symref)", "refs/heads"]).split("\n")) {
+    const [ref, target] = line.split("\0");
+    if (ref?.startsWith("refs/heads/") && target) names.push(ref.slice("refs/heads/".length));
+  }
+  return names;
+}
+
+/**
  * O que o push leva, pela configuração: `safe` só quando o push sem refspec
  * leva o branch atual e nada mais (`push.default` de um branch, sem
- * `remote.*.push`, `remote.*.mirror` nem `push.followTags`) e o ref de
- * acompanhamento do remoto tem o nome do branch remoto (`fetch` padrão).
+ * `remote.*.push`, `remote.*.mirror`, `push.followTags` nem remoto legado em
+ * `remotes/`/`branches/`) e o ref de acompanhamento do remoto tem o nome do
+ * branch remoto (`fetch` padrão). `pushDefault` é o efetivo (`simple` sem
+ * configuração): com `upstream`/`tracking`, o refspec sem `:` que nomeia um
+ * branch vai para o upstream dele. `symrefs`: branches que são ref simbólica.
  * @param {(args: string[], ok?: number[]) => string} git
+ * @param {string[]} gitDirs diretório comum e o da worktree
  * @returns {import("./shell-policy.mjs").PushInfo}
  */
-function pushInfo(git) {
+function pushInfo(git, gitDirs) {
   let pushRef = null;
   try {
     pushRef = git(["rev-parse", "--symbolic-full-name", "@{push}"]).trim() || null;
@@ -89,13 +126,36 @@ function pushInfo(git) {
     }
   }
   if (pushDefault !== null && !SINGLE_BRANCH_DEFAULTS.has(pushDefault)) safe = false;
+  if (hasLegacyRemotes(gitDirs)) safe = false;
   const remote = pushRef === null ? null : [...remotes].filter((name) => pushRef.startsWith(`refs/remotes/${name}/`)).sort((a, b) => b.length - a.length)[0] ?? null;
   if (remote !== null) {
     const standard = `refs/heads/*:refs/remotes/${remote}/*`;
     const specs = fetches.get(remote) ?? [];
     if (specs.length === 0 || specs.some((spec) => spec.replace(/^\+/, "") !== standard)) safe = false;
   }
-  return { safe, remote, pushRef: remote === null ? null : pushRef };
+  return { safe, remote, pushRef: remote === null ? null : pushRef, pushDefault: pushDefault ?? "simple", symrefs: symbolicBranches(git) };
+}
+
+/**
+ * Diretório em que o shell roda o comando quando a ferramenta recebe um
+ * `workdir` (OpenCode, Codex): relativo vale sobre `base`. Com `..`, o
+ * sistema sobe pelo caminho físico (depois de seguir link simbólico) e
+ * `path.resolve` pelo texto, então o caminho é resolvido pelo próprio sistema
+ * (`realpath` nativo); se não existe, `undefined` — sem diretório conferido.
+ * @param {string | undefined} base
+ * @param {unknown} workdir
+ * @returns {string | undefined}
+ */
+export function workingDirectory(base, workdir) {
+  if (typeof workdir !== "string" || workdir === "") return base;
+  if (!isAbsolute(workdir) && (typeof base !== "string" || !isAbsolute(base))) return undefined;
+  const joined = isAbsolute(workdir) ? workdir : `${base}/${workdir}`;
+  if (!joined.split("/").includes("..")) return resolve(joined);
+  try {
+    return realpathSync.native(joined);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -111,6 +171,8 @@ function pushInfo(git) {
 export function resolveGitTarget(command, { cwd, env = process.env, timeoutMs = GIT_TARGET_TIMEOUT_MS } = {}) {
   try {
     if (typeof command !== "string" || typeof cwd !== "string" || !isAbsolute(cwd)) return null;
+    // `..` no diretório atual: `resolve` sobe pelo texto, o sistema pelo caminho físico.
+    if (cwd.split("/").includes("..")) return null;
     const probe = plainGitCommand(command);
     if (!probe || !CONTEXT_SUBCOMMANDS.has(probe.sub)) return null;
     if (REDIRECTING_ENV.some((name) => env[name] !== undefined && env[name] !== "")) return null;
@@ -125,10 +187,13 @@ export function resolveGitTarget(command, { cwd, env = process.env, timeoutMs = 
       return result.stdout;
     };
 
-    const [toplevel, commonDir, gitDir, branch] = git([
-      "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir", "--absolute-git-dir", "--abbrev-ref", "HEAD",
+    // `--symbolic-full-name`, não `--abbrev-ref`: com uma tag `dev`, o abreviado
+    // vira `heads/dev` e escaparia da comparação com as branches protegidas.
+    const [toplevel, commonDir, gitDir, head] = git([
+      "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir", "--absolute-git-dir", "--symbolic-full-name", "HEAD",
     ]).split("\n");
-    if (!toplevel || !commonDir || !gitDir || !branch) return null;
+    if (!toplevel || !commonDir || !gitDir || !head) return null;
+    const branch = head.startsWith("refs/heads/") && head.length > "refs/heads/".length ? head.slice("refs/heads/".length) : "HEAD";
 
     // A primeira entrada é a checkout principal; as outras, as registradas.
     const worktrees = git(["worktree", "list", "--porcelain", "-z"])
@@ -138,7 +203,7 @@ export function resolveGitTarget(command, { cwd, env = process.env, timeoutMs = 
     const top = real(toplevel);
     const isMainWorktree = worktrees.length === 0 || worktrees[0] === top || !worktrees.slice(1).includes(top) || real(gitDir) === real(commonDir);
 
-    return { command, cwd, dir, branch, isMainWorktree, push: probe.sub === "push" ? pushInfo(git) : null };
+    return { command, cwd, dir, branch, isMainWorktree, push: probe.sub === "push" ? pushInfo(git, [commonDir, gitDir]) : null };
   } catch {
     return null;
   }
