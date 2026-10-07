@@ -71,6 +71,13 @@ export const ACTIONS = [
   "user:impersonate",
   "account:read",
   "account:write",
+  /**
+   * Ligar e desligar Google/LinkedIn e definir a primeira senha da PRÓPRIA
+   * conta (#464). Separada de `account:write` porque decide como se entra na
+   * conta, não o que ela mostra. Não existe ação de ligar provedor em conta
+   * alheia: só a sessão da dona liga (ADR-001, ADR-004).
+   */
+  "account:manage-methods",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 

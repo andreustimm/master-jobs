@@ -47,6 +47,7 @@ import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
 import { GAP_GUEST_FIXTURE } from "./gap-fixture.mjs";
 import { PIPELINE_FILTER_FIXTURE } from "./pipeline-filters-fixture.mjs";
 import { SOCIAL_FIXTURES } from "./social-fixtures.mjs";
+import { METHODS_FIXTURES } from "./account-methods-fixtures.mjs";
 import { PUBLIC_CV_FIXTURE, PUBLIC_FACTS_OFF_FIXTURE, factColumns } from "./public-cv-format.mjs";
 import { isolationRefusal } from "./database-guard.mjs";
 
@@ -112,6 +113,13 @@ export const E2E_ROLES = {
   socialRecruiter: { email: SOCIAL_FIXTURES.recruiter.email, roles: ["recruiter"] },
   socialConflict: { email: SOCIAL_FIXTURES.conflict.email, roles: ["candidate"] },
   socialInvited: { email: SOCIAL_FIXTURES.invited.email, roles: ["candidate"], noPassword: true },
+  // Formas de entrar (#464, task_04): ver `account-methods-fixtures.mjs`.
+  ...Object.fromEntries(
+    Object.entries(METHODS_FIXTURES).map(([key, fixture]) => [
+      `methods-${key}`,
+      { email: fixture.email, roles: fixture.roles, noPassword: fixture.noPassword ?? false },
+    ]),
+  ),
 };
 
 try {
@@ -646,6 +654,28 @@ try {
       emailAtLink: fixture.email,
       origin: "manual",
     });
+  }
+
+  // Formas de entrar (#464, task_04). A jornada liga, desliga e define senha:
+  // a cada execução, cada conta volta ao estado do fixture — sem senha onde o
+  // fixture diz, com as identidades e os termos dele, e nada mais.
+  for (const fixture of Object.values(METHODS_FIXTURES)) {
+    const [user] = await getDb().select({ id: authUser.id }).from(authUser).where(eq(authUser.email, fixture.email));
+    if (!user) throw new Error(`conta de formas de entrar não criada: ${fixture.email}`);
+    await getDb().delete(authIdentity).where(eq(authIdentity.userId, user.id));
+    for (const identity of fixture.identities ?? []) {
+      await getDb().insert(authIdentity).values({ userId: user.id, emailAtLink: fixture.email, ...identity });
+    }
+    await getDb()
+      .update(authUser)
+      .set({
+        termsVersion: fixture.terms?.termsVersion ?? null,
+        privacyVersion: fixture.terms?.privacyVersion ?? null,
+        termsAcceptedAt: fixture.terms?.termsAcceptedAt ?? null,
+        ...(fixture.noPassword ? { passwordHash: null } : {}),
+      })
+      .where(eq(authUser.id, user.id));
+    if (!fixture.noPassword) await setPassword(fixture.email, PASSWORD);
   }
 
   // #325: candidato sem conta, público e com o CV publicado, cujo texto veio

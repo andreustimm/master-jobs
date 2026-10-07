@@ -3,7 +3,13 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { changePasswordForSession, renameForSession } from "../../src/contexts/auth/index.ts";
+import {
+  changePasswordForSession,
+  disconnectOwnProvider,
+  isOidcProvider,
+  renameForSession,
+  setFirstPasswordForSession,
+} from "../../src/contexts/auth/index.ts";
 import { guard, SESSION_COOKIE } from "../auth";
 import type { AccountStatus } from "./status";
 
@@ -61,4 +67,41 @@ export async function changePasswordAction(formData: FormData) {
     expires: new Date(result.expiresAt),
   });
   back("password-changed");
+}
+
+/**
+ * Desliga Google ou LinkedIn da conta DA SESSÃO (#464, US-008).
+ *
+ * `account:manage-methods` nega a sessão emprestada (G24). O provedor do
+ * formulário é só "qual dos meus"; a conta é sempre a da sessão. A proteção do
+ * último método mora no store, sob trava da linha da conta.
+ */
+export async function disconnectProviderAction(formData: FormData) {
+  const session = await guard("account:manage-methods");
+  const provider = String(formData.get("provider") ?? "");
+  if (!isOidcProvider(provider)) back("unlink-not_linked");
+
+  const result = await disconnectOwnProvider(session, provider);
+  if (!result.ok) back(`unlink-${result.error}`);
+  revalidatePath("/account");
+  redirect(`/account?unlinked=${provider}`);
+}
+
+/**
+ * Primeira senha de uma conta que só entra por provedor ou link (#464, US-009).
+ *
+ * Não pede senha atual — não há — e não derruba sessão nenhuma. Conta que já
+ * tem senha é recusada: trocar passa por `changePasswordAction`, que prova a
+ * atual.
+ */
+export async function setOwnPasswordAction(formData: FormData) {
+  const session = await guard("account:manage-methods");
+  const next = String(formData.get("newPassword") ?? "");
+  const confirm = String(formData.get("confirmPassword") ?? "");
+  if (next !== confirm) back("password-mismatch");
+
+  const result = await setFirstPasswordForSession(session, next);
+  if (!result.ok) back(`first-password-${result.error}`);
+  revalidatePath("/account");
+  back("first-password-set");
 }

@@ -22,7 +22,7 @@
  * 5. **Nada criado sem e-mail verificado**; e-mail verificado sem conta vira
  *    pendência de cadastro, nunca conta (US-004, US-006.EC-3).
  */
-import { DEFAULT_LOCALE, isLocale, type LocaleId } from "../../../core/i18n/index.ts";
+import type { LocaleId } from "../../../core/i18n/index.ts";
 import { decideManualLink, resolveIdentity } from "../domain/identity-resolution.ts";
 import { landingForSession, safeNext } from "../domain/landing.ts";
 import { isOidcProvider, type OidcProviderId } from "../domain/oidc-config.ts";
@@ -38,7 +38,7 @@ import type {
   SessionStore,
   VerifiedIdentity,
 } from "../ports.ts";
-import { providerNoticeEmail } from "./account-emails.ts";
+import { sendProviderNotice } from "./account-methods.ts";
 import { openSession } from "./session.ts";
 
 /** Os códigos de erro que `/login` (e `/account`, no vínculo) sabem mostrar. */
@@ -135,7 +135,8 @@ function redirectUri(origin: string, provider: OidcProviderId): string {
  * `GET /login/oauth/[provider]`: decide se o fluxo começa e para onde ir.
  *
  * `intent=link` (ligar pela página da conta) exige sessão própria que possa
- * escrever na conta — sessão emprestada nega (`account:write`, G24).
+ * mexer nas formas de entrar — sessão emprestada nega
+ * (`account:manage-methods`, G24).
  */
 export async function beginSocial(
   input: { provider: string; intent: string | null; next: string | null; session: Session | null },
@@ -151,7 +152,7 @@ export async function beginSocial(
   const provider = config.available.includes(id) ? config.provider(id) : null;
   if (provider === null || config.origin === null || config.sealFlow === null) return refuse("unavailable");
 
-  if (intent === "link" && (input.session === null || !can(input.session, "account:write").allowed)) {
+  if (intent === "link" && (input.session === null || !can(input.session, "account:manage-methods").allowed)) {
     return { kind: "redirect", location: "/login?next=%2Faccount" };
   }
 
@@ -374,9 +375,10 @@ async function linkToSession(
   context: CallbackContext,
 ): Promise<SocialCallbackOutcome> {
   const { id, deps } = context;
-  // Sessão que não pode escrever na própria conta (emprestada, G24) conta como
-  // nenhuma: quem liga um provedor precisa ser a dona da conta.
-  const own = session !== null && session.impersonatedBy === null && can(session, "account:write").allowed;
+  // Sessão que não pode mexer nas formas de entrar (emprestada, G24) conta
+  // como nenhuma: quem liga um provedor precisa ser a dona da conta.
+  const own =
+    session !== null && session.impersonatedBy === null && can(session, "account:manage-methods").allowed;
   const sessionUser = session === null ? null : { id: session.userId, impersonated: !own };
   const linked = await deps.identities.findLinkedUser(id, identity.subject);
   const hasProvider = own && session !== null ? await deps.identities.userHasProvider(session.userId, id) : false;
@@ -411,18 +413,14 @@ async function linkToSession(
  * Aviso de provedor ligado à conta (US-019). Falha de envio não desfaz o
  * vínculo nem barra a entrada: fica registrada para o admin (ADR-011).
  */
-async function notifyLinked(
+function notifyLinked(
   userId: number,
   provider: OidcProviderId,
   by: "automatic" | "self",
   deps: SocialDeps,
 ): Promise<void> {
-  const contact = await deps.identities.accountContact(userId);
-  if (contact === null) return;
-  const locale = isLocale(contact.locale ?? undefined) ? (contact.locale as LocaleId) : DEFAULT_LOCALE;
-  const mail = providerNoticeEmail({ locale, provider, action: "linked", by, at: deps.now().toISOString() });
-  const result = await deps.mailer().send({ to: contact.email, subject: mail.subject, text: mail.text });
-  if (!result.ok) {
-    await deps.repository.record({ kind: "email_send_failed", userId, detail: "provider_linked" });
-  }
+  return sendProviderNotice(
+    { userId, provider, action: "linked", by },
+    { contact: deps.identities.accountContact, mailer: deps.mailer, repository: deps.repository, now: deps.now },
+  );
 }

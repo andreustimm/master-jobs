@@ -2441,6 +2441,67 @@ auth
     });
   });
 
+// Formas de entrar (#464, US-013). Só listar e desligar: ligar um provedor
+// exige o navegador da dona da conta passando pelo provedor, e por isso não
+// existe `jho auth link`.
+auth
+  .command("methods <email>")
+  .description("Formas de entrar de uma conta: senha e provedores ligados")
+  .action(async (email: string) => {
+    await withDb(async () => {
+      const { methodsForEmail } = await import("./contexts/auth/index.ts");
+      const access = await methodsForEmail(email);
+      if (access === null) {
+        console.error(c.red(`\n  Conta ${email} não existe.\n`));
+        process.exitCode = 1;
+        return;
+      }
+      console.log(`\n${c.bold("Formas de entrar")} ${c.dim(access.email)}`);
+      console.log(`  ${"senha".padEnd(10)} ${access.methods.password ? c.green("definida") : c.dim("não definida")}`);
+      for (const method of access.methods.providers) {
+        if (!method.linked) {
+          console.log(`  ${method.provider.padEnd(10)} ${c.dim("não ligado")}`);
+          continue;
+        }
+        const origin = method.origin === "automatic" ? "automático" : "manual";
+        const lastUsed = method.lastUsed === "never" ? "nunca" : method.lastUsed.slice(0, 16).replace("T", " ");
+        console.log(
+          `  ${method.provider.padEnd(10)} ${c.green("ligado")} em ${method.linkedAt.slice(0, 10)} ` +
+            c.dim(`(${origin}) · último uso: ${lastUsed}`) +
+            (method.availableHere ? "" : c.yellow(" · não disponível neste ambiente")),
+        );
+      }
+      console.log();
+    });
+  });
+
+auth
+  .command("unlink <email> <provider>")
+  .description("Desligar o Google ou o LinkedIn de uma conta (nunca o último método)")
+  .action(async (email: string, provider: string) => {
+    await withDb(async () => {
+      const { cliUnlinkProvider, isOidcProvider, OIDC_PROVIDERS } = await import("./contexts/auth/index.ts");
+      if (!isOidcProvider(provider)) {
+        console.error(c.red(`\n  Provedor inválido: ${provider}. Use ${OIDC_PROVIDERS.join(" ou ")}.\n`));
+        process.exitCode = 1;
+        return;
+      }
+      const result = await cliUnlinkProvider(email, provider);
+      if (result.ok) {
+        console.log(`${c.green("✓")} ${provider} desligado de ${email}`);
+        console.log(c.dim("  Registrado como identity_unlinked (cli); a conta recebe o aviso por e-mail.\n"));
+        return;
+      }
+      const message = {
+        no_account: `Conta ${email} não existe.`,
+        not_linked: `Nada a desligar: ${provider} não está ligado a ${email}.`,
+        last_method: `${provider} é a última forma de entrar de ${email}. Defina uma senha (jho auth set-password) antes de desligar.`,
+      }[result.error];
+      console.error(c.red(`\n  ${message}\n`));
+      process.exitCode = 1;
+    });
+  });
+
 const llm = program
   .command("llm")
   .description("Provedores e modelos de LLM (BYOK — a chave fica no seu .env)");
