@@ -141,18 +141,20 @@ async function prepare(
   return {
     callbackUrl,
     sealedFlow: start.sealedFlow,
-    finish: () =>
+    finish: (
+      override: { deps?: SocialDeps; session?: Session | null; provider?: string } = {},
+    ) =>
       finishSocial(
         {
-          provider,
+          provider: override.provider ?? provider,
           callbackUrl,
           sealedFlow: start.sealedFlow,
-          session: options.session ?? null,
+          session: override.session === undefined ? (options.session ?? null) : override.session,
           clientIp: IP,
           locale: "pt-BR",
         },
         config,
-        deps(),
+        override.deps ?? deps(),
       ),
   };
 }
@@ -354,6 +356,25 @@ describe("vínculo automático (US-002)", () => {
     expect(await events("identity_linked")).toHaveLength(1);
   });
 
+  it("IT-011 a outra aba ligou esta identidade entre as duas leituras: entra por ela, não é conflito", async () => {
+    const ana = await seedUser("ana@x.com");
+    await linkSeed(ana, "google", "g-ana");
+    fake.setBehavior("google", { sub: "g-ana", email: "ana@x.com" });
+    const prepared = await prepare("google");
+    // A primeira leitura do vínculo acontece "antes" da outra aba gravar.
+    let reads = 0;
+    const racing = deps();
+    racing.identities = {
+      ...racing.identities,
+      findLinkedUser: async (provider, subject) => {
+        reads += 1;
+        return reads === 1 ? null : identities.findLinkedUser(provider, subject);
+      },
+    };
+    await expect(prepared.finish({ deps: racing })).resolves.toMatchObject({ kind: "session", location: "/" });
+    expect(await events("oidc_failed")).toHaveLength(0);
+  });
+
   it("IT-012 depois do vínculo automático a senha continua valendo", async () => {
     await seedUser("ana@x.com", { password: "senha-certa-da-ana" });
     await signInVia("google", { sub: "g-ana", email: "ana@x.com" });
@@ -518,5 +539,187 @@ describe("ligar pela conta (US-007, base para a task_04)", () => {
       beginSocial({ provider: "google", intent: "link", next: null, session: borrowed }, config, deps()),
     ).resolves.toEqual({ kind: "redirect", location: "/login?next=%2Faccount" });
     expect(await db.select().from(authIdentity)).toHaveLength(0);
+  });
+
+  it("identidade de outra conta, provedor já ligado, ou sessão perdida no caminho: nada muda", async () => {
+    const ana = await seedUser("ana@x.com");
+    const bia = await seedUser("bia@x.com");
+    await linkSeed(bia, "google", "g-bia");
+    const session = await sessionOf(ana);
+
+    await expect(
+      signInVia("google", { sub: "g-bia", email: "bia@x.com" }, { intent: "link", session }),
+    ).resolves.toEqual({ kind: "redirect", location: "/account?error=taken&provider=google" });
+
+    await linkSeed(ana, "linkedin", "li-ana");
+    await expect(
+      signInVia("linkedin", { sub: "li-ana-2", email: "ana@x.com" }, { intent: "link", session }),
+    ).resolves.toEqual({ kind: "redirect", location: "/account?error=already_linked&provider=linkedin" });
+
+    // A sessão expirou durante o consentimento: o retorno chega sem ela.
+    fake.setBehavior("google", { sub: "g-ana", email: "ana@x.com" });
+    const prepared = await prepare("google", { intent: "link", session });
+    await expect(prepared.finish({ session: null })).resolves.toEqual({
+      kind: "redirect",
+      location: "/login?next=%2Faccount",
+    });
+
+    // Provedor recusado no meio do vínculo volta à conta, não ao login.
+    fake.setBehavior("google", { mode: "cancel" });
+    await expect(signInVia("google", { mode: "cancel" }, { intent: "link", session })).resolves.toEqual({
+      kind: "redirect",
+      location: "/account?error=cancelled&provider=google",
+    });
+
+    const rows = await db.select().from(authIdentity);
+    expect(rows.map((row) => `${row.userId}:${row.provider}:${row.subject}`).sort()).toEqual(
+      [`${ana}:linkedin:li-ana`, `${bia}:google:g-bia`].sort(),
+    );
+  });
+
+  it("vínculo manual concorrente que perde a corrida responde 'já ligado'", async () => {
+    const ana = await seedUser("ana@x.com");
+    const session = await sessionOf(ana);
+    fake.setBehavior("google", { sub: "g-ana", email: "ana@x.com" });
+    const prepared = await prepare("google", { intent: "link", session });
+    const losing = deps();
+    losing.identities = { ...losing.identities, linkIdentity: async () => false };
+    await expect(prepared.finish({ deps: losing })).resolves.toEqual({
+      kind: "redirect",
+      location: "/account?error=already_linked&provider=google",
+    });
+  });
+});
+
+describe("bordas do serviço", () => {
+  it("sem origem pública ou sem segredo do fluxo, o início recusa como indisponível", async () => {
+    for (const broken of [{ ...config, origin: null }, { ...config, sealFlow: null }]) {
+      await expect(
+        beginSocial({ provider: "google", intent: "signin", next: null, session: null }, broken, deps()),
+      ).resolves.toEqual({ kind: "redirect", location: "/login?error=unavailable&provider=google" });
+    }
+  });
+
+  it("cookie de um provedor usado no retorno de outro expira", async () => {
+    fake.setBehavior("linkedin", { sub: "li-1" });
+    const prepared = await prepare("linkedin");
+    await expect(prepared.finish({ provider: "google" })).resolves.toEqual({
+      kind: "redirect",
+      location: "/login?error=expired&provider=google",
+    });
+  });
+
+  it("cancelamento e erro do provedor voltam ao login com o motivo", async () => {
+    await expect(signInVia("google", { mode: "cancel" })).resolves.toEqual({
+      kind: "redirect",
+      location: "/login?error=cancelled&provider=google",
+    });
+    await expect(signInVia("linkedin", { mode: "error" })).resolves.toEqual({
+      kind: "redirect",
+      location: "/login?error=provider&provider=linkedin",
+    });
+    expect((await events("oidc_failed")).map((event) => event.detail)).toEqual([
+      "google: cancelled",
+      "linkedin: provider",
+    ]);
+  });
+
+  it("vínculo automático que perde a corrida para outra conta expira, sem sessão", async () => {
+    await seedUser("ana@x.com");
+    fake.setBehavior("google", { sub: "g-ana", email: "ana@x.com" });
+    const prepared = await prepare("google");
+    const losing = deps();
+    losing.identities = { ...losing.identities, linkIdentity: async () => false };
+    await expect(prepared.finish({ deps: losing })).resolves.toEqual({
+      kind: "redirect",
+      location: "/login?error=expired&provider=google",
+    });
+    expect(await db.select().from(authSession)).toHaveLength(0);
+  });
+
+  it("conta desabilitada entre a decisão e a sessão recebe a mesma recusa neutra", async () => {
+    const ana = await seedUser("ana@x.com");
+    await linkSeed(ana, "google", "g-ana");
+    fake.setBehavior("google", { sub: "g-ana", email: "ana@x.com" });
+    const prepared = await prepare("google");
+    const racing = deps();
+    racing.identities = { ...racing.identities, identityOfUser: async () => null };
+    await expect(prepared.finish({ deps: racing })).resolves.toEqual({
+      kind: "redirect",
+      location: "/login?error=refused&provider=google",
+    });
+    // A leitura real também nega conta desabilitada ou inexistente.
+    await db.update(authUser).set({ disabledAt: "2026-01-01T00:00:00.000Z" }).where(eq(authUser.id, ana));
+    await expect(identities.identityOfUser(ana)).resolves.toBeNull();
+    await expect(identities.identityOfUser(999_999)).resolves.toBeNull();
+    await expect(identities.accountContact(999_999)).resolves.toBeNull();
+  });
+
+  it("falha ao enviar o aviso não barra a entrada e fica registrada; conta sem contato não recebe aviso", async () => {
+    const ana = await seedUser("ana@x.com");
+    fake.setBehavior("google", { sub: "g-ana", email: "ana@x.com" });
+    const failing = deps();
+    failing.mailer = () => ({ name: "falho", send: async () => ({ ok: false, error: "fora do ar" }) });
+    const prepared = await prepare("google");
+    await expect(prepared.finish({ deps: failing })).resolves.toMatchObject({ kind: "session" });
+    const failed = await events("email_send_failed");
+    expect(failed).toHaveLength(1);
+    expect(failed[0]).toMatchObject({ userId: ana, detail: "provider_linked" });
+
+    await seedUser("bia@x.com");
+    fake.setBehavior("google", { sub: "g-bia", email: "bia@x.com" });
+    const silent = deps();
+    let sent = 0;
+    silent.mailer = () => ({ name: "contador", send: async () => ((sent += 1), { ok: true, id: null }) });
+    silent.identities = { ...silent.identities, accountContact: async () => null };
+    const second = await prepare("google");
+    await expect(second.finish({ deps: silent })).resolves.toMatchObject({ kind: "session" });
+    expect(sent).toBe(0);
+  });
+});
+
+describe("composição real de index.ts", () => {
+  it("startSocialSignIn e finishSocialSignIn leem o ambiente e entram pela identidade ligada", async () => {
+    const { finishSocialSignIn, socialProviders, startSocialSignIn } = await import("../src/contexts/auth/index.ts");
+    const env = {
+      JHO_ENV: "e2e",
+      JHO_PUBLIC_URL: ORIGIN,
+      JHO_SESSION_SECRET: "segredo-de-teste-com-mais-de-32-caracteres",
+      JHO_SIGNUP_IP_SECRET: "segredo-do-ip",
+      JHO_MAIL_SINK: sink,
+      GOOGLE_OIDC_CLIENT_ID: FAKE_CLIENTS.google.id,
+      GOOGLE_OIDC_CLIENT_SECRET: FAKE_CLIENTS.google.secret,
+      JHO_OIDC_ISSUER_GOOGLE: fake.issuer("google"),
+    };
+    expect(socialProviders(env)).toEqual(["google"]);
+    expect(socialProviders({})).toEqual([]);
+
+    const ana = await seedUser("ana@x.com");
+    await linkSeed(ana, "google", "g-ana");
+    fake.setBehavior("google", { sub: "g-ana", email: "ana@x.com" });
+    const request = { host: "127.0.0.1:3000", proto: "http" as const };
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = fake.fetch as typeof fetch;
+    try {
+      const start = await startSocialSignIn({ provider: "google", intent: null, next: "/jobs/7", session: null, request }, env);
+      if (start.kind !== "provider") throw new Error(JSON.stringify(start));
+      const callbackUrl = new URL((await fake.handle(new Request(start.location))).headers.get("location")!);
+      const finished = await finishSocialSignIn(
+        { provider: "google", callbackUrl, sealedFlow: start.sealedFlow, session: null, clientIp: IP, locale: "en", request },
+        env,
+      );
+      expect(finished).toMatchObject({ kind: "session", location: "/jobs/7" });
+
+      // Sem o segredo do fluxo, nem o cookie abre: o provedor sai da lista.
+      const noSecret = { ...env, JHO_SESSION_SECRET: "" };
+      await expect(
+        finishSocialSignIn(
+          { provider: "google", callbackUrl, sealedFlow: start.sealedFlow, session: null, clientIp: IP, locale: "en", request },
+          noSecret,
+        ),
+      ).resolves.toEqual({ kind: "redirect", location: "/login?error=unavailable&provider=google" });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 });

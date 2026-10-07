@@ -11,6 +11,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createFakeOidc, FAKE_CLIENTS, startFakeOidc } from "./e2e/fake-oidc.mjs";
+import { identityFromClaims } from "../src/contexts/auth/infra/oidc/client.ts";
 import { googleProvider } from "../src/contexts/auth/infra/oidc/google.ts";
 import { LINKEDIN_SCOPES, linkedinProvider } from "../src/contexts/auth/infra/oidc/linkedin.ts";
 import { configuredOidcProvider } from "../src/contexts/auth/infra/oidc/providers.ts";
@@ -147,6 +148,78 @@ describe("o que sai do token", () => {
     fake.setBehavior("linkedin", { emailVerified: "sim" });
     const no = await roundTrip(provider, "http://127.0.0.1:3000/login/oauth/linkedin/callback");
     expect(no.ok && no.identity.emailVerified).toBe(false);
+  });
+});
+
+describe("bordas do adapter", () => {
+  it("retorno com `state` trocado é resposta inválida, sem trocar o código", async () => {
+    const provider = googleProvider(settings("google"), { fetchImpl: fake.fetch });
+    const started = await provider.start({ redirectUri: REDIRECT, intent: "signin", next: null });
+    const callbackUrl = await consent(started.url);
+    callbackUrl.searchParams.set("state", "outro-state");
+    await expect(provider.complete({ redirectUri: REDIRECT, callbackUrl, flow: started.flow })).resolves.toEqual({
+      ok: false,
+      reason: "invalid_response",
+    });
+  });
+
+  it("erro do provedor que não é recusa da pessoa vira erro do provedor", async () => {
+    const provider = googleProvider(settings("google"), { fetchImpl: fake.fetch });
+    const started = await provider.start({ redirectUri: REDIRECT, intent: "signin", next: null });
+    const callbackUrl = new URL(`${REDIRECT}?error=temporarily_unavailable&state=${started.flow.state}`);
+    await expect(provider.complete({ redirectUri: REDIRECT, callbackUrl, flow: started.flow })).resolves.toEqual({
+      ok: false,
+      reason: "provider_error",
+    });
+  });
+
+  it("token sem sujeito não vira identidade", async () => {
+    fake.setBehavior("google", { sub: "" });
+    const provider = googleProvider(settings("google"), { fetchImpl: fake.fetch });
+    await expect(roundTrip(provider)).resolves.toEqual({ ok: false, reason: "invalid_response" });
+  });
+
+  it("descoberta sem authorization_endpoint recusa o início", async () => {
+    const provider = googleProvider(settings("google"), {
+      fetchImpl: async (input, init) => {
+        const response = await fake.fetch(input, init);
+        if (!String(input).endsWith("/.well-known/openid-configuration")) return response;
+        const { authorization_endpoint: _omitted, ...rest } = (await response.json()) as Record<string, unknown>;
+        return new Response(JSON.stringify(rest), { headers: { "content-type": "application/json" } });
+      },
+    });
+    await expect(provider.start({ redirectUri: REDIRECT, intent: "signin", next: null })).rejects.toThrow(
+      /authorization_endpoint/,
+    );
+  });
+
+  it("identityFromClaims: sem token, sem sujeito ou e-mail não textual", () => {
+    expect(identityFromClaims("google", undefined)).toBeNull();
+    const base = { iss: "x", aud: "y", iat: 1, exp: 2 };
+    expect(identityFromClaims("google", { ...base, sub: "   " })).toBeNull();
+    expect(identityFromClaims("linkedin", { ...base, sub: "s", email: 42, email_verified: true })).toEqual({
+      provider: "linkedin",
+      subject: "s",
+      email: null,
+      emailVerified: false,
+    });
+  });
+
+  it("a composição monta o LinkedIn com o emissor do desvio e os escopos dele", async () => {
+    const provider = configuredOidcProvider(
+      "linkedin",
+      {
+        JHO_ENV: "e2e",
+        LINKEDIN_CLIENT_ID: FAKE_CLIENTS.linkedin.id,
+        LINKEDIN_CLIENT_SECRET: FAKE_CLIENTS.linkedin.secret,
+        JHO_OIDC_ISSUER_LINKEDIN: fake.issuer("linkedin"),
+      },
+      { fetchImpl: fake.fetch },
+    );
+    expect(provider?.id).toBe("linkedin");
+    const started = await provider!.start({ redirectUri: REDIRECT, intent: "link", next: "/account" });
+    expect(new URL(started.url).searchParams.get("scope")).toBe(LINKEDIN_SCOPES);
+    expect(started.flow).toMatchObject({ provider: "linkedin", intent: "link", next: "/account" });
   });
 });
 

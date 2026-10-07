@@ -51,7 +51,10 @@ function verifiedClaim(value: unknown): boolean {
  * O LinkedIn às vezes omite `email_verified`; ausência conta como não
  * verificado, e o vínculo automático não acontece (ADR-001).
  */
-export function identityFromClaims(provider: OidcProviderId, claims: oauth.IDToken): VerifiedIdentity | null {
+export function identityFromClaims(provider: OidcProviderId, claims: oauth.IDToken | undefined): VerifiedIdentity | null {
+  // Sem token não há identidade; `requireIdToken` já recusa antes, e isto
+  // fecha o caso para quem chamar de outro lugar.
+  if (claims === undefined) return null;
   const subject = typeof claims.sub === "string" ? claims.sub.trim() : "";
   if (subject === "") return null;
   const rawEmail = typeof claims.email === "string" ? normalizeEmail(claims.email) : "";
@@ -140,13 +143,12 @@ export function oidcProvider(settings: OidcClientSettings, fetchImpl: typeof fet
         return { ok: false, reason: "provider_error" };
       }
 
+      // `?error=` já saiu acima; o que sobra para recusar aqui é retorno
+      // malformado — `state` diferente, `iss` de outro emissor, sem `code`.
       let params: URLSearchParams;
       try {
         params = oauth.validateAuthResponse(as, client, callbackUrl, flow.state);
-      } catch (failure) {
-        if (failure instanceof oauth.AuthorizationResponseError) {
-          return { ok: false, reason: failure.error === "access_denied" ? "cancelled" : "provider_error" };
-        }
+      } catch {
         return { ok: false, reason: "invalid_response" };
       }
 
@@ -182,7 +184,7 @@ export function oidcProvider(settings: OidcClientSettings, fetchImpl: typeof fet
         return { ok: false, reason: validationFailure(failure) ? "invalid_response" : "provider_error" };
       }
 
-      const identity = claims === undefined ? null : identityFromClaims(settings.id, claims);
+      const identity = identityFromClaims(settings.id, claims);
       if (identity === null) return { ok: false, reason: "invalid_response" };
       return { ok: true, identity };
     },

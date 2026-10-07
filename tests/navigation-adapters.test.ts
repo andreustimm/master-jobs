@@ -328,8 +328,15 @@ describe("stable navigation adapters", () => {
     expect(reset).toContain('redirect("/login?reset=1")');
     expect(reset).toContain("encodeURIComponent(token)");
     expect(callback).toContain('redirect303(request, "/login?error=invalid")');
-    expect(callback).toContain('request.headers.get("RSC")');
-    expect(callback).toContain('headers: { Location: location }');
+    // O 303 ciente de RSC mora num módulo só desde o login social (#464): o
+    // link mágico e as duas rotas OIDC o importam.
+    const redirect303 = readFileSync("app/login/redirect303.ts", "utf8");
+    expect(callback).toContain('import { redirect303 } from "../redirect303"');
+    expect(redirect303).toContain('request.headers.get("RSC")');
+    expect(redirect303).toContain('headers: { Location: location }');
+    for (const route of ["app/login/oauth/[provider]/route.ts", "app/login/oauth/[provider]/callback/route.ts"]) {
+      expect(readFileSync(route, "utf8")).toContain("import { redirect303 } from");
+    }
     expect(impersonation).toContain('if (adminToken) redirect("/admin/users")');
     expect(impersonation).toContain('redirect("/login")');
     expect(overlay).not.toMatch(/email|candidateName|token|protectedDestination/);

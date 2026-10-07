@@ -287,8 +287,18 @@ async function signIn(identity: VerifiedIdentity, context: CallbackContext): Pro
       return enter(decision.userId, identity, context, "signin");
     case "auto_link":
       return autoLink(decision.userId, identity, context);
-    case "conflict":
+    case "conflict": {
+      // Corrida (US-002.EC-5): entre ler o vínculo e ler a conta do e-mail,
+      // outra aba pode ter ligado ESTA identidade. Aí não é conflito — entra
+      // por ela, como a decisão teria dito um instante depois.
+      const raced = await deps.identities.findLinkedUser(id, identity.subject);
+      if (raced !== null) {
+        return raced.disabled
+          ? fail(deps, id, "refused", "login", raced.email)
+          : enter(raced.id, identity, context, "signin");
+      }
       return fail(deps, id, "conflict", "login", identity.email);
+    }
     case "refused":
       return fail(deps, id, "refused", "login", linked?.email ?? identity.email);
     case "unverified":
