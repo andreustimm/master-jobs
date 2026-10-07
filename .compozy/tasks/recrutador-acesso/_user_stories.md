@@ -49,6 +49,7 @@ and `_tests.md` (coverage matrix).
 | US-023 | Administration | Administrator              | Revoke an access or cancel an invitation |
 | US-024 | Administration | Administrator              | Never grant access, including while impersonating |
 | US-025 | Limits         | Candidate                  | Invitation and grant caps protect against abuse |
+| US-026 | Visibility     | Candidate                  | Profile on "Recruiters" becomes Private, with a notice that access is now by invitation |
 
 ## Granting
 
@@ -757,3 +758,53 @@ Edge cases:
   window.
 - EC-3: Refused attempts do not count.
 - EC-4: Administrator-side actions never count against the candidate.
+
+## Visibility
+
+### US-026: Profile on "Recruiters" becomes Private, with a notice that access is now by invitation
+
+**As a** candidate whose profile was set to "Recruiters", **I want** to be told
+that my profile is now Private and how to give recruiters access, **so that** I
+am not surprised and I can invite the recruiters I trust.
+
+Acceptance criteria:
+
+- AC-1: Given my profile was set to "Recruiters" before the change, when the
+  change is applied, then my profile visibility is Private.
+- AC-2: Given AC-1, when I open my account page, then the Recruiter access
+  section shows a notice: my profile is now Private, the "Recruiters" option
+  no longer exists, and recruiters get access by invitation. The notice links
+  to the grant form.
+- AC-3: Given AC-2, when I dismiss the notice, then it no longer appears, also
+  after a refresh or on another device.
+- AC-4: Given the candidate page, then the visibility choice offers only
+  Private and Public.
+- AC-5: Given a recruiter without a grant who used to read my profile, when
+  they request any of my pages or my CV, then they get the same 404 as for an
+  unknown candidate.
+- AC-6: Given a recruiter with an active grant from me, then their access is
+  unchanged.
+
+Edge cases:
+
+- EC-1: Profile was Public → stays Public; no notice; `/p/[slug]` unchanged,
+  and any recruiter can still read it there.
+- EC-2: Profile was Private → stays Private; no notice.
+- EC-3: No email is sent to affected candidates or recruiters about the
+  change, at any volume.
+- EC-4: A forged request setting visibility to "recruiters" → refused with a
+  validation error; visibility unchanged.
+- EC-5: A value of "recruiters" still stored after the change (missed row,
+  restored backup) → treated as Private for every reader, never as Public.
+- EC-6: Candidate with no account page visit for months → the notice waits
+  until the first visit, then until dismissed.
+- EC-7: Administrator impersonating the candidate → sees the notice; dismissing
+  it is refused, so the candidate still sees it.
+- EC-8: Zero affected profiles → the change applies with no notices; hundreds
+  of affected profiles → all become Private in the same reviewed migration.
+- EC-9: A recruiter page or list already open when the change applies → its
+  next request for that candidate returns 404; nothing private is served
+  afterwards.
+- EC-10: The data migration still waits for human review while the new code
+  is already running → stored "recruiters" values are already read as Private
+  (EC-5), so no recruiter without a grant reads the profile in between.

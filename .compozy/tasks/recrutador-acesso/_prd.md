@@ -24,6 +24,13 @@ at any moment, and the cut takes effect on the recruiter's next request. Both
 parties are notified by email, and the candidate sees who has access, when
 each recruiter last looked, and the full history of sharing decisions.
 
+The grant becomes the only way for a recruiter to see a non-public profile.
+Today a profile set to the "Recruiters" visibility can be read by any
+authenticated recruiter. With open recruiter sign-up, that means anyone who
+signs up. The option is removed: profiles keep only Private and Public, those
+on "Recruiters" become Private, and their candidates are told on the account
+page that recruiters now get access by invitation (ADR-010).
+
 It serves candidates who work with a recruiter or career coach and want help
 without handing over their private reasoning (notes, salary floor, contacts,
 analyses), and recruiters who need a clear, consented view of the people they
@@ -51,6 +58,8 @@ revocable as easily as given).
   since when".
 - Administrators can still cut an access, and the product makes it impossible
   for anyone but the candidate to create one.
+- A recruiter reads a non-public profile only through an active grant from
+  that candidate; no profile setting opens it to every recruiter.
 
 ## User Stories
 
@@ -64,6 +73,7 @@ revocable as easily as given).
   candidate's decision.
 - US-023 – US-024: administration: revoke only, never grant.
 - US-025: abuse limits.
+- US-026: removal of the "Recruiters" profile visibility.
 
 [Full user stories](_user_stories.md)
 
@@ -141,6 +151,14 @@ revocable as easily as given).
 - No grant or invite action for administrators in the web or the CLI;
   impersonated sessions see the candidate's access page read-only.
 
+### F8. Removal of the "Recruiters" visibility
+
+- The candidate page offers only Private and Public.
+- Profiles on "Recruiters" become Private. Recruiters who read them without a
+  grant start getting 404.
+- Affected candidates see a notice in the Recruiter access section of the
+  account page pointing to the invitation (F1).
+
 ### Interactions
 
 - F1 creates either a grant (F3 opens to the recruiter) or an invitation (F2),
@@ -190,6 +208,22 @@ revocable as easily as given).
 - Recruiters never write candidate data: no funnel moves, no notes, no CV or
   profile edits.
 - Public profile rules (`/p/[slug]`, G21–G23) are unchanged.
+
+### Profile visibility
+
+- Profile visibility has two values: Private and Public. "Recruiters" no
+  longer exists and is not offered on the candidate page.
+- Profiles set to "Recruiters" become Private. Public profiles do not change.
+- No visibility grants recruiters anything. A recruiter reads a non-public
+  candidate only through an active grant. Without one, the recruiter gets the
+  same 404 as for an unknown candidate. Any recruiter, like anyone else, can
+  read a Public profile through `/p/[slug]`.
+- A stored or requested `recruiters` value after the change is treated as
+  Private, never as Public.
+- Each candidate moved from "Recruiters" to Private sees a notice on the
+  account page, in the Recruiter access section, until dismissed. The notice
+  says the profile is now Private and recruiters get access by invitation. No
+  email is sent about this change.
 
 ### Lifecycle
 
@@ -354,6 +388,12 @@ revocable as easily as given).
 - **Responsiveness:** a revocation or expiry is enforced on the recruiter's
   next request, never after a background delay.
 - **Rules 9/10/11:** dictionary text, theme tokens, 375 px.
+- **Visibility removal (ADR-010):** `can()` stops granting reads for the
+  `recruiters` visibility. The visibility type, the candidate page options and
+  the dictionary keys for "Recruiters" are removed together. Moving existing
+  profiles from "Recruiters" to Private is a non-additive data migration: it
+  is not applied automatically and waits for human review at promotion (ADR
+  0028).
 - **Docs (rule 23, ADR-009):** when the feature ships, `docs/product/vision.md`
   and `docs/product/personas.md` describe the recruiter as a user invited by
   the candidate (P2 is no longer "not a user"). `docs/qa/personas.md`
@@ -388,14 +428,10 @@ revocable as easily as given).
 - [ADR-007: Re-granting needs new consent, and revoking a pending invitation kills it](adrs/adr-007.md) — decided by the agent.
 - [ADR-008: Administrators can revoke access but never grant it](adrs/adr-008.md) — decided by the agent.
 - [ADR-009: Recruiters become users invited by candidates, working from the existing candidate list](adrs/adr-009.md) — product positioning and docs update.
+- [ADR-010: Remove the "Recruiters" profile visibility; access to recruiters is by invitation only](adrs/adr-010.md) — owner decision; non-additive migration reviewed at promotion.
 
 ## Open Questions
 
-- **Profile visibility "recruiters":** today the policy lets any authenticated
-  recruiter read a candidate profile whose visibility is "recruiters", with no
-  grant. With open recruiter sign-up (#464), that means anyone who signs up as
-  recruiter. The owner should decide whether this visibility stays, is limited
-  to granted recruiters, or is removed. This PRD does not change it.
 - **Time zone of the end date:** this PRD uses the time zone shown at the
   moment of setting it. The TechSpec should confirm whether the candidate's
   account has a stored time zone to use instead.
