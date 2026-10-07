@@ -130,6 +130,20 @@ persona:
   patience_seconds: 5
 ```
 
+## Pessoa nova que se cadastra sozinha
+
+```yaml
+persona:
+  name: Pessoa nova que se cadastra sozinha
+  base: First-Time User
+  goal: criar a própria conta de candidato ou recrutador sem pedir nada ao admin e sair do cadastro sabendo o que fazer
+  device: phone-small
+  network: 4g
+  modality: touch
+  locale: pt-BR
+  patience_seconds: 8
+```
+
 ## Candidato convidado sem perfil
 
 ```yaml

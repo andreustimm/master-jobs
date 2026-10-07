@@ -1,9 +1,16 @@
 # Personas
 
-Quatro perfis. Só o primeiro é usuário hoje — os outros existem porque decisões
-de arquitetura já tomadas (modelagem multi-candidato, catálogo global de skills)
-só fazem sentido com eles no horizonte, e porque um deles não é usuário nenhum:
-é quem está do outro lado e decide se a candidatura é lida.
+Quatro perfis. O primeiro é o usuário que o sistema serve primeiro — os outros
+existem porque decisões de arquitetura já tomadas (modelagem multi-candidato,
+catálogo global de skills) só fazem sentido com eles, e porque um deles não é
+usuário nenhum: é quem está do outro lado e decide se a candidatura é lida.
+
+**Como cada um chega (#464).** O cadastro é aberto em `/signup`: a pessoa
+escolhe **Candidato** ou **Recrutador** e entra pelo Google, pelo LinkedIn ou
+por e-mail e senha confirmados com código. A candidata (como a P3) sai do
+cadastro com perfil e currículo; o recrutador nasce sem candidatos e vê só
+quem lhe conceder acesso (#465). Admin (o P1, o P4) continua só por convite
+pela CLI.
 
 ---
 
@@ -92,7 +99,8 @@ Cada decisão de scoring é uma hipótese sobre ela:
 ---
 
 ## P3 — Renata, a especialista em transição
-**Secundária. Valida a modelagem multi-candidato antes de existir.**
+**Secundária. Valida a modelagem multi-candidato; desde #464 chega sozinha,
+pelo cadastro aberto, com o currículo já no perfil.**
 
 | | |
 |---|---|

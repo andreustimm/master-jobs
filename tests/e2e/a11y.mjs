@@ -5,7 +5,7 @@
  */
 import AxeBuilder from "@axe-core/playwright";
 import { chromium } from "playwright";
-import { AXE_SWEEP } from "./routes.mjs";
+import { AXE_PRE_SESSION, AXE_SWEEP } from "./routes.mjs";
 import { isolationRefusal } from "./database-guard.mjs";
 
 // Antes do navegador: o login e a varredura só rodam no ambiente descartável.
@@ -57,6 +57,12 @@ async function scan(name, path) {
 }
 
 try {
+  // Sem sessão primeiro: com ela, `/login` e `/signup` mandam para a tela do
+  // papel, e a varredura mediria outra página. `/login` por último, porque o
+  // login parte do formulário dela.
+  for (const [name, path] of AXE_SWEEP.filter(([, path]) => AXE_PRE_SESSION.includes(path) && path !== "/login")) {
+    await scan(name, path);
+  }
   await scan(...AXE_SWEEP.find(([, path]) => path === "/login"));
 
   await page.fill('input[name="email"]', EMAIL);
@@ -65,8 +71,8 @@ try {
   await page.waitForURL((url) => !url.pathname.startsWith("/login"));
 
   // A lista mora em `routes.mjs`, cruzada com o inventário de páginas por
-  // `tests/e2e-route-coverage.test.ts`. `/login` foi varrida acima, sem sessão.
-  for (const [name, path] of AXE_SWEEP.filter(([, path]) => path !== "/login")) {
+  // `tests/e2e-route-coverage.test.ts`. As de pré-sessão foram varridas acima.
+  for (const [name, path] of AXE_SWEEP.filter(([, path]) => !AXE_PRE_SESSION.includes(path))) {
     await scan(name, path);
   }
 } finally {

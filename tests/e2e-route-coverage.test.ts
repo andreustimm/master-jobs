@@ -115,8 +115,11 @@ describe("V08-01 — nenhuma página fica fora da medição sem decisão", () =>
     expect(ui).toContain("portugueseLeaks(ENGLISH_SEARCHES_SWEEP.map(withSuiteIds))");
     expect(ui).toContain("for (const path of OVERFLOW_SWEEP)");
     expect(ui).toContain("OVERFLOW_SEARCHES_SWEEP.map(withSuiteIds)");
-    expect(a11y).toContain("AXE_SWEEP.filter(([, path]) => path !== \"/login\")");
+    // Duas metades que somam a lista inteira: as páginas sem sessão (`/login`,
+    // `/signup`, `/signup/verify`) antes do login, e todo o resto depois.
+    expect(a11y).toContain("AXE_SWEEP.filter(([, path]) => AXE_PRE_SESSION.includes(path) && path !== \"/login\")");
     expect(a11y).toContain("AXE_SWEEP.find(([, path]) => path === \"/login\")");
+    expect(a11y).toContain("AXE_SWEEP.filter(([, path]) => !AXE_PRE_SESSION.includes(path))");
   });
 
   it("a correspondência distingue estático de dinâmico", () => {

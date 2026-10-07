@@ -325,6 +325,55 @@
       ]
     },
     {
+      "id": "sign-up",
+      "modules": [
+        "tests/e2e/ui/sign-up.mjs",
+        "tests/e2e/fake-oidc.mjs",
+        "tests/e2e/mail-sink.mjs"
+      ],
+      "patterns": [
+        "app/signup/**",
+        "app/recruiter/page.tsx",
+        "src/contexts/auth/app/signup.ts",
+        "src/contexts/auth/domain/signup-rules.ts",
+        "src/contexts/auth/infra/drizzle-signups.ts",
+        "src/contexts/auth/app/account-emails.ts",
+        "src/contexts/auth/infra/resend-mailer.ts"
+      ],
+      "routes": [
+        "/",
+        "/candidate",
+        "/jobs",
+        "/login",
+        "/login/oauth/[provider]",
+        "/login/oauth/[provider]/callback",
+        "/privacy",
+        "/recruiter",
+        "/recruiter/[id]",
+        "/signup",
+        "/signup/verify",
+        "/terms"
+      ]
+    },
+    {
+      "id": "legal",
+      "modules": [
+        "tests/e2e/ui/legal.mjs"
+      ],
+      "patterns": [
+        "app/legal-document.tsx",
+        "app/terms/**",
+        "app/privacy/**",
+        "content/legal/**",
+        "src/core/legal.ts"
+      ],
+      "routes": [
+        "/privacy",
+        "/signup",
+        "/terms"
+      ]
+    },
+    {
       "id": "jobs-new",
       "modules": [
         "tests/e2e/ui/jobs-new.mjs"
@@ -410,7 +459,11 @@
         "/login/forgot",
         "/login/reset",
         "/pipeline",
-        "/referrals"
+        "/privacy",
+        "/referrals",
+        "/signup",
+        "/signup/verify",
+        "/terms"
       ]
     },
     {
@@ -741,7 +794,11 @@
         "/jobs/new",
         "/login",
         "/pipeline",
-        "/referrals"
+        "/privacy",
+        "/referrals",
+        "/signup",
+        "/signup/verify",
+        "/terms"
       ]
     }
   ]

@@ -74,8 +74,10 @@ import type { LocaleId } from "../../core/i18n/index.ts";
 import { beginSocial, finishSocial, type SocialConfig, type SocialDeps } from "./app/oidc-login.ts";
 import {
   availableProviders,
+  manualSignupAvailable,
   parseSessionSecret,
   parseSignupIpSecret,
+  parseSignupLimits,
   type OidcProviderId,
 } from "./domain/oidc-config.ts";
 import type { AuthEnvironment } from "./domain/open-mode.ts";
@@ -90,7 +92,32 @@ import {
   touchIdentity,
   userHasProvider,
 } from "./infra/drizzle-identities.ts";
-import { createSocialSignup, signupIpHmac } from "./infra/drizzle-signups.ts";
+import {
+  completeSocialSignup,
+  confirmManualSignup,
+  createSocialSignup,
+  findPending,
+  generateSignupCode,
+  newSignupToken,
+  resendSignupCode,
+  signupIpHmac,
+  signupTokenHash,
+  startManualSignup,
+} from "./infra/drizzle-signups.ts";
+import {
+  completeSocial,
+  confirmCode,
+  resendCode,
+  signupScreen,
+  startManual,
+  verifyScreen,
+  type ManualStartForm,
+  type SignupConfig,
+  type SignupDeps,
+  type SocialForm,
+} from "./app/signup.ts";
+import { hashPassword } from "./domain/password.ts";
+import { currentLegalVersions } from "../../core/legal.ts";
 import { checkCallbackState, flowKey, openFlow, sealFlow } from "./infra/flow-cookie.ts";
 import { configuredOidcProvider } from "./infra/oidc/providers.ts";
 import { MAX_ATTEMPTS, recentFailures } from "./infra/password-login.ts";
@@ -431,6 +458,98 @@ export function finishSocialSignIn(
   env: AuthEnvironment = process.env,
 ) {
   return finishSocial(input, socialConfig(env, input.request), socialDeps);
+}
+
+/* ----------------------------- Cadastro aberto ---------------------------- */
+
+export type { SignupError, SignupScreen, VerifyScreen } from "./app/signup.ts";
+export { landingAfterSignup, showsRecruiterEmptyState } from "./domain/landing.ts";
+export { CODE_DIGITS, CODE_MAX_ATTEMPTS, CODE_MINUTES, RESEND_SECONDS } from "./domain/signup-rules.ts";
+
+/** O que o cadastro precisa do ambiente, lido a cada requisição (como `socialConfig`). */
+function signupConfig(env: AuthEnvironment, request: RequestOrigin): SignupConfig {
+  return {
+    manualAvailable: manualSignupAvailable(env),
+    origin: resolvePublicOrigin(env, request),
+    ipSecret: parseSignupIpSecret(env),
+    maxPerIpHour: parseSignupLimits(env).maxPerIpHour,
+    legalVersions: () => currentLegalVersions(),
+  };
+}
+
+const signupDeps: SignupDeps = {
+  store: {
+    startManual: startManualSignup,
+    resend: resendSignupCode,
+    confirmManual: confirmManualSignup,
+    completeSocial: completeSocialSignup,
+    findPending,
+  },
+  tokens: { create: newSignupToken, hash: signupTokenHash },
+  ipHmac: signupIpHmac,
+  hashPassword,
+  generateCode: generateSignupCode,
+  // O extrator de PDF é pesado: só carrega quando alguém manda um.
+  readPdf: async (entry) => (await import("../../core/pdf.ts")).readCvPdf(entry),
+  sessions: drizzleSessions,
+  repository: drizzleAuthRepository,
+  identityOfUser,
+  mailer: () => configuredMailer(),
+  // Na hora do uso, como o extrator: a composição não carrega a fila de score.
+  afterCandidateCreated: async (candidateId) => (await import("../../core/candidate.ts")).requestCvRescore(candidateId),
+  now: () => new Date(clock().now()),
+};
+
+/**
+ * As dependências para um ambiente: o mailer sai do MESMO ambiente que decidiu
+ * se o cadastro manual está disponível — decidir por um e enviar por outro
+ * aceitaria um cadastro cujo código não chega.
+ */
+function signupDepsFor(env: AuthEnvironment): SignupDeps {
+  return { ...signupDeps, mailer: () => configuredMailer(env) };
+}
+
+/** O cadastro manual funciona neste ambiente? No Preview, não (ADR-011). */
+export function manualSignupOpen(env: AuthEnvironment = process.env): boolean {
+  return manualSignupAvailable(env);
+}
+
+/** Envio do formulário manual: pendência e código (US-016). Ver `app/signup.ts`. */
+export function beginManualSignup(
+  form: ManualStartForm,
+  request: RequestOrigin,
+  env: AuthEnvironment = process.env,
+) {
+  return startManual(form, signupConfig(env, request), signupDepsFor(env));
+}
+
+/** "Reenviar código" (US-017.EC-8). */
+export function resendManualSignupCode(token: string | null, request: RequestOrigin, env: AuthEnvironment = process.env) {
+  return resendCode({ token }, signupConfig(env, request), signupDepsFor(env));
+}
+
+/** O código digitado: cria a conta e abre a sessão (US-017). */
+export function confirmManualSignupCode(
+  input: { token: string | null; code: string; clientIp: string },
+  request: RequestOrigin,
+  env: AuthEnvironment = process.env,
+) {
+  return confirmCode(input, signupConfig(env, request), signupDepsFor(env));
+}
+
+/** O envio da tela no modo social (US-004, US-005). */
+export function finishSocialSignup(form: SocialForm, request: RequestOrigin, env: AuthEnvironment = process.env) {
+  return completeSocial(form, signupConfig(env, request), signupDepsFor(env));
+}
+
+/** O estado de `/signup` para o cookie desta visita. */
+export function signupScreenFor(token: string | null) {
+  return signupScreen(token, signupDeps);
+}
+
+/** O estado de `/signup/verify` para o cookie desta visita. */
+export function verifyScreenFor(token: string | null) {
+  return verifyScreen(token, signupDeps);
 }
 
 /**
