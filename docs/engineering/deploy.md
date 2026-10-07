@@ -442,6 +442,12 @@ copia só `.next/standalone`, `.next/static` e `public/`, e roda como o usuário
 `nextjs`, uid 1101, nunca root). `.dockerignore` exclui `.env*` e todo
 diretório operacional (`.claude/`, `.compozy/`, `tests/`, `docs/` etc.) do
 contexto de build — regra 16: nenhum valor de ambiente entra numa camada.
+Como `next build` checa tipos de todo `**/*.ts` do contexto, voltam só os
+arquivos que código do contexto importa: `.claude/hooks/` (a política de
+shell que `scripts/harness/` usa) e o leitor do grafo de módulos
+(`tests/support/module-graph.ts` e `entry-inventory.ts`, usados por
+`scripts/versions/`). `tests/dockerignore-imports.test.ts` reprova import de
+arquivo excluído ([#470](https://github.com/andreustimm/master-jobs/issues/470)).
 `fly.toml` fixa `primary_region = "gru"` (São Paulo, a região Fly mais
 próxima do Supabase de produção em `sa-east-1`, preservando o raciocínio de
 round-trip curto descrito em "Os três ambientes") e um health check HTTP
