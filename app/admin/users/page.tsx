@@ -255,9 +255,9 @@ function ConfirmAdminAction({
             <Button type="button" variant="outline" popoverTarget={id} popoverTargetAction="hide" className="min-h-11">
               {t("admin.cancel")}
             </Button>
-            {/* `autoComplete="off"`: ao recarregar, o navegador restauraria o id
-                oculto pela posição, e depois de uma revogação a posição de uma
-                concessão é a de outra. */}
+            {/* `autoComplete="off"`: há navegador (Firefox) que restaura campo
+                oculto pela posição ao recarregar, e depois de uma revogação a
+                posição de uma concessão é a de outra. */}
             <MutationFeedbackForm
               action={action}
               autoComplete="off"

@@ -242,14 +242,15 @@ export async function run(ctx) {
 
     const invitesBefore = (await mailsTo(NOVA)).length;
     await inviteRow(page, NOVA).locator('[data-testid="recruiter-invite-resend"]').click();
-    await page.locator('[data-testid="mutation-feedback"]').waitFor({ timeout: 15_000 }).catch(() => {});
+    // O aviso do passo anterior ("Data de fim salva.") ainda pode estar na
+    // tela: esperar só pelo aviso recarregaria antes de o reenvio terminar.
+    await page.waitForFunction(() =>
+      document.querySelector('[data-testid="mutation-feedback"]')?.textContent?.includes("Convite reenviado"),
+    );
     await reload(page);
     const resentValidity = await text(inviteRow(page, NOVA).locator('[data-testid="recruiter-invite-valid-until"]'));
     const invitesAfter = (await mailsTo(NOVA)).length;
 
-    // Depois do recarregamento: o convite novo ocupa a posição do antigo, e o
-    // cancelamento precisa agir sobre o novo (o navegador restaura campo pela
-    // posição — ver `AccessActionButton`).
     const invite = inviteRow(page, NOVA);
     await invite.locator('[data-testid="recruiter-invite-cancel"]').click();
     await invite.locator('[data-testid="recruiter-invite-cancel-dialog"]').waitFor({ state: "visible" });

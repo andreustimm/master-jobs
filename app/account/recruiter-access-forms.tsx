@@ -293,10 +293,9 @@ export function AccessActionButton({
   const popover = `${useId().replace(/:/g, "")}-confirm`;
 
   function submit(formData: FormData) {
-    // O id vem da prop, não do campo oculto: ao recarregar, o navegador
-    // restaura valor de campo pela posição no formulário, e depois de um
-    // reenvio a posição do convite antigo é a do novo — o campo mandaria o id
-    // velho. Achado no E2E-005.
+    // O id vem da prop, não de campo oculto: há navegador (Firefox) que
+    // restaura campo oculto pela posição ao recarregar, e depois de um
+    // reenvio ou de uma revogação a posição de um item é a de outro.
     for (const [name, value] of Object.entries(fields)) formData.set(name, String(value));
     startTransition(async () => {
       try {
