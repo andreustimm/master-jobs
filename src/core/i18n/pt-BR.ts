@@ -96,6 +96,19 @@ export const ptBR = {
       "Depois recarregue esta página. A senha é lida do terminal, nunca de argumento — argumento aparece no histórico do shell e em ps.",
     magicLinkHint: "Sem senha definida? Um link de uso único também entra:",
     setPasswordHint: "Definir senha:",
+    /** Login social (#464). O nome do provedor vem de `email.provider*`. */
+    continueWith: "Continuar com {provider}",
+    socialDivider: "ou entre com e-mail e senha",
+    socialCancelled: "Login cancelado.",
+    socialProvider: "Não foi possível falar com o {provider}. Tente de novo.",
+    socialExpired: "Esta tentativa de login expirou. Comece de novo.",
+    socialConflict:
+      "Esta conta está ligada a outra conta do {provider}. Entre com ela ou de outro jeito.",
+    socialUnverified:
+      "Não conseguimos confirmar seu e-mail com o {provider}. Entre de outro jeito e ligue o {provider} pela página da sua conta, ou use o {other}.",
+    socialRefused:
+      "Não foi possível entrar. Se continuar acontecendo, fale com quem administra o Master Jobs.",
+    socialUnavailable: "Esta opção de login não está disponível aqui.",
   },
   jobs: {
     originWeb: "web",

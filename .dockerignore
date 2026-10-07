@@ -22,6 +22,10 @@ node_modules
 .github
 
 .claude
+# `next build` checa tipos de todo `**/*.ts` do contexto, e
+# `scripts/harness/*.ts` importam a política de shell (#470). Só os hooks
+# voltam; memória, worktrees, settings, agentes e skills continuam fora.
+!.claude/hooks
 .codex
 .opencode
 .agents
@@ -36,6 +40,9 @@ node_modules
 
 coverage
 tests
+# `scripts/versions/postgres-majors.ts` lê o grafo de módulos dos testes.
+!tests/support/module-graph.ts
+!tests/support/entry-inventory.ts
 docs
 compozy
 supabase

@@ -231,6 +231,17 @@ export function availableProviders(env: AuthEnvironment): OidcProviderId[] {
   return OIDC_PROVIDERS.filter((provider) => config[provider].status === "configured");
 }
 
+/**
+ * A chave do HMAC do IP no cadastro aberto, ou `null` (ADR-009).
+ *
+ * Sem ela o cadastro recusa — fechado por omissão: gravar o IP cru, ou um hash
+ * sem chave que se reverte testando todos os IPv4, é o que a chave existe para
+ * evitar. A recusa nomeia a variável, nunca o valor.
+ */
+export function parseSignupIpSecret(env: AuthEnvironment): string | null {
+  return value(env, "JHO_SIGNUP_IP_SECRET");
+}
+
 /** Limite padrão de contas criadas por IP numa janela de 60 minutos (ADR-002). */
 export const DEFAULT_SIGNUP_MAX_PER_IP_HOUR = 3;
 

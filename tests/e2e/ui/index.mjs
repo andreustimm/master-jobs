@@ -52,6 +52,7 @@ import * as searchSynonyms from "./search-synonyms.mjs";
 import * as recruiterLogoTransition from "./recruiter-logo-transition.mjs";
 import * as searches from "./searches.mjs";
 import * as slowFilters from "./slow-filters.mjs";
+import * as socialSignIn from "./social-sign-in.mjs";
 import * as staleTabLogin from "./stale-tab-login.mjs";
 import * as themes from "./themes.mjs";
 import * as trackSelector from "./track-selector.mjs";
@@ -86,6 +87,9 @@ export const AREAS = [
   { id: "roles", run: roles.run, requires: [] },
   { id: "account", run: account.run, requires: [] },
   { id: "password-reset", run: passwordReset.run, requires: [] },
+  // Login social (#464): contas e identidades próprias de `setup.mjs`, emissor
+  // falso do `run-isolated`; cada cenário em contexto próprio.
+  { id: "social-sign-in", run: socialSignIn.run, requires: [] },
   { id: "jobs-new", run: jobsNew.run, requires: [] },
   { id: "public-profile", run: publicProfile.run, requires: [] },
   // Compara o histórico de novidades de quatro sessões: o dono (design),

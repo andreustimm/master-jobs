@@ -7,6 +7,7 @@
 import { clock } from "../../../core/clock.ts";
 import type {
   AuthRepository,
+  Identity,
   IdentityProvider,
   PasswordVerifier,
   SessionStore,
@@ -52,13 +53,30 @@ export async function completeLogin(loginToken: string, deps: AuthDeps): Promise
     await record("login_failed", { detail: "token inválido, usado ou expirado" }, deps);
     return null;
   }
+  return openSession(identity, deps, { kind: "login" });
+}
 
+/**
+ * Abre a sessão de uma identidade já provada — por link mágico ou por
+ * provedor social (#464). Uma porta só para a sessão nascer: mesma duração que
+ * a senha, token novo a cada entrada, e o registro do que aconteceu.
+ */
+export async function openSession(
+  identity: Identity,
+  deps: Pick<AuthDeps, "sessions" | "repository">,
+  event: { kind: string; detail?: string },
+): Promise<{ token: string; session: Session }> {
   const expiresAt = new Date(clock().now() + SESSION_DAYS * 86_400_000).toISOString();
   // A fresh token on every login is what defeats session fixation: a value the
   // attacker planted before authentication is not the value that ends up valid.
   const token = await deps.sessions.create({ userId: identity.userId, expiresAt });
 
-  await record("login", { userId: identity.userId, email: identity.email }, deps);
+  await deps.repository.record({
+    kind: event.kind,
+    userId: identity.userId,
+    email: identity.email,
+    ...(event.detail === undefined ? {} : { detail: event.detail }),
+  });
 
   return {
     token,

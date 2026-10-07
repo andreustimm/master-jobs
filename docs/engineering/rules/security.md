@@ -23,13 +23,24 @@ posicionamento do usuário.
 **Permitido.** Publicação pela API oficial (`w_member_social`); comentários e
 conexões **assistidos** (o agente redige, a pessoa executa); **job alert por
 e-mail**, que é a via legítima (ADR 0008); guardar e exibir uma URL do
-LinkedIn vinda de alerta ou cadastro manual — guardar não é buscar.
+LinkedIn vinda de alerta ou cadastro manual — guardar não é buscar; **login
+por OpenID Connect só para autenticar** (#464, ADR-003 da tarefa
+`login-social`): o produto oficial "Sign In with LinkedIn using OpenID
+Connect", escopos exatamente `openid profile email`, **sem** `w_member_social`.
+Do ID token sai só o sujeito (`sub`), o e-mail e se ele é verificado; nome,
+foto, título, URL de perfil e tokens não são gravados nem logados, e nada do
+provedor alimenta perfil de candidato, `/p/<slug>`, sourcing ou score.
+Desligar o provedor apaga a identidade.
 
 **Como o runtime garante.** `assertSafeRemoteUrl` recusa `linkedin.com`,
 `linkedin.cn`, `lnkd.in`, `licdn.com` e subdomínios antes do DNS, e
 `safeRemoteFetch` repete a checagem em cada salto de redirect. `jobs verify`
 devolve `inconclusive` sem pedido (nunca fecha a vaga); `scrape run` bloqueia
-antes do `robots.txt`. O inventário de transporte de saída é fechado.
+antes do `robots.txt`. O inventário de transporte de saída é fechado; o único
+arquivo que fala com o LinkedIn é o cliente OIDC
+(`src/contexts/auth/infra/oidc/client.ts`), que pede só descoberta, token e
+JWKS do emissor, e o adapter (`linkedin.ts`) fixa os escopos — provado por
+`tests/auth-oidc-adapters.test.ts` (UT-047).
 
 **Limite declarado.** A recusa casa pelo nome do host; scripts avulsos,
 navegador, ferramentas de agente e MCPs ficam fora do runtime e são cobertos só

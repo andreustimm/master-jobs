@@ -10,9 +10,9 @@
  * senha errada de propósito, e o limite de 8 em 15 minutos é real: depois de
  * algumas execuções ele bloquearia o teste com uma proteção que funcionou.
  */
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { closeDb, getDb } from "../../src/core/db/client.ts";
-import { application, authEvent, authLoginToken, authUser, candidate, candidateDocument, candidateSkill, fxRate, job, jobScore, savedTerm, scoreTask, skill, targetAccount, termAttribution } from "../../src/core/db/schema.ts";
+import { application, authEvent, authIdentity, authLoginToken, authUser, candidate, candidateDocument, candidateSkill, fxRate, job, jobScore, savedTerm, scoreTask, skill, targetAccount, termAttribution } from "../../src/core/db/schema.ts";
 import { linkRecruiterToCandidate } from "../../src/contexts/auth/index.ts";
 import { seedOwner } from "../../src/contexts/auth/app/seed.ts";
 import { hashToken } from "../../src/contexts/auth/infra/drizzle-store.ts";
@@ -46,6 +46,7 @@ import { SCORER_VERSION } from "../../src/core/scoring/score.ts";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
 import { GAP_GUEST_FIXTURE } from "./gap-fixture.mjs";
 import { PIPELINE_FILTER_FIXTURE } from "./pipeline-filters-fixture.mjs";
+import { SOCIAL_FIXTURES } from "./social-fixtures.mjs";
 import { PUBLIC_CV_FIXTURE, PUBLIC_FACTS_OFF_FIXTURE, factColumns } from "./public-cv-format.mjs";
 import { isolationRefusal } from "./database-guard.mjs";
 
@@ -104,6 +105,13 @@ export const E2E_ROLES = {
   gapGuest: { email: GAP_GUEST_FIXTURE.email, roles: ["candidate"] },
   // Funil próprio e fixo da área `pipeline-filters` (#478).
   pipelineFilters: { email: PIPELINE_FILTER_FIXTURE.email, roles: ["candidate"] },
+  // Login social (#464): ver `social-fixtures.mjs`. A convidada nasce sem
+  // senha, como as contas que um admin cria, para provar o primeiro acesso
+  // pelo Google sem link mágico.
+  socialCandidate: { email: SOCIAL_FIXTURES.candidate.email, roles: ["candidate"] },
+  socialRecruiter: { email: SOCIAL_FIXTURES.recruiter.email, roles: ["recruiter"] },
+  socialConflict: { email: SOCIAL_FIXTURES.conflict.email, roles: ["candidate"] },
+  socialInvited: { email: SOCIAL_FIXTURES.invited.email, roles: ["candidate"], noPassword: true },
 };
 
 try {
@@ -582,7 +590,7 @@ try {
   // Contas por papel, cada uma com o próprio candidato quando o papel pede um.
   // O slug deriva do e-mail: apontar duas contas para o mesmo candidato seria
   // dar a uma o dado da outra, que é justamente o que a política impede.
-  for (const { email, roles, disabled, noCandidate } of Object.values(E2E_ROLES)) {
+  for (const { email, roles, disabled, noCandidate, noPassword } of Object.values(E2E_ROLES)) {
     const [existing] = await getDb()
       .select({ id: authUser.id })
       .from(authUser)
@@ -601,7 +609,7 @@ try {
     await getDb().insert(authUser).values({ email, roles, candidateId: scoped });
     // Mesma senha da conta principal: o que muda entre os cenários é o PAPEL, e
     // uma senha por conta só acrescentaria variável sem acrescentar cobertura.
-    await setPassword(email, PASSWORD);
+    if (!noPassword) await setPassword(email, PASSWORD);
     if (disabled) {
       await getDb()
         .update(authUser)
@@ -614,6 +622,30 @@ try {
         .set({ visibility: "public", publicCv: false })
         .where(eq(candidate.id, scoped));
     }
+  }
+
+  // Identidades do login social (#464). Numa base reaproveitada, a execução
+  // anterior já ligou o Google da convidada: apaga e recria, para o vínculo
+  // automático (E2E-008) acontecer de novo.
+  const socialEmails = Object.values(SOCIAL_FIXTURES).map((fixture) => fixture.email);
+  const socialUsers = await getDb()
+    .select({ id: authUser.id, email: authUser.email })
+    .from(authUser)
+    .where(inArray(authUser.email, socialEmails));
+  if (socialUsers.length > 0) {
+    await getDb().delete(authIdentity).where(inArray(authIdentity.userId, socialUsers.map((user) => user.id)));
+  }
+  for (const fixture of Object.values(SOCIAL_FIXTURES)) {
+    if (!fixture.provider) continue;
+    const user = socialUsers.find((row) => row.email === fixture.email);
+    if (!user) throw new Error(`conta do login social não criada: ${fixture.email}`);
+    await getDb().insert(authIdentity).values({
+      userId: user.id,
+      provider: fixture.provider,
+      subject: fixture.subject,
+      emailAtLink: fixture.email,
+      origin: "manual",
+    });
   }
 
   // #325: candidato sem conta, público e com o CV publicado, cujo texto veio
