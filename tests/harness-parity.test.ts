@@ -742,6 +742,22 @@ const AFTER_485: readonly [string, Decision][] = [
   ['MANPAGER="rm -rf src" man ls', "ask"],
   ['GH_PAGER="git push --force origin main" gh pr view 1', "deny"],
   ['BROWSER="rm -rf src" gh pr view --web', "ask"],
+  // Segunda re-revisão: `+=`, `export` no laço, programa que recebe o arquivo, `env -S` com aspas, `ssh`.
+  ['GIT_EDITOR+="git push --force origin main" git commit', "deny"],
+  ['GIT_EXTERNAL_DIFF+="rm -rf src" git diff', "ask"],
+  ['EDITOR+="sudo ls" git commit', "deny"],
+  ["GIT_CONFIG_PARAMETERS+=\"'core.pager'='rm -rf src'\" git log", "ask"],
+  ['PGHOST+=db.prod psql -c "delete from job"', "ask"],
+  ['for i in 1; do export GIT_EXTERNAL_DIFF="rm -rf src"; git diff; done', "ask"],
+  ['if true; then export GIT_SSH_COMMAND="rm -rf src"; git fetch; fi', "ask"],
+  ['for i in 1; do declare -x PAGER="rm -rf src"; man ls; done', "ask"],
+  ["GIT_EXTERNAL_DIFF=rm git diff", "ask"],
+  ["EDITOR=rm git commit", "ask"],
+  ["env -S 'sh -c \"git push --force origin main\"'", "deny"],
+  ["env -S 'GIT_EXTERNAL_DIFF=\"rm -rf src\" git diff'", "ask"],
+  ['GIT_SSH_COMMAND="ssh -qF /tmp/c" git fetch', "ask"],
+  ['GIT_PROXY_COMMAND="rm -rf src" git fetch', "ask"],
+  ['git -c core.gitProxy="rm -rf src" fetch', "ask"],
 ];
 
 /** #485: a rotina ao lado das famílias novas continua passando nos três. */
@@ -772,6 +788,15 @@ const ROUTINE_485: readonly string[] = [
   "fd env",
   "GIT_PAGER=cat git log",
   "EDITOR=vim git commit",
+  'EDITOR="code --wait" git commit',
+  "VISUAL=nano gh pr create",
+  'PAGER="less -FRX" gh pr diff 1',
+  'GIT_PAGER="delta --dark" git diff',
+  "GIT_EDITOR=true git commit",
+  'GIT_SSH_COMMAND="ssh -p 2222" git push origin feat/x',
+  'GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" git fetch',
+  "NODE_ENV=test pnpm vitest run env",
+  "PATH+=:/x ls",
 ];
 
 describe("decisão real nos três harnesses (#461)", () => {

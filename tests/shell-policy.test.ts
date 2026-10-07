@@ -908,10 +908,10 @@ describe("escrita fora da árvore do projeto, com a raiz informada pelo chamador
     expect(classifyRisk("git -C /repo worktree add .claude/worktrees/x -b feat/x", env)).toBeNull();
   });
 
-  // Limites aceitos (G85): criar ou remover entrada vazia não perde dado
+  // Limites conhecidos (G85): criar ou remover entrada vazia não perde dado
   // existente, e o link simbólico exigiria olhar o disco — a política é pura.
   it.each(["touch ~/.zshrc", "mkdir -p ~/.config/novo", "rmdir ~/fora", "ln -s ~/.zshrc ./link", "echo x > ./link"])(
-    "limite aceito, registrado em G85: %s",
+    "limite conhecido, registrado em G85: %s",
     (command) => {
       expect(classifyRisk(command, env)).toBeNull();
     },
@@ -1008,6 +1008,47 @@ describe("#485: invólucro desconhecido, ferramenta fora do catálogo e segredo"
     ['GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.sshCommand GIT_CONFIG_VALUE_0="sudo ls" git fetch', "deny"],
     ['GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.x GIT_CONFIG_VALUE_0="!rm -rf src" git x', "ask"],
     ["GIT_CONFIG_PARAMETERS=\"'core.pager'='rm -rf src'\" git log", "ask"],
+    // `NOME+=valor` também atribui: o valor acrescentado é julgado.
+    ['GIT_EDITOR+="git push --force origin main" git commit', "deny"],
+    ['GIT_EXTERNAL_DIFF+="rm -rf src" git diff', "ask"],
+    ['EDITOR+="sudo ls" git commit', "deny"],
+    ['GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0+=core.pager GIT_CONFIG_VALUE_0="rm -rf src" git log', "ask"],
+    ["GIT_CONFIG_PARAMETERS+=\"'core.pager'='rm -rf src'\" git log", "ask"],
+    ['PGHOST+=db.prod psql -c "delete from job"', "ask"],
+    ["PATH+=:/x sudo ls", "deny"],
+    // `export`/`declare -x`/`typeset -x` no mesmo comando (laço, `if`) valem como a atribuição.
+    ['for i in 1; do export GIT_EXTERNAL_DIFF="rm -rf src"; git diff; done', "ask"],
+    ['for i in 1; do export GIT_EDITOR="git push --force origin main"; git commit; done', "deny"],
+    ['if true; then export GIT_SSH_COMMAND="rm -rf src"; git fetch; fi', "ask"],
+    ['for i in 1; do declare -x PAGER="rm -rf src"; man ls; done', "ask"],
+    ['for i in 1; do typeset -x PAGER="rm -rf src"; man ls; done', "ask"],
+    ['for i in 1; do export GIT_EDITOR+="sudo ls"; git commit; done', "deny"],
+    ['readonly PAGER="sudo ls"', "deny"],
+    // O programa recebe o arquivo do git: `rm` apaga; `GIT_EXTERNAL_DIFF` pergunta como `diff.external`.
+    ["GIT_EXTERNAL_DIFF=rm git diff", "ask"],
+    ['GIT_EXTERNAL_DIFF="rm -f" git diff', "ask"],
+    ["GIT_EXTERNAL_DIFF=trash git diff", "ask"],
+    ["GIT_EXTERNAL_DIFF=difft git diff", "ask"],
+    ["EDITOR=rm git commit", "ask"],
+    ["GIT_EDITOR=rm git commit", "ask"],
+    ["GIT_SEQUENCE_EDITOR=rm git rebase -i HEAD~2", "ask"],
+    ['VISUAL="rm -f" git commit', "ask"],
+    // `env -S` respeita aspas; grupo de opções (`-vS`) também; `\` do `env` pergunta.
+    ["env -S 'sh -c \"git push --force origin main\"'", "deny"],
+    ["env -S 'GIT_EDITOR=\"git push --force origin main\" git commit'", "deny"],
+    ["env -S 'GIT_EXTERNAL_DIFF=\"rm -rf src\" git diff'", "ask"],
+    ["env --split-string='sh -c \"git push --force origin main\"'", "deny"],
+    ["env -S\"sh -c 'rm -rf src'\"", "ask"],
+    ["env -vS 'git push --force origin main'", "deny"],
+    ["env -S 'GIT_EXTERNAL_DIFF=rm\\_-rf\\_src git diff'", "ask"],
+    // `ssh` do transporte: `-F`/`-E`/`-I` no grupo e provedor de biblioteca perguntam.
+    ['GIT_SSH_COMMAND="ssh -qF /tmp/c" git fetch', "ask"],
+    ['GIT_SSH_COMMAND="ssh -E /tmp/log" git fetch', "ask"],
+    ['GIT_SSH_COMMAND="ssh -oPKCS11Provider=/tmp/x.so" git fetch', "ask"],
+    ['GIT_SSH_COMMAND="ssh -o SecurityKeyProvider=/tmp/x.so" git fetch', "ask"],
+    ['GIT_PROXY_COMMAND="rm -rf src" git fetch', "ask"],
+    ['git -c core.gitProxy="rm -rf src" fetch', "ask"],
+    ['git config core.gitProxy "rm -rf src"', "ask"],
     // `fd` com `-x`/`-X`/`--exec` executa o argv.
     ["fd -Hx rm -rf", "ask"],
     ["fd . --exec rm -rf {}", "ask"],
@@ -1044,6 +1085,14 @@ describe("#485: invólucro desconhecido, ferramenta fora do catálogo e segredo"
     "GH_PAGER= gh pr view 1",
     'GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" git fetch',
     'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=user.name GIT_CONFIG_VALUE_0="rm -rf src" git log',
+    'EDITOR="code --wait" git commit',
+    "VISUAL=nano gh pr create",
+    'GIT_PAGER="delta --dark" git diff',
+    'GIT_SSH_COMMAND="ssh -p 2222" git push origin feat/x',
+    'GIT_SSH_COMMAND="ssh -oIdentityFile=~/.ssh/x" git fetch',
+    "PATH+=:/x ls",
+    "for i in 1; do export NODE_ENV=test; pnpm vitest run env; done",
+    "env -S 'pnpm vitest run env'",
     // Rotina ao lado das famílias novas.
     "docker ps",
     "docker build -t x .",

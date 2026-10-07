@@ -655,7 +655,10 @@ const MAX_JUDGEMENTS = 2000;
 let budget = MAX_JUDGEMENTS;
 /** Teto de tamanho do comando julgado; acima dele, pergunta. */
 export const MAX_COMMAND = 100_000;
-const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+/** `NOME=valor` e `NOME+=valor` (acrescenta ao valor herdado). */
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*\+?=/;
+/** `NOME+=valor` vira `NOME=valor`: o que se lê é o nome, e o valor acrescentado é o que se julga. */
+const plainAssignment = (word) => word.replace(/^([A-Za-z_][A-Za-z0-9_]*)\+=/, "$1=");
 const PROTECTED_BRANCHES = new Set(["main", "staging", "dev"]);
 
 /** @returns {Risk} */
@@ -693,8 +696,23 @@ const WRAPPERS = {
 const XARGS = { value: ["-n", "-L", "-P", "-s", "-I", "-J", "-E", "-d", "-a", "-R", "-S", "--max-args", "--max-lines", "--max-procs", "--max-chars", "--eof", "--delimiter", "--arg-file", "--process-slot-var"] };
 const WATCH = { value: ["-n", "--interval"] };
 
-/** Pula as opções de `spec` e devolve o comando que vem depois. */
-function skipOptions(rest, spec) {
+/**
+ * Palavras do texto de `env -S`, que respeita aspas como o shell (#485):
+ * `env -S 'sh -c "git push -f"'` roda `sh -c 'git push -f'`. Vai pelo lexer
+ * da política; o escape do `env` (`\_`, `\c`) não é o do shell, e `notes.escaped`
+ * marca o texto com `\` para perguntar.
+ */
+function splitString(text, notes) {
+  if (text.includes("\\")) notes.escaped = true;
+  return lex(text).tokens.map((token) => token.value ?? "").filter(Boolean);
+}
+
+/**
+ * Pula as opções de `spec` e devolve o comando que vem depois. Opção curta em
+ * grupo (`env -vS '…'`, `xargs -0n1`) é lida como o `getopt`: a primeira letra
+ * com valor consome o resto do grupo. `notes.split` diz que `-S` injetou palavras.
+ */
+function skipOptions(rest, spec, notes = {}) {
   const value = new Set(spec.value ?? []);
   const split = new Set(spec.split ?? []);
   const injected = [];
@@ -711,13 +729,23 @@ function skipOptions(rest, spec) {
     }
     if (!arg.startsWith("-") || arg === "-") break;
     const long = arg.startsWith("--");
-    const flag = long ? arg.split("=")[0] : arg.slice(0, 2);
+    let flag = long ? arg.split("=")[0] : arg.slice(0, 2);
     let attached = long ? (arg.includes("=") ? arg.slice(arg.indexOf("=") + 1) : undefined) : arg.length > 2 ? arg.slice(2) : undefined;
+    if (!long && !value.has(flag)) {
+      const at = [...arg.slice(1)].findIndex((letter) => value.has(`-${letter}`));
+      if (at !== -1) {
+        flag = `-${arg[at + 1]}`;
+        attached = arg.length > at + 2 ? arg.slice(at + 2) : undefined;
+      }
+    }
     if (value.has(flag) && attached === undefined) {
       attached = rest[k + 1];
       k++;
     }
-    if (split.has(flag) && attached !== undefined) injected.push(...attached.split(/\s+/).filter(Boolean));
+    if (split.has(flag) && attached !== undefined) {
+      injected.push(...splitString(attached, notes));
+      notes.split = true;
+    }
     k++;
   }
   k += spec.positional ?? 0;
@@ -1436,7 +1464,7 @@ function gitOutputs(sub, rest) {
  * que desligam os hooks): `-c` e `git config` com elas perguntam.
  */
 const GIT_EXEC_KEY =
-  /^(?:core\.(?:pager|editor|sshcommand|fsmonitor|hookspath|askpass)|diff\.external|sequence\.editor|credential\.helper|credential\..+\.helper|gpg\.program|gpg\.[^.]+\.program|.+\.textconv|diff\..+\.command|merge\..+\.driver|filter\..+\.(?:clean|smudge|process)|pager\..+|uploadpack\.packobjectshook)$/;
+  /^(?:core\.(?:pager|editor|sshcommand|gitproxy|fsmonitor|hookspath|askpass)|diff\.external|sequence\.editor|credential\.helper|credential\..+\.helper|gpg\.program|gpg\.[^.]+\.program|.+\.textconv|diff\..+\.command|merge\..+\.driver|filter\..+\.(?:clean|smudge|process)|pager\..+|uploadpack\.packobjectshook)$/;
 
 const has = (args, ...flags) => args.some((arg) => flags.includes(arg));
 
@@ -2329,12 +2357,16 @@ function policyWrite(name, args) {
  * executam (#485): `GIT_SSH_COMMAND="rm -rf src" git fetch` roda `rm`.
  */
 const PROGRAM_VARIABLES = new Set([
-  "GIT_SSH_COMMAND", "GIT_SSH", "GIT_EXTERNAL_DIFF", "GIT_EDITOR", "GIT_SEQUENCE_EDITOR", "GIT_ASKPASS", "SSH_ASKPASS",
-  "GIT_PAGER", "PAGER", "MANPAGER", "GH_PAGER", "EDITOR", "VISUAL", "GH_EDITOR", "BROWSER", "GH_BROWSER",
+  "GIT_SSH_COMMAND", "GIT_SSH", "GIT_PROXY_COMMAND", "GIT_EXTERNAL_DIFF", "GIT_EDITOR", "GIT_SEQUENCE_EDITOR", "GIT_ASKPASS",
+  "SSH_ASKPASS", "GIT_PAGER", "PAGER", "MANPAGER", "GH_PAGER", "EDITOR", "VISUAL", "GH_EDITOR", "BROWSER", "GH_BROWSER",
 ]);
 
-/** Opções do `ssh` que rodam comando local ou leem config que pode rodar. */
-const SSH_RUNS_LOCAL = /(?:proxy|local|knownhosts)command|(?:^|\s)-F/i;
+/**
+ * Opções do `ssh` que rodam comando local, carregam biblioteca, gravam log ou
+ * leem config que pode rodar: `-F`, `-E` e `-I` também no grupo de opções sem
+ * valor (`-qF x`), e não dentro do valor de outra (`-oIdentityFile`).
+ */
+const SSH_RUNS_LOCAL = [/(?:proxy|local|knownhosts)command|pkcs11provider|securitykeyprovider/i, /(?:^|\s)-[46AaCfGgKkMNnqsTtVvXxYy]*[FEI]/];
 
 /**
  * Risco das atribuições de um comando: o valor de variável que executa
@@ -2354,8 +2386,11 @@ function variableRisk(assignments, context) {
     if (PROGRAM_VARIABLES.has(name)) {
       // O transporte do git já é o `ssh`: `GIT_SSH_COMMAND="ssh -i chave"` é rotina, se for só o `ssh`.
       const ssh = (name === "GIT_SSH_COMMAND" || name === "GIT_SSH") && /^\s*(?:[\w./~-]*\/)?ssh(?:\s[^;&|`$()<>{}\n\\'"]*)?$/.test(value);
-      if (ssh) worst = stronger(worst, SSH_RUNS_LOCAL.test(value) ? ask(`${name} com ssh que roda comando local`) : null);
-      else worst = stronger(worst, riskOf(value, context.depth + 1, false, context.env));
+      if (ssh) worst = stronger(worst, SSH_RUNS_LOCAL.some((pattern) => pattern.test(value)) ? ask(`${name} com ssh que roda comando local`) : null);
+      // O programa recebe argumentos do git (o arquivo a editar, o host): `EDITOR=rm` apaga, como em `xargs`.
+      else worst = stronger(worst, riskOf(value, context.depth + 1, true, context.env));
+      // Como `diff.external`: o git passa o caminho do arquivo do projeto ao programa (`GIT_EXTERNAL_DIFF=rm`).
+      if (name === "GIT_EXTERNAL_DIFF") worst = stronger(worst, ask("GIT_EXTERNAL_DIFF executa programa sobre os arquivos, como diff.external"));
     } else if (name === "GIT_CONFIG_PARAMETERS") worst = stronger(worst, ask("GIT_CONFIG_PARAMETERS configura o git por variável"));
     else {
       const index = /^GIT_CONFIG_KEY_(\d+)$/.exec(name);
@@ -2386,9 +2421,10 @@ function judgeWords(input, context) {
   const assigned = [...(context.assigned ?? [])];
   // `env` sem comando imprime o ambiente inteiro (#485); `env -i` não.
   let printsEnv = false;
+  let escaped = null;
   for (let guard = 0; guard < 64 && words.length > 0; guard++) {
     const head = words[0];
-    if (ASSIGNMENT.test(head)) assigned.push(words.shift());
+    if (ASSIGNMENT.test(head)) assigned.push(plainAssignment(words.shift()));
     else if (head === "rtk") {
       words.shift();
       if (words[0] === "proxy") words.shift();
@@ -2396,16 +2432,21 @@ function judgeWords(input, context) {
     else if (Object.hasOwn(WRAPPERS, head)) {
       if (head === "command" && words.slice(1).some((arg) => arg === "-v" || arg === "-V")) return null;
       printsEnv = head === "env" && !words.slice(1).some((arg) => arg === "-" || arg === "--ignore-environment" || shortCluster(arg, "i"));
+      const notes = {};
+      words = skipOptions(words.slice(1), WRAPPERS[head], notes);
       // `env -S '…'` injeta palavras que não estavam no argv: a busca de sufixo recomeça.
-      if (head === "env" && words.slice(1).some((arg) => /^(?:-S|--split-string)/.test(arg))) context = { ...context, suffix: false };
-      words = skipOptions(words.slice(1), WRAPPERS[head]);
+      if (notes.split) context = { ...context, suffix: false };
+      if (notes.escaped) escaped = ask("env -S com \\ (escape do env, não do shell) não é julgado");
     } else break;
   }
   // Programa apontado por variável (`GIT_SSH_COMMAND="rm -rf src" git fetch`): só as atribuições deste comando.
-  const launched = variableRisk(assigned.slice(inherited), context);
+  const launched = stronger(escaped, variableRisk(assigned.slice(inherited), context));
   if (launched?.decision === "deny") return launched;
   return stronger(launched, judgeCommand(words, assigned, printsEnv, context));
 }
+
+/** Builtins que atribuem (e exportam) `NOME=valor` dos argumentos. */
+const DECLARATIONS = new Set(["export", "declare", "typeset", "local", "readonly"]);
 
 /** O comando já sem atribuição, `rtk` nem invólucro de `judgeWords`. */
 function judgeCommand(words, assigned, printsEnv, context) {
@@ -2493,7 +2534,9 @@ function judgeCommand(words, assigned, printsEnv, context) {
     default: {
       // Comando desconhecido: o próprio risco e todo sufixo que começa por
       // executável conhecido (#485), salvo em quem não executa o argv.
-      const own = stronger(write, stronger(judgeSystemTool(name, args), judgeSecretTool(name, args)));
+      let own = stronger(write, stronger(judgeSystemTool(name, args), judgeSecretTool(name, args)));
+      // `export GIT_EDITOR="…"` antes do `git` no mesmo comando (laço, `if`): o valor vale como atribuição.
+      if (DECLARATIONS.has(name)) own = stronger(own, variableRisk(args.filter((arg) => ASSIGNMENT.test(arg)).map(plainAssignment), context));
       if (own?.decision === "deny" || NON_EXECUTING.has(name) || (name === "fd" && !fdExecutes(args))) return own;
       return stronger(own, nestedRisk(args, context));
     }

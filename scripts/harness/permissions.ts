@@ -72,9 +72,10 @@ function withoutReserved(part: string): string {
 const WRAPPERS = new Set(["env", "command", "exec", "nohup", "time", "nice", "timeout", "stdbuf", "ionice"]);
 
 /** Opção, número/duração, sinal (`KILL`) ou atribuição logo depois de um invólucro. */
-const WRAPPER_ARGUMENT = /^(?:-|\d|[A-Z]+$|[A-Za-z_][A-Za-z0-9_]*=)/;
+const WRAPPER_ARGUMENT = /^(?:-|\d|[A-Z]+$|[A-Za-z_][A-Za-z0-9_]*\+?=)/;
 
-const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+/** `NOME=valor` e `NOME+=valor`. */
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*\+?=/;
 
 /**
  * Tira, até estabilizar, o prefixo `rtk`/`rtk proxy` (G63: no Claude Code o

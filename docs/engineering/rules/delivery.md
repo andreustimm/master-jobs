@@ -877,14 +877,23 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   separar arquivo de branch ali exige olhar o disco, e a política é pura —
   só `.`, `..`, `./x`, `x/` e `:x`, que nenhum ref aceita, perguntam.
   Programa apontado por variável na atribuição do próprio comando
-  (`GIT_SSH_COMMAND`, `GIT_SSH`, `GIT_EXTERNAL_DIFF`, `GIT_EDITOR`,
-  `GIT_SEQUENCE_EDITOR`, `GIT_ASKPASS`, `SSH_ASKPASS`, `GIT_PAGER`, `PAGER`,
-  `MANPAGER`, `GH_PAGER`, `EDITOR`, `VISUAL`, `GH_EDITOR`, `BROWSER`,
-  `GH_BROWSER`) tem o valor julgado como comando; `GIT_CONFIG_KEY_n` com
-  chave que executa vale como `git -c`, e `GIT_CONFIG_PARAMETERS` pergunta.
-  `GIT_SSH_COMMAND="ssh -i chave"` passa; com `ProxyCommand`,
-  `LocalCommand` ou `-F`, pergunta.
-  Escrita fora do projeto, limites aceitos pelo dono (#462): `touch`,
+  (`NOME=valor` ou `NOME+=valor`), ou por `export`/`declare`/`typeset`/
+  `local`/`readonly` com `NOME=valor` no mesmo comando (corpo de laço ou
+  `if`) — `GIT_SSH_COMMAND`, `GIT_SSH`, `GIT_PROXY_COMMAND`,
+  `GIT_EXTERNAL_DIFF`, `GIT_EDITOR`, `GIT_SEQUENCE_EDITOR`, `GIT_ASKPASS`,
+  `SSH_ASKPASS`, `GIT_PAGER`, `PAGER`, `MANPAGER`, `GH_PAGER`, `EDITOR`,
+  `VISUAL`, `GH_EDITOR`, `BROWSER`, `GH_BROWSER` — tem o valor julgado como
+  comando que recebe argumentos do git (o arquivo a editar, o host), como em
+  `xargs`: `EDITOR=rm git commit` pergunta, `EDITOR="code --wait"` passa.
+  `GIT_EXTERNAL_DIFF` sempre pergunta, como `diff.external`: o git passa o
+  arquivo do projeto ao programa. `GIT_CONFIG_KEY_n` com chave que executa
+  (inclusive `core.gitProxy`) vale como `git -c`, e `GIT_CONFIG_PARAMETERS`
+  pergunta. `GIT_SSH_COMMAND="ssh -i chave"` passa; com `ProxyCommand`,
+  `LocalCommand`, `KnownHostsCommand`, `PKCS11Provider`,
+  `SecurityKeyProvider` ou `-F`/`-E`/`-I` (também em grupo, `-qF`),
+  pergunta. `env -S '…'` é lido com as aspas, como o `env` faz; com `\`
+  (escape do `env`, não do shell), pergunta.
+  Escrita fora do projeto, limites conhecidos (#462): `touch`,
   `mkdir` e `rmdir` fora do projeto passam, porque não perdem dado
   existente; link simbólico não é resolvido — `ln -s ~/.zshrc ./link` e
   depois `echo x > ./link` passam, porque seguir o link exige olhar o disco
@@ -920,8 +929,9 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     arquivo que um `vercel env pull` gravou com outro nome — só `.env*` e
     `.linkedin.token.json` são negados por nome; `dotenv -- …` carrega o
     `.env` como o `pnpm jho` (`--env-file-if-exists=.env`) faz na rotina.
-  - **Host do Postgres pelo ambiente**: `PGHOST` exportado antes, fora do
-    comando, não é visto; `psql` remoto com `-c` de `select` passa.
+  - **Host do Postgres pelo ambiente**: `PGHOST` fora do prefixo do próprio
+    `psql` (exportado em outra chamada, ou por `export` antes do `psql` no
+    mesmo laço) não é visto; `psql` remoto com `-c` de `select` passa.
   - **Postgres remoto fora das formas lidas**: URL colada na opção
     (`psql -dpostgresql://…`), `service=` do `pg_service.conf` e
     `select … into` (grava com cara de leitura) passam.
@@ -931,8 +941,9 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   - **Comando remoto do Fly**: `fly ssh console -C "…"` roda na máquina
     remota sem que o texto seja julgado.
   - **Variável que a política não lê**: programa por variável fora da lista
-    acima (`BASH_ENV`, `NODE_OPTIONS=--require`) e variável exportada antes,
-    fora do comando, passam.
+    acima (`BASH_ENV`, `NODE_OPTIONS=--require`) e variável exportada em
+    outra chamada passam: a política não guarda estado entre comandos.
+    `NOME=valor` solto ou com `export` no mesmo comando é julgado.
   - **Busca de sufixo por palavra**: só o argv é lido; texto entre aspas só
     é julgado como shell em `sh -c`, `eval`, `watch` e nos invólucros
     `hyperfine`, `parallel`, `entr` e `flock` (`tmux new "…"` não é).
