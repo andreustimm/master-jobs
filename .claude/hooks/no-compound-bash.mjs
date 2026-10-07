@@ -12,6 +12,8 @@
 //   que seja a forma que o Claude Code use para casar a lista — com ou sem o
 //   `rtk` que o hook global acrescenta —, porque o classificador tira o
 //   prefixo antes de julgar.
+// - Comando `git` simples: o contexto real (checkout principal ou worktree de
+//   trabalho, destino do push) vem do próprio git (`push-target.mjs`, #476).
 // - Falha do processo (node ausente, módulo quebrado): o `|| exit 2` do
 //   comando em `.claude/settings.json` bloqueia, como no Codex — saída
 //   diferente de 0 e 2 deixaria o comando passar.
@@ -19,6 +21,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
+import { resolveGitTarget } from "./push-target.mjs";
 import { bashRulesFromSettings, compoundMessage, findCompound, isReadOnlyStage, judgeShell } from "./shell-policy.mjs";
 
 export { findCompound, isReadOnlyStage };
@@ -39,13 +42,15 @@ export function loadRules(path = SETTINGS) {
  * PreToolUse com `ask`/`deny` (risco) ou nada.
  * @param {string} command
  * @param {import("./shell-policy.mjs").BashRules | null} rules
- * @param {import("./shell-policy.mjs").ShellEnv} [env] raiz do projeto, cwd e diretório pessoal
+ * @param {import("./shell-policy.mjs").ShellEnv} [env] raiz do projeto, cwd e diretório pessoal;
+ *   sem `gitTarget`, o contexto do git é resolvido aqui a partir do `cwd`
  * @returns {{ exit: 0 | 2, stdout?: string, stderr?: string }}
  */
 export function hookOutcome(command, rules, env = {}) {
   let verdict;
   try {
-    verdict = judgeShell(command, rules, env);
+    const gitTarget = env.gitTarget === undefined ? resolveGitTarget(command, { cwd: env.cwd }) : env.gitTarget;
+    verdict = judgeShell(command, rules, { ...env, gitTarget });
   } catch (error) {
     // Falha fecha na decisão: o hook que cai deixaria o comando passar.
     verdict = { decision: "ask", reason: `a política de shell não conseguiu julgar o comando (${error?.message ?? error})`, kind: "risk" };
