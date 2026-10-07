@@ -243,7 +243,10 @@ const BUILTIN_ALLOWED = new Set(["cd"]);
  * pergunta. O prefixo `rtk` sai antes de conferir o allow (G63). Em laço
  * (#461), a palavra reservada sai antes do allow: `do echo $f` é julgado como
  * `echo $f`, `while docker ps` como `docker ps`, e `done`/`fi`/cabeçalho de
- * `for` são estrutura — `Bash(for:*)` libera a forma, não o corpo.
+ * `for` são estrutura — `Bash(for:*)` libera a forma, não o corpo. `Bash` sem
+ * padrão no allow (#481) libera todo trecho que deny e ask não pegam: aí o
+ * risco é do classificador e o composto é recusado, ambos por `judgeShell`
+ * na guarda do Codex (`codex-guard.ts`), antes desta lista.
  */
 export function decideCommand(rules: readonly Rule[], command: string): Decision {
   const bash = rules.filter((rule) => rule.tool === "Bash");
@@ -433,6 +436,10 @@ export function toOpenCodePermission(permissions: ClaudePermissions): OpenCodePe
         if (rule.specifier === null) {
           for (const pattern of Object.keys(entry)) delete entry[pattern];
           entry["*"] = decision;
+        } else if (decision === "allow" && entry["*"] === "allow") {
+          // A ferramenta inteira já está liberada (`Bash` sem padrão, #481):
+          // o allow com padrão não acrescenta nada, em qualquer ordem da fonte.
+          continue;
         } else if (tool === "bash") {
           const pattern = openCodeBashPattern(rule.specifier);
           place(entry, pattern, decision);

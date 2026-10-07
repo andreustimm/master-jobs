@@ -662,7 +662,10 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   liberado por uma regra
   `allow` (ou é `cd`), e o que nenhuma regra libera é `ask` — isso fecha
   de uma vez invólucro, shell aninhado, `eval`, palavra reservada e aspas
-  `$'…'`, porque o que a leitura não reconhece como liberado pergunta. Edição
+  `$'…'`, porque o que a leitura não reconhece como liberado pergunta. Com a
+  lista real (#481), `Bash` sem padrão libera todo comando simples que `deny`
+  não pega: a lista libera o shell, e quem decide o risco é a política
+  (`judgeShell`), que roda antes da lista nos três. Edição
   por `apply_patch` fora das regras de caminho é a exceção: fica com o sandbox
   e a aprovação que a pessoa escolheu no Codex (recomendado: `workspace-write`
   com `on-request`, ou mais estrito); o projeto não fixa esses valores, porque
@@ -781,8 +784,15 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     `a+rwx`, `o+w`) e `rm` recursivo na raiz, num diretório de sistema de
     primeiro nível (`/usr`, `/etc`, `/Users`…) ou no diretório pessoal;
     subdiretório (`rm -rf /tmp/cache`, `rm -rf ~/www`) pergunta.
-- **O que fica no `.claude/settings.json`.** `allow` da rotina (com
-  `Bash(for:*)`, `while`, `until`, `if`, `case`); `ask` só para editar a
+- **O que fica no `.claude/settings.json`.** `allow` com `Bash` sem padrão
+  (#481, pedido do dono): a lista libera o shell, e a política decide o
+  risco nos três harnesses — o hook do Claude Code devolve `ask`/`deny`, a
+  guarda do Codex bloqueia `ask` e `deny`, o plugin do OpenCode lança
+  `Error`. Antes, todo comando fora de uma lista de prefixos (`docker`,
+  `codex exec`, `opencode run`, script novo) caía em aprovação manual, e a
+  lista nunca cobria tudo; as entradas `Bash(...)` de `allow` saíram por
+  redundantes. No OpenCode a tradução vira `bash: { "*": "allow", …deny }`,
+  sem padrão `allow` além do `*`. `ask` só para editar a
   própria política (`.claude/settings.json`, `.claude/hooks/**`,
   `scripts/harness/**`, `opencode.json`, `.codex/**`, `.opencode/plugins/**`,
   com `**/` à frente para valer também dentro de `.claude/worktrees/<wt>/`),
@@ -831,9 +841,10 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   `git notes --ref refs/heads/main` não é
   vetor: o git prefixa `refs/notes/` (grava `refs/notes/refs/heads/main`, e
   `main` fica intacta), por isso não pergunta.
-  `Bash(node:*)`,
-  `Bash(npx:*)` e `Bash(rtk proxy:*)` liberam código arbitrário por desenho, e
-  o classificador só pega neles o risco que reconhece.
+  `Bash` liberado inteiro (#481) libera código arbitrário por desenho
+  (`node -e`, script por arquivo, ferramenta nova), e o classificador só
+  pega o risco que reconhece: `docker rm` e `docker system prune`, por
+  exemplo, não são julgados pela política do projeto.
 - **Instruções.** Os três carregam só o `AGENTS.md`; as regras por domínio são
   lidas sob demanda pelo roteador da entrada. Carregar os seis arquivos de
   `docs/engineering/rules/` em `opencode.json > instructions` custaria ~26 mil
@@ -850,7 +861,10 @@ prova, sobre o `.claude/settings.json` real, que Codex (guarda) e OpenCode
 (`opencode.json` + plugin) decidem igual ou mais forte que o Claude Code em
 todos os achados da revisão da #462 — com e sem `rtk`/`rtk proxy` —, que a
 rotina passa sem pergunta nos três e que o composto é recusado nos três com a
-mesma mensagem. `tests/shell-policy.test.ts` cobre o classificador em cada
+mesma mensagem; desde a #481, também que ferramenta fora da antiga lista
+(`docker ps`, `codex exec`, `opencode run`) passa nos três e que push
+forçado, `rm -rf`, `vercel --prod`, `.env`, `sudo` e push protegido dão a
+mesma decisão (`ask` ou `deny`) nos três. `tests/shell-policy.test.ts` cobre o classificador em cada
 forma (pura, `rtk`, `git -C`, `git -c`, laço, `sh -c`, `xargs`,
 `find -exec`, invólucro e lançador). O plugin foi carregado no runtime do
 OpenCode (Bun 1.3.14) e `opencode debug config` o lista entre os plugins do
@@ -868,9 +882,11 @@ economia de saída, não proteção. `rtk proxy <comando>` só quando a saída b
 leia o log bruto quando o resultado importa.
 
 **Um comando de shell por chamada**, sem `&&`, `||` ou `;`. A lista de
-permissão do Claude Code (`.claude/settings.json`) casa pelo prefixo do
-comando: um composto não casa com o `allow` e cai em aprovação manual, e o dono
-vira fila. Duas exceções (#461):
+permissão (`.claude/settings.json`) libera o shell (`Bash` sem padrão, #481)
+e a política de shell decide o risco comando a comando (G85): o composto é
+recusado antes, porque juntar comandos esconde um atrás do outro, e o que a
+política não consegue separar cairia em aprovação manual — o dono vira fila.
+Duas exceções (#461):
 
 - **Pipe em que todo estágio só lê** — `cat`, `head`, `tail`, `wc`, `grep`,
   `rg`, `jq`, `sort`, `uniq`, `cut`, `tr`, `column`, `nl`, `ls`, e
@@ -889,9 +905,9 @@ vira fila. Duas exceções (#461):
   continua julgado comando a comando — `&&`, `||`, `&`, subshell, heredoc,
   substituição, pipe fora da leitura e qualquer comando depois do `done`
   (salvo pipe de leitura: `for …; done | grep a`) seguem recusados, o
-  classificador de risco vê cada comando do corpo, e cada um precisa estar no
-  `allow` como se rodasse sozinho (`Bash(for:*)` libera a forma, não o
-  corpo); os embutidos `[`, `[[`, `:`, `true`, `false`, `read`, `test`,
+  classificador de risco vê cada comando do corpo, e cada um é conferido
+  contra a lista como se rodasse sozinho (a forma do laço não libera o
+  corpo; com `Bash` liberado, decidem o classificador e o `deny`); os embutidos `[`, `[[`, `:`, `true`, `false`, `read`, `test`,
   `break` e `continue` passam sem regra.
 
 Filtre saída com a flag do próprio programa (`--jq`, `--format`) e ponha

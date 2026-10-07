@@ -759,6 +759,11 @@ describe("findCompound: pipe só de leitura e laço com corpo julgado", () => {
 
 const REAL_SETTINGS = JSON.parse(readFileSync(".claude/settings.json", "utf8")) as { permissions: Record<string, string[]> };
 const REAL_BASH = bashRulesFromSettings(REAL_SETTINGS)!;
+/**
+ * Lista estreita para provar o mecanismo do corpo de laço: desde a #481 a lista
+ * real libera `Bash` inteiro, e o laço não teria o que perguntar por ela.
+ */
+const NARROW_BASH = { allow: ["echo:*", "sleep:*", "git:*"], ask: [], deny: ["git push * main"] };
 
 describe("uma fonte de verdade para o risco de shell", () => {
   it("`.claude/settings.json` não repete o classificador em `ask` e não pergunta nada de `gh`", () => {
@@ -814,11 +819,21 @@ describe("uma fonte de verdade para o risco de shell", () => {
   });
 
   it("corpo de laço é julgado contra a lista allow, como se rodasse sozinho", () => {
-    expect(judgeShell("for f in a; do echo $f; done", REAL_BASH)).toBeNull();
-    expect(judgeShell("for f in a; do docker rm $f; done", REAL_BASH)).toMatchObject({ decision: "ask", kind: "body" });
-    expect(judgeShell("while docker ps; do sleep 1; done", REAL_BASH)).toMatchObject({ decision: "ask", kind: "body" });
+    expect(judgeShell("for f in a; do echo $f; done", NARROW_BASH)).toBeNull();
+    expect(judgeShell("for f in a; do docker rm $f; done", NARROW_BASH)).toMatchObject({ decision: "ask", kind: "body" });
+    expect(judgeShell("while docker ps; do sleep 1; done", NARROW_BASH)).toMatchObject({ decision: "ask", kind: "body" });
     expect(judgeShell("for f in a; do echo $f; done", null)).toMatchObject({ decision: "ask", kind: "body" });
     expect(judgeShell("for f in a; do git push origin main; done", REAL_BASH)).toMatchObject({ decision: "deny" });
+  });
+
+  it("#481: `Bash` sem padrão na lista real libera o corpo; o risco continua com a política", () => {
+    expect(REAL_BASH.allow).toEqual([null]);
+    expect(judgeShell("for f in a; do docker rm $f; done", REAL_BASH)).toBeNull();
+    expect(judgeShell("while docker ps; do sleep 1; done", REAL_BASH)).toBeNull();
+    expect(judgeShell("for f in a; do rm -rf $f; done", REAL_BASH)).toMatchObject({ decision: "ask", kind: "risk" });
+    expect(judgeShell("for f in a; do git push --force origin $f; done", REAL_BASH)).toMatchObject({ decision: "ask" });
+    expect(judgeShell("for f in a; do sudo ls; done", REAL_BASH)).toMatchObject({ decision: "deny" });
+    expect(judgeShell("for f in a; do cat .env; done", REAL_BASH)).toMatchObject({ decision: "deny" });
   });
 
   it.each([
@@ -834,7 +849,7 @@ describe("uma fonte de verdade para o risco de shell", () => {
   });
 
   it("embutido não libera o resto do corpo", () => {
-    expect(judgeShell("while read l; do docker rm $l; done < f", REAL_BASH)).toMatchObject({ decision: "ask", kind: "body" });
+    expect(judgeShell("while read l; do docker rm $l; done < f", NARROW_BASH)).toMatchObject({ decision: "ask", kind: "body" });
     expect(judgeShell("if [ -f x ]; then git push origin main; fi", REAL_BASH)).toMatchObject({ decision: "deny" });
   });
 });

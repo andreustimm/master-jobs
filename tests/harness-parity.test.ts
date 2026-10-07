@@ -388,8 +388,9 @@ const RISKY: readonly [string, Decision][] = [
   ["rm -rf /", "deny"],
   ["sudo ls", "deny"],
   ["cat .env", "deny"],
-  // Corpo de laço fora da lista allow.
-  ["for f in a; do docker rm $f; done", "ask"],
+  // Corpo de laço arriscado pela política (#481: a lista libera o resto).
+  ["for f in a; do rm -rf $f; done", "ask"],
+  ["for f in a; do sudo ls; done", "deny"],
   ["while true; do git push --force; done", "ask"],
   // Revisão da #462 (segunda rodada).
   ["git push origin @", "ask"],
@@ -511,8 +512,11 @@ const SAME: readonly [string, Decision][] = [
   ["while false; do echo a; done", "allow"],
   ["for f in a b; do echo $f; done", "allow"],
   ["for f in a b; do echo $f; done | /usr/bin/grep a", "allow"],
-  ["for f in a; do docker rm $f; done", "ask"],
-  ["case $x in a|b) docker ps;; esac", "ask"],
+  // #481: ferramenta fora da antiga lista passa; o risco no corpo, não.
+  ["for f in a; do docker rm $f; done", "allow"],
+  ["case $x in a|b) docker ps;; esac", "allow"],
+  ["case $x in a|b) rm -rf build;; esac", "ask"],
+  ["for f in a; do git push --force origin $f; done", "ask"],
   ["pnpm node scripts/migration/production.ts --source snapshot.db --apply", "ask"],
   ["pnpm node --run db:import-production", "ask"],
   ["git send-pack --force git@github.com:o/r.git HEAD:refs/heads/dev", "deny"],
@@ -582,6 +586,36 @@ const COMPOUND: readonly string[] = [
   "for f in a; do echo $f; done | sh",
 ];
 
+/** #481: o que antes caía em aprovação manual só por não estar na lista. */
+const OUTSIDE_OLD_LIST: readonly string[] = [
+  "docker ps",
+  "docker compose ps",
+  "codex exec --model gpt-5.6-terra revisar",
+  "opencode run revisar",
+  "make build",
+  "uv run pytest",
+  "rtk docker ps",
+];
+
+/** #481: com `Bash` liberado, o risco sai da política, com a mesma decisão nos três. */
+const RISK_AFTER_481: readonly [string, Decision][] = [
+  ["git push --force origin feat/x", "ask"],
+  ["git push -f origin feat/x", "ask"],
+  ["rtk git push --force origin feat/x", "ask"],
+  ["rm -rf build", "ask"],
+  ["rtk rm -rf build", "ask"],
+  ["vercel --prod", "ask"],
+  ["npx vercel --prod", "ask"],
+  ["git reset --hard origin/dev", "ask"],
+  ["cat .env", "deny"],
+  ["cat app/.env.local", "deny"],
+  ["sudo ls", "deny"],
+  ["rtk sudo ls", "deny"],
+  ["git push origin main", "deny"],
+  ["rm -rf /", "deny"],
+  ["chmod 777 x", "deny"],
+];
+
 describe("decisão real nos três harnesses (#461)", () => {
   for (const prefix of ["", "rtk ", "rtk proxy "]) {
     it.each(RISKY.filter(([command]) => !(prefix && /^(?:for|while) /.test(command))))(
@@ -617,6 +651,23 @@ describe("decisão real nos três harnesses (#461)", () => {
     expect(verdict.message).toBe(message);
     const hooks = await openCodeGuard;
     await expect(hooks["tool.execute.before"]({ tool: "bash", sessionID: "s", callID: "c" }, { args: { command } })).rejects.toThrow(message);
+  });
+
+  it("#481: a lista real libera o shell inteiro, sem `Bash(...)` redundante", () => {
+    expect(REAL_SETTINGS.permissions.allow).toContain("Bash");
+    expect(REAL_SETTINGS.permissions.allow!.filter((rule) => rule.startsWith("Bash("))).toEqual([]);
+  });
+
+  it.each(OUTSIDE_OLD_LIST)("#481: ferramenta fora da antiga lista passa nos três: %s", async (command) => {
+    expect(claude(command), "Claude Code").toBe("allow");
+    expect(codex(command), "Codex").toBe("allow");
+    expect(await openCode(command), "OpenCode").toBe("allow");
+  });
+
+  it.each(RISK_AFTER_481)("#481: risco continua decidido pela política, igual nos três: %s -> %s", async (command, expected) => {
+    expect(claude(command), "Claude Code").toBe(expected);
+    expect(codex(command), "Codex").toBe(expected);
+    expect(await openCode(command), "OpenCode").toBe(expected);
   });
 
   it("o plugin só julga `bash`", async () => {
@@ -671,7 +722,7 @@ describe("OpenCode: tradução gerada de `.claude/settings.json`", () => {
   it("reproduz a decisão do Claude Code nos casos que decidem", async () => {
     expect(openCodeDecide(permission, "bash", "rtk git push origin main")).toBe("deny");
     expect(openCodeDecide(permission, "bash", "git status")).toBe("allow");
-    expect(openCodeDecide(permission, "bash", "docker ps")).toBe("ask");
+    expect(openCodeDecide(permission, "bash", "docker ps")).toBe("allow");
     expect(openCodeDecide(permission, "bash", "rtk sudo ls")).toBe("deny");
     expect(openCodeDecide(permission, "bash", "rtk proxy sudo ls")).toBe("deny");
     expect(openCodeDecide(permission, "bash", "rtk rm -rf /")).toBe("deny");
@@ -728,6 +779,24 @@ describe("OpenCode: tradução gerada de `.claude/settings.json`", () => {
     expect(openCodePathPatterns("./**/*.pem")).toEqual(["*.pem"]);
     expect(openCodePathPatterns("~/.ssh/**")).toEqual(["~/.ssh/*"]);
     expect(openCodePathPatterns("/abs/x")).toEqual(["abs/x", "*/abs/x"]);
+  });
+
+  it("#481: `bash` gerado libera tudo em `*` e só restringe — nenhum padrão `allow` além dele", () => {
+    const bash = permission.bash as Record<string, Decision>;
+    expect(bash["*"]).toBe("allow");
+    const restricted = Object.entries(bash).filter(([pattern]) => pattern !== "*");
+    expect(restricted.length).toBeGreaterThan(0);
+    for (const [pattern, decision] of restricted) expect(["ask", "deny"], pattern).toContain(decision);
+    expect(bash["sudo *"]).toBe("deny");
+    expect(bash["rtk sudo *"]).toBe("deny");
+  });
+
+  it("#481: `Bash` sem padrão descarta o `allow` com padrão, em qualquer ordem da fonte", () => {
+    const expected = { "*": "allow", "rm *": "ask", "rtk rm *": "ask", "rtk proxy rm *": "ask", "sudo *": "deny", "rtk sudo *": "deny", "rtk proxy sudo *": "deny" };
+    for (const allow of [["Bash", "Bash(git:*)"], ["Bash(git:*)", "Bash"]]) {
+      const generated = toOpenCodePermission({ allow, ask: ["Bash(rm:*)"], deny: ["Bash(sudo *)"] });
+      expect(generated.bash, allow.join(", ")).toEqual(expected);
+    }
   });
 
   it("regra repetida em duas listas vai para a posição da mais forte", () => {
@@ -850,8 +919,23 @@ describe("guarda do Codex", () => {
     expect(bash("rtk git push origin main")).toBe("deny");
     expect(bash("git push --force origin feat/x")).toBe("ask");
     expect(bash("pnpm check")).toBe("allow");
-    expect(bash("docker ps")).toBe("ask");
+    expect(bash("docker ps")).toBe("allow");
     expect(bash("rtk ls -la")).toBe("allow");
+  });
+
+  it("#481: `Bash` sem padrão libera o comando simples; composto e risco continuam com a política", () => {
+    const open = parseRules({ allow: ["Bash"], deny: ["Bash(sudo *)"] });
+    const bash = (command: string) => judge({ tool_name: "Bash", tool_input: { command } }, open, context);
+    expect(decideCommand(open, "docker ps")).toBe("allow");
+    expect(decideCommand(open, "codex exec revisar")).toBe("allow");
+    expect(bash("docker ps").decision).toBe("allow");
+    expect(bash("sudo ls").decision).toBe("deny");
+    expect(bash("rm -rf build")).toMatchObject({ decision: "ask", message: expect.stringContaining("rm") });
+    expect(bash("git push --force origin feat/x").decision).toBe("ask");
+    expect(bash("vercel --prod").decision).toBe("ask");
+    const compound = bash("git status && docker ps");
+    expect(compound.decision).toBe("deny");
+    expect(compound.message).toContain("Comando composto recusado");
   });
 
   it("patch que toca arquivo secreto é negado, com o caminho no motivo", () => {

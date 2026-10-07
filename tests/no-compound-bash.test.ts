@@ -106,9 +106,12 @@ describe("processo real do hook: bloqueia composto, libera simples", () => {
     ["rtk git push --force", "ask"],
     ["git push --force origin fix/x", "ask"],
     ["npx -y vercel --prod", "ask"],
-    ["for f in a; do docker rm $f; done", "ask"],
+    ["for f in a; do rm -rf $f; done", "ask"],
+    ["vercel --prod", "ask"],
     ["rtk git push origin main", "deny"],
     ["git -c x=y push origin main", "deny"],
+    ["sudo ls", "deny"],
+    ["cat .env", "deny"],
   ])("risco devolve permissionDecision: %s -> %s", (command, decision) => {
     const result = run(JSON.stringify({ tool_name: "Bash", tool_input: { command } }));
     expect(result.status).toBe(0);
@@ -118,7 +121,16 @@ describe("processo real do hook: bloqueia composto, libera simples", () => {
   });
 
   it("rotina e laço com corpo liberado saem com 0 e sem saída", () => {
-    for (const command of ["git push -u origin fix/x", "for f in a b; do echo $f; done", "git log | head", "gh secret set X"]) {
+    // #481: a lista libera `Bash` inteiro; ferramenta fora da antiga lista passa.
+    const routine = [
+      "git push -u origin fix/x",
+      "for f in a b; do echo $f; done",
+      "git log | head",
+      "gh secret set X",
+      "docker ps",
+      "for f in a; do docker rm $f; done",
+    ];
+    for (const command of routine) {
       const result = run(JSON.stringify({ tool_name: "Bash", tool_input: { command } }));
       expect(result.status, command).toBe(0);
       expect(result.stdout, command).toBe("");
