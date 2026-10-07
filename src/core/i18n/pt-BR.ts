@@ -1232,6 +1232,7 @@ export const ptBR = {
     broaden: "ampliar busca",
     broadenHint:
       "Também acha sinônimos em português e inglês e cargos com grafia parecida. Ainda não entende o sentido da frase.",
+    broadenHintSpelling: "Também acha cargos com grafia parecida. Ainda não entende o sentido da frase.",
     companyAll: "todas as empresas",
     channel: "canal",
     channelAll: "todos os canais",

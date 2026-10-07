@@ -1207,6 +1207,7 @@ export const en: Dictionary = {
     broaden: "broaden search",
     broadenHint:
       "Also finds Portuguese and English synonyms and titles with similar spelling. It does not understand the meaning of a sentence yet.",
+    broadenHintSpelling: "Also finds titles with similar spelling. It does not understand the meaning of a sentence yet.",
     companyAll: "all companies",
     channel: "channel",
     channelAll: "all channels",

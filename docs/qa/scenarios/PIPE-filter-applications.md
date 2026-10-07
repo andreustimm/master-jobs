@@ -26,7 +26,8 @@ A conferir, com refresh e leitura independente (o detalhe de cada vaga):
    de vaga já fechada; entre aspas, a frase exata.
 3. "Ampliar busca" com `SEARCH_SYNONYMS_ENABLED` ligada: "engenheiro" também
    traz "Engineer"; um cargo com uma letra trocada aparece; a tela não fala em
-   semântica. Desligada a flag, só a grafia parecida amplia.
+   semântica. Desligada a flag, só a grafia parecida amplia, e a dica do
+   botão não menciona sinônimos.
 4. Canal e faixa de score combinam com o estágio; candidatura sem nota passa
    por qualquer faixa.
 5. Filtros sem resultado dizem isso e oferecem "limpar filtros", que mantém o

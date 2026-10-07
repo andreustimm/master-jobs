@@ -2,18 +2,10 @@
 # valor versionado do dev entra no contexto — .env* nunca sobe uma camada.
 # Espelha .gitignore ("secrets" e "runtime data") de propósito: o que o Git
 # nunca versiona, o contexto do build também nunca deveria receber, mesmo que
-# alguém o tenha criado localmente sem `git add`.
-.env
-.env.*
-!.env.example
-*.token.json
-.linkedin-session.json
+# alguém o tenha criado localmente sem `git add`. Os padrões de segredo e de
+# banco ficam no fim do arquivo (o porquê está lá).
 out/
 data/
-*.db
-*.db-journal
-*.db-wal
-*.db-shm
 
 node_modules
 .next
@@ -65,3 +57,18 @@ auth
 auth-wal
 tsconfig.tsbuildinfo
 *.log
+
+# Segredos e banco local, em qualquer profundidade. Ficam por último de
+# propósito: a última regra que casa vence, e uma reinclusão acima (como
+# `!.claude/hooks`) reabriria um `.env` criado dentro do diretório reincluído.
+# O `**/` imita o .gitignore, onde padrão sem barra casa em qualquer nível; no
+# Docker, sem ele, o padrão casa só na raiz.
+**/.env
+**/.env.*
+!.env.example
+**/*.token.json
+**/.linkedin-session.json
+**/*.db
+**/*.db-journal
+**/*.db-wal
+**/*.db-shm

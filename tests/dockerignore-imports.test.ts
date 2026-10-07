@@ -3,13 +3,15 @@
 //   arquivo que o `.dockerignore` deixa de fora — `next build` checa tipos de
 //   todo `**/*.ts` do contexto e reprova no primeiro import que não resolve.
 //   E a exceção que deixa o import passar não leva memória, worktrees nem
-//   settings do harness para a imagem.
+//   settings do harness para a imagem, nem reabre segredo dentro dela.
 // Boundary IN: `.dockerignore` (semântica do Docker: padrão casa o caminho ou
 //   um diretório pai, `!` reinclui, a última regra que casa vence) e os
 //   arquivos versionados (`git ls-files`), o mesmo conteúdo do checkout do CI.
-// Boundary OUT: o `docker build` real, verificado à parte (deploy.md).
+// Boundary OUT: o `docker build` real, que nenhum CI automático roda: é
+//   manual, no teste local ou no workflow `publicar-imagem-fly.yml` disparado
+//   pelo dono (deploy.md).
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { moduleEdges, resolveLocal } from "./support/module-graph.ts";
 
@@ -82,7 +84,16 @@ function brokenImports(
   return broken;
 }
 
-const RULES = parseDockerignore(readFileSync(".dockerignore", "utf8"));
+const DOCKERIGNORE = readFileSync(".dockerignore", "utf8");
+const RULES = parseDockerignore(DOCKERIGNORE);
+/** Os diretórios que uma regra `!` devolve ao contexto, sem a exclamação. */
+const REINCLUDED_DIRS = DOCKERIGNORE.split("\n")
+  .map((line) => line.trim())
+  .filter((line) => line.startsWith("!"))
+  .map((line) => line.slice(1).replace(/\/+$/, ""))
+  .filter((path) => existsSync(path) && statSync(path).isDirectory());
+/** Um arquivo de cada padrão de segredo e de banco local do `.gitignore`. */
+const SECRETS = [".env", ".env.local", ".env.production", "gmail.token.json", ".linkedin-session.json", "jobs.db", "jobs.db-wal"];
 const TRACKED = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" }).split("\0").filter(Boolean);
 
 describe(".dockerignore — o contexto da imagem compila sozinho", () => {
@@ -112,10 +123,21 @@ describe(".dockerignore — o contexto da imagem compila sozinho", () => {
     expect(isIgnored(RULES, "tests/support/outro.ts")).toBe(true);
   });
 
-  it("os segredos continuam fora, inclusive dentro do diretório reincluído", () => {
-    expect(isIgnored(RULES, ".env")).toBe(true);
-    expect(isIgnored(RULES, ".env.local")).toBe(true);
+  it("os segredos continuam fora na raiz e em qualquer subdiretório", () => {
+    for (const secret of SECRETS) {
+      expect(isIgnored(RULES, secret), secret).toBe(true);
+      expect(isIgnored(RULES, `src/core/${secret}`), `src/core/${secret}`).toBe(true);
+    }
     expect(isIgnored(RULES, ".env.example")).toBe(false);
+  });
+
+  it("os segredos continuam fora dentro de todo diretório reincluído por `!`", () => {
+    expect(REINCLUDED_DIRS).toContain(".claude/hooks");
+    for (const dir of REINCLUDED_DIRS) {
+      for (const secret of SECRETS) {
+        expect(isIgnored(RULES, `${dir}/${secret}`), `${dir}/${secret}`).toBe(true);
+      }
+    }
   });
 });
 
@@ -162,5 +184,13 @@ describe("isIgnored — semântica do .dockerignore", () => {
   it("a última regra que casa vence", () => {
     expect(isIgnored(parseDockerignore("!.claude/hooks\n.claude"), ".claude/hooks/a.mjs")).toBe(true);
     expect(isIgnored(parseDockerignore(".claude\n!.claude/hooks"), ".claude/hooks/a.mjs")).toBe(false);
+  });
+
+  it("segredo antes da reinclusão volta ao contexto; depois dela, fica fora", () => {
+    const before = parseDockerignore("**/.env\n.claude\n!.claude/hooks");
+    const after = parseDockerignore(".claude\n!.claude/hooks\n**/.env");
+    expect(isIgnored(before, ".claude/hooks/.env")).toBe(false);
+    expect(isIgnored(after, ".claude/hooks/.env")).toBe(true);
+    expect(isIgnored(parseDockerignore(".claude\n!.claude/hooks\n.env"), ".claude/hooks/.env")).toBe(false);
   });
 });

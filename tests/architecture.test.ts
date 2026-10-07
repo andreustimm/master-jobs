@@ -1,9 +1,10 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import {
   discoverEntries,
   exportedBindings,
@@ -15,7 +16,7 @@ import {
   routeMethods,
   stripComments,
 } from "./support/entry-inventory.ts";
-import { ambientReads, forbiddenReach, moduleEdges, type ForbiddenEdge } from "./support/module-graph.ts";
+import { ambientReads, forbiddenReach, moduleEdges, resolveLocal, type ForbiddenEdge } from "./support/module-graph.ts";
 
 /**
  * Executable architecture rules.
@@ -158,6 +159,46 @@ describe("erasable TypeScript (ADR 0006)", () => {
     // A regra antiga só lia `from "…"`: as grafias abaixo passavam sem extensão.
     const semExtensao = "import x from './x';\nexport * from './y';\nawait import('./z');";
     expect(moduleEdges(semExtensao).map((e) => e.specifier)).toEqual(["./x", "./y", "./z"]);
+  });
+});
+
+describe("resolveLocal — o arquivo que o especificador nomeia", () => {
+  // Raiz descartável: os casos não dependem de arquivo real do repositório.
+  const root = mkdtempSync(join(tmpdir(), "module-graph-"));
+  for (const file of [
+    "src/core/db/client.ts",
+    "src/core/ui/index.tsx",
+    "src/core/mail/index.ts",
+    "components/botao.tsx",
+    "scripts/util.ts",
+    "scripts/hook.mjs",
+  ]) {
+    mkdirSync(dirname(join(root, file)), { recursive: true });
+    writeFileSync(join(root, file), "export {};\n");
+  }
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+  const from = "app/page.tsx";
+
+  it("resolve os apelidos do tsconfig: `@core/*` e `@/*`", () => {
+    expect(resolveLocal(from, "@core/db/client", root)).toBe("src/core/db/client.ts");
+    expect(resolveLocal(from, "@core/db/client.ts", root)).toBe("src/core/db/client.ts");
+    expect(resolveLocal(from, "@/components/botao", root)).toBe("components/botao.tsx");
+  });
+
+  it("`.js` nomeia o `.ts` irmão, e `.js` real continua valendo", () => {
+    expect(resolveLocal("scripts/main.ts", "./util.js", root)).toBe("scripts/util.ts");
+    expect(resolveLocal("scripts/main.ts", "./hook.mjs", root)).toBe("scripts/hook.mjs");
+  });
+
+  it("diretório resolve para `index.ts` ou `index.tsx`", () => {
+    expect(resolveLocal(from, "@core/mail", root)).toBe("src/core/mail/index.ts");
+    expect(resolveLocal(from, "@core/ui", root)).toBe("src/core/ui/index.tsx");
+  });
+
+  it("pacote e arquivo inexistente não resolvem", () => {
+    expect(resolveLocal(from, "drizzle-orm", root)).toBeNull();
+    expect(resolveLocal(from, "@scope/pacote", root)).toBeNull();
+    expect(resolveLocal(from, "@core/nao-existe", root)).toBeNull();
   });
 });
 
