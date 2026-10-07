@@ -245,10 +245,13 @@ commit. [[G62](docs/engineering/rules/delivery.md#g62)]
   (`Bash` sem padrão) e a política decide o risco: uma função recusa o
   composto nos três harnesses — `.claude/hooks/shell-policy.mjs`, chamada
   pelo hook do Claude Code, pela guarda do Codex e pelo plugin
-  `.opencode/plugins/shell-guard.js` —, e o mesmo módulo classifica o risco:
-  `gh` não pergunta; produção, perda de trabalho e apagamento em massa
-  perguntam, segredo, `sudo` e push protegido são negados (no Codex e no
-  OpenCode, pergunta vira bloqueio). Heredoc e `$(...)` são recusados mesmo em mensagem de commit:
+  `.opencode/plugins/shell-guard.js` —, e o mesmo módulo classifica o risco
+  por uma lista do que é proibido (o que ela não reconhece passa): `gh` não
+  pergunta; produção, perda de trabalho, apagamento, escrita fora do projeto,
+  sistema e ambiente impresso perguntam; arquivo de segredo, Keychain, `sudo`
+  e push protegido são negados (no Codex e no OpenCode, pergunta vira
+  bloqueio; o OpenCode depende do plugin carregado). Famílias cobertas e
+  limites aceitos pelo dono: G85. Heredoc e `$(...)` são recusados mesmo em mensagem de commit:
   escreva a mensagem com a ferramenta de arquivo e rode `git commit -F
   <arquivo>` (ou vários `-m`).
   [[G63](docs/engineering/rules/delivery.md#g63), [G85](docs/engineering/rules/delivery.md#g85)]

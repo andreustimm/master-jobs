@@ -513,8 +513,10 @@ const SAME: readonly [string, Decision][] = [
   ["for f in a b; do echo $f; done", "allow"],
   ["for f in a b; do echo $f; done | /usr/bin/grep a", "allow"],
   // #481: ferramenta fora da antiga lista passa; o risco no corpo, não.
-  ["for f in a; do docker rm $f; done", "allow"],
+  ["for f in a; do docker logs $f; done", "allow"],
   ["case $x in a|b) docker ps;; esac", "allow"],
+  // #488: apagar contêiner pergunta, também no corpo de laço.
+  ["for f in a; do docker rm $f; done", "ask"],
   ["case $x in a|b) rm -rf build;; esac", "ask"],
   ["for f in a; do git push --force origin $f; done", "ask"],
   ["pnpm node scripts/migration/production.ts --source snapshot.db --apply", "ask"],
@@ -616,6 +618,144 @@ const RISK_AFTER_481: readonly [string, Decision][] = [
   ["chmod 777 x", "deny"],
 ];
 
+/**
+ * Revisão L2 da #485 (opção A do dono, 06/10/2026): todo comando dos achados
+ * 1 (invólucro desconhecido), 2 (ferramenta fora do catálogo, com o Docker
+ * da #488) e 3 (segredo) dá a mesma decisão nos três harnesses.
+ */
+const AFTER_485: readonly [string, Decision][] = [
+  // Achado 1: invólucro desconhecido.
+  ["coproc sudo ls", "deny"],
+  ["coproc git push --force origin x", "ask"],
+  ["coproc rm -rf src", "ask"],
+  ["noglob rm -rf src", "ask"],
+  ["noglob git push --force origin x", "ask"],
+  ["nocorrect git reset --hard", "ask"],
+  ["arch -arm64 rm -rf src", "ask"],
+  ["arch -arm64 git push --force origin x", "ask"],
+  ["arch -arm64 sudo ls", "deny"],
+  ["arch -arm64 vercel --prod", "ask"],
+  ["arch -arm64 git push origin main", "deny"],
+  ["uv run rm -rf src", "ask"],
+  ["uv run git push --force origin x", "ask"],
+  ["poetry run git reset --hard", "ask"],
+  ["bundle exec rm -rf src", "ask"],
+  ["direnv exec . git push --force origin x", "ask"],
+  ["mise exec -- vercel --prod", "ask"],
+  ["op run -- vercel --prod", "ask"],
+  ["doppler run -- git push -f", "ask"],
+  ["dotenv -- git push --force origin x", "ask"],
+  ["unbuffer git push --force origin x", "ask"],
+  ["setsid git push --force origin x", "ask"],
+  ["flock /tmp/l git push --force origin x", "ask"],
+  ["chronic git push --force origin x", "ask"],
+  ["sandbox-exec -p x rm -rf src", "ask"],
+  ["taskpolicy -b rm -rf src", "ask"],
+  ["xcrun rm -rf src", "ask"],
+  ["parallel git push --force origin ::: x", "ask"],
+  ["parallel rm -rf ::: src", "ask"],
+  ['hyperfine "git push --force origin x"', "ask"],
+  ["entr git push --force origin x", "ask"],
+  ["fd -x rm -rf", "ask"],
+  ["docker run -v /:/host alpine rm -rf /host/etc", "ask"],
+  ["docker exec x rm -rf /", "deny"],
+  // Achado 2: banco.
+  ['psql "$DATABASE_URL" -c "drop table job"', "ask"],
+  ['psql "$POSTGRES_URL" -f x.sql', "ask"],
+  ['psql postgres://u:p@db.supabase.co/postgres -c "truncate application"', "ask"],
+  ['pg_dump "$DATABASE_URL"', "ask"],
+  ["pg_restore -d postgres://u@db.x.co/p dump.bin", "ask"],
+  ["drizzle-kit push", "ask"],
+  ["npx drizzle-kit push", "ask"],
+  ["supabase config push", "ask"],
+  // Achado 2: deploy e nuvem.
+  ["fly deploy", "ask"],
+  ["flyctl deploy", "ask"],
+  ["fly secrets set X=1", "ask"],
+  ["fly apps destroy x", "ask"],
+  ["fly scale count 2", "ask"],
+  ["fly machine destroy x", "ask"],
+  ["vercel api /v9/projects -X DELETE", "ask"],
+  ["vercel api /v9/projects -X POST", "ask"],
+  ["vercel api /v9/projects --method PATCH", "ask"],
+  ["vercel teams rm x", "ask"],
+  ["vercel git disconnect", "ask"],
+  ["vercel integration remove x", "ask"],
+  // Achado 2: apagamento.
+  ["diskutil eraseDisk APFS X disk2", "ask"],
+  ["mkfs.ext4 /dev/sdb", "ask"],
+  ["shred -u x", "ask"],
+  ["truncate -s 0 src/a.ts", "ask"],
+  ["unlink x", "ask"],
+  ["trash -r src", "ask"],
+  ["rimraf src", "ask"],
+  ["npx rimraf src", "ask"],
+  ["pnpm dlx rimraf src", "ask"],
+  ["tmutil delete x", "ask"],
+  ["aws s3 rm s3://b --recursive", "ask"],
+  ["terraform destroy", "ask"],
+  ["terraform apply -auto-approve", "ask"],
+  ["kubectl delete ns prod", "ask"],
+  ["gcloud projects delete x", "ask"],
+  // Achado 2: sistema.
+  ["crontab -r", "ask"],
+  ["crontab -e", "ask"],
+  ["crontab x", "ask"],
+  ["launchctl load ~/Library/LaunchAgents/x.plist", "ask"],
+  ["launchctl bootstrap gui/501 x.plist", "ask"],
+  ["defaults write com.apple.x k v", "ask"],
+  ['osascript -e "do shell script \\"x\\""', "ask"],
+  ["csrutil disable", "ask"],
+  ["spctl --master-disable", "ask"],
+  ["shutdown -h now", "ask"],
+  ["reboot", "ask"],
+  ["unzip x.zip -d ~/", "ask"],
+  ["ditto x ~/Library/LaunchAgents/x.plist", "ask"],
+  ["patch ~/.zshrc x.diff", "ask"],
+  // Achado 2 / #488: Docker destrutivo.
+  ["docker rm x", "ask"],
+  ["docker rmi x", "ask"],
+  ["docker volume rm v", "ask"],
+  ["docker network rm n", "ask"],
+  ["docker system prune -af", "ask"],
+  ["docker compose down -v", "ask"],
+  // Achado 3: segredo.
+  ["printenv", "ask"],
+  ["env", "ask"],
+  ["set", "ask"],
+  ["export -p", "ask"],
+  ["declare -x", "ask"],
+  ["security find-generic-password -s x -w", "deny"],
+  ["security dump-keychain", "deny"],
+  ["vercel env pull", "ask"],
+  ["vercel env pull /tmp/s", "ask"],
+  ["vercel env pull .env.local", "deny"],
+];
+
+/** #485: a rotina ao lado das famílias novas continua passando nos três. */
+const ROUTINE_485: readonly string[] = [
+  'git -C /repo/.claude/worktrees/wt commit -m "chore: x"',
+  "gh pr checks 485 -R andreustimm/master-jobs --watch",
+  "gh label create docker",
+  "pnpm typecheck",
+  "pnpm exec vitest run tests/shell-policy.test.ts",
+  "pnpm jho jobs search sudo",
+  "docker ps",
+  "docker build -t x .",
+  "docker logs -f app",
+  "docker compose up -d",
+  "node scripts/x.ts",
+  "python3 scripts/a.py",
+  "make build",
+  "uv run pytest",
+  "curl -sS http://127.0.0.1:3000",
+  "psql postgresql://jobs:jobs@127.0.0.1:5433/jobs -c 'select 1'",
+  "grep -rn sudo src",
+  "printenv PATH",
+  "set -e",
+  "crontab -l",
+];
+
 describe("decisão real nos três harnesses (#461)", () => {
   for (const prefix of ["", "rtk ", "rtk proxy "]) {
     it.each(RISKY.filter(([command]) => !(prefix && /^(?:for|while) /.test(command))))(
@@ -668,6 +808,18 @@ describe("decisão real nos três harnesses (#461)", () => {
     expect(claude(command), "Claude Code").toBe(expected);
     expect(codex(command), "Codex").toBe(expected);
     expect(await openCode(command), "OpenCode").toBe(expected);
+  });
+
+  it.each(AFTER_485)("#485: achado da revisão L2 dá ask/deny igual nos três: %s -> %s", async (command, expected) => {
+    expect(claude(command), "Claude Code").toBe(expected);
+    expect(codex(command), "Codex").toBe(expected);
+    expect(await openCode(command), "OpenCode").toBe(expected);
+  });
+
+  it.each(ROUTINE_485)("#485: rotina continua passando nos três: %s", async (command) => {
+    expect(claude(command), "Claude Code").toBe("allow");
+    expect(codex(command), "Codex").toBe("allow");
+    expect(await openCode(command), "OpenCode").toBe("allow");
   });
 
   it("o plugin só julga `bash`", async () => {

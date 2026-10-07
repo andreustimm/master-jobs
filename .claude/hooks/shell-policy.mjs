@@ -11,10 +11,13 @@
 //   laço `for`/`while`/`until`/`if`/`case` aceita `;` e quebra de linha, e o
 //   corpo continua julgado comando a comando.
 // - `classifyRisk`: o que pergunta (`ask`) ou é negado (`deny`), julgado por
-//   token — a fonte de verdade do risco de shell. `.claude/settings.json` não
-//   repete esta lista em `ask`; guarda só o `deny` ancorado de reserva.
+//   token — a fonte de verdade do risco de shell. É uma lista do que é
+//   proibido: com `Bash` liberado no `.claude/settings.json` (#481), o que ela
+//   não reconhece passa. `.claude/settings.json` não repete esta lista em
+//   `ask`; guarda só o `deny` ancorado de reserva.
 // - `judgeShell`: as duas coisas e, em laço, cada comando do corpo contra a
-//   lista `allow` do `.claude/settings.json`.
+//   lista `.claude/settings.json` (com `Bash` liberado, decidem o
+//   classificador e o `deny`).
 
 /** @typedef {"ask" | "deny"} RiskDecision */
 /** @typedef {{ decision: RiskDecision, reason: string }} Risk */
@@ -887,6 +890,11 @@ const OUTPUT_OPTIONS = {
   },
   sort: { short: "o", stop: "kStT", long: ["--output"] },
   openssl: { single: ["-out", "-keyout"] },
+  // #485: saída de cliente do Postgres e destino de `unzip -d`.
+  psql: { short: "oL", stop: "cdfhpUvPTFR", long: ["--output", "--log-file"] },
+  pg_dump: { short: "f", stop: "dFhpUnNtTZjESe", long: ["--file"] },
+  pg_restore: { short: "f", stop: "dFhpUnNtTIPLjS", long: ["--file"] },
+  unzip: { short: "d", stop: "xP" },
 };
 
 /** Os valores das opções de `spec` em `args` (ver `OUTPUT_OPTIONS`). */
@@ -965,10 +973,42 @@ function tarOutput(args) {
 }
 
 /**
+ * Os argumentos posicionais, sem as opções: as de `value` consomem a palavra
+ * seguinte, salvo com valor colado (`-p1`, `--app=x`); depois de `--`, tudo é
+ * posicional.
+ * @param {string[]} args
+ * @param {Set<string>} [value]
+ */
+function positionals(args, value = NO_OPTIONS) {
+  const found = [];
+  for (let k = 0; k < args.length; k++) {
+    const arg = args[k];
+    if (arg === "--") {
+      found.push(...args.slice(k + 1));
+      break;
+    }
+    if (!arg.startsWith("-") || arg === "-") found.push(arg);
+    else if (value.has(arg)) k++;
+  }
+  return found;
+}
+
+const PATCH_VALUE = new Set([
+  "-i", "--input", "-o", "--output", "-d", "--directory", "-p", "--strip", "-D", "--ifdef", "-r", "--reject-file",
+  "-B", "--prefix", "-Y", "--basename-prefix", "-z", "--suffix", "-V", "--version-control", "-F", "--fuzz", "-g", "--get",
+]);
+
+/** `patch [opções] [original [patch]]` grava o original, `-o`, `-r` e o diretório de `-d`. */
+function patchOutput(args) {
+  const original = positionals(args, PATCH_VALUE).slice(0, 1);
+  return [...original, ...optionValues(args, { short: "odr", stop: "ipDBYzVFg", long: ["--output", "--directory", "--reject-file"] })];
+}
+
+/**
  * O que o comando grava, pelo nome do programa: destino de `tee`, `cp`, `mv`,
- * `ln`, `install`, `dd of=` e `truncate`; saída de `uniq` e `tar`; e as
- * opções de `OUTPUT_OPTIONS` (`curl -o`, `wget -O`, `sort -o`,
- * `openssl -out`). O `git` tem os seus em `judgeGit`.
+ * `ln`, `install`, `ditto`, `dd of=` e `truncate`; saída de `uniq`, `tar` e
+ * `patch`; e as opções de `OUTPUT_OPTIONS` (`curl -o`, `wget -O`, `sort -o`,
+ * `openssl -out`, `unzip -d`, `pg_dump -f`). O `git` tem os seus em `judgeGit`.
  */
 function writtenPaths(name, args) {
   if (Object.hasOwn(OUTPUT_OPTIONS, name)) return optionValues(args, OUTPUT_OPTIONS[name]);
@@ -986,7 +1026,10 @@ function writtenPaths(name, args) {
     case "cp":
     case "ln":
     case "install":
+    case "ditto":
       return targetDir.length > 0 ? targetDir : operands.slice(-1);
+    case "patch":
+      return patchOutput(args);
     case "dd":
       return args.filter((arg) => arg.startsWith("of=")).map((arg) => arg.slice(3));
     case "uniq":
@@ -1841,9 +1884,35 @@ function judgeVercel(args) {
   const [sub, action] = positional;
   if (VERCEL_PRODUCTION.has(sub)) return ask(`produção: vercel ${sub}`);
   if (sub === "env" && ["add", "rm", "remove", "update"].includes(action)) return ask(`produção: vercel env ${action}`);
+  // #485: `env pull` e `pull` gravam os segredos do projeto em disco, em qualquer destino.
+  if ((sub === "env" && action === "pull") || sub === "pull") return ask(`vercel ${sub === "pull" ? "pull" : "env pull"} grava segredos em arquivo`);
   if ((sub === "project" || sub === "projects") && (action === "rm" || action === "remove")) return ask(`produção: vercel ${sub} ${action}`);
   if (sub === "blob" && ["del", "delete", "rm", "remove"].includes(action)) return ask(`produção: vercel blob ${action}`);
+  if ((sub === "teams" || sub === "team") && ["rm", "remove", "delete"].includes(action)) return ask(`produção: vercel ${sub} ${action}`);
+  if (sub === "git" && action === "disconnect") return ask("produção: vercel git disconnect");
+  if ((sub === "integration" || sub === "integrations") && ["rm", "remove", "uninstall"].includes(action)) return ask(`produção: vercel ${sub} ${action}`);
+  if (sub === "api") return judgeVercelApi(args);
   return null;
+}
+
+const API_WRITE_METHODS = new Set(["DELETE", "POST", "PATCH", "PUT"]);
+
+/**
+ * `vercel api`: `-X/--method` DELETE, POST, PATCH ou PUT escreve; sem método,
+ * campo ou corpo (`-f`, `-F`, `--field`, `-d`, `--data`, `--input`) vira POST.
+ */
+function judgeVercelApi(args) {
+  let method = null;
+  let body = false;
+  for (let k = 0; k < args.length; k++) {
+    const arg = args[k];
+    if (arg === "-X" || arg === "--method") method = args[++k] ?? "";
+    else if (arg.startsWith("--method=")) method = arg.slice("--method=".length);
+    else if (/^-X./.test(arg)) method = arg.slice(2);
+    else if (/^(?:-[fFd]|--(?:field|raw-field|data|input))(?:=|$)/.test(arg) || /^-[fFd]./.test(arg)) body = true;
+  }
+  const write = method === null ? body : API_WRITE_METHODS.has(method.toUpperCase());
+  return write ? ask(`produção: vercel api ${method?.toUpperCase() ?? "POST"}`) : null;
 }
 
 const SUPABASE_VALUE = new Set(["--workdir", "--profile", "-o", "--output", "--network-id", "--dns-resolver", "--db-url", "-p", "--password", "--project-ref", "-s", "--schema", "-f", "--file"]);
@@ -1863,8 +1932,365 @@ function judgeSupabase(args) {
   if ((key === "db query" || key === "migration up") && remote) return ask(`produção: supabase ${key} remoto`);
   if (group === "secrets") return ask("produção: supabase secrets");
   if (key === "functions deploy" || key === "functions delete" || key === "projects delete") return ask(`produção: supabase ${key}`);
-  if (key === "storage rm" || key === "branches delete") return ask(`produção: supabase ${key}`);
+  if (key === "storage rm" || key === "branches delete" || key === "config push") return ask(`produção: supabase ${key}`);
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Ferramentas fora do catálogo do projeto (#485): banco, nuvem, disco, sistema
+// e segredo. A política é uma lista do que é proibido; estas famílias entraram
+// quando `Bash` foi liberado em geral (#481).
+
+const LOCAL_HOSTS = new Set(["", "localhost", "127.0.0.1", "::1", "[::1]"]);
+
+/** `localhost`, loopback, socket (`/tmp`, `%2Ftmp`) ou host vazio. */
+function isLocalHost(host) {
+  return LOCAL_HOSTS.has(host.toLowerCase()) || host.startsWith("/") || /^%2f/i.test(host);
+}
+
+/** Hosts de uma URL `postgres://…` ou de conninfo `host=…` na palavra. */
+function connectionHosts(word) {
+  const hosts = [];
+  const url = /^postgres(?:ql)?:\/\/([^/?#]*)/i.exec(word);
+  if (url) {
+    const authority = url[1].slice(url[1].lastIndexOf("@") + 1);
+    for (const part of authority.split(",")) hosts.push(part.startsWith("[") ? part.slice(0, part.indexOf("]") + 1) : part.replace(/:\d*$/, ""));
+  }
+  for (const match of word.matchAll(/(?:^|[\s?&])host(?:addr)?=([^\s&]*)/gi)) hosts.push(...match[1].split(","));
+  return hosts;
+}
+
+const PG_ENV_TARGET = /^(?:PGHOST|PGHOSTADDR|DATABASE_URL|POSTGRES_URL|PGSERVICE)=(.*)$/s;
+
+/**
+ * O cliente do Postgres aponta para fora da máquina: host ou URL que não é
+ * `localhost`/`127.0.0.1`/socket, ou destino por variável (`$DATABASE_URL`,
+ * `$POSTGRES_URL`), que só aparece na hora. O texto de `psql -c` não conta.
+ */
+function postgresRemote(name, args, assigned) {
+  for (const assignment of assigned) {
+    const match = PG_ENV_TARGET.exec(assignment);
+    if (match && (match[1].includes("$") || match[1].split(",").some((host) => !isLocalHost(host)) || connectionHosts(match[1]).some((host) => !isLocalHost(host)))) {
+      return true;
+    }
+  }
+  for (let k = 0; k < args.length; k++) {
+    const arg = args[k];
+    if (name === "psql" && (arg === "-c" || arg === "--command")) {
+      k++;
+      continue;
+    }
+    if (name === "psql" && (/^-c./.test(arg) || arg.startsWith("--command="))) continue;
+    let host = null;
+    if (arg === "-h" || arg === "--host") host = args[++k] ?? "";
+    else if (arg.startsWith("--host=")) host = arg.slice("--host=".length);
+    else if (/^-h./.test(arg)) host = arg.slice(2);
+    if (host !== null) {
+      if (host.includes("$") || host.split(",").some((part) => !isLocalHost(part))) return true;
+      continue;
+    }
+    if (arg.includes("$")) return true;
+    const value = arg.startsWith("--") && arg.includes("=") ? arg.slice(arg.indexOf("=") + 1) : arg;
+    if (connectionHosts(value).some((part) => !isLocalHost(part))) return true;
+  }
+  return false;
+}
+
+/** SQL que escreve ou muda o banco; na dúvida (palavra solta), conta como escrita. */
+const SQL_WRITE =
+  /\b(?:insert|update|delete|drop|truncate|alter|create|grant|revoke|copy|merge|vacuum|reindex|cluster|comment|lock|call|do|refresh|import|reassign|execute|prepare|security|set\s+(?:role|session))\b/i;
+/** Meta-comando do psql que roda shell, script, escreve arquivo ou executa o resultado. */
+const PSQL_META_WRITE = /\\(?:!|ir?\b|include|copy|o\b|out|w\b|write|g\b|gx|gexec|gset|s\b|e\b|edit|ef|ev)/;
+
+/**
+ * `psql`/`pg_dump`/`pg_dumpall`/`pg_restore` (#485). Banco local passa. Banco
+ * remoto: `pg_dump`/`pg_dumpall` pergunta (copia os dados de produção),
+ * `pg_restore` pergunta (escreve), e `psql` pergunta salvo quando só roda
+ * `-c` de leitura (sem DDL/DML), ou `-l`; `-f`, entrada redirecionada ou
+ * sessão interativa perguntam.
+ */
+function judgePostgres(name, args, context, assigned) {
+  if (!postgresRemote(name, args, assigned)) return null;
+  if (name === "pg_dump" || name === "pg_dumpall") return ask(`${name} de banco remoto copia os dados de produção`);
+  if (name === "pg_restore") return ask("pg_restore escreve em banco remoto");
+  const commands = [];
+  let script = (context.stdin?.length ?? 0) > 0 || context.input === true;
+  let list = false;
+  for (let k = 0; k < args.length; k++) {
+    const arg = args[k];
+    if (arg === "-c" || arg === "--command") commands.push(args[++k] ?? "");
+    else if (arg.startsWith("--command=")) commands.push(arg.slice("--command=".length));
+    else if (/^-c./.test(arg)) commands.push(arg.slice(2));
+    else if (arg === "-f" || arg === "--file" || arg.startsWith("--file=") || /^-f./.test(arg)) script = true;
+    else if (arg === "-l" || arg === "--list" || arg === "-V" || arg === "--version") list = true;
+  }
+  if (script) return ask("psql em banco remoto roda script (-f ou entrada)");
+  if (commands.length === 0) return list ? null : ask("psql em banco remoto sem -c de leitura (sessão ou entrada)");
+  return commands.some((sql) => SQL_WRITE.test(sql) || PSQL_META_WRITE.test(sql)) ? ask("psql escreve em banco remoto (DDL/DML ou meta-comando)") : null;
+}
+
+const DOCKER_VALUE = new Set(["-H", "--host", "-c", "--context", "--config", "-l", "--log-level", "--tlscacert", "--tlscert", "--tlskey"]);
+const COMPOSE_VALUE = new Set(["-f", "--file", "-p", "--project-name", "--profile", "--env-file", "--project-directory", "--ansi", "--progress", "--parallel"]);
+const DOCKER_OBJECTS = new Set(["container", "image", "volume", "network", "system", "builder", "buildx"]);
+const DOCKER_DELETE = new Set(["rm", "remove", "prune"]);
+
+/** Tira as opções do início (`value` consome a palavra seguinte). */
+function skipLeading(args, value) {
+  let k = 0;
+  while (k < args.length && args[k].startsWith("-") && args[k] !== "-") k += value.has(args[k]) ? 2 : 1;
+  return args.slice(k);
+}
+
+/**
+ * Docker destrutivo (#488): `rm`, `rmi`, `container|image|volume|network rm`,
+ * `prune` (inclusive `system prune`) e `compose rm`/`compose down -v`/`--rmi`.
+ * Leitura e build (`ps`, `logs`, `build`, `compose up`) passam; o comando
+ * dentro de `run`/`exec` é julgado pela busca de sufixo (`nestedRisk`).
+ */
+function judgeDocker(name, args) {
+  let rest = name === "docker" ? skipLeading(args, DOCKER_VALUE) : args;
+  if (name === "docker" && rest[0] !== "compose") {
+    const [sub, ...more] = rest;
+    if (sub === "rm" || sub === "rmi") return ask(`docker ${sub} apaga ${sub === "rm" ? "contêiner" : "imagem"}`);
+    const action = more.find((arg) => !arg.startsWith("-"));
+    return DOCKER_OBJECTS.has(sub) && DOCKER_DELETE.has(action) ? ask(`docker ${sub} ${action} apaga dado do Docker`) : null;
+  }
+  if (name === "docker") rest = rest.slice(1);
+  const [action, ...options] = skipLeading(rest, COMPOSE_VALUE);
+  if (action === "rm") return ask("docker compose rm apaga contêiner");
+  const removes = options.some((arg) => /^--(?:volumes|rmi)(?:=|$)/.test(arg) || shortCluster(arg, "v"));
+  return action === "down" && removes ? ask("docker compose down -v/--rmi apaga volume ou imagem") : null;
+}
+
+const FLY_VALUE = new Set([
+  "-a", "--app", "-c", "--config", "-t", "--access-token", "-r", "--region", "-o", "--org", "-i", "--image", "-e", "--env",
+  "--build-arg", "--build-secret", "--strategy", "--vm-size", "--dockerfile", "--label", "--process-group",
+]);
+
+/** Fly.io (plano B de deploy): `deploy`, `secrets`, `scale` e destruir app, máquina ou volume. */
+function judgeFly(name, args) {
+  const [group, action] = positionals(args, FLY_VALUE);
+  if (["deploy", "secrets", "secret", "scale", "destroy"].includes(group)) return ask(`produção: ${name} ${group}`);
+  const destroys = ["destroy", "delete", "remove", "rm"].includes(action);
+  if (destroys && ["apps", "app", "machine", "machines", "m", "volumes", "volume", "vol"].includes(group)) return ask(`produção: ${name} ${group} ${action}`);
+  return null;
+}
+
+const KUBECTL_VALUE = new Set(["-n", "--namespace", "--context", "--cluster", "--kubeconfig", "-l", "--selector", "-f", "--filename", "-o", "--output", "-s", "--server", "--user", "--token", "--as", "-c", "--container"]);
+const DEFAULTS_VALUE = new Set(["-host"]);
+
+/** Apagar dado ou mudar o sistema por ferramenta de nuvem, disco ou macOS. */
+function judgeSystemTool(name, args) {
+  const [verb, object] = positionals(args);
+  switch (name) {
+    case "drizzle-kit":
+      return verb === "push" ? ask("drizzle-kit push aplica o schema direto no banco do DATABASE_URL") : null;
+    case "terraform":
+    case "tofu": {
+      if (verb === "destroy") return ask(`${name} destroy apaga a infraestrutura`);
+      const auto = args.some((arg) => /^--?(?:auto-approve|destroy)(?:=|$)/.test(arg)) || positionals(args).length > 1;
+      return verb === "apply" && auto ? ask(`${name} apply sem confirmação (-auto-approve ou plano salvo)`) : null;
+    }
+    case "kubectl":
+      return positionals(args, KUBECTL_VALUE)[0] === "delete" ? ask("kubectl delete apaga recurso do cluster") : null;
+    case "aws": {
+      if (args.some((arg) => /^(?:delete|terminate)-/.test(arg))) return ask("aws delete-*/terminate-* apaga recurso");
+      if (!args.includes("s3")) return null;
+      if (args.includes("rm") && args.includes("--recursive")) return ask("aws s3 rm --recursive apaga em massa");
+      if (args.includes("rb") && args.includes("--force")) return ask("aws s3 rb --force apaga o bucket");
+      return args.includes("sync") && args.includes("--delete") ? ask("aws s3 sync --delete apaga no destino") : null;
+    }
+    case "gcloud":
+      return args.includes("delete") ? ask("gcloud … delete apaga recurso") : null;
+    case "diskutil": {
+      if (/^(?:erase|secureerase|zerodisk|randomdisk|reformat|partitiondisk)/i.test(verb ?? "")) return ask(`diskutil ${verb} apaga o disco`);
+      return /^(?:apfs|ap|cs|corestorage|appleraid|ar)$/i.test(verb ?? "") && /^(?:delete|erase|remove)/i.test(object ?? "")
+        ? ask(`diskutil ${verb} ${object} apaga volume`)
+        : null;
+    }
+    case "shred":
+    case "unlink":
+    case "rimraf":
+      return ask(`${name} apaga arquivo`);
+    case "trash":
+      return args.some((arg) => arg === "--recursive" || arg === "-R" || shortCluster(arg, "r")) ? ask("trash -r apaga diretório") : null;
+    case "truncate": {
+      const sizes = optionValues(args, { short: "s", stop: "r", long: ["--size"] });
+      return sizes.some((size) => /^(?:0+[KMGTPEZY]?(?:i?B)?|[-<\/%].*)$/i.test(size)) ? ask("truncate zera ou encolhe arquivo") : null;
+    }
+    case "tmutil":
+      return /^(?:delete\w*|thinlocalsnapshots)$/i.test(verb ?? "") ? ask(`tmutil ${verb} apaga backup`) : null;
+    case "crontab":
+      return args.includes("-l") && !args.some((arg) => arg === "-r" || arg === "-e" || arg === "-i") ? null : ask("crontab grava ou apaga agendamento");
+    case "launchctl":
+      return ["load", "bootstrap", "submit", "enable"].includes(verb) ? ask(`launchctl ${verb} instala serviço do sistema`) : null;
+    case "defaults":
+      return ["write", "delete", "import", "rename"].includes(positionals(args, DEFAULTS_VALUE)[0]) ? ask("defaults grava preferência do sistema") : null;
+    case "osascript":
+      return ask("osascript automatiza o sistema e roda shell");
+    case "csrutil":
+      return verb !== undefined && verb !== "status" ? ask(`csrutil ${verb} mexe na proteção do sistema`) : null;
+    case "spctl":
+      return args.some((arg) => /^--(?:(?:master|global)-(?:disable|enable)|add|remove|enable|disable|reset-default)$/.test(arg))
+        ? ask("spctl mexe no Gatekeeper")
+        : null;
+    case "shutdown":
+    case "reboot":
+    case "halt":
+    case "poweroff":
+      return ask(`${name} desliga a máquina`);
+    default:
+      return /^(?:mkfs|newfs)(?:[._]|$)/.test(name) ? ask(`${name} formata disco`) : null;
+  }
+}
+
+/**
+ * Segredo pela shell (#485): imprimir o ambiente inteiro (`printenv`, `set`,
+ * `export -p`, `declare -x`; `env` sem comando fica em `judgeWords`) pergunta;
+ * tirar senha do Keychain (`security find-*-password -w/-g`,
+ * `dump-keychain`, `export`) é negado.
+ */
+function judgeSecretTool(name, args) {
+  switch (name) {
+    case "printenv":
+      return positionals(args).length === 0 ? ask("printenv sem argumento imprime o ambiente (segredos)") : null;
+    case "set":
+      return args.length === 0 ? ask("set sem argumento imprime as variáveis (segredos)") : null;
+    case "export":
+      return args.every((arg) => arg.startsWith("-")) ? ask("export -p imprime o ambiente (segredos)") : null;
+    case "declare":
+    case "typeset":
+      return args.every((arg) => /^[-+]/.test(arg)) ? ask(`${name} sem nome imprime as variáveis (segredos)`) : null;
+    case "security": {
+      const [sub] = positionals(args);
+      const reveals = args.some((arg) => shortCluster(arg, "w") || shortCluster(arg, "g"));
+      if (/^find-\w+-password$/.test(sub ?? "") && reveals) return deny(`security ${sub} -w/-g imprime senha do Keychain`);
+      return sub === "dump-keychain" || sub === "export" ? deny(`security ${sub} exporta o Keychain`) : null;
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * Invólucros que rodam outro comando (#485): `arch -arm64 git push`,
+ * `uv run …`, `op run -- …`. `sub`: o subcomando que lança (sem ele, a
+ * primeira palavra já lança); `shell`: argumento com espaço é texto de shell
+ * (`hyperfine "git push -f"`, `parallel "rm {}" ::: a`, `flock x -c "…"`).
+ * O comando é a primeira palavra que não é opção; a busca de sufixo
+ * (`nestedRisk`) cobre o executável conhecido em qualquer posição.
+ */
+const LAUNCHING_WRAPPERS = {
+  arch: {},
+  coproc: {},
+  noglob: {},
+  nocorrect: {},
+  unbuffer: {},
+  setsid: {},
+  flock: { shell: true },
+  chronic: {},
+  entr: { shell: true },
+  parallel: { shell: true, bulk: true },
+  hyperfine: { shell: true },
+  "sandbox-exec": {},
+  taskpolicy: {},
+  xcrun: {},
+  uv: { sub: ["run"] },
+  poetry: { sub: ["run"] },
+  bundle: { sub: ["exec"] },
+  direnv: { sub: ["exec"] },
+  mise: { sub: ["exec", "x"] },
+  op: { sub: ["run"] },
+  doppler: { sub: ["run"] },
+  dotenv: {},
+};
+
+function judgeWrapped(name, args, context) {
+  const spec = LAUNCHING_WRAPPERS[name];
+  let rest = args;
+  if (spec.sub) {
+    const at = args.findIndex((arg) => !arg.startsWith("-"));
+    if (at === -1 || !spec.sub.includes(args[at])) return nestedRisk(args, context);
+    rest = args.slice(at + 1);
+  }
+  const base = spec.bulk ? { ...context, bulk: true } : context;
+  let worst = null;
+  if (spec.shell) {
+    for (const arg of rest) {
+      if (/\s/.test(arg)) worst = stronger(worst, riskOf(arg, context.depth + 1, spec.bulk === true, context.env));
+    }
+  }
+  // O comando do invólucro; o executável conhecido mais adiante fica com `nestedRisk`.
+  const start = rest.findIndex((arg) => !arg.startsWith("-") || arg === "-");
+  if (start !== -1 && worst?.decision !== "deny") worst = stronger(worst, judgeWords(rest.slice(start), deeper(base, { suffix: true })));
+  return worst?.decision === "deny" ? worst : stronger(worst, nestedRisk(rest, base));
+}
+
+/**
+ * Executáveis que a política conhece (#485): todo sufixo do argv de um
+ * comando desconhecido que começa por um deles é julgado como comando —
+ * `arch -arm64 git push --force`, `docker run img rm -rf /x`. Vale a decisão
+ * mais forte. `mkfs*` e `newfs*` entram pelo prefixo.
+ */
+const KNOWN_COMMANDS = new Set([
+  "git", "rm", "sudo", "su", "doas", "pkexec", "vercel", "supabase", "psql", "pg_dump", "pg_dumpall", "pg_restore",
+  "drizzle-kit", "fly", "flyctl", "terraform", "tofu", "kubectl", "aws", "gcloud", "docker", "docker-compose", "chmod",
+  "chown", "chgrp", "dd", "shred", "diskutil", "crontab", "launchctl", "defaults", "osascript", "csrutil", "spctl",
+  "shutdown", "reboot", "halt", "poweroff", "sh", "bash", "zsh", "dash", "ksh", "fish", "node", "pnpm", "npx", "npm",
+  "pnpx", "bunx", "yarn", "bun", "curl", "wget", "cp", "mv", "tee", "ln", "install", "ditto", "patch", "unzip", "tar",
+  "truncate", "unlink", "trash", "rimraf", "tmutil", "rsync", "ssh", "scp", "sftp", "brew", "script", "xargs", "find",
+  "watch", "eval", "printenv", "security", "openssl", "sort", "uniq",
+  ...Object.keys(WRAPPERS),
+  ...Object.keys(LAUNCHING_WRAPPERS),
+]);
+
+/**
+ * Comandos que não executam o próprio argv: a palavra `sudo` em
+ * `grep -n sudo arquivo` ou `gh label create docker` é dado, não comando.
+ * `jho` é a CLI do projeto, que não roda o que recebe.
+ */
+const NON_EXECUTING = new Set([
+  "echo", "printf", "cat", "head", "tail", "less", "more", "wc", "grep", "egrep", "fgrep", "rg", "ag", "ack", "ls", "tree",
+  "jq", "yq", "cut", "tr", "column", "nl", "diff", "cmp", "comm", "file", "stat", "which", "whereis", "whatis",
+  "apropos", "type", "man", "tldr", "help", "basename", "dirname", "realpath", "readlink", "mkdir", "rmdir", "touch",
+  "test", "[", "[[", "cd", "pushd", "popd", "gh", "jho", "kill", "pkill", "pgrep", "killall", "ps", "lsof", "sleep",
+  "seq", "date", "true", "false", "read", "wait", "unset", "alias", "unalias", "hash", "sed", "awk", "md5", "shasum",
+  "sha256sum", "xxd", "od", "hexdump", "strings", "du", "df", "pbcopy",
+]);
+
+/**
+ * A palavra é um executável conhecido: pelo nome ou por caminho num
+ * diretório de binários (`/bin/rm`, `node_modules/.bin/vercel`). Caminho de
+ * dado (`tests/install`) não conta.
+ */
+export function isKnownCommand(word) {
+  const slash = word.lastIndexOf("/");
+  if (slash !== -1 && !/(?:^|\/)(?:s?bin|\.bin)$/.test(word.slice(0, slash))) return false;
+  const name = word.slice(slash + 1);
+  return KNOWN_COMMANDS.has(name) || /^(?:mkfs|newfs)(?:[._]|$)/.test(name);
+}
+
+/** Teto de posições com executável conhecido num argv; acima dele, pergunta. */
+const MAX_SUFFIXES = 32;
+
+/**
+ * Busca de sufixo (#485): cada posição do argv com executável conhecido é
+ * julgada como início de comando, e vale a decisão mais forte. Fecha o
+ * invólucro que a política não conhece pelo nome. Roda uma vez por argv:
+ * dentro de um sufixo (`context.suffix`) não repete, porque o sufixo de um
+ * sufixo já foi enumerado — texto novo (`sh -c`, `env -S`) começa de novo.
+ */
+function nestedRisk(args, context) {
+  if (context.suffix) return null;
+  const starts = [];
+  for (let k = 0; k < args.length; k++) if (isKnownCommand(args[k])) starts.push(k);
+  if (starts.length > MAX_SUFFIXES) return ask("argv com executáveis conhecidos demais para julgar");
+  let worst = null;
+  for (const k of starts) {
+    worst = stronger(worst, judgeWords(args.slice(k), deeper(context, { suffix: true })));
+    if (worst?.decision === "deny") break;
+  }
+  return worst;
 }
 
 /** `tee`, `cp`, `mv`, `ln`, `sed -i`… apontando para a política. */
@@ -1901,6 +2327,8 @@ function judgeWords(input, context) {
   if (--budget < 0) return ask("comando com leituras demais para julgar");
   let words = input.slice();
   const assigned = [...(context.assigned ?? [])];
+  // `env` sem comando imprime o ambiente inteiro (#485); `env -i` não.
+  let printsEnv = false;
   for (let guard = 0; guard < 64 && words.length > 0; guard++) {
     const head = words[0];
     if (ASSIGNMENT.test(head)) assigned.push(words.shift());
@@ -1910,13 +2338,17 @@ function judgeWords(input, context) {
     } else if (head.includes("/") && !head.endsWith("/")) words[0] = head.slice(head.lastIndexOf("/") + 1);
     else if (Object.hasOwn(WRAPPERS, head)) {
       if (head === "command" && words.slice(1).some((arg) => arg === "-v" || arg === "-V")) return null;
+      printsEnv = head === "env" && !words.slice(1).some((arg) => arg === "-" || arg === "--ignore-environment" || shortCluster(arg, "i"));
+      // `env -S '…'` injeta palavras que não estavam no argv: a busca de sufixo recomeça.
+      if (head === "env" && words.slice(1).some((arg) => /^(?:-S|--split-string)/.test(arg))) context = { ...context, suffix: false };
       words = skipOptions(words.slice(1), WRAPPERS[head]);
     } else break;
   }
-  if (words.length === 0) return null;
+  if (words.length === 0) return printsEnv ? ask("env sem comando imprime o ambiente (segredos)") : null;
   const [name, ...args] = words;
   let write = policyWrite(name, args);
   for (const path of writtenPaths(name, args)) write = stronger(write, writeRisk(path, context.env ?? NO_ENV));
+  if (Object.hasOwn(LAUNCHING_WRAPPERS, name)) return stronger(write, judgeWrapped(name, args, { ...context, assigned }));
   switch (name) {
     case "sudo":
     case "doas":
@@ -1982,8 +2414,24 @@ function judgeWords(input, context) {
     case "ksh":
     case "fish":
       return judgeShellInvocation(args, context);
-    default:
-      return write;
+    case "docker":
+    case "docker-compose":
+      return stronger(stronger(write, judgeDocker(name, args)), nestedRisk(args, context));
+    case "psql":
+    case "pg_dump":
+    case "pg_dumpall":
+    case "pg_restore":
+      return stronger(write, judgePostgres(name, args, context, assigned));
+    case "fly":
+    case "flyctl":
+      return judgeFly(name, args);
+    default: {
+      // Comando desconhecido: o próprio risco e todo sufixo que começa por
+      // executável conhecido (#485), salvo em quem não executa o argv.
+      const own = stronger(write, stronger(judgeSystemTool(name, args), judgeSecretTool(name, args)));
+      if (own?.decision === "deny" || NON_EXECUTING.has(name)) return own;
+      return stronger(own, nestedRisk(args, context));
+    }
   }
 }
 
@@ -2013,7 +2461,9 @@ function riskOf(text, depth, bulk = false, env = NO_ENV) {
         ...command.heredocs.map((heredoc) => heredoc.body),
         ...command.redirects.filter((redirect) => redirect.op === "<<<").map((redirect) => redirect.target),
       ];
-      worst = stronger(worst, judgeWords(words, { depth, bulk, stdin, env }));
+      // `input`: a entrada vem de arquivo (`< x.sql`), que o programa pode executar.
+      const input = command.redirects.some((redirect) => redirect.op === "<" || redirect.op === "<>");
+      worst = stronger(worst, judgeWords(words, { depth, bulk, stdin, env, input }));
     }
     if (worst?.decision === "deny") return worst;
   }
@@ -2143,8 +2593,9 @@ export function simpleCommands(command) {
 }
 
 /**
- * Cada comando de um laço contra a lista, como se rodasse sozinho: o
- * `Bash(for:*)` libera a forma, não o corpo.
+ * Cada comando de um laço contra a lista, como se rodasse sozinho: a forma
+ * do laço não libera o corpo. Com `Bash` sem padrão no allow (#481), todo
+ * corpo passa pela lista, e decidem o classificador e o `deny`.
  * @param {BashRules | null} rules
  * @returns {ShellVerdict | null}
  */

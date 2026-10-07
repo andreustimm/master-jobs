@@ -112,6 +112,10 @@ describe("processo real do hook: bloqueia composto, libera simples", () => {
     ["git -c x=y push origin main", "deny"],
     ["sudo ls", "deny"],
     ["cat .env", "deny"],
+    // #485/#488: invólucro desconhecido, Docker destrutivo e segredo.
+    ["arch -arm64 git push origin main", "deny"],
+    ["docker system prune -af", "ask"],
+    ["printenv", "ask"],
   ])("risco devolve permissionDecision: %s -> %s", (command, decision) => {
     const result = run(JSON.stringify({ tool_name: "Bash", tool_input: { command } }));
     expect(result.status).toBe(0);
@@ -128,7 +132,7 @@ describe("processo real do hook: bloqueia composto, libera simples", () => {
       "git log | head",
       "gh secret set X",
       "docker ps",
-      "for f in a; do docker rm $f; done",
+      "for f in a; do docker logs $f; done",
     ];
     for (const command of routine) {
       const result = run(JSON.stringify({ tool_name: "Bash", tool_input: { command } }));
@@ -163,5 +167,24 @@ describe("gate ligado ao harness real", () => {
     expect(bash, "hooks.PreToolUse com matcher Bash").toBeDefined();
     const command = bash!.hooks[0]!.command;
     expect(command).toContain("$CLAUDE_PROJECT_DIR/.claude/hooks/no-compound-bash.mjs");
+    // #485: saída diferente de 0 e 2 deixaria o comando passar; a falha do processo bloqueia.
+    expect(command).toMatch(/no-compound-bash\.mjs\\?" \|\| exit 2$/);
+  });
+
+  it("o comando registrado bloqueia (saída 2) quando o hook não consegue rodar", () => {
+    const settings = JSON.parse(readFileSync(".claude/settings.json", "utf8")) as {
+      hooks: { PreToolUse: { matcher: string; hooks: { command: string }[] }[] };
+    };
+    const command = settings.hooks.PreToolUse.find((entry) => entry.matcher === "Bash")!.hooks[0]!.command;
+    const input = JSON.stringify({ tool_name: "Bash", tool_input: { command: "git status" } });
+    const broken = spawnSync("sh", ["-c", command], { input, encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "/nao/existe" } });
+    expect(broken.status).toBe(2);
+    // O hook que roda continua com as saídas de sempre: 0 para simples, 2 para composto.
+    const ok = spawnSync("sh", ["-c", command], { input, encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: process.cwd() } });
+    expect(ok.status).toBe(0);
+    const compound = JSON.stringify({ tool_name: "Bash", tool_input: { command: "git add . && git commit" } });
+    const refused = spawnSync("sh", ["-c", command], { input: compound, encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: process.cwd() } });
+    expect(refused.status).toBe(2);
+    expect(refused.stderr).toContain("Comando composto recusado (&&)");
   });
 });

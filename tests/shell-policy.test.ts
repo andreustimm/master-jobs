@@ -15,6 +15,7 @@ import {
   bashSpecifierMatches,
   classifyRisk,
   findCompound,
+  isKnownCommand,
   isReadOnlyStage,
   judgeShell,
   MAX_COMMAND,
@@ -820,7 +821,8 @@ describe("uma fonte de verdade para o risco de shell", () => {
 
   it("corpo de laço é julgado contra a lista allow, como se rodasse sozinho", () => {
     expect(judgeShell("for f in a; do echo $f; done", NARROW_BASH)).toBeNull();
-    expect(judgeShell("for f in a; do docker rm $f; done", NARROW_BASH)).toMatchObject({ decision: "ask", kind: "body" });
+    // `docker logs` não tem risco (#488 tornou `docker rm` risco): só a lista estreita pergunta.
+    expect(judgeShell("for f in a; do docker logs $f; done", NARROW_BASH)).toMatchObject({ decision: "ask", kind: "body" });
     expect(judgeShell("while docker ps; do sleep 1; done", NARROW_BASH)).toMatchObject({ decision: "ask", kind: "body" });
     expect(judgeShell("for f in a; do echo $f; done", null)).toMatchObject({ decision: "ask", kind: "body" });
     expect(judgeShell("for f in a; do git push origin main; done", REAL_BASH)).toMatchObject({ decision: "deny" });
@@ -828,8 +830,10 @@ describe("uma fonte de verdade para o risco de shell", () => {
 
   it("#481: `Bash` sem padrão na lista real libera o corpo; o risco continua com a política", () => {
     expect(REAL_BASH.allow).toEqual([null]);
-    expect(judgeShell("for f in a; do docker rm $f; done", REAL_BASH)).toBeNull();
+    expect(judgeShell("for f in a; do docker logs $f; done", REAL_BASH)).toBeNull();
     expect(judgeShell("while docker ps; do sleep 1; done", REAL_BASH)).toBeNull();
+    // #488: apagar contêiner pergunta, também no corpo.
+    expect(judgeShell("for f in a; do docker rm $f; done", REAL_BASH)).toMatchObject({ decision: "ask", kind: "risk" });
     expect(judgeShell("for f in a; do rm -rf $f; done", REAL_BASH)).toMatchObject({ decision: "ask", kind: "risk" });
     expect(judgeShell("for f in a; do git push --force origin $f; done", REAL_BASH)).toMatchObject({ decision: "ask" });
     expect(judgeShell("for f in a; do sudo ls; done", REAL_BASH)).toMatchObject({ decision: "deny" });
@@ -849,7 +853,7 @@ describe("uma fonte de verdade para o risco de shell", () => {
   });
 
   it("embutido não libera o resto do corpo", () => {
-    expect(judgeShell("while read l; do docker rm $l; done < f", NARROW_BASH)).toMatchObject({ decision: "ask", kind: "body" });
+    expect(judgeShell("while read l; do docker logs $l; done < f", NARROW_BASH)).toMatchObject({ decision: "ask", kind: "body" });
     expect(judgeShell("if [ -f x ]; then git push origin main; fi", REAL_BASH)).toMatchObject({ decision: "deny" });
   });
 });
@@ -916,6 +920,155 @@ describe("escrita fora da árvore do projeto, com a raiz informada pelo chamador
   it("o diretório pessoal absoluto conta como `~` no `rm` recursivo", () => {
     expect(classifyRisk("rm -rf /home/eu", env)?.decision).toBe("deny");
     expect(classifyRisk("rm -rf /home/eu/www", env)?.decision).toBe("ask");
+  });
+});
+
+describe("#485: invólucro desconhecido, ferramenta fora do catálogo e segredo", () => {
+  const env = { root: "/repo", cwd: "/repo", home: "/home/eu" };
+
+  it.each<[string, Expected]>([
+    // Busca de sufixo: executável conhecido em qualquer posição do argv.
+    ["foo --bar git push --force origin x", "ask"],
+    ["/opt/x/bin/wrap -q /bin/rm -rf src", "ask"],
+    ["nice arch -arm64 xcrun git push origin main", "deny"],
+    ["docker run -v /:/host alpine rm -rf /host/etc", "ask"],
+    ["python3 x.py sudo ls", "deny"],
+    // Texto novo dentro de um sufixo (`env -S`) também é buscado.
+    ['wrap env -S "foo git push --force origin x"', "ask"],
+    // Invólucros nomeados, inclusive texto de shell entre aspas.
+    ['hyperfine --prepare "git reset --hard" "ls"', "ask"],
+    ['parallel "rm -rf {}" ::: a b', "ask"],
+    ['flock /tmp/l -c "git push --force origin x"', "ask"],
+    ["mise x node@20 -- vercel --prod", "ask"],
+    // Postgres: remoto por host, URL, conninfo, variável ou atribuição.
+    ["psql -h db.supabase.co -c 'delete from job'", "ask"],
+    ["psql --dbname=postgresql://u@db.x.co/p -c 'drop table x'", "ask"],
+    ["psql 'host=db.x.co dbname=p' -c 'update job set x=1'", "ask"],
+    ["PGHOST=db.x.co psql -c 'truncate job'", "ask"],
+    ['psql "$POSTGRES_URL" -f x.sql', "ask"],
+    ['psql "$DATABASE_URL" < x.sql', "ask"],
+    ['psql "$DATABASE_URL"', "ask"],
+    ['psql "$DATABASE_URL" -c "\\! rm -rf src"', "ask"],
+    ["pg_restore -d postgres://u@db.x.co/p dump.bin", "ask"],
+    ["pg_dump -f ~/dump.sql postgres://127.0.0.1/jobs", "ask"],
+    // Docker (#488).
+    ["docker rmi img", "ask"],
+    ["docker -H tcp://x container prune -f", "ask"],
+    ["docker volume rm v", "ask"],
+    ["docker network prune", "ask"],
+    ["docker builder prune -a", "ask"],
+    ["docker compose -f docker-compose.local.yml down --volumes", "ask"],
+    ["docker-compose down -v", "ask"],
+    ["docker compose rm -f", "ask"],
+    // Segredo.
+    ["env -u X", "ask"],
+    ["rtk env", "ask"],
+    ["typeset -x", "ask"],
+    ["export", "ask"],
+    ["security find-internet-password -s x -g", "deny"],
+    ["security export -k login.keychain -o x.p12", "deny"],
+    ["vercel pull --yes", "ask"],
+    // Nuvem, disco e sistema.
+    ["vercel api /v9/projects -f name=x", "ask"],
+    ["vercel api /v9/projects --method=patch", "ask"],
+    ["terraform apply plan.tfplan", "ask"],
+    ["kubectl -n prod delete pod x", "ask"],
+    ["aws ec2 terminate-instances --instance-ids i-1", "ask"],
+    ["newfs_apfs /dev/disk4", "ask"],
+    ["diskutil apfs deleteVolume disk3s1", "ask"],
+    ["truncate --size=0 x", "ask"],
+    ["defaults -currentHost write com.apple.x k v", "ask"],
+    ["crontab -e", "ask"],
+    ["unzip -o x.zip -d /etc/x", "ask"],
+    ["patch -o ~/.zshrc a x.diff", "ask"],
+  ])("pergunta ou nega: %s -> %s", (command, expected) => {
+    expect(classifyRisk(command, env)?.decision ?? null, command).toBe(expected);
+  });
+
+  it.each([
+    // Quem não executa o argv: a palavra é dado.
+    "grep -rn sudo src",
+    "rg -n 'git push --force' docs",
+    "echo rm -rf /",
+    "gh label create sudo",
+    "pnpm jho jobs search sudo",
+    "which docker",
+    "man rm",
+    // Rotina ao lado das famílias novas.
+    "docker ps",
+    "docker build -t x .",
+    "docker logs -f app",
+    "docker compose up -d",
+    "docker compose down",
+    "docker run --rm node:22 node -e 1",
+    "uv run pytest -k rm",
+    "uv run pytest tests/install tests/find tests/sudo",
+    "uv pip install x",
+    "make build",
+    "psql postgresql://jobs:jobs@127.0.0.1:5433/jobs -c 'drop table x'",
+    "psql -h localhost -c 'select 1'",
+    "psql -h /tmp -f x.sql",
+    'psql "$DATABASE_URL" -c "select count(*) from job"',
+    'psql "$DATABASE_URL" -l',
+    "pg_dump postgres://127.0.0.1/jobs",
+    "env FOO=1 node x.js",
+    "env -i",
+    "printenv PATH",
+    "set -euo pipefail",
+    "export FOO=1",
+    "declare -a xs",
+    "security find-generic-password -s x",
+    "crontab -l",
+    "defaults read com.apple.x",
+    "launchctl list",
+    "diskutil list",
+    "tmutil listbackups",
+    "csrutil status",
+    "aws s3 ls",
+    "aws s3 rm s3://b/x",
+    "gcloud projects list",
+    "kubectl get pods",
+    "terraform apply",
+    "fly status",
+    "vercel api /v9/projects",
+    "truncate -s 10M x.img",
+    "unzip x.zip -d tmp/x",
+    "patch -p1 -i x.diff",
+    "ditto a b",
+    "trash x",
+    "curl -sS http://127.0.0.1:3000",
+  ])("passa: %s", (command) => {
+    expect(classifyRisk(command, env), command).toBeNull();
+  });
+
+  it("todo executável que o dono listou é conhecido pela busca de sufixo", () => {
+    const listed = [
+      "git", "rm", "sudo", "su", "doas", "vercel", "supabase", "psql", "pg_dump", "pg_restore", "drizzle-kit", "fly",
+      "flyctl", "terraform", "kubectl", "aws", "gcloud", "docker", "chmod", "chown", "dd", "mkfs.ext4", "shred",
+      "diskutil", "crontab", "launchctl", "defaults", "osascript", "shutdown", "reboot", "sh", "bash", "zsh", "node",
+      "pnpm", "npx", "npm", "curl", "wget", "cp", "mv", "tee",
+    ];
+    for (const name of listed) expect(isKnownCommand(name), name).toBe(true);
+    for (const name of ["echo", "grep", "gh", "jho", "pytest"]) expect(isKnownCommand(name), name).toBe(false);
+    // Sufixo depois de um executável que a política não conhece: julgado como comando.
+    expect(classifyRisk("wrap chmod 777 x")?.decision).toBe("deny");
+    expect(classifyRisk("wrap dd of=/etc/x")?.decision).toBe("ask");
+    expect(classifyRisk("wrap shutdown")?.decision).toBe("ask");
+    expect(classifyRisk("wrap mkfs.ext4 /dev/x")?.decision).toBe("ask");
+    expect(classifyRisk("wrap bash -c 'rm -rf src'")?.decision).toBe("ask");
+    expect(classifyRisk("wrap npx vercel --prod")?.decision).toBe("ask");
+    expect(classifyRisk("wrap curl -o ~/.zshrc https://x")?.decision).toBe("ask");
+    expect(classifyRisk("wrap tee ~/.zshrc")?.decision).toBe("ask");
+  });
+
+  it("busca de sufixo num argv longo não trava", () => {
+    const started = performance.now();
+    expect(classifyRisk(`wrap ${"rm ".repeat(20000)}-rf x`)?.decision).toBe("ask");
+    expect(classifyRisk(`wrap ${"docker ".repeat(5000)}ps`)?.decision).toBe("ask");
+    // Muito dado e poucos executáveis: cada sufixo é julgado uma vez só.
+    expect(classifyRisk(`wrap ${"docker run x ".repeat(10)}${"a ".repeat(30000)}`)).toBeNull();
+    expect(classifyRisk(`wrap ${"a ".repeat(30000)}git push origin main`)?.decision).toBe("deny");
+    expect(performance.now() - started).toBeLessThan(3000);
   });
 });
 

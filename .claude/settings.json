@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/no-compound-bash.mjs\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/no-compound-bash.mjs\" || exit 2"
           }
         ]
       }

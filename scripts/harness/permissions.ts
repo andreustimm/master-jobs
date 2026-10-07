@@ -243,10 +243,11 @@ const BUILTIN_ALLOWED = new Set(["cd"]);
  * pergunta. O prefixo `rtk` sai antes de conferir o allow (G63). Em laço
  * (#461), a palavra reservada sai antes do allow: `do echo $f` é julgado como
  * `echo $f`, `while docker ps` como `docker ps`, e `done`/`fi`/cabeçalho de
- * `for` são estrutura — `Bash(for:*)` libera a forma, não o corpo. `Bash` sem
- * padrão no allow (#481) libera todo trecho que deny e ask não pegam: aí o
- * risco é do classificador e o composto é recusado, ambos por `judgeShell`
- * na guarda do Codex (`codex-guard.ts`), antes desta lista.
+ * `for` são estrutura — a forma do laço não libera o corpo. Com `Bash` sem
+ * padrão no allow (#481), esta lista libera todo trecho que deny e ask não
+ * pegam; o risco fica com o classificador (`judgeShell`, uma lista do que é
+ * proibido: o que ele não reconhece passa) e o composto é recusado, ambos na
+ * guarda do Codex (`codex-guard.ts`), antes desta lista.
  */
 export function decideCommand(rules: readonly Rule[], command: string): Decision {
   const bash = rules.filter((rule) => rule.tool === "Bash");
