@@ -72,6 +72,8 @@ rtk pnpm jho auth status         # modo e contas
 rtk pnpm jho auth add-user <email> --role admin,candidate
 rtk pnpm jho auth set-password <email>   # senha (entrada escondida ou --stdin)
 rtk pnpm jho auth login <email>          # link de uso único → /login/callback
+rtk pnpm jho auth methods <email>        # senha e provedores (Google, LinkedIn) ligados
+rtk pnpm jho auth unlink <email> google  # desliga um provedor (nunca o último método)
 
 # LLM opcional (BYOK — sua chave, seu custo)
 rtk pnpm jho llm seed            # cadastra provedores conhecidos (sem os modelos desligados)
@@ -1385,6 +1387,27 @@ Um candidato tem no máximo uma conta (índice `auth_user_candidate_idx`).
 Cria a conta do dono (admin + candidato `default`) com senha gerada, mostrada
 uma vez. Recusa um e-mail diferente quando o candidato `default` já pertence a
 outra conta.
+
+### `jho auth methods <email>`
+
+Lista as formas de entrar da conta (#464, US-013): senha definida ou não e, para
+Google e LinkedIn, se está ligado, a data do vínculo, a origem (`automático`,
+pelo e-mail verificado, ou `manual`, pela tela da conta), o último uso (ou
+`nunca`) e, se for o caso, "não disponível neste ambiente". Nunca mostra o
+sujeito, o e-mail, o nome ou a foto do provedor. E-mail sem conta sai com
+"Conta … não existe." e código 1 — a CLI é ferramenta de operador e pode dizer.
+
+### `jho auth unlink <email> <provider>`
+
+Desliga `google` ou `linkedin` da conta, com a mesma regra da tela: recusa a
+última forma de entrar (conta sem senha e sem outro provedor; o link mágico não
+conta). Grava `identity_unlinked` com o detalhe `<provedor>: cli` e manda à
+conta o aviso por e-mail (que diz "um administrador"). Sai com código 1 para
+conta inexistente, provedor inválido, provedor não ligado ("Nada a desligar")
+e último método.
+
+Não existe `jho auth link`: ligar um provedor exige o navegador da dona da
+conta passando pelo provedor, em `/account` (US-013.EC-3).
 
 ## Área `analysis` — análise estruturada da vaga
 

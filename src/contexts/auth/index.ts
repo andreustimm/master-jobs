@@ -93,6 +93,24 @@ import {
   userHasProvider,
 } from "./infra/drizzle-identities.ts";
 import {
+  accountMethods,
+  providersByUser,
+  setFirstPassword as storeFirstPassword,
+  unlinkIdentityChecked,
+  userIdByEmail,
+} from "./infra/drizzle-identities.ts";
+import {
+  disconnectProvider,
+  listMethods,
+  setFirstPassword,
+  type AccountAccess,
+  type DisconnectResult,
+  type FirstPasswordResult,
+  type MethodsDeps,
+} from "./app/account-methods.ts";
+import { hashPassword } from "./domain/password.ts";
+import { authorize } from "./domain/policy.ts";
+import {
   completeSocialSignup,
   confirmManualSignup,
   createSocialSignup,
@@ -116,7 +134,6 @@ import {
   type SignupDeps,
   type SocialForm,
 } from "./app/signup.ts";
-import { hashPassword } from "./domain/password.ts";
 import { currentLegalVersions } from "../../core/legal.ts";
 import { checkCallbackState, flowKey, openFlow, sealFlow } from "./infra/flow-cookie.ts";
 import { configuredOidcProvider } from "./infra/oidc/providers.ts";
@@ -343,8 +360,8 @@ function resetDeps(baseUrl: string): ResetDeps {
  * formulário que responde "não encontramos esta conta" é um oráculo de
  * enumeração aberto ao mundo.
  */
-export function askPasswordReset(email: string, baseUrl: string) {
-  return requestPasswordReset(email, resetDeps(baseUrl));
+export function askPasswordReset(email: string, baseUrl: string, locale?: LocaleId) {
+  return requestPasswordReset(email, resetDeps(baseUrl), locale);
 }
 
 /**
@@ -550,6 +567,96 @@ export function signupScreenFor(token: string | null) {
 /** O estado de `/signup/verify` para o cookie desta visita. */
 export function verifyScreenFor(token: string | null) {
   return verifyScreen(token, signupDeps);
+}
+
+/* ---------------------------- Formas de entrar ---------------------------- */
+
+export type { AccountAccess, DisconnectResult, FirstPasswordResult } from "./app/account-methods.ts";
+export type { MethodsView, ProviderMethod } from "./domain/methods.ts";
+export { OIDC_PROVIDERS } from "./domain/oidc-config.ts";
+
+function methodsDeps(env: AuthEnvironment = process.env): MethodsDeps {
+  return {
+    store: { accountMethods, unlinkIdentityChecked, setFirstPassword: storeFirstPassword },
+    repository: drizzleAuthRepository,
+    mailer: () => configuredMailer(env),
+    hashPassword,
+    available: () => availableProviders(env),
+    now: () => new Date(clock().now()),
+  };
+}
+
+/** As formas de entrar e os termos aceitos da conta DA SESSÃO (US-010, US-021.AC-3). */
+export function accountAccess(session: Session, env: AuthEnvironment = process.env): Promise<AccountAccess | null> {
+  return listMethods(session.userId, methodsDeps(env));
+}
+
+/**
+ * Desliga um provedor da conta DA SESSÃO (US-008).
+ *
+ * Segunda barreira além do `guard` da action, como `assertOwnSession`: a
+ * função recebe a sessão e pode ser chamada de outro lugar amanhã.
+ */
+export function disconnectOwnProvider(
+  session: Session,
+  provider: OidcProviderId,
+  env: AuthEnvironment = process.env,
+): Promise<DisconnectResult> {
+  authorize(session, "account:manage-methods");
+  return disconnectProvider({ userId: session.userId, provider, actor: { by: "self" } }, methodsDeps(env));
+}
+
+/** Primeira senha da conta DA SESSÃO, que até aqui só entrava por provedor (US-009). */
+export function setFirstPasswordForSession(session: Session, password: string): Promise<FirstPasswordResult> {
+  authorize(session, "account:manage-methods");
+  return setFirstPassword({ userId: session.userId, email: session.email, password }, methodsDeps());
+}
+
+/**
+ * O admin desliga o provedor de OUTRA conta (US-011.AC-2), com a mesma
+ * proteção do último método. Não existe o inverso: admin não liga provedor em
+ * conta de ninguém (US-011.AC-3).
+ */
+export function adminDisconnectProvider(
+  actor: Session | null,
+  targetUserId: number,
+  provider: OidcProviderId,
+  env: AuthEnvironment = process.env,
+): Promise<DisconnectResult> {
+  authorize(actor, "user:manage");
+  const admin = actor as Session;
+  return disconnectProvider(
+    { userId: targetUserId, provider, actor: { by: "admin", adminUserId: admin.userId, adminEmail: admin.email } },
+    methodsDeps(env),
+  );
+}
+
+/** As contas com os provedores ligados de cada uma, para `/admin/users` (US-011.AC-1). */
+export async function listUsersWithMethods() {
+  const [users, providers] = await Promise.all([drizzleUserDirectory.list(), providersByUser()]);
+  return users.map((user) => ({ ...user, providers: providers.get(user.id) ?? [] }));
+}
+
+/** `jho auth methods <email>`: `null` quando não há conta (US-013). */
+export async function methodsForEmail(
+  email: string,
+  env: AuthEnvironment = process.env,
+): Promise<(AccountAccess & { email: string }) | null> {
+  const userId = await userIdByEmail(email);
+  if (userId === null) return null;
+  const access = await listMethods(userId, methodsDeps(env));
+  return access === null ? null : { ...access, email: email.trim().toLowerCase() };
+}
+
+/** `jho auth unlink <email> <provider>`: mesma proteção e auditoria da tela (US-013.AC-2). */
+export async function cliUnlinkProvider(
+  email: string,
+  provider: OidcProviderId,
+  env: AuthEnvironment = process.env,
+): Promise<DisconnectResult> {
+  const userId = await userIdByEmail(email);
+  if (userId === null) return { ok: false, error: "no_account" };
+  return disconnectProvider({ userId, provider, actor: { by: "cli" } }, methodsDeps(env));
 }
 
 /**

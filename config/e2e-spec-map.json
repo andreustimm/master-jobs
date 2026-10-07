@@ -390,6 +390,29 @@
       ]
     },
     {
+      "id": "account-methods",
+      "modules": [
+        "tests/e2e/ui/account-methods.mjs",
+        "tests/e2e/account-methods-fixtures.mjs",
+        "tests/e2e/fake-oidc.mjs"
+      ],
+      "patterns": [
+        "app/account/**",
+        "app/admin/actions.ts",
+        "app/admin/users/**",
+        "src/contexts/auth/app/account-methods.ts",
+        "src/contexts/auth/domain/methods.ts",
+        "src/contexts/auth/infra/drizzle-identities.ts"
+      ],
+      "routes": [
+        "/account",
+        "/admin/users",
+        "/login",
+        "/login/oauth/[provider]",
+        "/login/oauth/[provider]/callback"
+      ]
+    },
+    {
       "id": "jobs-new",
       "modules": [
         "tests/e2e/ui/jobs-new.mjs"

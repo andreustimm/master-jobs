@@ -14,6 +14,7 @@
  * inteira já provou.
  */
 import * as account from "./account.mjs";
+import * as accountMethods from "./account-methods.mjs";
 import * as admin from "./admin.mjs";
 import * as adminCatalog from "./admin-catalog.mjs";
 import * as auth from "./auth.mjs";
@@ -96,6 +97,10 @@ export const AREAS = [
   // do sink de e-mail; cada cenário em contexto próprio, com IP próprio.
   { id: "sign-up", run: signUp.run, requires: [] },
   { id: "legal", run: legal.run, requires: [] },
+  // Formas de entrar (#464, task_04): contas próprias de `setup.mjs`
+  // (`account-methods-fixtures.mjs`), devolvidas ao estado inicial a cada
+  // execução; o provedor é o emissor falso.
+  { id: "account-methods", run: accountMethods.run, requires: [] },
   { id: "jobs-new", run: jobsNew.run, requires: [] },
   { id: "public-profile", run: publicProfile.run, requires: [] },
   // Compara o histórico de novidades de quatro sessões: o dono (design),
