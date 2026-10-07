@@ -28,6 +28,13 @@ const count = async (target, stage) => {
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
+/** Abre o seletor (`<details>`) se estiver fechado; clicar no resumo aberto o fecharia. */
+const openPicker = async (target, testId) => {
+  if (!(await target.getByTestId(`${testId}-combo`).evaluate((details) => details.open))) {
+    await target.getByTestId(`${testId}-summary`).click();
+  }
+};
+
 export async function run(ctx) {
   const { BASE, E2E_PASSWORD, browser, check, trackConsole, gotoMeasured } = ctx;
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -119,6 +126,95 @@ export async function run(ctx) {
     await page.waitForURL((url) => url.pathname === "/pipeline" && url.search === "", { timeout: 15_000 });
     await ready(page);
     check("E2E-478 limpar filtros devolve o funil inteiro", same(await listed(page), [backend, engenheiro, platform]));
+
+    // E2E-492: marcas e campos seguem a URL depois de voltar, avançar, limpar
+    // e de uma faixa trocada pelo servidor — sem refresh entre os passos, que
+    // remontaria a tela e esconderia o defeito.
+    await page.goto(`${BASE}/pipeline`, { waitUntil: "networkidle" });
+    await ready(page);
+    const companyParam = () => new URL(page.url()).searchParams.getAll("company").join("|");
+    const channelParam = () => new URL(page.url()).searchParams.getAll("channel").join("|");
+
+    await openPicker(page, "pipeline-company");
+    await page.getByTestId(`pipeline-company-option-${alpha}`).check();
+    await page.getByTestId("pipeline-company-submit").click();
+    await page.waitForURL(() => companyParam() === alpha, { timeout: 15_000 });
+    await ready(page);
+    await page.goBack();
+    await page.waitForURL(() => companyParam() === "", { timeout: 15_000 });
+    await ready(page);
+    check("E2E-492 voltar desmarca a empresa que saiu da URL",
+      !(await page.getByTestId(`pipeline-company-option-${alpha}`).isChecked()));
+    await page.goForward();
+    await page.waitForURL(() => companyParam() === alpha, { timeout: 15_000 });
+    await ready(page);
+    check("E2E-492 avançar marca de novo a empresa que voltou à URL",
+      await page.getByTestId(`pipeline-company-option-${alpha}`).isChecked());
+    await page.goBack();
+    await page.waitForURL(() => companyParam() === "", { timeout: 15_000 });
+    await ready(page);
+    await openPicker(page, "pipeline-company");
+    await page.getByTestId(`pipeline-company-option-${beta}`).check();
+    await page.getByTestId("pipeline-company-submit").click();
+    await page.waitForURL(() => companyParam() !== "", { timeout: 15_000 });
+    await ready(page);
+    check("E2E-492 o Aplicar depois de voltar não ressuscita a empresa desfeita",
+      companyParam() === beta && same(await listed(page), [platform]), page.url());
+
+    await page.getByTestId("pipeline-company-clear").click();
+    await page.waitForURL(() => companyParam() === "", { timeout: 15_000 });
+    await ready(page);
+    check("E2E-492 limpar desmarca a empresa",
+      !(await page.getByTestId(`pipeline-company-option-${beta}`).isChecked()));
+
+    await openPicker(page, "pipeline-channel");
+    await page.getByTestId("pipeline-channel-option-direct").check();
+    await page.getByTestId("pipeline-channel-submit").click();
+    await page.waitForURL(() => channelParam() === "direct", { timeout: 15_000 });
+    await ready(page);
+    await page.goBack();
+    await page.waitForURL(() => channelParam() === "", { timeout: 15_000 });
+    await ready(page);
+    check("E2E-492 voltar desmarca o canal que saiu da URL",
+      !(await page.getByTestId("pipeline-channel-option-direct").isChecked()));
+    await openPicker(page, "pipeline-channel");
+    await page.getByTestId("pipeline-channel-option-referral").check();
+    await page.getByTestId("pipeline-channel-submit").click();
+    await page.waitForURL(() => channelParam() !== "", { timeout: 15_000 });
+    await ready(page);
+    check("E2E-492 o Aplicar depois de voltar não ressuscita o canal desfeito",
+      channelParam() === "referral", page.url());
+    await page.getByTestId("pipeline-channel-clear").click();
+    await page.waitForURL(() => channelParam() === "", { timeout: 15_000 });
+    await ready(page);
+    check("E2E-492 limpar desmarca o canal",
+      !(await page.getByTestId("pipeline-channel-option-referral").isChecked()));
+
+    // Faixa invertida igual à já aplicada: o servidor troca, e os campos também.
+    await page.goto(`${BASE}/pipeline?fit=60&fitMax=80`, { waitUntil: "networkidle" });
+    await ready(page);
+    const scoreParams = () => {
+      const params = new URL(page.url()).searchParams;
+      return `${params.get("fit")}/${params.get("fitMax")}`;
+    };
+    await page.getByTestId("pipeline-score-min").fill("80");
+    await page.getByTestId("pipeline-score-max").fill("60");
+    await page.getByTestId("pipeline-score-submit").click();
+    await page.waitForURL(() => scoreParams() === "80/60", { timeout: 15_000 });
+    await ready(page);
+    const swapped = {
+      notice: await page.getByTestId("pipeline-notice-range_swapped").count(),
+      min: await page.getByTestId("pipeline-score-min").inputValue(),
+      max: await page.getByTestId("pipeline-score-max").inputValue(),
+    };
+    check("E2E-492 faixa invertida: aviso e campos já na ordem trocada",
+      swapped.notice === 1 && swapped.min === "60" && swapped.max === "80", JSON.stringify(swapped));
+    await page.getByTestId("pipeline-score-submit").click();
+    await page.waitForURL(() => scoreParams() === "60/80", { timeout: 15_000 });
+    await ready(page);
+    check("E2E-492 o Aplicar seguinte envia a faixa na ordem certa, sem aviso",
+      (await page.getByTestId("pipeline-notice-range_swapped").count()) === 0 && same(await listed(page), [platform]),
+      page.url());
 
     // E2E-478-04: 375 px com o seletor aberto, e inglês sem português.
     await page.setViewportSize({ width: 375, height: 812 });
