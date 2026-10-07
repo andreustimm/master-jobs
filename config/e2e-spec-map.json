@@ -249,6 +249,22 @@
       ]
     },
     {
+      "id": "pipeline-filters",
+      "modules": [
+        "tests/e2e/ui/pipeline-filters.mjs",
+        "tests/e2e/pipeline-filters-fixture.mjs"
+      ],
+      "patterns": [
+        "app/checkbox-picker.tsx",
+        "src/core/synonyms.ts",
+        "src/core/synonyms-load.ts"
+      ],
+      "routes": [
+        "/login",
+        "/pipeline"
+      ]
+    },
+    {
       "id": "roles",
       "modules": [
         "tests/e2e/ui/roles.mjs"
