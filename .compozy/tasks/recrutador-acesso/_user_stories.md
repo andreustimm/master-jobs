@@ -3,7 +3,8 @@
 Canonical behavior catalog for the candidate granting, limiting and revoking a
 recruiter's access to their own funnel and CV, the invitation for recruiters
 without an account, job suggestions from recruiters, notices and the consent
-history. Companion to `_prd.md`; consumed by `_techspec.md` (component mapping)
+history, plus the profile directory where recruiters find candidates who
+chose the Recruiters or Public visibility. Companion to `_prd.md`; consumed by `_techspec.md` (component mapping)
 and `_tests.md` (coverage matrix).
 
 ## Personas
@@ -19,6 +20,8 @@ and `_tests.md` (coverage matrix).
   needs to see each candidate's funnel and CV and suggest jobs.
 - **Administrator** — keeps the installation safe; can cut an abusive or
   mistaken access, never creates one.
+- **Anonymous visitor** — anyone without a session; may read Public profiles
+  through `/p/`, never the directory.
 
 ## Story Index
 
@@ -49,6 +52,12 @@ and `_tests.md` (coverage matrix).
 | US-023 | Administration | Administrator              | Revoke an access or cancel an invitation |
 | US-024 | Administration | Administrator              | Never grant access, including while impersonating |
 | US-025 | Limits         | Candidate                  | Invitation and grant caps protect against abuse |
+| US-026 | Directory      | Recruiter with an account  | Search Recruiters and Public profiles by text and filters |
+| US-027 | Directory      | Recruiter with an account  | Read a profile found in the directory, allowlist only |
+| US-028 | Directory      | Candidate                  | Change visibility and appear in or disappear from the directory |
+| US-029 | Directory      | Anonymous visitor          | Anonymous visitors cannot reach the directory |
+| US-030 | Directory      | Candidate                  | A Private profile is never listed |
+| US-031 | Directory      | Candidate                  | Private fields never appear in the directory |
 
 ## Granting
 
@@ -528,8 +537,10 @@ Acceptance criteria:
   available to them shows my notes, salary floor, profile contact fields,
   score explanations, fit analyses, dossiers, mail suggestions or earlier CV
   versions.
-- AC-2: Given a recruiter, when they request any page of a candidate who did
-  not grant them access, then they get the same 404 as for a nonexistent id.
+- AC-2: Given a recruiter, when they request the grant pages (funnel, CV,
+  suggestions) of a candidate who did not grant them access, then they get the
+  same 404 as for a nonexistent id. The directory (US-026 – US-031) shows
+  only the public allowlist and never these pages.
 
 Edge cases:
 
@@ -757,3 +768,172 @@ Edge cases:
   window.
 - EC-3: Refused attempts do not count.
 - EC-4: Administrator-side actions never count against the candidate.
+
+## Directory
+
+### US-026: Search Recruiters and Public profiles by text and filters
+
+**As a** recruiter with an account, **I want** to search candidates who chose
+to be found, **so that** I can discover people I have not been invited by.
+
+Acceptance criteria:
+
+- AC-1: Given I am signed in as a recruiter, when I open the directory, then I
+  see a search box and simple filters, and a paginated list of profiles whose
+  visibility is Recruiters or Public.
+- AC-2: Given I type text, when I search, then results match the text in
+  title, headline or skills, ignoring case and accents.
+- AC-3: Given filters, when I apply one, then only matching profiles remain,
+  and the filter stays visible and removable.
+- AC-4: Given results, then each shows only allowlist fields (name, title,
+  headline, skills, and the other fields `publicProfile()` releases) and a link
+  to read the profile.
+
+Edge cases:
+
+- EC-1: Empty search → all Recruiters and Public profiles, paginated.
+- EC-2: No match → "No profiles match"; nothing reveals Private profiles
+  (no counts of hidden profiles).
+- EC-3: Text over 200 characters, only symbols or markup → trimmed or treated
+  as literal text; never interpreted; no error page.
+- EC-4: Unknown filter value or forged parameter asking for Private profiles
+  or extra fields → ignored; results stay within Recruiters and Public and the
+  allowlist.
+- EC-5: Page number out of range or non-numeric → first or last valid page.
+- EC-6: Thousands of profiles → paginated; each page loads within the same
+  time as other list pages.
+- EC-7: Many searches in a short time from one recruiter → rate limited with a
+  "Try again shortly" message (value in TechSpec).
+- EC-8: Session expires mid-search → sign-in, then back to the directory.
+- EC-9: A profile changes visibility between two pages of results → it may
+  appear or disappear on the next page; never shown after it became Private.
+- EC-10: Two roles (recruiter and candidate) → my own profile is listed only
+  if its visibility is Recruiters or Public, like any other.
+- EC-11: 375 px → search, filters and results usable.
+
+### US-027: Read a profile found in the directory, allowlist only
+
+**As a** recruiter with an account, **I want** to open a profile from the
+directory, **so that** I can decide whether to contact the candidate through
+public channels.
+
+Acceptance criteria:
+
+- AC-1: Given a result, when I open it, then I see the allowlist fields only.
+- AC-2: Given the candidate gave the second consent for the CV text, then the
+  page shows the CV text, filtered as on the public profile (no email, phone or
+  salary passage).
+- AC-3: Given the profile is Public, then the page shows its `/p/` link.
+- AC-4: Given any profile, then there is no control that requests or creates a
+  grant, and opening it records nothing linking me to the candidate.
+
+Edge cases:
+
+- EC-1: No second consent → no CV text, no CV file, no hint of its contents.
+- EC-2: Profile is Recruiters → no `/p/` link (it returns 404 to anonymous
+  visitors).
+- EC-3: The profile became Private after I loaded the results → 404 identical
+  to an unknown profile.
+- EC-4: Unknown or malformed profile id → same 404.
+- EC-5: I also hold a grant from this candidate → the directory page still
+  shows only the allowlist; a link takes me to the grant page for funnel and
+  CV.
+- EC-6: Names and texts with markup → rendered as text.
+- EC-7: Reloading the page repeatedly → same content; no side effects.
+
+### US-028: Change visibility and appear in or disappear from the directory
+
+**As a** candidate, **I want** my visibility choice to decide whether
+recruiters find me, **so that** I control my exposure.
+
+Acceptance criteria:
+
+- AC-1: Given the candidate page, then the visibility choice offers Private,
+  Recruiters and Public, each with a hint stating who finds and reads the
+  profile; the Recruiters hint says it reaches any authenticated recruiter,
+  including people who signed up as recruiters themselves.
+- AC-2: Given I move from Private to Recruiters or Public, when a recruiter
+  searches next, then my profile can appear in results.
+- AC-3: Given I move to Private, when a recruiter searches next or opens my
+  directory profile, then I am absent and the profile returns 404.
+- AC-4: Given any visibility, then grants are unaffected: invited recruiters
+  keep their access.
+
+Edge cases:
+
+- EC-1: Forged visibility value → validation error; visibility unchanged.
+- EC-2: Same value submitted twice → no change, no error.
+- EC-3: Two tabs changing visibility → the last saved value wins, and the page
+  shows it after refresh.
+- EC-4: Administrator impersonating me → cannot change visibility (account
+  change in a borrowed session is refused).
+- EC-5: Profile without title, headline or skills → listed with the fields it
+  has; it matches only searches on fields present.
+- EC-6: Recruiters → Public → Private in a minute → each next request reflects
+  the current value.
+
+### US-029: Anonymous visitors cannot reach the directory
+
+**As a** candidate, **I want** the directory closed to people without an
+account, **so that** Recruiters visibility does not become public.
+
+Acceptance criteria:
+
+- AC-1: Given no session, when the directory or a directory profile is
+  requested, then the visitor is sent to sign-in and receives no profile data.
+- AC-2: Given a candidate-only or administrator-only session, when the
+  directory is requested, then it is refused, and no profile data is returned.
+
+Edge cases:
+
+- EC-1: Direct links to directory search URLs shared outside → sign-in
+  required.
+- EC-2: Expired session → sign-in.
+- EC-3: Administrator impersonating a recruiter → sees what that recruiter
+  sees, and nothing more.
+- EC-4: Anonymous request to `/p/` of a Recruiters profile → 404 (G22).
+
+### US-030: A Private profile is never listed
+
+**As a** candidate with a Private profile, **I want** never to appear in the
+directory, **so that** only recruiters I invite see me.
+
+Acceptance criteria:
+
+- AC-1: Given my profile is Private, then no search, filter, page or sort
+  returns it.
+- AC-2: Given my profile is Private, when a recruiter without a grant requests
+  my directory profile by id, then they get 404.
+
+Edge cases:
+
+- EC-1: Search for my exact name → not found.
+- EC-2: A recruiter I invited → still not found in the directory; reaches me
+  only through the grant page.
+- EC-3: Missing or unrecognized stored visibility → treated as Private.
+- EC-4: Zero Recruiters or Public profiles in the installation → directory
+  empty state, with no hint that Private profiles exist.
+
+### US-031: Private fields never appear in the directory
+
+**As a** candidate, **I want** the directory to show only what the public
+profile shows, **so that** funnel, contacts and salary floor stay private.
+
+Acceptance criteria:
+
+- AC-1: Given any profile in the directory, then results and profile pages
+  never show funnel, applications, profile contacts, salary floor, notes,
+  private analyses, CV files or unfiltered CV text.
+- AC-2: Given the same profile, then the fields shown equal those the public
+  profile allowlist releases, whatever the visibility (Recruiters or Public).
+
+Edge cases:
+
+- EC-1: CV text containing email, phone or salary → removed by the public CV
+  filter before display.
+- EC-2: A new private field added to the profile in the future → absent from
+  the directory unless added to the allowlist.
+- EC-3: Export or API requests from a recruiter for directory profiles → only
+  allowlist fields.
+- EC-4: Search on a private field's content (for example the salary floor
+  value or a note) → no match through that field.

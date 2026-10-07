@@ -24,6 +24,16 @@ at any moment, and the cut takes effect on the recruiter's next request. Both
 parties are notified by email, and the candidate sees who has access, when
 each recruiter last looked, and the full history of sharing decisions.
 
+Alongside the invitation, recruiters get a way to discover candidates who chose
+to be found. The profile keeps its three visibilities. Private profiles are seen
+only by invited recruiters. Recruiters profiles are found and read by any
+authenticated recruiter. Public profiles are read by anyone through `/p/` and
+are also found by authenticated recruiters. A new profile directory lets
+authenticated recruiters search Recruiters and Public profiles. It shows only
+the public allowlist, and the CV text only under the candidate's second
+consent. Funnel, applications, contacts, salary floor and notes stay exclusive
+to the invitation, and the directory never creates a link (ADR-010).
+
 It serves candidates who work with a recruiter or career coach and want help
 without handing over their private reasoning (notes, salary floor, contacts,
 analyses), and recruiters who need a clear, consented view of the people they
@@ -51,6 +61,11 @@ revocable as easily as given).
   since when".
 - Administrators can still cut an access, and the product makes it impossible
   for anyone but the candidate to create one.
+- Authenticated recruiters find, by text and simple filters, the candidates
+  whose visibility is Recruiters or Public. They see only the public allowlist
+  there, never a Private profile, and gain no link by finding someone.
+- The visibility a candidate chooses decides, from the next search on, whether
+  recruiters can find them.
 
 ## User Stories
 
@@ -64,6 +79,9 @@ revocable as easily as given).
   candidate's decision.
 - US-023 – US-024: administration: revoke only, never grant.
 - US-025: abuse limits.
+- US-026 – US-031: profile directory for recruiters: search, reading,
+  visibility changes, anonymous refusal, Private never listed, private fields
+  never shown.
 
 [Full user stories](_user_stories.md)
 
@@ -141,6 +159,24 @@ revocable as easily as given).
 - No grant or invite action for administrators in the web or the CLI;
   impersonated sessions see the candidate's access page read-only.
 
+### F8. Profile directory for recruiters
+
+- A directory page, reachable only by authenticated recruiters, lists
+  candidate profiles whose visibility is Recruiters or Public.
+- Search by free text over title, headline and skills. Simple filters cover
+  the fields of the public allowlist that support it (for example location or
+  work mode, when published). Results are paginated.
+- Each result and the profile page opened from it show only the
+  `publicProfile()` allowlist (G21). The CV text appears only when the
+  candidate gave the second consent, filtered as on the public profile (G23).
+  A Public profile also shows its `/p/` link.
+- The directory never shows funnel, applications, contacts, salary floor,
+  notes or private analyses, and never offers an action that creates a link
+  with the candidate.
+- The candidate page keeps the three visibilities. Each option explains who
+  finds and reads the profile, including that Recruiters reaches anyone who
+  signs up as a recruiter.
+
 ### Interactions
 
 - F1 creates either a grant (F3 opens to the recruiter) or an invitation (F2),
@@ -149,6 +185,10 @@ revocable as easily as given).
 - F4 depends on an active grant to create suggestions. The candidate can still
   decide on them after F5 ends the grant.
 - F7 uses F5's end-of-access rules.
+- F8 is independent of grants: a recruiter may hold a grant from a candidate
+  who also appears in the directory. The grant page (F3) shows the funnel and
+  current CV, while the directory shows only the allowlist. Finding a
+  candidate in F8 never creates or requests an F1 grant.
 
 ## Business Rules
 
@@ -190,6 +230,36 @@ revocable as easily as given).
 - Recruiters never write candidate data: no funnel moves, no notes, no CV or
   profile edits.
 - Public profile rules (`/p/[slug]`, G21–G23) are unchanged.
+
+### Profile visibility and directory
+
+- Three visibilities, chosen by the candidate on the candidate page:
+  - **Private:** absent from the directory and from `/p/` (404). Only
+    recruiters with an active grant see the candidate, within the grant scope.
+  - **Recruiters:** found in the directory and readable by any authenticated
+    recruiter. Not reachable anonymously (`/p/` returns 404).
+  - **Public:** readable by anyone through `/p/[slug]` and found by
+    authenticated recruiters in the directory.
+- Accepted risk (owner, 2026-10-06): with open recruiter sign-up (#464),
+  Recruiters reaches anyone who signs up as a recruiter. The option's text
+  says so.
+- Directory access: sessions with the recruiter role only. Anonymous visitors
+  are sent to sign-in. Candidate-only and administrator-only sessions are
+  refused.
+- Directory content and the profile reached from it: only the
+  `publicProfile()` allowlist; the CV text only with the second consent and
+  through `publicCvText()`. Never funnel, applications, contacts, salary floor,
+  notes, private analyses or CV files.
+- A recruiter who also holds a grant from that candidate still sees only the
+  allowlist in the directory. Funnel and CV are read on the grant page.
+- Visibility changes take effect on the next directory request: a candidate
+  who moves to Private disappears from results and from profile pages opened
+  from the directory (404). A candidate who moves to Recruiters or Public
+  appears.
+- The directory never creates, requests or implies a grant, and records no
+  link between recruiter and candidate.
+- Search results never reveal that Private profiles exist (no counts, no
+  placeholders).
 
 ### Lifecycle
 
@@ -238,7 +308,8 @@ revocable as easily as given).
   see list and history, accept or decline suggestions, all on their own
   candidate only.
 - Recruiter: read granted candidates within scope; suggest jobs; see own
-  suggestions. Nothing else on candidates.
+  suggestions; search and read Recruiters and Public profiles in the
+  directory, allowlist only. Nothing else on candidates.
 - Administrator: see grants and invitations; revoke; cancel. Never grant,
   invite, resend or change end dates. In impersonation, the candidate's access
   page and suggestions are read-only (G24).
@@ -354,6 +425,20 @@ revocable as easily as given).
 - **Responsiveness:** a revocation or expiry is enforced on the recruiter's
   next request, never after a background delay.
 - **Rules 9/10/11:** dictionary text, theme tokens, 375 px.
+- **Directory (ADR-010):**
+  - The directory page and its search require a session with the recruiter
+    role, and the page calls `requirePage(...)` first (rule 14, G38–G40).
+  - Visibility filtering and field selection happen behind the authorization
+    policy (`can()`), never in the page alone. No request parameter widens the
+    visibilities searched or the fields returned.
+  - Results reuse the public allowlist (`publicProfile()`, G21) and the CV
+    filtering (`publicCvText()`, G23).
+  - Per-role end-to-end scenarios (G16): a recruiter searches and reads; a
+    candidate changes visibility and appears or disappears; an anonymous
+    visitor is refused; a Private profile is never listed; private fields
+    never appear.
+  - The new route enters the E2E route list.
+  - No data migration: the three visibilities and their stored values stay.
 - **Docs (rule 23, ADR-009):** when the feature ships, `docs/product/vision.md`
   and `docs/product/personas.md` describe the recruiter as a user invited by
   the candidate (P2 is no longer "not a user"). `docs/qa/personas.md`
@@ -362,7 +447,8 @@ revocable as easily as given).
 
 ## Non-Goals (Out of Scope)
 
-- Recruiter-initiated access requests or searching for candidates.
+- Recruiter-initiated access requests, including from the directory (F8):
+  finding a candidate never asks for or creates a grant.
 - Per-recruiter permission levels or custom scopes. Every grant has the same
   scope.
 - Recruiters editing the funnel, notes, profile or CV, or commenting on funnel
@@ -388,14 +474,10 @@ revocable as easily as given).
 - [ADR-007: Re-granting needs new consent, and revoking a pending invitation kills it](adrs/adr-007.md) — decided by the agent.
 - [ADR-008: Administrators can revoke access but never grant it](adrs/adr-008.md) — decided by the agent.
 - [ADR-009: Recruiters become users invited by candidates, working from the existing candidate list](adrs/adr-009.md) — product positioning and docs update.
+- [ADR-010: Keep the three profile visibilities and add a profile directory for recruiters](adrs/adr-010.md) — owner decision; accepted risk of open recruiter sign-up.
 
 ## Open Questions
 
-- **Profile visibility "recruiters":** today the policy lets any authenticated
-  recruiter read a candidate profile whose visibility is "recruiters", with no
-  grant. With open recruiter sign-up (#464), that means anyone who signs up as
-  recruiter. The owner should decide whether this visibility stays, is limited
-  to granted recruiters, or is removed. This PRD does not change it.
 - **Time zone of the end date:** this PRD uses the time zone shown at the
   moment of setting it. The TechSpec should confirm whether the candidate's
   account has a stored time zone to use instead.
