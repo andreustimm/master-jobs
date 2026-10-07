@@ -15,6 +15,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { resolveGitTarget } from "../../.claude/hooks/push-target.mjs";
 import { blockMessage, judgeShell } from "../../.claude/hooks/shell-policy.mjs";
 import { bashRules, decideCommand, decidePath, parseRules, type Decision, type Rule } from "./permissions.ts";
 
@@ -56,7 +57,9 @@ export function judge(input: HookInput, rules: readonly Rule[], context: { root:
     }
     return { decision: worst, target };
   }
-  const shell = judgeShell(command, bashRules(rules), { root: context.root, cwd, home: context.home });
+  // Contexto real do git (#476): checkout principal ou worktree, destino do push.
+  const gitTarget = resolveGitTarget(command, { cwd });
+  const shell = judgeShell(command, bashRules(rules), { root: context.root, cwd, home: context.home, gitTarget });
   if (shell?.kind === "compound") return { decision: "deny", target: command, message: blockMessage(shell, "Codex") };
   const listed = decideCommand(rules, command);
   if (shell && STRENGTH[shell.decision] > STRENGTH[listed]) {

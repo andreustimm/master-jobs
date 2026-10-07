@@ -17,9 +17,12 @@ exceções e prova de cada regra estão em
 ## Como trabalhar
 
 - Leve a tarefa até a entrega exigida na issue; decisões rotineiras são suas.
-  Pergunte ao dono só antes de ação irreversível fora do fluxo (force-push,
-  `reset --hard`, apagar branch permanente ou dado), escrita no banco de
-  produção, afrouxar uma regra ou aceitar `FIX_BEFORE_SHIP` remanescente.
+  Pergunte ao dono só antes de ação irreversível fora do fluxo (force-push ou
+  apagar branch em `main`/`staging`/`dev`, `reset --hard`/`clean`/descarte
+  na checkout principal, apagar dado), escrita no banco de produção, afrouxar
+  uma regra ou aceitar `FIX_BEFORE_SHIP` remanescente. Em worktree de
+  trabalho, todo `git` é rotina, inclusive o destrutivo (decisão do dono,
+  07/10/2026). [[G85](docs/engineering/rules/delivery.md#g85)]
 - Entregue o pedido, no escopo pedido; melhoria fora dele vira uma frase na PR
   ou uma issue.
 - Relate só o que um comando desta sessão mostrou; o resto é "não verificado".

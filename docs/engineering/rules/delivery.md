@@ -626,7 +626,7 @@ formato chega por espelho **gerado** — nunca escrito à mão.
 | Comandos | `.claude/commands/` | nativo | sem suporte de projeto — peça pelo nome e leia o arquivo | `.opencode/commands` (symlink) |
 | Agentes | `.claude/agents/*.md` | nativo | `.codex/agents/*.toml` (gerado) | `.opencode/agents/*.md` (gerado) |
 | Permissões | `.claude/settings.json` | nativo | `.codex/hooks.json` (gerado) → `scripts/harness/codex-guard.ts` | `opencode.json > permission` (gerado) |
-| Política de shell (composto e risco) | `.claude/hooks/shell-policy.mjs` | `.claude/hooks/no-compound-bash.mjs` (hook `PreToolUse`) | `scripts/harness/codex-guard.ts` (importa) | `.opencode/plugins/shell-guard.js` (plugin, conferido) |
+| Política de shell (composto e risco) | `.claude/hooks/shell-policy.mjs` (pura) + `.claude/hooks/push-target.mjs` (contexto do git) | `.claude/hooks/no-compound-bash.mjs` (hook `PreToolUse`) | `scripts/harness/codex-guard.ts` (importa) | `.opencode/plugins/shell-guard.js` (plugin, conferido) |
 
 Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
 
@@ -705,12 +705,45 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   recursão, `chmod`, `kill` e utilitários de texto e arquivo. Reescrever
   commit local (`commit --amend`, `rebase`, `rebase -i` em branch de
   trabalho) também é rotina, por decisão do dono: o portão da reescrita é o
-  push forçado, que pergunta.
-  - **Pergunta (`ask`):** perda de trabalho (push forçado ou `+ref`,
-    `--mirror`, `--all`, `--prune`, `--no-verify`, push sem refspec ou com
-    refspec variável; `reset --hard/--merge`; `clean`; `checkout -- <caminho>`,
+  push para branch protegida.
+  - **Git em worktree de trabalho (#476).** Por decisão do dono
+    (07/10/2026), todo `git` numa worktree de trabalho passa sem pergunta,
+    inclusive o destrutivo: push sem refspec, forçado (`-f`, `+ref`,
+    `--force-with-lease`) e `--no-verify`, `push --delete` de branch de
+    trabalho, `reset --hard`, `clean`, `checkout`/`switch` com descarte,
+    `checkout -B`/`switch -C` de branch de trabalho, `restore`, `rm -r/-f`
+    e `commit --no-verify`. Olhar o caminho não basta (a primeira versão,
+    revertida, caiu em quatro Critical), então o contexto vem do próprio
+    git: `.claude/hooks/push-target.mjs` (`resolveGitTarget`), chamado pelos
+    três chamadores, roda `git rev-parse` (raiz, diretório comum, branch),
+    `git worktree list` e, no push, `rev-parse @{push}` e a configuração
+    (`push.default` de um branch só, sem `remote.*.push`, `remote.*.mirror`,
+    `push.followTags` nem `remote.<r>.fetch` fora do padrão), com teto de
+    1,5 s; erro ou estouro devolvem `null`. A política (`shell-policy.mjs`)
+    só usa o resultado quando o comando é um `git` simples
+    (`plainGitCommand`: um comando, sem laço, pipe, substituição, curinga,
+    atribuição, invólucro nem shell aninhado; opções globais só `-C`
+    encadeado, `--no-pager` e `-P`) e o resultado é deste comando, deste
+    `cwd` e deste diretório efetivo; dentro de `xargs`, `find -exec`,
+    `sh -c` ou lançador ele não vale. A worktree conta como de trabalho
+    quando é registrada, diferente da checkout principal e fora de
+    `main`/`staging`/`dev`. Continuam perguntando ou negando: push cujo
+    destino real é branch protegida (`@{push}` em `dev`, `HEAD` numa
+    worktree em `dev`; destino não resolvido conta como protegido, e com
+    `-c`, `--config-env`, `--git-dir`, `GIT_DIR=`, `env -C` ou shell
+    aninhado o push volta ao julgamento pelo texto); descarte na checkout
+    principal ou num diretório que sobe até ela (G44); `stash drop/clear`
+    em qualquer lugar, porque o stash é comum às worktrees; e o resto da
+    lista abaixo (tag, `--all`/`--mirror`/`--prune`, reescrita de
+    histórico, poda de objetos, ref protegida local, git que executa
+    programa). Push de branch de trabalho a partir da checkout principal
+    também passa forçado, porque o destino é conferido.
+  - **Pergunta (`ask`):** perda de trabalho fora do contexto conferido
+    acima (push forçado ou `+ref`, `--no-verify`, push sem refspec, `HEAD`
+    sem destino; `reset --hard/--merge`; `clean`; `checkout -- <caminho>`,
     `checkout .`, `checkout <ref> <caminho>`, `checkout -f/-B`;
-    `switch -f/--discard-changes/-C`; `restore` fora de `--staged`;
+    `switch -f/--discard-changes/-C`; `restore` fora de `--staged`), e em
+    qualquer contexto `--mirror`, `--all`, `--prune`, refspec variável,
     `stash drop/clear`; `worktree remove --force` fora de worktree de
     trabalho — em `.claude/worktrees/<nome>` ou `~/.codex/worktrees/<id>/<nome>`
     passa, por autorização do dono de 06/10/2026, porque é a limpeza de rotina
@@ -852,7 +885,14 @@ todos os achados da revisão da #462 — com e sem `rtk`/`rtk proxy` —, que a
 rotina passa sem pergunta nos três e que o composto é recusado nos três com a
 mesma mensagem. `tests/shell-policy.test.ts` cobre o classificador em cada
 forma (pura, `rtk`, `git -C`, `git -c`, laço, `sh -c`, `xargs`,
-`find -exec`, invólucro e lançador). O plugin foi carregado no runtime do
+`find -exec`, invólucro e lançador). `tests/git-target.test.ts` monta um
+repositório descartável de verdade (remoto bare com `main`, `staging` e
+`dev`; worktrees criadas de `origin/dev`), prova com `git push --dry-run`
+real que as formas dos quatro Critical da primeira versão empurrariam
+`dev` ou `main`, que elas perguntam nos três chamadores, que o git
+destrutivo passa na worktree de trabalho e pergunta na checkout principal,
+e que o `git -C <wt> push` liberado atualiza só o branch de trabalho no
+remoto. O plugin foi carregado no runtime do
 OpenCode (Bun 1.3.14) e `opencode debug config` o lista entre os plugins do
 projeto.
 
@@ -906,7 +946,9 @@ mesma mensagem (`compoundMessage`):
   relativo ao projeto (`$CLAUDE_PROJECT_DIR`), recusa com saída 2 — fecha o
   composto ANTES da aprovação manual, sem depender de hook global do usuário.
   O mesmo hook devolve o risco do classificador (G85) como JSON de
-  `PreToolUse` com `permissionDecision` `ask` ou `deny`.
+  `PreToolUse` com `permissionDecision` `ask` ou `deny`; para `git` simples,
+  antes de julgar, resolve o contexto real com o próprio git
+  (`push-target.mjs`, #476), como a guarda do Codex e o plugin do OpenCode.
 - **Codex:** `scripts/harness/codex-guard.ts` (G85) recusa o composto antes de
   olhar a lista — antes, ele liberava o composto quando todo trecho era
   `allow` (`git ls-files | xargs wc -l`) e tratava heredoc de commit como
