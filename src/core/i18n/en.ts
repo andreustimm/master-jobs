@@ -332,6 +332,7 @@ export const en: Dictionary = {
     term_invalid_char: "The term has a character that is not accepted — use letters, digits, space and + # . - /; the search was ignored.",
     term_no_alnum: "The term needs at least one letter or digit; the search was ignored.",
     pay_invalid: "A pay bound must be a whole number from 1 to 2,000,000; the filter was ignored.",
+    fit_invalid: "The score must be a number from 0 to 100; the unreadable value was ignored.",
     range_swapped: "The minimum was above the maximum; the two were swapped.",
     track_unknown: "That track does not exist or is archived; showing the primary.",
     term_unknown: "That saved term does not exist; the filter was ignored.",
@@ -1190,6 +1191,13 @@ export const en: Dictionary = {
     realGaps: "real gaps",
     jobsWrite: "jobs write",
     jobs: "jobs",
+  },
+  channels: {
+    direct: "direct",
+    ats: "ATS",
+    referral: "referral",
+    recruiter: "recruiter",
+    agency: "agency",
   },
   pipeline: {
     title: "Pipeline",

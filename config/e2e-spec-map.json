@@ -256,11 +256,14 @@
       ],
       "patterns": [
         "app/checkbox-picker.tsx",
+        "app/local-date.tsx",
+        "src/core/i18n/date.ts",
         "src/core/synonyms.ts",
         "src/core/synonyms-load.ts"
       ],
       "routes": [
         "/login",
+        "/jobs",
         "/pipeline"
       ]
     },

@@ -31,6 +31,8 @@ import { FIT_MAX, PAY_FILTER_MAX } from "./filter-scales.ts";
 export type FilterNotice =
   | TermError
   | "pay_invalid"
+  /** `fit` ou `fitMax` que não é número (`?fit=abc`): o lado ilegível é ignorado. */
+  | "fit_invalid"
   | "range_swapped"
   | "track_unknown"
   | "term_unknown"
@@ -114,6 +116,14 @@ const DEFAULT_FIT = 45;
  * `fit=abc` used to reach the query as NaN and Postgres refused the page. An
  * empty field is a deliberate "every score"; an absent one keeps the default.
  */
+/**
+ * Score da URL que não é número. Vazio não conta: campo vazio é escolha. Fora
+ * da escala também não: é preso entre 0 e o teto, sem mudar o sentido.
+ */
+export function unreadableFit(raw: string | undefined): boolean {
+  return raw !== undefined && raw.trim() !== "" && !Number.isFinite(Number(raw));
+}
+
 function boundedFit(raw: string | undefined, fallback: number): number {
   if (raw === undefined) return fallback;
   if (raw.trim() === "") return 0;
@@ -231,6 +241,8 @@ export function readFilters(
   }
 
   const rawFitMax = one("fitMax");
+  // Ignorar calado contradizia o contrato da URL: parâmetro inválido vira aviso.
+  if (unreadableFit(one("fit")) || unreadableFit(rawFitMax)) notices.push("fit_invalid");
   if (rawFitMax !== undefined && rawFitMax.trim() !== "") {
     state.fitMax = boundedFit(rawFitMax, FIT_MAX);
   }

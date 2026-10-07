@@ -4,7 +4,7 @@ import type { PipelineFilters } from "../../src/contexts/pursuit/index.ts";
 import { EMPTY_SYNONYMS, type SynonymDictionary } from "../../src/core/synonyms.ts";
 import { searchSynonyms } from "../../src/core/synonyms-load.ts";
 import { FIT_MAX } from "../filter-scales.ts";
-import { readSearchQuery, type FilterNotice, type SearchQueryState } from "../filter-state.ts";
+import { readSearchQuery, unreadableFit, type FilterNotice, type SearchQueryState } from "../filter-state.ts";
 
 /**
  * O estado dos filtros do Funil (#478), lido da URL e escrito de volta nela.
@@ -65,6 +65,8 @@ export function readPipelineFilters(params: Params, dictionary: SynonymDictionar
   const search = readSearchQuery(one("q"), semantic ? dictionary : EMPTY_SYNONYMS);
   if (search.notice) notices.push(search.notice);
 
+  // Parâmetro ilegível é ignorado com aviso, como diz o contrato acima (#494).
+  if (unreadableFit(one("fit")) || unreadableFit(one("fitMax"))) notices.push("fit_invalid");
   let fit = readFit(one("fit"));
   let fitMax = readFit(one("fitMax"));
   if (fit !== undefined && fitMax !== undefined && fit > fitMax) {

@@ -74,6 +74,12 @@ describe("readPipelineFilters", () => {
     expect(readPipelineFilters({ fit: "-5", fitMax: "250" }, dictionary)).toMatchObject({ fit: 0, fitMax: 100 });
   });
 
+  it("score ilegível avisa uma vez; vazio e fora da escala não avisam (#494)", () => {
+    expect(readPipelineFilters({ fit: "abc" }, dictionary).notices).toEqual(["fit_invalid"]);
+    expect(readPipelineFilters({ fit: "abc", fitMax: "x" }, dictionary).notices).toEqual(["fit_invalid"]);
+    expect(readPipelineFilters({ fit: "", fitMax: "250" }, dictionary).notices).toEqual([]);
+  });
+
   it("UT-478-03 sem semantic a busca é literal; com ele, expande pelo dicionário e liga a grafia parecida", () => {
     const literal = toPipelineFilters(readPipelineFilters({ q: "engenheiro" }, dictionary));
     expect(literal.synonyms).toBeUndefined();

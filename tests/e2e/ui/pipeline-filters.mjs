@@ -28,9 +28,17 @@ const count = async (target, stage) => {
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
+/** Abre o seletor (`<details>`) se estiver fechado; clicar no resumo aberto o fecharia. */
+const openPicker = async (target, testId) => {
+  if (!(await target.getByTestId(`${testId}-combo`).evaluate((details) => details.open))) {
+    await target.getByTestId(`${testId}-summary`).click();
+  }
+};
+
 export async function run(ctx) {
   const { BASE, E2E_PASSWORD, browser, check, trackConsole, gotoMeasured } = ctx;
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  // Fuso de São Paulo: a data de "aplicado em" tem de sair no dia local (#494).
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, timezoneId: "America/Sao_Paulo" });
   const page = await context.newPage();
   trackConsole(page);
   try {
@@ -109,6 +117,57 @@ export async function run(ctx) {
     check("E2E-478-02 teto de score corta a de 85",
       same(await listed(page), [platform]) && (await page.getByTestId("pipeline-score-max").inputValue()) === "80",
       JSON.stringify(await listed(page)));
+
+    // E2E-494: atritos de interface do QA da #478.
+    await page.goto(`${BASE}/pipeline?stage=applied`, { waitUntil: "networkidle" });
+    await ready(page);
+    const stageMark = await page.evaluate(() => {
+      const card = (id) => document.querySelector(`[data-testid="${id}"] [data-slot="card"]`);
+      const link = (id) => document.querySelector(`[data-testid="${id}"]`);
+      return {
+        current: link("pipeline-filter-applied")?.getAttribute("aria-current"),
+        others: ["pipeline-filter-all", "pipeline-filter-shortlisted"].map((id) => link(id)?.getAttribute("aria-current") ?? null),
+        active: getComputedStyle(card("pipeline-filter-applied")).boxShadow,
+        idle: getComputedStyle(card("pipeline-filter-shortlisted")).boxShadow,
+      };
+    });
+    check("E2E-494 o estágio escolhido tem aria-current e marca visível diferente dos outros",
+      stageMark.current === "true" && stageMark.others.every((value) => value === null)
+        && stageMark.active !== stageMark.idle && stageMark.active !== "none",
+      JSON.stringify(stageMark));
+
+    const appliedDay = await page.evaluate((id) => {
+      const time = document.querySelector(`[data-testid="pipeline-applied-${id}"]`);
+      const iso = time?.getAttribute("datetime") ?? "";
+      const format = (timeZone) => new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeZone }).format(new Date(iso));
+      return { shown: time?.textContent, local: format("America/Sao_Paulo"), utc: format("UTC") };
+    }, backend);
+    check("E2E-494 'aplicado em' mostra o dia no fuso de quem lê, não em UTC",
+      appliedDay.shown === appliedDay.local && appliedDay.local !== appliedDay.utc, JSON.stringify(appliedDay));
+
+    check("E2E-494 o selo de canal sai no idioma da tela",
+      (await page.getByTestId(`pipeline-channel-${backend}`).textContent())?.trim() === "indicação");
+    await openPicker(page, "pipeline-channel");
+    check("E2E-494 o seletor de canal também traduz o canal",
+      (await page.locator("label", { has: page.getByTestId("pipeline-channel-option-referral") }).textContent())?.trim() === "indicação");
+
+    await page.goto(`${BASE}/pipeline`, { waitUntil: "networkidle" });
+    await ready(page);
+    await page.getByTestId("pipeline-score-min").fill("60");
+    await page.getByTestId("pipeline-score-submit").click();
+    await page.waitForURL((url) => url.searchParams.get("fit") === "60", { timeout: 15_000 });
+    await ready(page);
+    check("E2E-494 o primeiro Aplicar de score não grava teto vazio na URL",
+      !new URL(page.url()).searchParams.has("fitMax"), page.url());
+
+    await page.goto(`${BASE}/pipeline?fit=abc`, { waitUntil: "networkidle" });
+    await ready(page);
+    check("E2E-494 score ilegível no Funil vira aviso",
+      (await page.getByTestId("pipeline-notice-fit_invalid").count()) === 1);
+    await page.goto(`${BASE}/jobs?fit=abc`, { waitUntil: "networkidle" });
+    await ready(page);
+    check("E2E-494 score ilegível em Vagas vira aviso",
+      (await page.getByTestId("jobs-notice-fit_invalid").count()) === 1);
 
     await page.goto(`${BASE}/pipeline?company=${encodeURIComponent(beta)}&q=engenheiro`, { waitUntil: "networkidle" });
     await ready(page);

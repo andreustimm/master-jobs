@@ -106,6 +106,11 @@ describe("Jobs screen filters in the URL", () => {
 
     // `fit=abc` chegava na consulta como NaN e o Postgres recusava a página.
     expect(readFilters({ fit: "abc" }).fit).toBe(45);
+    // …e, ignorado, avisa (#494): o contrato da URL é aviso, não silêncio.
+    expect(readFilters({ fit: "abc" }).notices).toEqual(["fit_invalid"]);
+    expect(readFilters({ fit: "70", fitMax: "x" }).notices).toEqual(["fit_invalid"]);
+    expect(readFilters({ fit: "", fitMax: " " }).notices).toEqual([]);
+    expect(readFilters({ fit: "250" }).notices).toEqual([]);
 
     const inverted = readFilters({ fit: "80", fitMax: "60" });
     expect(inverted).toMatchObject({ fit: 60, fitMax: 80 });

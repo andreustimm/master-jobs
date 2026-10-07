@@ -384,7 +384,8 @@
     --card-foreground: #f0f1f3;
     --popover: #1f232a;
     --popover-foreground: #f0f1f3;
-    --primary: #296ef9;
+    /* Igual à escolha explícita: o #296ef9 dava 4,34:1 com o texto (#494). */
+    --primary: #4d8bff;
     --primary-foreground: #0b0d10;
     --secondary: #1f232a;
     --secondary-foreground: #c8cbd2;
