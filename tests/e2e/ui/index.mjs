@@ -93,6 +93,10 @@ export const AREAS = [
   // Login social (#464): contas e identidades próprias de `setup.mjs`, emissor
   // falso do `run-isolated`; cada cenário em contexto próprio.
   { id: "social-sign-in", run: socialSignIn.run, requires: [] },
+  // Cadastro aberto (#464): contas novas pelo emissor falso e pelo código lido
+  // do sink de e-mail; cada cenário em contexto próprio, com IP próprio.
+  { id: "sign-up", run: signUp.run, requires: [] },
+  { id: "legal", run: legal.run, requires: [] },
   // Formas de entrar (#464, task_04): contas próprias de `setup.mjs`
   // (`account-methods-fixtures.mjs`), devolvidas ao estado inicial a cada
   // execução; o provedor é o emissor falso.
@@ -108,13 +112,6 @@ export const AREAS = [
   { id: "cv-versions", run: cvVersions.run, requires: ["candidate-rescore"] },
   { id: "i18n", run: i18n.run, requires: [] },
   { id: "onboarding", run: onboarding.run, requires: [] },
-  // Cadastro aberto (#464): contas novas pelo emissor falso e pelo código lido
-  // do sink de e-mail; cada cenário em contexto próprio, com IP próprio. Logo
-  // depois de `onboarding`, que também cria candidato com currículo e drena a
-  // fila de score: a mesma posição na história do banco que a suíte já prova
-  // para as áreas seguintes (o `a11y` de `/jobs` lê as notas do dono).
-  { id: "sign-up", run: signUp.run, requires: [] },
-  { id: "legal", run: legal.run, requires: [] },
   { id: "rate-limit", run: rateLimit.run, requires: [] },
   { id: "navigation", run: navigation.run, requires: [] },
   // Cada uma entra com as contas e a fixture de `setup.mjs`, não com estado de

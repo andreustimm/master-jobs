@@ -125,15 +125,18 @@ export const AXE_SWEEP = [
   // Perfil público (#326): a varredura roda autenticada como dono, mas a
   // página ignora sessão — o mesmo candidato fixo de `public-cv-format.mjs`.
   ["public profile", "/p/e2e-cv-formatado"],
-  // Cadastro aberto (#464, E2E-024): varridas antes do login, como `/login`
-  // — com sessão, `/signup` manda para a tela do papel.
+  // Cadastro aberto (#464, E2E-024): varridas numa aba anônima — com sessão,
+  // `/signup` manda para a tela do papel.
   ["signup", "/signup"],
   ["signup verify", "/signup/verify"],
   ["terms", "/terms"],
   ["privacy", "/privacy"],
 ];
 
-/** As páginas do AXE_SWEEP que só existem sem sessão: `a11y.mjs` as varre antes de entrar. */
+/**
+ * As páginas do AXE_SWEEP que só existem sem sessão: `a11y.mjs` varre `/login`
+ * antes de entrar e as outras numa aba anônima, depois do percurso do dono.
+ */
 export const AXE_PRE_SESSION = ["/login", "/signup", "/signup/verify"];
 
 /**

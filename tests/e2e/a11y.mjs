@@ -25,9 +25,9 @@ const context = await browser.newContext({ viewport: { width: 1280, height: 900 
 const page = await context.newPage();
 const failures = [];
 
-async function scan(name, path) {
-  const response = await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
-  const finalPath = new URL(page.url()).pathname;
+async function scan(name, path, target = page) {
+  const response = await target.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
+  const finalPath = new URL(target.url()).pathname;
 
   if (!response?.ok() || finalPath !== path) {
     failures.push({
@@ -41,7 +41,7 @@ async function scan(name, path) {
     return;
   }
 
-  const result = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+  const result = await new AxeBuilder({ page: target }).withTags(TAGS).analyze();
   if (result.violations.length === 0) {
     console.log(`✓ a11y ${name}`);
     return;
@@ -57,12 +57,6 @@ async function scan(name, path) {
 }
 
 try {
-  // Sem sessão primeiro: com ela, `/login` e `/signup` mandam para a tela do
-  // papel, e a varredura mediria outra página. `/login` por último, porque o
-  // login parte do formulário dela.
-  for (const [name, path] of AXE_SWEEP.filter(([, path]) => AXE_PRE_SESSION.includes(path) && path !== "/login")) {
-    await scan(name, path);
-  }
   await scan(...AXE_SWEEP.find(([, path]) => path === "/login"));
 
   await page.fill('input[name="email"]', EMAIL);
@@ -71,10 +65,20 @@ try {
   await page.waitForURL((url) => !url.pathname.startsWith("/login"));
 
   // A lista mora em `routes.mjs`, cruzada com o inventário de páginas por
-  // `tests/e2e-route-coverage.test.ts`. As de pré-sessão foram varridas acima.
+  // `tests/e2e-route-coverage.test.ts`. As de pré-sessão vão abaixo.
   for (const [name, path] of AXE_SWEEP.filter(([, path]) => !AXE_PRE_SESSION.includes(path))) {
     await scan(name, path);
   }
+
+  // As outras telas sem sessão (`/signup`, `/signup/verify`): com sessão elas
+  // mandam para a tela do papel, então vão numa aba anônima própria, sem
+  // mexer no percurso da aba do dono acima.
+  const anonymousContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const anonymous = await anonymousContext.newPage();
+  for (const [name, path] of AXE_SWEEP.filter(([, path]) => AXE_PRE_SESSION.includes(path) && path !== "/login")) {
+    await scan(name, path, anonymous);
+  }
+  await anonymousContext.close();
 } finally {
   await browser.close();
 }
