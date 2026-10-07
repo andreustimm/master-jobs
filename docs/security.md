@@ -290,8 +290,10 @@ As exceções, e o que substitui a sessão em cada uma:
 | `requestResetAction`, `submitResetAction` | resposta uniforme; token de uso único queimado antes de gravar |
 | `logoutAction`, `stopImpersonatingAction` | só revogam/restauram o que está no próprio cookie |
 | `setLocaleAction`, `setAppearanceAction` | preferência de interface em cookie próprio, sem dado de ninguém |
-| `/login`, `/login/forgot`, `/login/reset` | pré-sessão; `/login` só pergunta se existe alguma conta |
+| `/login`, `/login/forgot`, `/login/reset` | pré-sessão; `/login` só pergunta se existe alguma conta e, com sessão válida, manda à tela do papel |
 | `/login/callback` | link mágico de uso único |
+| `/login/oauth/[provider]` | pré-sessão: só redireciona ao provedor com o cookie cifrado do fluxo (AES-256-GCM, 10 min, escopo `/login/oauth`); provedor fora da lista do ambiente recusa (ADR-005 da #464); `intent=link` exige `account:write`, que nega sessão emprestada |
+| `/login/oauth/[provider]/callback` | `state` do cookie conferido em tempo constante e queimado no servidor (vale uma vez), PKCE S256, ID token validado no JWKS (`iss`, `aud`, `exp`, `nonce`, assinatura); vínculo automático só com e-mail verificado; recusas neutras e na mesma janela de tentativas da senha |
 | `/api/cron/recheck` | `CRON_SECRET` em tempo constante; 503 sem ele |
 | `/api/cron/watchdog` | `CRON_SECRET` em tempo constante; 503 sem ele — checagem manual/de teste do vigia de cota (ADR 0030); o agendador de produção é `supabase/cron/watchdog.sql`, que nunca chama esta rota |
 | `/p/[slug]` | lista de permissão de `publicProfile()`, 404 para não público, limite por IP |

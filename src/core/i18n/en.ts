@@ -99,6 +99,18 @@ export const en: Dictionary = {
       "Then reload this page. The password is read from the terminal, never from an argument — arguments show up in shell history and in ps.",
     magicLinkHint: "No password set? A single-use link works too:",
     setPasswordHint: "Set a password:",
+    continueWith: "Continue with {provider}",
+    socialDivider: "or sign in with email and password",
+    socialCancelled: "Sign-in cancelled.",
+    socialProvider: "Could not reach {provider}, try again.",
+    socialExpired: "This sign-in attempt expired, start again.",
+    socialConflict:
+      "This account is linked to another {provider} account; sign in with it or another method.",
+    socialUnverified:
+      "We could not confirm your email with {provider}. Sign in another way and connect {provider} from your account page, or use {other}.",
+    socialRefused:
+      "Could not sign you in. If this keeps happening, contact the Master Jobs administrator.",
+    socialUnavailable: "This sign-in option is not available here.",
   },
   jobs: {
     originWeb: "web",

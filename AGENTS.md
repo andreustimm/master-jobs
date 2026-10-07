@@ -36,7 +36,9 @@ A numeração é estável: código e testes citam "regra N".
 1. **Não adquira dados do LinkedIn:** nada de `li_at`, sessão autenticada, HTML
    raspado (mesmo deslogado) ou "LinkedIn MCP" não oficial — viola a §8.2 do
    User Agreement e arrisca a conta do dono. Permitidos: job alert por e-mail
-   (ADR 0008), API oficial (`w_member_social`), comentário e conexão
+   (ADR 0008), API oficial (`w_member_social`) para publicar, login por OpenID
+   Connect só para autenticar (`openid profile email`, sem `w_member_social`,
+   guardando só sujeito e e-mail verificado), comentário e conexão
    assistidos. Leia [linkedin-policy.md](docs/linkedin-policy.md) antes.
    [[G01](docs/engineering/rules/security.md#g01)]
 2. **Ingestão escreve só em `job`, nunca em `application`.** Sync, import,

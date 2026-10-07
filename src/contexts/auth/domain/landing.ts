@@ -59,3 +59,16 @@ export function landingFor(roles: readonly string[], next: string | null | undef
   if (safe !== null) return safe;
   return roles.includes("candidate") ? "/" : "/jobs";
 }
+
+/**
+ * O destino de uma sessão aberta: como `landingFor`, mas o cockpit só para
+ * quem tem o PRÓPRIO candidato — a mesma regra de `passwordLoginAction`. Um
+ * papel candidato sem perfil iria a uma tela que lhe responde 403.
+ */
+export function landingForSession(
+  session: { roles: readonly string[]; candidateId: number | null },
+  next: string | null | undefined,
+): string {
+  const roles = session.candidateId === null ? session.roles.filter((role) => role !== "candidate") : session.roles;
+  return landingFor(roles, next);
+}
