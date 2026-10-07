@@ -251,7 +251,7 @@ commit. [[G62](docs/engineering/rules/delivery.md#g62)]
   sistema e ambiente impresso perguntam; arquivo de segredo, Keychain, `sudo`
   e push protegido são negados (no Codex e no OpenCode, pergunta vira
   bloqueio; o OpenCode depende do plugin carregado). Famílias cobertas e
-  limites aceitos pelo dono: G85. Heredoc e `$(...)` são recusados mesmo em mensagem de commit:
+  limites conhecidos: G85. Heredoc e `$(...)` são recusados mesmo em mensagem de commit:
   escreva a mensagem com a ferramenta de arquivo e rode `git commit -F
   <arquivo>` (ou vários `-m`).
   [[G63](docs/engineering/rules/delivery.md#g63), [G85](docs/engineering/rules/delivery.md#g85)]

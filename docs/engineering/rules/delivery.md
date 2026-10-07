@@ -667,7 +667,7 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   não pega, e esse fechamento deixa de valer: a lista libera o shell, e quem
   decide o risco é a política (`judgeShell`), que roda antes da lista nos
   três e é uma lista do que é proibido — o que ela não reconhece passa
-  (famílias cobertas e limites aceitos pelo dono em "O classificador" e
+  (famílias cobertas e limites conhecidos em "O classificador" e
   "Limites conhecidos", abaixo). Edição
   por `apply_patch` fora das regras de caminho é a exceção: fica com o sandbox
   e a aprovação que a pessoa escolheu no Codex (recomendado: `workspace-write`
@@ -872,11 +872,18 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   tradução recusa em vez de perder o deny, e a guarda do Codex só julga shell e
   patch) são diferenças do harness, não da política. O classificador não vê
   alias do git definido em config, script de shell chamado por arquivo
-  (`bash x.sh`), código passado a `node -e`/`python -c`, programa apontado por
-  variável de ambiente (`GIT_SSH_COMMAND`, `PAGER`, `GIT_EDITOR`) nem
+  (`bash x.sh`), código passado a `node -e`/`python -c` nem
   `git checkout <arquivo>` sem extensão e sem `/` (`git checkout Makefile`):
   separar arquivo de branch ali exige olhar o disco, e a política é pura —
   só `.`, `..`, `./x`, `x/` e `:x`, que nenhum ref aceita, perguntam.
+  Programa apontado por variável na atribuição do próprio comando
+  (`GIT_SSH_COMMAND`, `GIT_SSH`, `GIT_EXTERNAL_DIFF`, `GIT_EDITOR`,
+  `GIT_SEQUENCE_EDITOR`, `GIT_ASKPASS`, `SSH_ASKPASS`, `GIT_PAGER`, `PAGER`,
+  `MANPAGER`, `GH_PAGER`, `EDITOR`, `VISUAL`, `GH_EDITOR`, `BROWSER`,
+  `GH_BROWSER`) tem o valor julgado como comando; `GIT_CONFIG_KEY_n` com
+  chave que executa vale como `git -c`, e `GIT_CONFIG_PARAMETERS` pergunta.
+  `GIT_SSH_COMMAND="ssh -i chave"` passa; com `ProxyCommand`,
+  `LocalCommand` ou `-F`, pergunta.
   Escrita fora do projeto, limites aceitos pelo dono (#462): `touch`,
   `mkdir` e `rmdir` fora do projeto passam, porque não perdem dado
   existente; link simbólico não é resolvido — `ln -s ~/.zshrc ./link` e
@@ -893,8 +900,7 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   vetor: o git prefixa `refs/notes/` (grava `refs/notes/refs/heads/main`, e
   `main` fica intacta), por isso não pergunta.
   `Bash` liberado inteiro (#481) faz da política uma lista do que é
-  proibido: o que ela não reconhece passa. Limites restantes, aceitos pelo
-  dono (decisão de 06/10/2026, opção A da revisão da #485):
+  proibido: o que ela não reconhece passa. Limites conhecidos:
   - **Código passado a interpretador** — `node -e`, `python3 -c`,
     `perl -e`, `ruby -e`, `php -r`, `lua -e`, `awk 'BEGIN{system(…)}'`,
     `sed 'e …'`, `ts-node`, `deno run`, `bun x.ts` — e **script por
@@ -916,6 +922,17 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     `.env` como o `pnpm jho` (`--env-file-if-exists=.env`) faz na rotina.
   - **Host do Postgres pelo ambiente**: `PGHOST` exportado antes, fora do
     comando, não é visto; `psql` remoto com `-c` de `select` passa.
+  - **Postgres remoto fora das formas lidas**: URL colada na opção
+    (`psql -dpostgresql://…`), `service=` do `pg_service.conf` e
+    `select … into` (grava com cara de leitura) passam.
+  - **Segredo fora do Keychain**: `op read`, `doppler secrets get --plain`,
+    `security delete-generic-password` e `ps eww` (ambiente dos processos)
+    passam.
+  - **Comando remoto do Fly**: `fly ssh console -C "…"` roda na máquina
+    remota sem que o texto seja julgado.
+  - **Variável que a política não lê**: programa por variável fora da lista
+    acima (`BASH_ENV`, `NODE_OPTIONS=--require`) e variável exportada antes,
+    fora do comando, passam.
   - **Busca de sufixo por palavra**: só o argv é lido; texto entre aspas só
     é julgado como shell em `sh -c`, `eval`, `watch` e nos invólucros
     `hyperfine`, `parallel`, `entr` e `flock` (`tmux new "…"` não é).
@@ -941,9 +958,11 @@ rotina passa sem pergunta nos três e que o composto é recusado nos três com a
 mesma mensagem; desde a #481, também que ferramenta fora da antiga lista
 (`docker ps`, `codex exec`, `opencode run`) passa nos três e que push
 forçado, `rm -rf`, `vercel --prod`, `.env`, `sudo` e push protegido dão a
-mesma decisão (`ask` ou `deny`) nos três; desde a #485, que todo comando
+mesma decisão (`ask` ou `deny`) nos três; desde a #485, que os comandos
 dos achados da revisão L2 da #485 (invólucro desconhecido, ferramenta fora
-do catálogo, segredo e Docker da #488) dá `ask` ou `deny` nos três, e que a
+do catálogo, segredo, Docker da #488 e programa por variável de ambiente)
+que a política passou a cobrir dão `ask` ou `deny` nos três — o resto está
+nos limites conhecidos —, e que a
 rotina (`git -C <wt> commit`, `gh`, `pnpm`, `docker ps/build/logs`, `node`,
 `python3`, `make`, `uv run pytest`, `curl` local) continua passando.
 `tests/no-compound-bash.test.ts` prova que o registro do hook do Claude Code

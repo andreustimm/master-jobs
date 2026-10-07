@@ -2256,7 +2256,14 @@ const NON_EXECUTING = new Set([
   "test", "[", "[[", "cd", "pushd", "popd", "gh", "jho", "kill", "pkill", "pgrep", "killall", "ps", "lsof", "sleep",
   "seq", "date", "true", "false", "read", "wait", "unset", "alias", "unalias", "hash", "sed", "awk", "md5", "shasum",
   "sha256sum", "xxd", "od", "hexdump", "strings", "du", "df", "pbcopy",
+  // Executores de teste: o argv é filtro (`vitest run env`, `pytest -k sudo`), não comando.
+  "vitest", "playwright", "pytest", "jest",
 ]);
+
+/** `fd` só executa o argv com `-x`/`-X`/`--exec`/`--exec-batch` (inclusive em grupo, `-Hx`). */
+function fdExecutes(args) {
+  return args.some((arg) => arg.startsWith("--exec") || (/^-[^-]/.test(arg) && /[xX]/.test(arg)));
+}
 
 /**
  * A palavra é um executável conhecido: pelo nome ou por caminho num
@@ -2318,6 +2325,55 @@ function policyWrite(name, args) {
 }
 
 /**
+ * Variáveis cujo valor é um programa que o git, o `gh`, o `man` ou o editor
+ * executam (#485): `GIT_SSH_COMMAND="rm -rf src" git fetch` roda `rm`.
+ */
+const PROGRAM_VARIABLES = new Set([
+  "GIT_SSH_COMMAND", "GIT_SSH", "GIT_EXTERNAL_DIFF", "GIT_EDITOR", "GIT_SEQUENCE_EDITOR", "GIT_ASKPASS", "SSH_ASKPASS",
+  "GIT_PAGER", "PAGER", "MANPAGER", "GH_PAGER", "EDITOR", "VISUAL", "GH_EDITOR", "BROWSER", "GH_BROWSER",
+]);
+
+/** Opções do `ssh` que rodam comando local ou leem config que pode rodar. */
+const SSH_RUNS_LOCAL = /(?:proxy|local|knownhosts)command|(?:^|\s)-F/i;
+
+/**
+ * Risco das atribuições de um comando: o valor de variável que executa
+ * programa é julgado como comando (vale a decisão mais forte), e config do
+ * git por variável (`GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n`) vale como `git -c`.
+ * `GIT_CONFIG_PARAMETERS` não é lido: pergunta.
+ */
+function variableRisk(assignments, context) {
+  if (assignments.length === 0) return null;
+  const values = new Map();
+  for (const assignment of assignments) {
+    const eq = assignment.indexOf("=");
+    values.set(assignment.slice(0, eq), assignment.slice(eq + 1));
+  }
+  let worst = null;
+  for (const [name, value] of values) {
+    if (PROGRAM_VARIABLES.has(name)) {
+      // O transporte do git já é o `ssh`: `GIT_SSH_COMMAND="ssh -i chave"` é rotina, se for só o `ssh`.
+      const ssh = (name === "GIT_SSH_COMMAND" || name === "GIT_SSH") && /^\s*(?:[\w./~-]*\/)?ssh(?:\s[^;&|`$()<>{}\n\\'"]*)?$/.test(value);
+      if (ssh) worst = stronger(worst, SSH_RUNS_LOCAL.test(value) ? ask(`${name} com ssh que roda comando local`) : null);
+      else worst = stronger(worst, riskOf(value, context.depth + 1, false, context.env));
+    } else if (name === "GIT_CONFIG_PARAMETERS") worst = stronger(worst, ask("GIT_CONFIG_PARAMETERS configura o git por variável"));
+    else {
+      const index = /^GIT_CONFIG_KEY_(\d+)$/.exec(name);
+      if (!index) continue;
+      const key = value.toLowerCase();
+      const configured = values.get(`GIT_CONFIG_VALUE_${index[1]}`) ?? "";
+      if (GIT_EXEC_KEY.test(key)) {
+        worst = stronger(worst, ask(`${name}=${key} executa programa ou desliga os hooks`));
+        worst = stronger(worst, riskOf(configured, context.depth + 1, false, context.env));
+      }
+      if (key.startsWith("alias.") && configured.trimStart().startsWith("!")) worst = stronger(worst, ask("alias do git que roda shell"));
+    }
+    if (worst?.decision === "deny") return worst;
+  }
+  return worst;
+}
+
+/**
  * Decide um comando já em palavras: tira atribuição, `rtk`/`rtk proxy`,
  * caminho do executável, invólucro e lançador, e olha o que sobra.
  * `context.bulk` marca o payload de `xargs` e `find -exec`.
@@ -2326,6 +2382,7 @@ function judgeWords(input, context) {
   if (context.depth > MAX_DEPTH) return ask("comando aninhado demais para julgar");
   if (--budget < 0) return ask("comando com leituras demais para julgar");
   let words = input.slice();
+  const inherited = context.assigned?.length ?? 0;
   const assigned = [...(context.assigned ?? [])];
   // `env` sem comando imprime o ambiente inteiro (#485); `env -i` não.
   let printsEnv = false;
@@ -2344,6 +2401,14 @@ function judgeWords(input, context) {
       words = skipOptions(words.slice(1), WRAPPERS[head]);
     } else break;
   }
+  // Programa apontado por variável (`GIT_SSH_COMMAND="rm -rf src" git fetch`): só as atribuições deste comando.
+  const launched = variableRisk(assigned.slice(inherited), context);
+  if (launched?.decision === "deny") return launched;
+  return stronger(launched, judgeCommand(words, assigned, printsEnv, context));
+}
+
+/** O comando já sem atribuição, `rtk` nem invólucro de `judgeWords`. */
+function judgeCommand(words, assigned, printsEnv, context) {
   if (words.length === 0) return printsEnv ? ask("env sem comando imprime o ambiente (segredos)") : null;
   const [name, ...args] = words;
   let write = policyWrite(name, args);
@@ -2429,7 +2494,7 @@ function judgeWords(input, context) {
       // Comando desconhecido: o próprio risco e todo sufixo que começa por
       // executável conhecido (#485), salvo em quem não executa o argv.
       const own = stronger(write, stronger(judgeSystemTool(name, args), judgeSecretTool(name, args)));
-      if (own?.decision === "deny" || NON_EXECUTING.has(name)) return own;
+      if (own?.decision === "deny" || NON_EXECUTING.has(name) || (name === "fd" && !fdExecutes(args))) return own;
       return stronger(own, nestedRisk(args, context));
     }
   }

@@ -619,9 +619,11 @@ const RISK_AFTER_481: readonly [string, Decision][] = [
 ];
 
 /**
- * Revisão L2 da #485 (opção A do dono, 06/10/2026): todo comando dos achados
- * 1 (invólucro desconhecido), 2 (ferramenta fora do catálogo, com o Docker
- * da #488) e 3 (segredo) dá a mesma decisão nos três harnesses.
+ * Revisão L2 da #485: os comandos dos achados 1 (invólucro desconhecido), 2
+ * (ferramenta fora do catálogo, com o Docker da #488), 3 (segredo) e da
+ * re-revisão (programa por variável de ambiente) que a política passou a
+ * cobrir dão a mesma decisão nos três harnesses; o resto está nos limites
+ * conhecidos do G85.
  */
 const AFTER_485: readonly [string, Decision][] = [
   // Achado 1: invólucro desconhecido.
@@ -730,6 +732,16 @@ const AFTER_485: readonly [string, Decision][] = [
   ["vercel env pull", "ask"],
   ["vercel env pull /tmp/s", "ask"],
   ["vercel env pull .env.local", "deny"],
+  // Re-revisão: programa apontado por variável de ambiente.
+  ['GIT_SSH_COMMAND="rm -rf src" git fetch', "ask"],
+  ['GIT_EXTERNAL_DIFF="rm -rf src" git diff', "ask"],
+  ['GIT_EDITOR="git push --force origin main" git commit', "deny"],
+  ['GIT_SEQUENCE_EDITOR="rm -rf src" git rebase -i HEAD~2', "ask"],
+  ['GIT_ASKPASS="rm -rf src" git fetch', "ask"],
+  ['GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0="rm -rf src" git log', "ask"],
+  ['MANPAGER="rm -rf src" man ls', "ask"],
+  ['GH_PAGER="git push --force origin main" gh pr view 1', "deny"],
+  ['BROWSER="rm -rf src" gh pr view --web', "ask"],
 ];
 
 /** #485: a rotina ao lado das famílias novas continua passando nos três. */
@@ -754,6 +766,12 @@ const ROUTINE_485: readonly string[] = [
   "printenv PATH",
   "set -e",
   "crontab -l",
+  "npx playwright test --grep sudo",
+  "pnpm vitest run env",
+  "pytest -k sudo",
+  "fd env",
+  "GIT_PAGER=cat git log",
+  "EDITOR=vim git commit",
 ];
 
 describe("decisão real nos três harnesses (#461)", () => {
