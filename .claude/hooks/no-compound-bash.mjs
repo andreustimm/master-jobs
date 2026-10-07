@@ -3,14 +3,18 @@
 // (`shell-policy.mjs`, #461) — a mesma que a guarda do Codex e o plugin do
 // OpenCode chamam.
 //
-// - Comando composto: recusa com saída 2 e o motivo no stderr. A lista de
-//   permissão casa pelo prefixo; `a && b`, `a; b`, `$(...)` e várias linhas
-//   cairiam em aprovação manual e travariam o terminal.
-// - Risco (`classifyRisk`) e comando de laço fora da lista: imprime o JSON de
+// - Comando composto: recusa com saída 2 e o motivo no stderr. Com `Bash`
+//   liberado na lista (#481), este hook é a barreira: `a && b`, `a; b`,
+//   `$(...)` e várias linhas esconderiam um comando atrás do outro.
+// - Risco (`classifyRisk`, uma lista do que é proibido: o que ela não
+//   reconhece passa) e comando de laço fora da lista: imprime o JSON de
 //   PreToolUse com `permissionDecision` `ask` ou `deny` e sai 0. Vale qualquer
 //   que seja a forma que o Claude Code use para casar a lista — com ou sem o
 //   `rtk` que o hook global acrescenta —, porque o classificador tira o
 //   prefixo antes de julgar.
+// - Falha do processo (node ausente, módulo quebrado): o `|| exit 2` do
+//   comando em `.claude/settings.json` bloqueia, como no Codex — saída
+//   diferente de 0 e 2 deixaria o comando passar.
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute } from "node:path";
