@@ -1635,11 +1635,11 @@ export const authSession = production.table(
 
 /** Single-use magic link. Hashed for the same reason as a session token. */
 /**
- * Quem um recrutador acompanha.
- *
- * O recrutador lê CV e funil apenas de candidatos vinculados a ele. O vínculo
- * mora aqui e é resolvido na carga da sessão, para `policy.ts` continuar
- * derivando posse da sessão e nunca de um id que o chamador mandou.
+ * Vínculo antigo recrutador↔candidato. **Congelada** desde a migração 0036
+ * (#465, ADR-011): cada linha virou uma concessão ativa em `recruiter_grant`, e
+ * nenhum código lê nem escreve aqui. A remoção é migração não aditiva e mora
+ * numa issue própria, com revisão humana. `tests/architecture.test.ts` recusa
+ * qualquer import desta constante fora do schema.
  */
 export const recruiterCandidate = production.table(
   "recruiter_candidate",
@@ -1662,6 +1662,231 @@ export const recruiterCandidate = production.table(
 );
 
 export type RecruiterCandidate = typeof recruiterCandidate.$inferSelect;
+
+/**
+ * Convite de um candidato a um e-mail que ainda não tem conta de recrutador
+ * (#465, ADR-001, ADR-006, ADR-011).
+ *
+ * O token do link nunca é gravado: `token_hash` é o SHA-256 dele, pelo mesmo
+ * motivo da sessão. Vale 7 dias e uma vez só; reenviar marca o anterior como
+ * `superseded` e cria outra linha. `access_expires_at` e `expiry_tz` guardam a
+ * data de fim escolhida no convite, que a concessão herda ao ser aceita.
+ */
+export const recruiterInvite = production.table(
+  "recruiter_invite",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    candidateId: integer("candidate_id")
+      .notNull()
+      .references(() => candidate.id, { onDelete: "cascade" }),
+    /** Normalizado (`normalizeEmail`). */
+    email: text("email").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    /** `pending` | `accepted` | `expired` | `cancelled` | `superseded`. */
+    status: text("status").notNull().default("pending"),
+    /** Validade do link (ISO UTC). */
+    expiresAt: text("expires_at").notNull(),
+    /** Fim do acesso escolhido no convite (ISO UTC); nulo = sem fim. */
+    accessExpiresAt: text("access_expires_at"),
+    expiryTz: text("expiry_tz"),
+    createdBy: integer("created_by").references(() => authUser.id, { onDelete: "set null" }),
+    cancelledBy: integer("cancelled_by").references(() => authUser.id, { onDelete: "set null" }),
+    acceptedUserId: integer("accepted_user_id").references(() => authUser.id, { onDelete: "set null" }),
+    createdAt: text("created_at").notNull().default(now),
+    decidedAt: text("decided_at"),
+    deliveryFailedAt: text("delivery_failed_at"),
+    dismissedAt: text("dismissed_at"),
+  },
+  (t) => [
+    uniqueIndex("recruiter_invite_token_idx").on(t.tokenHash),
+    // Um convite pendente por candidato e e-mail; os encerrados ficam fora.
+    uniqueIndex("recruiter_invite_pending_idx")
+      .on(t.candidateId, t.email)
+      .where(sql`${t.status} = 'pending'`),
+    index("recruiter_invite_email_idx").on(t.email, t.status),
+    check(
+      "recruiter_invite_status_check",
+      sql`${t.status} in ('pending', 'accepted', 'expired', 'cancelled', 'superseded')`,
+    ),
+  ],
+);
+
+/**
+ * Acesso de um recrutador a um candidato, concedido pelo candidato (#465,
+ * ADR-011, ADR-012).
+ *
+ * Substitui `recruiter_candidate`. A única leitura de acesso é
+ * `linkedCandidatesFor` (`drizzle-store.ts`), que conta só `active` com
+ * `expires_at` nulo ou futuro — é esse predicado que corta revogação, prazo,
+ * papel removido e conta desabilitada na próxima requisição. Encerrar é UPDATE
+ * condicional em `status = 'active'`, nunca DELETE: a linha e o histórico
+ * sobrevivem. Conceder de novo cria outra linha (ADR-007), e por isso o índice
+ * único é parcial.
+ *
+ * `recruiter_user_id` vira nulo se a conta for apagada; antes disso
+ * `UserDirectory.remove` encerra a concessão como `ended_account_removed`, e o
+ * CHECK garante que nenhuma concessão ativa fique sem recrutador.
+ */
+export const recruiterGrant = production.table(
+  "recruiter_grant",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    candidateId: integer("candidate_id")
+      .notNull()
+      .references(() => candidate.id, { onDelete: "cascade" }),
+    recruiterUserId: integer("recruiter_user_id").references(() => authUser.id, { onDelete: "set null" }),
+    /** Normalizado. Fica mesmo depois que a conta some, para a lista e o histórico. */
+    recruiterEmail: text("recruiter_email").notNull(),
+    /** `active` | `revoked` | `expired` | `ended_account_removed`. */
+    status: text("status").notNull().default("active"),
+    inviteId: integer("invite_id").references(() => recruiterInvite.id, { onDelete: "set null" }),
+    createdBy: integer("created_by").references(() => authUser.id, { onDelete: "set null" }),
+    createdAt: text("created_at").notNull().default(now),
+    /** Fim do acesso (ISO UTC, fim do dia no fuso `expiry_tz`); nulo = sem fim. */
+    expiresAt: text("expires_at"),
+    expiryTz: text("expiry_tz"),
+    endedAt: text("ended_at"),
+    revokedBy: integer("revoked_by").references(() => authUser.id, { onDelete: "set null" }),
+    lastAccessedAt: text("last_accessed_at"),
+  },
+  (t) => [
+    uniqueIndex("recruiter_grant_active_idx")
+      .on(t.candidateId, t.recruiterUserId)
+      .where(sql`${t.status} = 'active'`),
+    index("recruiter_grant_recruiter_idx").on(t.recruiterUserId, t.status),
+    index("recruiter_grant_candidate_idx").on(t.candidateId, t.status),
+    check(
+      "recruiter_grant_status_check",
+      sql`${t.status} in ('active', 'revoked', 'expired', 'ended_account_removed')`,
+    ),
+    check(
+      "recruiter_grant_active_recruiter_check",
+      sql`${t.status} <> 'active' or ${t.recruiterUserId} is not null`,
+    ),
+  ],
+);
+
+/**
+ * Histórico de compartilhamento do candidato, só de acréscimo (#465, ADR-005,
+ * ADR-011).
+ *
+ * Nenhum caminho atualiza nem apaga linha daqui (`tests/architecture.test.ts`);
+ * só a cascata do candidato as remove. O e-mail do recrutador é copiado para a
+ * linha porque o histórico sobrevive à conta. `actor_name` é o nome do
+ * administrador no momento, quando é ele quem age.
+ */
+export const recruiterAccessEvent = production.table(
+  "recruiter_access_event",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    candidateId: integer("candidate_id")
+      .notNull()
+      .references(() => candidate.id, { onDelete: "cascade" }),
+    grantId: integer("grant_id").references(() => recruiterGrant.id, { onDelete: "set null" }),
+    inviteId: integer("invite_id").references(() => recruiterInvite.id, { onDelete: "set null" }),
+    suggestionId: integer("suggestion_id").references((): AnyPgColumn => recruiterSuggestion.id, {
+      onDelete: "set null",
+    }),
+    recruiterEmail: text("recruiter_email").notNull(),
+    kind: text("kind").notNull(),
+    /** `candidate` | `admin` | `recruiter` | `system`. */
+    actor: text("actor").notNull(),
+    actorUserId: integer("actor_user_id").references(() => authUser.id, { onDelete: "set null" }),
+    actorName: text("actor_name"),
+    /** Nova data de fim (ISO ou `none`) ou o título e a empresa da vaga sugerida. */
+    detail: text("detail"),
+    at: text("at").notNull().default(now),
+  },
+  (t) => [
+    index("recruiter_access_event_candidate_idx").on(t.candidateId, t.at.desc(), t.id.desc()),
+    check(
+      "recruiter_access_event_kind_check",
+      sql`${t.kind} in ('invite_sent', 'invite_resent', 'invite_cancelled', 'invite_expired', 'invite_accepted', 'grant_created', 'end_date_changed', 'access_revoked', 'access_expired', 'access_ended_account_removed', 'suggestion_received', 'suggestion_accepted', 'suggestion_declined')`,
+    ),
+    check("recruiter_access_event_actor_check", sql`${t.actor} in ('candidate', 'admin', 'recruiter', 'system')`),
+  ],
+);
+
+/**
+ * Vaga sugerida por recrutador a um candidato (#465, ADR-003, ADR-015).
+ *
+ * Proposta, não candidatura: a `application` só nasce quando o candidato aceita,
+ * pela ação dele (regra 2). Uma sugestão pendente por candidato e vaga; vários
+ * recrutadores entram nela por `recruiter_suggestion_by`.
+ */
+export const recruiterSuggestion = production.table(
+  "recruiter_suggestion",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    candidateId: integer("candidate_id")
+      .notNull()
+      .references(() => candidate.id, { onDelete: "cascade" }),
+    jobId: integer("job_id")
+      .notNull()
+      .references(() => job.id, { onDelete: "cascade" }),
+    /** `pending` | `accepted` | `declined`. */
+    status: text("status").notNull().default("pending"),
+    applicationId: integer("application_id").references(() => application.id, { onDelete: "set null" }),
+    createdAt: text("created_at").notNull().default(now),
+    decidedAt: text("decided_at"),
+  },
+  (t) => [
+    uniqueIndex("recruiter_suggestion_pending_idx")
+      .on(t.candidateId, t.jobId)
+      .where(sql`${t.status} = 'pending'`),
+    check("recruiter_suggestion_status_check", sql`${t.status} in ('pending', 'accepted', 'declined')`),
+  ],
+);
+
+/** Quem sugeriu: um recrutador por linha, com a nota dele (até 500 caracteres). */
+export const recruiterSuggestionBy = production.table(
+  "recruiter_suggestion_by",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    suggestionId: integer("suggestion_id").notNull(),
+    recruiterUserId: integer("recruiter_user_id").references(() => authUser.id, { onDelete: "set null" }),
+    recruiterEmail: text("recruiter_email").notNull(),
+    grantId: integer("grant_id").references(() => recruiterGrant.id, { onDelete: "set null" }),
+    note: text("note"),
+    createdAt: text("created_at").notNull().default(now),
+    /** Quando entrou num e-mail de aviso ao candidato; nulo = ainda não avisado. */
+    notifiedAt: text("notified_at"),
+  },
+  (t) => [
+    // Nome explícito: o gerado teria 64 caracteres, e o Postgres o cortaria em
+    // 63 — o schema e o banco passariam a discordar do nome da restrição.
+    foreignKey({
+      name: "recruiter_suggestion_by_suggestion_fk",
+      columns: [t.suggestionId],
+      foreignColumns: [recruiterSuggestion.id],
+    }).onDelete("cascade"),
+    uniqueIndex("recruiter_suggestion_by_idx").on(t.suggestionId, t.recruiterUserId),
+    index("recruiter_suggestion_by_recruiter_idx").on(t.recruiterUserId, t.createdAt),
+    check("recruiter_suggestion_by_note_check", sql`char_length(${t.note}) <= 500`),
+  ],
+);
+
+/**
+ * Uma linha por busca no diretório de perfis, só para o limite por recrutador
+ * (ADR-017). Sem texto da busca e sem candidato.
+ */
+export const recruiterDirectoryQuery = production.table(
+  "recruiter_directory_query",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    recruiterUserId: integer("recruiter_user_id")
+      .notNull()
+      .references(() => authUser.id, { onDelete: "cascade" }),
+    at: text("at").notNull().default(now),
+  },
+  (t) => [index("recruiter_directory_query_idx").on(t.recruiterUserId, t.at)],
+);
+
+export type RecruiterGrant = typeof recruiterGrant.$inferSelect;
+export type RecruiterInvite = typeof recruiterInvite.$inferSelect;
+export type RecruiterAccessEvent = typeof recruiterAccessEvent.$inferSelect;
+export type RecruiterSuggestion = typeof recruiterSuggestion.$inferSelect;
+export type RecruiterSuggestionBy = typeof recruiterSuggestionBy.$inferSelect;
 
 export const authLoginToken = production.table(
   "auth_login_token",

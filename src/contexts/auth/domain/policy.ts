@@ -137,6 +137,32 @@ export function can(
       if (session.candidateId !== null) return deny("conta já tem candidato");
       return ALLOW;
 
+    case "access:manage":
+    case "suggestion:decide":
+      // Consentimento é ato do próprio candidato (G24, G25, ADR-008): conceder,
+      // revogar, convidar e decidir sugestão ficam fora da sessão emprestada,
+      // que só vê. O admin revoga pela administração, com o nome dele, por
+      // `user:manage` — nunca por esta ação.
+      if (!isCandidate) return deny("requer papel candidate");
+      if (borrowed) return deny("sessão emprestada não decide pelo candidato");
+      if (resource.kind !== "candidate") return deny("requer escopo de candidato");
+      if (!ownsCandidate) return deny("recurso de outro candidato");
+      return ALLOW;
+
+    case "suggestion:create":
+      // Só para quem a sessão diz que tem concessão ativa: o id do candidato é
+      // seletor dentro de `linkedCandidateIds`, nunca prova de acesso (G40).
+      if (!isRecruiter) return deny("requer papel recruiter");
+      if (resource.kind !== "candidate") return deny("requer escopo de candidato");
+      if (!followsCandidate) return deny("candidato sem acesso concedido");
+      return ALLOW;
+
+    case "candidate:discover":
+      // O diretório lista perfis Recrutadores e Público só para recrutador
+      // (ADR-013). Sessão emprestada de recrutador vê o que ele vê; candidato e
+      // admin sem o papel não listam ninguém.
+      return isRecruiter ? ALLOW : deny("requer papel recruiter");
+
     case "candidate:read":
       // Um recurso global nunca é atalho para dado privado: todo chamador
       // precisa provar o escopo de candidato que derivou da sessão.

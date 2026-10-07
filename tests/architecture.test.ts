@@ -661,6 +661,51 @@ describe("write-path invariants (ADR 0005)", () => {
   });
 });
 
+describe("acesso de recrutador (#465, ADR-011, ADR-012)", () => {
+  const SCHEMA = "src/core/db/schema.ts";
+  const GRANT_READERS = [
+    "src/contexts/auth/infra/drizzle-store.ts",
+    "src/contexts/auth/infra/drizzle-directory.ts",
+    "src/contexts/auth/infra/drizzle-recruiter-access.ts",
+  ];
+  const PRODUCTION = [...SRC, ...APP];
+
+  it("IT-015 só os três adapters de acesso tocam recruiter_grant", () => {
+    // Um leitor que pulasse o predicado de `activeGrantCondition` reabriria o
+    // acesso que a revogação ou o prazo já fecharam (ADR-012, risco).
+    const offenders = PRODUCTION.filter(
+      (file) =>
+        file !== SCHEMA &&
+        !GRANT_READERS.includes(file) &&
+        /\brecruiterGrant\b|\brecruiter_grant\b/.test(stripComments(read(file))),
+    );
+    expect(offenders).toEqual([]);
+    expect(GRANT_READERS.every((file) => existsSync(file))).toBe(true);
+  });
+
+  it("IT-015 ninguém atualiza nem apaga o histórico de acesso", () => {
+    const offenders = PRODUCTION.filter((file) => {
+      const code = stripComments(read(file));
+      return (
+        /\.(update|delete)\(\s*recruiterAccessEvent\s*\)/.test(code) ||
+        /\b(update|delete\s+from)\s+(production\.)?"?recruiter_access_event\b/i.test(code)
+      );
+    });
+    expect(offenders).toEqual([]);
+  });
+
+  it("IT-015 recruiter_candidate está congelada: só o schema a nomeia", () => {
+    const offenders = PRODUCTION.filter(
+      (file) => file !== SCHEMA && /\brecruiterCandidate\b|\brecruiter_candidate\b/.test(stripComments(read(file))),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it("IT-015 as regras de acesso ficam no domínio puro", () => {
+    expect(PURE_CORE).toContain("src/contexts/auth/domain/recruiter-access.ts");
+  });
+});
+
 describe("fit per target track (ADR-008)", () => {
   it("IT-037 routes every job_score reader through a track filter", () => {
     // `job_score` has one row per (candidate, track, job). A reader that picks

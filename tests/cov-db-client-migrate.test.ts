@@ -82,9 +82,19 @@ describe("PostgreSQL client and migrations", () => {
     await runMigrations("./drizzle/postgres");
     expect(await getDb().execute(sql`select * from drizzle.__drizzle_migrations order by id`)).toEqual(first);
     const tables = await getDb().execute(sql`select tablename from pg_tables where schemaname = 'production'`);
-    expect(tables).toHaveLength(46);
+    expect(tables).toHaveLength(52);
     expect(tables.map((t) => t.tablename)).toEqual(
-      expect.arrayContaining(["job", "application", "job_score", "score_cursor", "request_budget", "auth_identity", "auth_signup"]),
+      expect.arrayContaining([
+        "job",
+        "application",
+        "job_score",
+        "score_cursor",
+        "request_budget",
+        "auth_identity",
+        "auth_signup",
+        "recruiter_grant",
+        "recruiter_access_event",
+      ]),
     );
   });
 });

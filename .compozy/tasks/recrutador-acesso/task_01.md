@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: "Fundação: tabelas, cópia dos vínculos, predicado de acesso, política e e-mails"
 type: backend
 complexity: critical
@@ -38,13 +38,13 @@ concessões com estado e prazo.
 </requirements>
 
 ## Subtasks
-- [ ] 1.1 Tabelas, restrições e migração com a cópia dos vínculos, mais o teste de upgrade.
-- [ ] 1.2 Predicado de acesso em `linkedCandidatesFor` e nas leituras do admin.
-- [ ] 1.3 `revokeGrant`, encerramento na remoção de conta e ajuste da porta `UserDirectory`.
-- [ ] 1.4 Regras puras de acesso (e-mail, data de fim e fuso, alvo, limite, convite, exibição, máscara).
-- [ ] 1.5 Quatro ações novas na política, com testes de tabela.
-- [ ] 1.6 Construtores de e-mail do recrutador e chaves do dicionário.
-- [ ] 1.7 Fixture `linkRecruiterToCandidate` e testes de arquitetura das tabelas novas.
+- [x] 1.1 Tabelas, restrições e migração com a cópia dos vínculos, mais o teste de upgrade.
+- [x] 1.2 Predicado de acesso em `linkedCandidatesFor` e nas leituras do admin.
+- [x] 1.3 `revokeGrant`, encerramento na remoção de conta e ajuste da porta `UserDirectory`.
+- [x] 1.4 Regras puras de acesso (e-mail, data de fim e fuso, alvo, limite, convite, exibição, máscara).
+- [x] 1.5 Quatro ações novas na política, com testes de tabela.
+- [x] 1.6 Construtores de e-mail do recrutador e chaves do dicionário.
+- [x] 1.7 Fixture `linkRecruiterToCandidate` e testes de arquitetura das tabelas novas.
 
 ## Implementation Details
 
@@ -88,17 +88,17 @@ selecionadas (`select-production.ts`, como na #464).
 
 Cases assigned from `_tests.md`, the test contract — read each ID's full definition there before writing tests.
 
-- [ ] UT-001, UT-002, UT-003, UT-004, UT-005, UT-006 — normalização de e-mail
-- [ ] UT-007, UT-008, UT-009, UT-010, UT-011, UT-012, UT-013, UT-014 — data de fim e fuso
-- [ ] UT-015, UT-016, UT-017, UT-018, UT-019, UT-020 — alvo da concessão
-- [ ] UT-021, UT-022, UT-023 — limite em janela móvel
-- [ ] UT-024, UT-025, UT-026, UT-027, UT-028, UT-029, UT-030, UT-031, UT-032 — conclusão de convite
-- [ ] UT-033, UT-034 — exibição e máscara
-- [ ] UT-035, UT-036, UT-037, UT-038, UT-039, UT-040, UT-041, UT-042 — política
-- [ ] UT-043, UT-044, UT-045, UT-046, UT-047, UT-048, UT-049 — e-mails do recrutador
-- [ ] IT-001, IT-002, IT-003, IT-004 — migração, FKs e restrições
-- [ ] IT-005, IT-006, IT-007, IT-008, IT-009, IT-010 — predicado de acesso
-- [ ] IT-011, IT-012, IT-013, IT-014, IT-015 — revogação do admin, remoção de conta, fixture e arquitetura
+- [x] UT-001, UT-002, UT-003, UT-004, UT-005, UT-006 — normalização de e-mail
+- [x] UT-007, UT-008, UT-009, UT-010, UT-011, UT-012, UT-013, UT-014 — data de fim e fuso
+- [x] UT-015, UT-016, UT-017, UT-018, UT-019, UT-020 — alvo da concessão
+- [x] UT-021, UT-022, UT-023 — limite em janela móvel
+- [x] UT-024, UT-025, UT-026, UT-027, UT-028, UT-029, UT-030, UT-031, UT-032 — conclusão de convite
+- [x] UT-033, UT-034 — exibição e máscara
+- [x] UT-035, UT-036, UT-037, UT-038, UT-039, UT-040, UT-041, UT-042 — política
+- [x] UT-043, UT-044, UT-045, UT-046, UT-047, UT-048, UT-049 — e-mails do recrutador
+- [x] IT-001, IT-002, IT-003, IT-004 — migração, FKs e restrições
+- [x] IT-005, IT-006, IT-007, IT-008, IT-009, IT-010 — predicado de acesso
+- [x] IT-011, IT-012, IT-013, IT-014, IT-015 — revogação do admin, remoção de conta, fixture e arquitetura
 
 ## Success Criteria
 - Every assigned test case implemented and passing
