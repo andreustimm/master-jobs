@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: "Métodos de acesso: conta, admin, CLI, avisos e recuperação"
 type: frontend
 complexity: high
@@ -36,13 +36,13 @@ recuperação de senha com e-mail localizado.
 </requirements>
 
 ## Subtasks
-- [ ] 4.1 Serviço de métodos: listar, desligar com proteção do último, definir senha.
-- [ ] 4.2 `/account`: lista, ligar, desligar, definir senha, versões aceitas.
-- [ ] 4.3 `/admin/users`: coluna de métodos e desligar.
-- [ ] 4.4 CLI `methods` e `unlink`, com `docs/cli.md`.
-- [ ] 4.5 Avisos de vínculo por e-mail.
-- [ ] 4.6 Recuperação de senha com e-mail localizado.
-- [ ] 4.7 Política (`can`) para as ações novas e E2E por papel.
+- [x] 4.1 Serviço de métodos: listar, desligar com proteção do último, definir senha.
+- [x] 4.2 `/account`: lista, ligar, desligar, definir senha, versões aceitas.
+- [x] 4.3 `/admin/users`: coluna de métodos e desligar.
+- [x] 4.4 CLI `methods` e `unlink`, com `docs/cli.md`.
+- [x] 4.5 Avisos de vínculo por e-mail.
+- [x] 4.6 Recuperação de senha com e-mail localizado.
+- [x] 4.7 Política (`can`) para as ações novas e E2E por papel.
 
 ## Implementation Details
 
@@ -72,15 +72,15 @@ Seguir "API Endpoints" (ações de conta, admin e CLI) e "Monitoring" da TechSpe
 
 Cases assigned from `_tests.md`, the test contract — read each ID's full definition there before writing tests.
 
-- [ ] UT-090, UT-091, UT-092, UT-093, UT-094, UT-095 — política e visão de métodos
-- [ ] IT-040, IT-041, IT-042, IT-043, IT-044, IT-045 — ligar provedor
-- [ ] IT-046, IT-047, IT-048, IT-049, IT-050, IT-051 — desligar, senha, listar
-- [ ] IT-052, IT-053, IT-054 — admin
-- [ ] IT-060, IT-061, IT-062, IT-063, IT-064 — CLI
-- [ ] IT-086, IT-087 — avisos de vínculo
-- [ ] IT-088, IT-089, IT-090, IT-091, IT-092, IT-093 — recuperação de senha
-- [ ] E2E-016, E2E-017, E2E-018, E2E-019, E2E-020, E2E-021 — conta e admin
-- [ ] E2E-030 — recuperação de senha
+- [x] UT-090, UT-091, UT-092, UT-093, UT-094, UT-095 — política e visão de métodos
+- [x] IT-040, IT-041, IT-042, IT-043, IT-044, IT-045 — ligar provedor
+- [x] IT-046, IT-047, IT-048, IT-049, IT-050, IT-051 — desligar, senha, listar
+- [x] IT-052, IT-053, IT-054 — admin
+- [x] IT-060, IT-061, IT-062, IT-063, IT-064 — CLI
+- [x] IT-086, IT-087 — avisos de vínculo
+- [x] IT-088, IT-089, IT-090, IT-091, IT-092, IT-093 — recuperação de senha
+- [x] E2E-016, E2E-017, E2E-018, E2E-019, E2E-020, E2E-021 — conta e admin
+- [x] E2E-030 — recuperação de senha
 
 ## Success Criteria
 - Every assigned test case implemented and passing

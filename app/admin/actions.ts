@@ -4,8 +4,10 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import {
+  adminDisconnectProvider,
   adminsBesides,
   beginImpersonation,
+  isOidcProvider,
   createUser,
   deleteUser,
   claimOwnCandidate,
@@ -212,6 +214,29 @@ export async function unlinkAction(formData: FormData) {
   if (!Number.isFinite(linkId)) throw new Error("Vínculo inválido");
   await removeRecruiterLink(linkId);
   revalidatePath("/admin/users");
+}
+
+/**
+ * Desliga o Google ou o LinkedIn de outra conta (#464, US-011.AC-2).
+ *
+ * Só desliga: não existe ação de admin que LIGUE provedor, porque ligar daria
+ * a quem tem o provedor uma porta permanente na conta de outra pessoa
+ * (US-011.AC-3). A proteção do último método vale igual à da tela da conta
+ * (US-011.EC-1) — a saída para conta comprometida sem outra porta é
+ * desabilitar. A auditoria grava o e-mail do admin; o aviso à dona da conta
+ * diz "um administrador".
+ *
+ * Devolve `{ ok, code }` para o formulário dizer por que recusou.
+ */
+export async function adminDisconnectProviderAction(formData: FormData) {
+  const session = await guard("user:manage");
+  const userId = parseUserId(formData);
+  const provider = String(formData.get("provider") ?? "");
+  if (!isOidcProvider(provider)) return { ok: false, code: "not_linked" } as const;
+
+  const result = await adminDisconnectProvider(session, userId, provider);
+  revalidatePath("/admin/users");
+  return result.ok ? ({ ok: true, code: "unlinked" } as const) : ({ ok: false, code: result.error } as const);
 }
 
 /**
