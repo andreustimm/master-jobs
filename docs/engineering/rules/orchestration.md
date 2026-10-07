@@ -83,7 +83,10 @@ deles.
   ausente ou desconhecido, papel sem célula, effort que o provedor não aceita,
   modelo do Claude Code sem apelido, provedor de outro harness num modo de um
   harness só ou juiz sem alternativa **falham fechado** — `pnpm route` sai com
-  erro e sem rota.
+  erro e sem rota. **Modo vigente: `claude_only`**, por decisão do dono de
+  06/10/2026 ("só Claude Code, nada de Codex para revisão, julgamento e nada,
+  até segunda ordem", #483): executor, revisor, corretor e juiz são agentes
+  Claude, e o juiz é um modelo Claude diferente dos autores.
 - Em `multi_provider`, a ladder é `anthropic → openai → opencode`: executor,
   analista, revisor e corretor usam o primeiro provedor da ladder com cota e
   do harness da sessão; o juiz usa o primeiro provedor que não seja de nenhum
