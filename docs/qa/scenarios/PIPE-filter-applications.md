@@ -6,13 +6,13 @@ persona: Andreus em triagem noturna
 journey: J-preserve-application-decision
 expected: Os filtros combinam com o estágio, a lista e o contador de cada estágio mostram o mesmo conjunto, "ampliar busca" acha pelo sinônimo e pela grafia parecida, e o estado sobrevive a refresh e ao voltar do navegador
 entry_points: /pipeline; /pipeline?q=engenheiro&semantic=1&company=<empresa>
-qa_status: untested
-bug_ids: BUG-20261006-pipeline-back-keeps-stale-picker-marks; BUG-20261006-pipeline-swapped-score-fields-stale; BUG-20261006-pipeline-active-stage-invisible; BUG-20261006-primary-button-contrast-dark-theme
+qa_status: pass
+bug_ids: BUG-20261006-pipeline-back-keeps-stale-picker-marks; BUG-20261006-pipeline-swapped-score-fields-stale; BUG-20261006-pipeline-active-stage-invisible; BUG-20261006-primary-button-contrast-dark-theme; BUG-20261007-primary-button-hover-contrast-dark; BUG-20261007-job-history-day-in-utc
 fix_status: fixed
-retest_status: pending
+retest_status: pass
 fix_commits: 961558d6701ebe980553f282b42c9e842194c112; 891042f; 7415e40
-evidence: docs/qa/reports/2026-10-07-qa-492-funil-seletores.md; docs/qa/evidence/2026-10-07-qa-492-funil-seletores/06-voltar-empresa-desmarcada.png; docs/qa/evidence/2026-10-07-qa-492-funil-seletores/04-faixa-invertida-campos-75-80.png
-last_report: docs/qa/reports/2026-10-07-qa-492-funil-seletores.md
+evidence: docs/qa/reports/2026-10-07-qa-494-funil-atritos.md; docs/qa/evidence/2026-10-07-qa-494-funil-atritos/01-estagio-escolhido-anel-escuro.png; docs/qa/evidence/2026-10-07-qa-494-funil-atritos/03-funil-escuro-sistema-buscar-ampliar.png; docs/qa/evidence/2026-10-07-qa-494-funil-atritos/05-aplicado-em-fuso-kiritimati.png
+last_report: docs/qa/reports/2026-10-07-qa-494-funil-atritos.md
 overlaps: PIPE-undo-and-move-back; JOBS-search-synonyms
 ---
 
@@ -73,3 +73,24 @@ São Paulo não vira o dia seguinte); o canal documentado aparece traduzido no
 selo e no seletor (`referral` → "indicação"); `?fit=abc` mostra aviso; o
 primeiro Aplicar só com o mínimo do score não grava `fitMax=` na URL; no tema
 escuro herdado do sistema, o botão primário passa no contraste AA.
+
+**Reteste 07/10 (`fix/funil-atritos` em `c55f4fe9`, PR #499; ambiente
+isolado, tema escuro herdado do sistema, sem refresh entre os passos):
+`pass` nos seis ajustes da #494.** "Buscar" e "ampliar busca" ligado em
+`#4d8bff` sem violação `color-contrast` no axe (também em `/jobs?q=engenheiro`);
+o estágio escolhido tem anel de 2 px e `aria-current`, e só ele (também a
+375 px); selo e seletor dizem "indicação", "direto" e "agência" com a URL em
+`channel=referral`; o primeiro Aplicar só com mínimo 75 grava `fit=75` sem
+`fitMax=`; `?fit=abc` e `?fitMax=abc` mostram "O score precisa ser um número
+de 0 a 100; o valor ilegível foi ignorado." com os campos vazios e as 7
+linhas. "Aplicado em" segue o fuso do navegador: a mesma candidatura das
+12:56 UTC aparece em 7 de outubro em `America/Sao_Paulo` e em 8 de outubro em
+`Pacific/Kiritimati` (a hora da candidatura não é controlável pela CLI; a
+candidatura às 23:45 BRT foi substituída por esse fuso). O histórico do
+recrutador ficou sem verificar: nem a tela nem a CLI criam o vínculo.
+Achados novos: o hover do botão primário cai para 4,31:1
+(BUG-20261007-primary-button-hover-contrast-dark, Cosmetic) e o histórico do
+detalhe da vaga ainda mostra o dia em UTC, discordando do Funil à noite
+(BUG-20261007-job-history-day-in-utc). Os passos 1, 2, 3, 5 e 7 não foram
+refeitos além do que os ajustes tocam. Relatório:
+`docs/qa/reports/2026-10-07-qa-494-funil-atritos.md`.
