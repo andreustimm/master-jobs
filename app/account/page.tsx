@@ -5,14 +5,17 @@ import { Label } from "@/components/ui/label";
 import {
   accountAccess,
   findUser,
+  historyPageOf,
   MIN_LENGTH,
+  recruiterAccessView,
   type OidcProviderId,
   type ProviderMethod,
 } from "../../src/contexts/auth/index.ts";
 import { formatDate, type LocaleId, type Translator } from "../../src/core/i18n/index.ts";
-import { requirePage } from "../auth";
+import { candidateScope, requirePage } from "../auth";
 import { getTranslator } from "../i18n";
 import { changePasswordAction, disconnectProviderAction, renameAction, setOwnPasswordAction } from "./actions";
+import { RecruiterAccessSection } from "./recruiter-access";
 import { accountStatus, providerStatus } from "./status";
 
 export const dynamic = "force-dynamic";
@@ -31,11 +34,22 @@ export const dynamic = "force-dynamic";
  *
  * Formas de entrar (#464, US-010): só provedor, datas, origem e
  * disponibilidade — nunca o e-mail, o nome ou a foto do provedor.
+ *
+ * Acesso de recrutadores (#465): só para quem tem candidato na sessão —
+ * recrutador e admin sem candidato não veem a seção. O histórico pagina por
+ * `?historyPage=`.
  */
 export default async function AccountPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; linked?: string; unlinked?: string; error?: string; provider?: string }>;
+  searchParams: Promise<{
+    status?: string;
+    linked?: string;
+    unlinked?: string;
+    error?: string;
+    provider?: string;
+    historyPage?: string;
+  }>;
 }) {
   const session = await requirePage("account:read");
   const { t, locale } = await getTranslator();
@@ -47,6 +61,8 @@ export default async function AccountPage({
   const user = await findUser(session.userId);
   const access = await accountAccess(session);
   const borrowed = session.impersonatedBy !== null;
+  const recruiterAccess =
+    candidateScope(session) === null ? null : await recruiterAccessView(session, historyPageOf(params.historyPage));
 
   return (
     <main className="pt-10 pb-16" data-testid="route-account">
@@ -285,6 +301,8 @@ export default async function AccountPage({
             </CardContent>
           </Card>
         )}
+
+        {recruiterAccess && <RecruiterAccessSection view={recruiterAccess} borrowed={borrowed} t={t} locale={locale} />}
       </div>
     </main>
   );

@@ -52,6 +52,14 @@ relatório em JSON. Quem chama é o `pg_cron` do Supabase — e ligá-lo é **pa
 humano**, uma vez, depois de o código estar em produção (as migrações
 `0016_sweep_lease_and_runs` e `0019_score_cursor` aplicadas).
 
+Ao fim de qualquer fatia, no máximo uma vez por hora (reserva
+`manutencao:recruiter-access`), roda o trabalho do acesso de recrutador (#465,
+ADR-016): concessão com data de fim vencida vira `expired`, com o evento do
+sistema e um e-mail de fim ao recrutador; convite com link vencido vira
+`expired`, sem e-mail. O corte do acesso não espera por isto — o predicado da
+sessão já nega no instante do fim —; a varredura só marca, registra e avisa.
+As contagens (`expired`, `invitesExpired`) saem no `detail` da fatia.
+
 **Só em produção** ([ADR 0027](adr/0027-cadencia-das-notas-em-lotes-com-cursor.md)).
 O SQL do agendador é aplicado **somente no projeto Supabase de produção** — ele
 recusa rodar se o Vault não apontar para `https://jobs.mastertimm.com.br`. Em

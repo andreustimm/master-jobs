@@ -4,25 +4,28 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  adminRecruiterAccess,
   listUsersWithMethods,
-  recruiterLinks,
   ROLES,
+  type AdminCandidateAccess,
   type OidcProviderId,
   type Role,
   type UserSummary,
 } from "../../../src/contexts/auth/index.ts";
-import type { TranslationKey, Translator } from "../../../src/core/i18n/index.ts";
+import { formatDate, type LocaleId, type TranslationKey, type Translator } from "../../../src/core/i18n/index.ts";
 import { requirePage } from "../../auth";
 import { getTranslator } from "../../i18n";
 import { MutationFeedbackForm } from "../../mutation-feedback";
 import {
+  adminCancelInviteAction,
   adminDisconnectProviderAction,
+  adminRevokeGrantAction,
   createUserAction,
   impersonateAction,
   toggleDisabledAction,
-  unlinkAction,
 } from "../actions";
 import { DeleteUserModal, EditUserModal } from "../user-modal";
+import { USER_MODAL_BOX } from "../user-modal-styles";
 
 export const dynamic = "force-dynamic";
 
@@ -53,10 +56,10 @@ export default async function AdminUsersPage() {
   const session = await requirePage("user:manage");
 
   const users = await listUsersWithMethods();
-  const links = new Map<number, { id: number; candidateId: number }[]>();
-  for (const user of users) {
-    if (user.roles.includes("recruiter")) links.set(user.id, await recruiterLinks(user.id));
-  }
+  const access = await adminRecruiterAccess(
+    session,
+    users.flatMap((user) => (user.candidateId === null ? [] : [user.candidateId])),
+  );
 
   return (
     <main className="pt-10 pb-16" data-testid="route-admin-users">
@@ -107,7 +110,7 @@ export default async function AdminUsersPage() {
           <UserRow
             key={user.id}
             user={user}
-            linked={links.get(user.id) ?? []}
+            access={user.candidateId === null ? undefined : access.get(user.candidateId)}
             isSelf={user.id === session.userId}
             locale={locale}
             t={t}
@@ -118,20 +121,176 @@ export default async function AdminUsersPage() {
   );
 }
 
+/**
+ * Concessões ativas e convites pendentes do candidato desta conta (US-023).
+ *
+ * Só revogar e cancelar, cada um com confirmação: conceder e convidar não
+ * existem aqui, nem como botão nem como action (ADR-008, US-024.AC-1). `div`,
+ * não `p`: cada item carrega um `form`, e o parser HTML fecharia o `p` antes
+ * dele — o servidor e o React montariam árvores diferentes.
+ */
+function RecruiterAccessBlock({
+  userId,
+  access,
+  locale,
+  t,
+}: {
+  userId: number;
+  access: AdminCandidateAccess;
+  locale: LocaleId;
+  t: Translator["t"];
+}) {
+  const endOf = (expiresAt: string | null) =>
+    expiresAt === null ? t("recruiterAccess.noEnd") : formatDate(expiresAt, locale);
+  return (
+    <div className="type-meta grid gap-2 text-muted-foreground" data-testid="admin-recruiter-access">
+      <span className="font-medium text-foreground">{t("admin.access")}</span>
+      <ul className="grid gap-2">
+        {access.grants.map((grant) => (
+          <li key={`g${grant.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="admin-recruiter-grant">
+            <span data-user-content className="break-all text-foreground">
+              {grant.recruiterEmail}
+            </span>
+            <span>{t("admin.accessGrant", { since: formatDate(grant.createdAt, locale), end: endOf(grant.expiresAt) })}</span>
+            <ConfirmAdminAction
+              id={`grant-revoke-${userId}-${grant.id}`}
+              action={adminRevokeGrantAction}
+              field={{ name: "grantId", value: grant.id }}
+              label={t("admin.revokeGrant")}
+              title={t("admin.revokeGrantTitle")}
+              email={grant.recruiterEmail}
+              body={t("admin.revokeGrantBody")}
+              confirm={t("admin.revokeGrantConfirm")}
+              testId="admin-recruiter-grant-revoke"
+              messages={{
+                revoked: t("admin.grantRevoked"),
+                already_ended: t("admin.accessAlreadyEnded"),
+                not_found: t("admin.accessNotFound"),
+              }}
+              t={t}
+            />
+          </li>
+        ))}
+        {access.invites.map((invite) => (
+          <li key={`i${invite.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="admin-recruiter-invite">
+            <span data-user-content className="break-all text-foreground">
+              {invite.email}
+            </span>
+            <span>
+              {t("admin.accessInvite", { sent: formatDate(invite.createdAt, locale), until: formatDate(invite.expiresAt, locale) })}
+            </span>
+            <ConfirmAdminAction
+              id={`invite-cancel-${userId}-${invite.id}`}
+              action={adminCancelInviteAction}
+              field={{ name: "inviteId", value: invite.id }}
+              label={t("admin.cancelInvite")}
+              title={t("admin.cancelInviteTitle")}
+              email={invite.email}
+              body={t("admin.cancelInviteBody")}
+              confirm={t("admin.cancelInviteConfirm")}
+              testId="admin-recruiter-invite-cancel"
+              messages={{
+                cancelled: t("admin.inviteCancelled"),
+                already_ended: t("admin.accessAlreadyEnded"),
+                not_found: t("admin.accessNotFound"),
+              }}
+              t={t}
+            />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Botão que abre a confirmação; só o de dentro executa. Mesmo popover nativo da exclusão de conta. */
+function ConfirmAdminAction({
+  id,
+  action,
+  field,
+  label,
+  title,
+  email,
+  body,
+  confirm,
+  testId,
+  messages,
+  t,
+}: {
+  id: string;
+  action: (formData: FormData) => Promise<unknown>;
+  field: { name: string; value: number };
+  label: string;
+  title: string;
+  email: string;
+  body: string;
+  confirm: string;
+  testId: string;
+  messages: Record<string, string>;
+  t: Translator["t"];
+}) {
+  const [before, after] = title.split("{email}");
+  return (
+    <>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="min-h-11 xl:h-7 xl:min-h-0"
+        popoverTarget={id}
+        popoverTargetAction="show"
+        data-testid={testId}
+      >
+        {label}
+      </Button>
+      <div id={id} popover="auto" role="dialog" className={USER_MODAL_BOX} data-testid={`${testId}-dialog`}>
+        <div className="grid gap-3 px-5 py-5">
+          <h2 className="type-display-xs leading-tight break-words">
+            {before}
+            <span data-user-content>{email}</span>
+            {after}
+          </h2>
+          <p className="type-caption-sm">{body}</p>
+          <div className="mt-1 flex flex-wrap items-center justify-end gap-2">
+            <Button type="button" variant="outline" popoverTarget={id} popoverTargetAction="hide" className="min-h-11">
+              {t("admin.cancel")}
+            </Button>
+            {/* `autoComplete="off"`: ao recarregar, o navegador restauraria o id
+                oculto pela posição, e depois de uma revogação a posição de uma
+                concessão é a de outra. */}
+            <MutationFeedbackForm
+              action={action}
+              autoComplete="off"
+              successMessage={t("feedback.success")}
+              errorMessage={t("feedback.error")}
+              resultMessages={messages}
+              dismissLabel={t("feedback.dismiss")}
+            >
+              <input type="hidden" name={field.name} value={field.value} />
+              <Button type="submit" variant="destructive" className="min-h-11" data-testid={`${testId}-confirm`}>
+                {confirm}
+              </Button>
+            </MutationFeedbackForm>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function UserRow({
   user,
-  linked,
+  access,
   isSelf,
   locale,
   t,
 }: {
   user: UserSummary & { providers: OidcProviderId[] };
-  linked: { id: number; candidateId: number }[];
+  access: AdminCandidateAccess | undefined;
   isSelf: boolean;
-  locale: string;
+  locale: LocaleId;
   t: Translator["t"];
 }) {
-  void locale;
   const disabled = user.disabledAt !== null;
 
   return (
@@ -169,32 +328,8 @@ function UserRow({
             </span>
           </div>
 
-          {linked.length > 0 && (
-            // `div`, não `p`: cada vínculo carrega um `form`, e o parser HTML
-            // fecha o `p` antes dele — o servidor e o React montavam árvores
-            // diferentes e a hidratação falhava.
-            <div className="type-meta flex flex-wrap items-center gap-x-2 text-muted-foreground">
-              <span>{t("admin.linked")}:</span>
-              {linked.map((link) => (
-                <span key={link.id} className="inline-flex items-center gap-1">
-                  #{link.candidateId}
-                  {/* Admin revoga, mas não concede: conceder mora na área do
-                      candidato, porque o vínculo dá leitura do currículo. */}
-                  <MutationFeedbackForm
-                    action={unlinkAction}
-                    successMessage={t("feedback.success")}
-                    errorMessage={t("feedback.error")}
-                    dismissLabel={t("feedback.dismiss")}
-                    className="inline"
-                  >
-                    <input type="hidden" name="linkId" value={link.id} />
-                    <button type="submit" className="cursor-pointer underline-offset-2 hover:underline">
-                      {t("admin.unlink")}
-                    </button>
-                  </MutationFeedbackForm>
-                </span>
-              ))}
-            </div>
+          {access && (access.grants.length > 0 || access.invites.length > 0) && (
+            <RecruiterAccessBlock userId={user.id} access={access} locale={locale} t={t} />
           )}
 
           {/* Formas de entrar (#464, US-011): quais provedores e se há senha.

@@ -1418,3 +1418,17 @@ condicional em `status = 'active'` com o evento na mesma transação — o segun
 de dois pedidos simultâneos recebe `already_ended` —, e apagar a conta de um
 recrutador encerra antes as concessões ativas como `ended_account_removed`. A
 importação do snapshot legado não transfere as seis tabelas (nascem vazias).
+
+**Quem escreve.** Só o candidato concede e convida, pela seção "Acesso de
+recrutadores" de `/account` (`app/recruiter-access.ts` + o store
+`drizzle-recruiter-access.ts`). Conceder, convidar e reenviar tomam
+`pg_advisory_xact_lock(hashtext('recruiter-access'), candidate_id)` antes de
+contar: no máximo 10 eventos `grant_created`/`invite_sent`/`invite_resent` de
+ator `candidate` em 24 h móveis e 20 convites pendentes com link válido
+(ADR-017). Revogação, cancelamento, recusa e ato do admin não contam. O admin
+revoga e cancela por `/admin/users`, com `actor = 'admin'` e o nome dele; não
+há caminho de admin nem verbo de CLI para conceder. A varredura horária
+(`manutencao:recruiter-access`) marca `expired` a concessão vencida e o convite
+de link vencido, com o evento do sistema; a limpeza semanal (`jho db cleanup
+--apply`) apaga convites `expired`/`cancelled`/`superseded` decididos há mais
+de 30 dias e buscas do diretório com mais de um dia.
