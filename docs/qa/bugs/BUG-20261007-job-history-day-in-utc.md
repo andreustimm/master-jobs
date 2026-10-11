@@ -51,7 +51,7 @@ o dia em UTC.
   `firstSeenAt.slice(0, 10)` e `event.at.slice(0, 10)`, que devolvem o dia em
   UTC; o Funil e o histórico do recrutador já liam o dia pela ilha `LocalDate`
   (#494), no fuso do navegador.
-- **Fix commit:** preenchido no commit seguinte, com o SHA.
+- **Fix commit:** `039a373`.
 - **Fix:** as duas datas do detalhe saem pela mesma ilha `LocalDate`
   (`testId` `job-first-seen` e `application-timeline-event-date`). O formato
   muda de `2026-10-07` para o dia por extenso do idioma da tela ("7 de out. de

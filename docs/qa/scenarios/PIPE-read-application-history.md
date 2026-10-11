@@ -10,7 +10,7 @@ qa_status: untested
 bug_ids: BUG-20260917-transition-note-never-readable; BUG-20261007-job-history-day-in-utc
 fix_status: fixed
 retest_status: pending
-fix_commits: cb00cbb
+fix_commits: cb00cbb; 039a373
 evidence: docs/qa/reports/2026-09-18T202222983242Z-8870c32d-release-candidate-1.13.1-full.md
 last_report: docs/qa/reports/2026-09-18T202222983242Z-8870c32d-release-candidate-1.13.1-full.md
 overlaps: PIPE-save-resume-decision; PIPE-note-on-unchanged-stage
