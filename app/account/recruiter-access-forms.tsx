@@ -26,7 +26,7 @@ export type AccessServerAction = (formData: FormData) => Promise<ActionResult>;
 /** Mensagens de recusa por código, mais a genérica. `cap_reached` traz `{time}`. */
 export type ErrorLabels = Record<string, string> & { unexpected: string };
 
-const EMAIL_ERRORS = new Set(["blank_email", "invalid_email", "self", "already_active", "already_invited"]);
+const EMAIL_ERRORS = new Set(["blank_email", "invalid_email", "self", "already_active", "already_invited", "invites_unavailable"]);
 const DATE_ERRORS = new Set(["date_invalid", "date_past", "date_too_far"]);
 
 function refusal(result: ActionResult, errors: ErrorLabels, locale: string): string {

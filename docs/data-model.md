@@ -1425,7 +1425,14 @@ recrutadores" de `/account` (`app/recruiter-access.ts` + o store
 `pg_advisory_xact_lock(hashtext('recruiter-access'), candidate_id)` antes de
 contar: no máximo 10 eventos `grant_created`/`invite_sent`/`invite_resent` de
 ator `candidate` em 24 h móveis e 20 convites pendentes com link válido
-(ADR-017). Revogação, cancelamento, recusa e ato do admin não contam. O admin
+(ADR-017). Revogação, cancelamento, recusa e ato do admin não contam.
+Enquanto `/signup/invite` não existe (task_03), convidar e reenviar ficam
+desligados (`recruiterInvitesEnabled`): quem viraria convite recebe
+`invites_unavailable` antes de qualquer gravação; só `JHO_RECRUITER_INVITES=on`
+num processo `local` ou `e2e` fora da Vercel os liga. O `detail` de
+`end_date_changed` guarda o instante e o fuso da escolha separados por espaço
+(`endDateEventDetail`), para o histórico mostrar o dia escolhido, e não o dia
+em UTC. O admin
 revoga e cancela por `/admin/users`, com `actor = 'admin'` e o nome dele; não
 há caminho de admin nem verbo de CLI para conceder. A varredura horária
 (`manutencao:recruiter-access`) marca `expired` a concessão vencida e o convite

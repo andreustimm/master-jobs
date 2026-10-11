@@ -114,6 +114,8 @@ export type RecruiterAccessStore = {
     tokenHash: string;
     inviteExpiresAt: string;
     nowIso: string;
+    /** Falso: quem viraria convite é recusado com `invites_unavailable`, sem gravar nada (`recruiterInvitesEnabled`). */
+    invites: boolean;
   }): Promise<GrantStoreResult>;
   endGrant(input: {
     grantId: number;

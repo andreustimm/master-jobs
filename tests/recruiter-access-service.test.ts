@@ -25,7 +25,7 @@ import {
   source,
 } from "../src/core/db/schema.ts";
 import { runDatabaseCleanup } from "../src/core/db/retention.ts";
-import { translator } from "../src/core/i18n/index.ts";
+import { formatDate, translator } from "../src/core/i18n/index.ts";
 import {
   cancelInvite,
   candidateAccessView,
@@ -38,7 +38,11 @@ import {
   revokeAccess,
   type RecruiterAccessDeps,
 } from "../src/contexts/auth/app/recruiter-access.ts";
-import { inviteCompletion, type InviteStatus } from "../src/contexts/auth/domain/recruiter-access.ts";
+import {
+  inviteCompletion,
+  readEndDateEventDetail,
+  type InviteStatus,
+} from "../src/contexts/auth/domain/recruiter-access.ts";
 import { appendHistory, drizzleRecruiterAccess } from "../src/contexts/auth/infra/drizzle-recruiter-access.ts";
 import { drizzleAuthRepository, drizzleSessions, hashToken, linkedCandidatesFor } from "../src/contexts/auth/infra/drizzle-store.ts";
 import { drizzleUserDirectory } from "../src/contexts/auth/infra/drizzle-directory.ts";
@@ -91,6 +95,7 @@ function deps(over: Partial<RecruiterAccessDeps> = {}): RecruiterAccessDeps {
       tokens.push(token);
       return { token, hash: hashToken(token) };
     },
+    invitesEnabled: true,
     ...over,
   };
 }
@@ -409,6 +414,46 @@ describe("convidar", () => {
   });
 });
 
+describe("convite desligado (até `/signup/invite` existir)", () => {
+  const off = () => deps({ invitesEnabled: false });
+  const grantOff = (email: string) =>
+    grantAccess({ candidateId: seven, actorUserId: ana, email, endDate: "", tz: "" }, off());
+
+  it("quem viraria convite é recusado com invites_unavailable: nada gravado, nada contado, nenhum e-mail", async () => {
+    expect(await grantOff("bia@y.com")).toEqual({ ok: false, error: "invites_unavailable" });
+    // Conta sem o papel de recrutador também viraria convite.
+    await makeUser("cora@y.com", ["candidate"], { emailVerifiedAt: T0 });
+    expect(await grantOff("cora@y.com")).toEqual({ ok: false, error: "invites_unavailable" });
+    expect(await invitesOf()).toEqual([]);
+    expect(await eventsOf()).toEqual([]);
+    expect(sent).toEqual([]);
+  });
+
+  it("recrutador com conta confirmada continua recebendo acesso direto", async () => {
+    expect(await grantOff("rui@x.com")).toEqual({ ok: true, kind: "grant" });
+    expect(await grantsOf()).toHaveLength(1);
+    expect(sent).toHaveLength(1);
+  });
+
+  it("reenviar convite antigo é recusado antes do banco: o link não é trocado nem enviado", async () => {
+    const inviteId = await rawInvite("bia@y.com");
+    const before = await invitesOf();
+    expect(await resendInvite({ inviteId, candidateId: seven, actorUserId: ana }, off())).toEqual({
+      ok: false,
+      error: "invites_unavailable",
+    });
+    expect(await invitesOf()).toEqual(before);
+    expect(await eventsOf()).toEqual([]);
+    expect(sent).toEqual([]);
+  });
+
+  it("a tela recebe o estado do portão para não prometer convite", async () => {
+    const view = await candidateAccessView({ candidateId: seven, historyPage: 1 }, off());
+    expect(view.invitesEnabled).toBe(false);
+    expect((await candidateAccessView({ candidateId: seven, historyPage: 1 }, deps())).invitesEnabled).toBe(true);
+  });
+});
+
 describe("limites", () => {
   it("IT-033 dez ações contadas nas últimas 24 h: a 11ª é cap_reached com a hora da vaga; nada gravado", async () => {
     const oldest = new Date(Date.parse(T0) - 23 * HOUR).toISOString();
@@ -563,13 +608,21 @@ describe("data de fim", () => {
   const setEnd = (grantId: number, endDate: string, tz = "America/Sao_Paulo") =>
     changeEndDate({ grantId, candidateId: seven, actorUserId: ana, endDate, tz }, deps());
 
-  it("IT-044 pôr data de fim: fim do dia no fuso escolhido, histórico com o instante e um e-mail", async () => {
+  it("IT-044 pôr data de fim: fim do dia no fuso escolhido, histórico com o instante e o fuso, e um e-mail", async () => {
     const grantId = await rawGrant();
     expect(await setEnd(grantId, "2026-10-20")).toEqual({ ok: true });
     expect((await grantsOf())[0]).toMatchObject({ expiresAt: "2026-10-21T02:59:59.999Z", expiryTz: "America/Sao_Paulo" });
     expect(await eventsOf()).toEqual([
-      expect.objectContaining({ kind: "end_date_changed", detail: "2026-10-21T02:59:59.999Z", actor: "candidate" }),
+      expect.objectContaining({
+        kind: "end_date_changed",
+        detail: "2026-10-21T02:59:59.999Z America/Sao_Paulo",
+        actor: "candidate",
+      }),
     ]);
+    // O histórico lê o dia escolhido, não o do servidor em UTC (21).
+    const end = readEndDateEventDetail((await eventsOf())[0]!.detail);
+    expect(end).toEqual({ expiresAt: "2026-10-21T02:59:59.999Z", tz: "America/Sao_Paulo" });
+    expect(formatDate(end!.expiresAt, "pt-BR", end!.tz)).toBe(formatDate("2026-10-20T12:00:00Z", "pt-BR", "UTC"));
     expect(sent).toHaveLength(1);
     expect(sent[0]!.subject).toBe(pt("email.recruiterEndChangedSubject", { candidate: "Ana" }));
   });

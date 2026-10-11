@@ -140,8 +140,9 @@ function RecruiterAccessBlock({
   locale: LocaleId;
   t: Translator["t"];
 }) {
-  const endOf = (expiresAt: string | null) =>
-    expiresAt === null ? t("recruiterAccess.noEnd") : formatDate(expiresAt, locale);
+  // O dia no fuso em que o candidato o escolheu, como a lista de /account.
+  const endOf = (expiresAt: string | null, expiryTz: string | null) =>
+    expiresAt === null ? t("recruiterAccess.noEnd") : formatDate(expiresAt, locale, expiryTz ?? "UTC");
   return (
     <div className="type-meta grid gap-2 text-muted-foreground" data-testid="admin-recruiter-access">
       <span className="font-medium text-foreground">{t("admin.access")}</span>
@@ -151,7 +152,7 @@ function RecruiterAccessBlock({
             <span data-user-content className="break-all text-foreground">
               {grant.recruiterEmail}
             </span>
-            <span>{t("admin.accessGrant", { since: formatDate(grant.createdAt, locale), end: endOf(grant.expiresAt) })}</span>
+            <span>{t("admin.accessGrant", { since: formatDate(grant.createdAt, locale), end: endOf(grant.expiresAt, grant.expiryTz) })}</span>
             <ConfirmAdminAction
               id={`grant-revoke-${userId}-${grant.id}`}
               action={adminRevokeGrantAction}

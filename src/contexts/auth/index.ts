@@ -81,6 +81,7 @@ import {
   type OidcProviderId,
 } from "./domain/oidc-config.ts";
 import type { AuthEnvironment } from "./domain/open-mode.ts";
+import { recruiterInvitesEnabled } from "./domain/recruiter-access.ts";
 import { resolvePublicOrigin, type RequestOrigin } from "./domain/public-origin.ts";
 import {
   accountContact,
@@ -271,6 +272,7 @@ export function revokeRecruiterGrant(grantId: number, by: number) {
 /* -------------------------- Acesso de recrutador --------------------------- */
 
 export { HISTORY_PAGE_SIZE, historyPageOf } from "./app/recruiter-access.ts";
+export { readEndDateEventDetail } from "./domain/recruiter-access.ts";
 export type { CandidateAccessView, GrantResult, SimpleResult as AccessResultSimple } from "./app/recruiter-access.ts";
 export type { AdminCandidateAccess, GrantRow, HistoryRow, InviteRow } from "./ports-recruiter-access.ts";
 
@@ -285,6 +287,7 @@ function accessDeps(origin: string | null = null): RecruiterAccessDeps {
       const token = randomBytes(32).toString("base64url");
       return { token, hash: hashToken(token) };
     },
+    invitesEnabled: recruiterInvitesEnabled(process.env),
   };
 }
 

@@ -15,17 +15,67 @@ import {
   GRANT_STATUSES,
   INVITE_STATUSES,
   capDecision,
+  endDateEventDetail,
   grantDisplay,
   grantTarget,
   inviteCompletion,
   maskEmail,
   normalizeEmail,
   parseEndDate,
+  readEndDateEventDetail,
+  recruiterInvitesEnabled,
   type InviteStatus,
 } from "../src/contexts/auth/domain/recruiter-access.ts";
+import { formatDate } from "../src/core/i18n/index.ts";
 
 const T0 = Date.parse("2026-10-06T12:00:00Z");
 const SP = "America/Sao_Paulo";
+
+describe("recruiterInvitesEnabled", () => {
+  it("desligado por omissão e em qualquer deployment, mesmo com a variável cadastrada", () => {
+    expect(recruiterInvitesEnabled({})).toBe(false);
+    expect(recruiterInvitesEnabled({ JHO_ENV: "e2e" })).toBe(false);
+    expect(recruiterInvitesEnabled({ JHO_RECRUITER_INVITES: "on" })).toBe(false);
+    expect(recruiterInvitesEnabled({ JHO_RECRUITER_INVITES: "on", JHO_ENV: "production" })).toBe(false);
+    expect(recruiterInvitesEnabled({ JHO_RECRUITER_INVITES: "on", JHO_ENV: "e2e", VERCEL: "1" })).toBe(false);
+    expect(recruiterInvitesEnabled({ JHO_RECRUITER_INVITES: "on", JHO_ENV: "local", VERCEL_ENV: "production" })).toBe(false);
+    expect(recruiterInvitesEnabled({ JHO_RECRUITER_INVITES: "1", JHO_ENV: "e2e" })).toBe(false);
+  });
+
+  it("ligado só com `on` num processo `local` ou `e2e` fora da Vercel", () => {
+    expect(recruiterInvitesEnabled({ JHO_RECRUITER_INVITES: "on", JHO_ENV: "e2e" })).toBe(true);
+    expect(recruiterInvitesEnabled({ JHO_RECRUITER_INVITES: " ON ", JHO_ENV: "local" })).toBe(true);
+  });
+});
+
+describe("detalhe da data de fim no histórico", () => {
+  it("grava instante e fuso; lê os dois de volta", () => {
+    const end = parseEndDate({ date: "2026-10-20", tz: SP, now: T0 });
+    if (!end.ok) throw new Error("data recusada");
+    const detail = endDateEventDetail(end.value.expiresAt, end.value.tz);
+    expect(detail).toBe("2026-10-21T02:59:59.999Z America/Sao_Paulo");
+    expect(readEndDateEventDetail(detail)).toEqual({ expiresAt: "2026-10-21T02:59:59.999Z", tz: SP });
+  });
+
+  it("o dia lido no fuso gravado é o escolhido (20), não o do servidor em UTC (21)", () => {
+    const read = readEndDateEventDetail("2026-11-21T02:59:59.999Z America/Sao_Paulo")!;
+    expect(formatDate(read.expiresAt, "pt-BR", read.tz)).toBe(formatDate("2026-11-20T12:00:00Z", "pt-BR", "UTC"));
+    expect(formatDate(read.expiresAt, "pt-BR", "UTC")).toBe(formatDate("2026-11-21T12:00:00Z", "pt-BR", "UTC"));
+  });
+
+  it("sem data é `none`; linha antiga sem fuso e fuso desconhecido caem em UTC", () => {
+    expect(endDateEventDetail(null, null)).toBe("none");
+    expect(endDateEventDetail("2026-10-21T02:59:59.999Z", null)).toBe("2026-10-21T02:59:59.999Z");
+    expect(readEndDateEventDetail("none")).toBeNull();
+    expect(readEndDateEventDetail(null)).toBeNull();
+    expect(readEndDateEventDetail("")).toBeNull();
+    expect(readEndDateEventDetail("2026-10-21T02:59:59.999Z")).toEqual({ expiresAt: "2026-10-21T02:59:59.999Z", tz: "UTC" });
+    expect(readEndDateEventDetail("2026-10-21T02:59:59.999Z Marte/Olimpo")).toEqual({
+      expiresAt: "2026-10-21T02:59:59.999Z",
+      tz: "UTC",
+    });
+  });
+});
 
 describe("normalizeEmail", () => {
   it("UT-001 tira espaço das pontas e põe em minúsculas", () => {

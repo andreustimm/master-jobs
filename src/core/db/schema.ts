@@ -1793,7 +1793,7 @@ export const recruiterAccessEvent = production.table(
     actor: text("actor").notNull(),
     actorUserId: integer("actor_user_id").references(() => authUser.id, { onDelete: "set null" }),
     actorName: text("actor_name"),
-    /** Nova data de fim (ISO ou `none`) ou o título e a empresa da vaga sugerida. */
+    /** Nova data de fim (`endDateEventDetail`: ISO e fuso, ou `none`) ou o título e a empresa da vaga sugerida. */
     detail: text("detail"),
     at: text("at").notNull().default(now),
   },

@@ -15,10 +15,10 @@
 
 ### Novidades
 
-- Em Minha conta, a seção "Acesso de recrutadores" deixa você dar a um recrutador acesso de leitura ao seu funil e ao currículo atual, com data de fim opcional. Quem ainda não tem conta recebe um convite por e-mail. Você vê quem tem acesso, revoga quando quiser e acompanha o histórico de tudo o que foi compartilhado.
+- Em Minha conta, a seção "Acesso de recrutadores" deixa você dar a um recrutador com conta acesso de leitura ao seu funil e ao currículo atual, com data de fim opcional. Você vê quem tem acesso, revoga quando quiser e acompanha o histórico de tudo o que foi compartilhado.
 
 ## en
 
 ### New
 
-- In My account, the "Recruiter access" section lets you give a recruiter read access to your funnel and current CV, with an optional end date. People without an account get an email invitation. You see who has access, revoke it whenever you want and follow the history of everything you shared.
+- In My account, the "Recruiter access" section lets you give a recruiter who has an account read access to your funnel and current CV, with an optional end date. You see who has access, revoke it whenever you want and follow the history of everything you shared.

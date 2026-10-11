@@ -7,6 +7,8 @@
  * virar acesso —, e por isso cada regra é testada sem I/O
  * (`tests/recruiter-access-rules.test.ts`).
  */
+import { testOverridesAllowed } from "./oidc-config.ts";
+import type { AuthEnvironment } from "./open-mode.ts";
 
 /** Validade do link de convite (ADR-006). */
 export const INVITE_TTL_MS = 7 * 86_400_000;
@@ -60,7 +62,8 @@ export type AccessError =
   | "date_past"
   | "date_too_far"
   | "already_ended"
-  | "not_found";
+  | "not_found"
+  | "invites_unavailable";
 
 export type AccessResult<T> = { ok: true; value: T } | { ok: false; error: AccessError; retryAt?: string };
 
@@ -170,6 +173,44 @@ export function parseEndDate(input: { date: string; tz: string; now: number }): 
   const next = new Date(Date.UTC(y, m - 1, d + 1));
   const end = midnightIn(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), tz) - 1;
   return { ok: true, value: { expiresAt: new Date(end).toISOString(), tz } };
+}
+
+/**
+ * O `detail` da linha `end_date_changed` do histórico: o instante e o fuso em
+ * que o dia foi escolhido, separados por espaço (nenhum dos dois tem espaço).
+ * Sem o fuso, o fim do dia em São Paulo (02:59Z do dia seguinte) apareceria
+ * um dia depois no servidor em UTC. `none` é "tirou a data de fim".
+ */
+export function endDateEventDetail(expiresAt: string | null, tz: string | null): string {
+  if (expiresAt === null) return "none";
+  return tz === null ? expiresAt : `${expiresAt} ${tz}`;
+}
+
+/**
+ * Lê o que `endDateEventDetail` gravou. Linha sem fuso (gravada antes dele)
+ * ou com fuso que o runtime não conhece cai em UTC, como `knownZone`; `none`,
+ * vazio ou nulo é "sem data".
+ */
+export function readEndDateEventDetail(detail: string | null): { expiresAt: string; tz: string } | null {
+  const raw = detail?.trim() ?? "";
+  if (raw === "" || raw === "none") return null;
+  const space = raw.indexOf(" ");
+  if (space === -1) return { expiresAt: raw, tz: "UTC" };
+  return { expiresAt: raw.slice(0, space), tz: knownZone(raw.slice(space + 1)) };
+}
+
+/**
+ * Convidar quem não tem conta de recrutador está ligado aqui?
+ *
+ * O link do convite leva a `/signup/invite`, que só chega com a task_03 do
+ * #465. Até lá o convite fica desligado onde há usuário de verdade: só vale
+ * com `JHO_RECRUITER_INVITES=on` num processo que se declara `local` ou `e2e`,
+ * fora da Vercel (`testOverridesAllowed`, lista de permissão G27) — cadastrar
+ * a variável em Production por engano não liga nada. A task_03 apaga este
+ * portão junto com a página.
+ */
+export function recruiterInvitesEnabled(env: AuthEnvironment): boolean {
+  return env.JHO_RECRUITER_INVITES?.trim().toLowerCase() === "on" && testOverridesAllowed(env);
 }
 
 /**
