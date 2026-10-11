@@ -1,6 +1,6 @@
 # BUG-20261007-job-history-day-in-utc: o histórico da vaga mostra o dia em UTC, e à noite diverge do "aplicado em" do Funil
 
-- **Status:** open
+- **Status:** fixed
 - **Impact (user-side):** Trust-Damage
 - **Severity:** Medium · **Priority:** P2
 - **Persona Affected:** Andreus em triagem noturna
@@ -47,7 +47,24 @@ o dia em UTC.
 
 ## Fix
 
-<!-- filled when status moves to fixed -->
+- **Root cause:** `app/jobs/[id]/page.tsx` cortava o instante com
+  `firstSeenAt.slice(0, 10)` e `event.at.slice(0, 10)`, que devolvem o dia em
+  UTC; o Funil e o histórico do recrutador já liam o dia pela ilha `LocalDate`
+  (#494), no fuso do navegador.
+- **Fix commit:** preenchido no commit seguinte, com o SHA.
+- **Fix:** as duas datas do detalhe saem pela mesma ilha `LocalDate`
+  (`testId` `job-first-seen` e `application-timeline-event-date`). O formato
+  muda de `2026-10-07` para o dia por extenso do idioma da tela ("7 de out. de
+  2026", "Oct 7, 2026"), igual ao do Funil.
+- **Regression test:** `tests/job-detail-local-date.test.ts` (reprova sem a
+  correção: a página não importa `LocalDate` e ainda corta em `slice`) e, no
+  E2E, a área `pipeline-filters` com `timezoneId: "America/Sao_Paulo"`
+  (E2E-500): vaga vista às 22:30 e candidatura às 23:45 de São Paulo, ambas já
+  no dia seguinte em UTC, e o histórico igual ao "aplicado em" do Funil. A área
+  E2E não rodou na sessão da correção (Docker sem escrita na máquina); roda no
+  CI.
+- **Fora do escopo:** "conferido em" (`availability.lastCheckedAt.slice(0, 10)`),
+  na mesma página, tem o mesmo defeito e não foi pedido na #500.
 
 ## Verification
 
