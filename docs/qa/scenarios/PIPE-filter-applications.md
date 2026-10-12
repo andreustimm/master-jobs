@@ -9,8 +9,8 @@ entry_points: /pipeline; /pipeline?q=engenheiro&semantic=1&company=<empresa>
 qa_status: pass
 bug_ids: BUG-20261006-pipeline-back-keeps-stale-picker-marks; BUG-20261006-pipeline-swapped-score-fields-stale; BUG-20261006-pipeline-active-stage-invisible; BUG-20261006-primary-button-contrast-dark-theme; BUG-20261007-primary-button-hover-contrast-dark; BUG-20261007-job-history-day-in-utc
 fix_status: fixed
-retest_status: pass
-fix_commits: 961558d6701ebe980553f282b42c9e842194c112; 891042f; 7415e40
+retest_status: pending
+fix_commits: 961558d6701ebe980553f282b42c9e842194c112; 891042f; 7415e40; 629d2233
 evidence: docs/qa/reports/2026-10-07-qa-494-funil-atritos.md; docs/qa/evidence/2026-10-07-qa-494-funil-atritos/01-estagio-escolhido-anel-escuro.png; docs/qa/evidence/2026-10-07-qa-494-funil-atritos/03-funil-escuro-sistema-buscar-ampliar.png; docs/qa/evidence/2026-10-07-qa-494-funil-atritos/05-aplicado-em-fuso-kiritimati.png
 last_report: docs/qa/reports/2026-10-07-qa-494-funil-atritos.md
 overlaps: PIPE-undo-and-move-back; JOBS-search-synonyms
@@ -94,3 +94,15 @@ detalhe da vaga ainda mostra o dia em UTC, discordando do Funil à noite
 (BUG-20261007-job-history-day-in-utc). Os passos 1, 2, 3, 5 e 7 não foram
 refeitos além do que os ajustes tocam. Relatório:
 `docs/qa/reports/2026-10-07-qa-494-funil-atritos.md`.
+
+**Reset 2026-10-11 (#501, PR #517):** o hover do botão primário passou de
+`bg-primary/80` (3,50–4,44:1 com o texto em cinco dos seis tema/modo) para o
+token opaco `--primary-hover`, e nos temas claros o botão agora escurece sob o
+ponteiro em vez de clarear. O veredito anterior sobre o contraste do botão
+primário não cobre mais essa superfície. Conferir, com o ponteiro parado sobre
+o botão: o hover de "Buscar" e de "ampliar busca" ligado em `/pipeline`, e o de
+"Aplicar" em `/jobs`, nos seis tema/modo (HP, Huly e Graphy, cada um em claro e
+em escuro; o escuro também herdado do sistema, sem escolha de Aparência); a
+auditoria axe com o ponteiro em cima não acusa `color-contrast`; o botão em
+repouso e o hover continuam distinguíveis a olho. Contraste esperado do hover
+com o texto: HP 8,39 claro e 6,97 escuro, Huly 7,40 e 6,10, Graphy 6,00 e 6,50.

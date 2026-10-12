@@ -61,7 +61,7 @@ o contraste do hover com o `#296ef9` anterior não foi medido.
   com `--primary-foreground`: HP claro 8,39:1, HP escuro 6,97:1, Huly claro
   7,40:1, Huly escuro 6,10:1, Graphy claro 6,00:1, Graphy escuro 6,50:1. Nos
   temas claros o hover agora escurece, em vez de clarear.
-- **Fix commit:** a PR desta correção (`fix/contraste-hover-escuro`, issue #501).
+- **Fix commit:** `629d2233` (PR #517, issue #501).
 - **Regression test:** `tests/design.test.ts` ("keeps primary-foreground on
   primary-hover at WCAG AA, and never below the resting button (#501)", nos
   três estados de cada tema, e "paints the primary hover from the theme token,
