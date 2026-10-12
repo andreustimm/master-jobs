@@ -45,6 +45,8 @@ let home = "";
 let wt = "";
 /** Worktree em `feat/up`, com upstream `origin/dev` (o padrão de `worktree add -b … origin/dev`). */
 let wtUp = "";
+/** Worktree em `feat/novo`, criada sem upstream: o primeiro push ainda não aconteceu. */
+let wtNew = "";
 /** Worktree em `dev` (criada com `--force`). */
 let wtDev = "";
 /** Diretório comum sob `.claude/worktrees/`: sobe até a checkout principal. */
@@ -128,6 +130,8 @@ beforeAll(() => {
   git(wt, "push", "origin", "feat/x:feat/velha");
   wtUp = join(root, ".claude/worktrees/feat-up");
   git(root, "worktree", "add", "-b", "feat/up", wtUp, "origin/dev");
+  wtNew = join(root, ".claude/worktrees/feat-novo");
+  git(root, "worktree", "add", "--no-track", "-b", "feat/novo", wtNew, "origin/dev");
   wtDev = join(root, ".claude/worktrees/em-dev");
   git(root, "worktree", "add", "--force", wtDev, "dev");
   plainDir = join(root, ".claude/worktrees/node_modules");
@@ -265,6 +269,14 @@ describe("os três chamadores dão a mesma decisão", () => {
     ["rm --forc abreviado na principal", () => "git rm --forc a.txt", () => root, "ask"],
     ["worktree remove --forc abreviado de fora", () => `git worktree remove --forc ${base}/fora`, () => root, "ask"],
     ["worktree remove --forc abreviado de worktree de trabalho", () => "git worktree remove --forc .claude/worktrees/feat-x", () => root, "pass"],
+    // O pedido do dono (11/10/2026): `git -C <worktree> push` resolve o destino real do branch do
+    // diretório de `-C`; branch de trabalho com upstream do mesmo nome passa, sem upstream nega
+    // com a instrução de explicitar o destino, e o explícito passa.
+    ["-C worktree de trabalho com upstream do mesmo nome", () => `git -C ${wt} push`, () => root, "pass"],
+    ["-C worktree de trabalho com upstream do mesmo nome, com rtk", () => `rtk git -C ${wt} push`, () => root, "pass"],
+    ["-C worktree de trabalho sem upstream nega", () => `git -C ${wtNew} push`, () => root, "deny"],
+    ["-C worktree de trabalho sem upstream, push -u explícito", () => `git -C ${wtNew} push -u origin feat/novo`, () => root, "pass"],
+    ["-C worktree de trabalho sem upstream, destino explícito", () => `git -C ${wtNew} push origin feat/novo:feat/novo`, () => root, "pass"],
     // #505: o `git push -u origin <tipo>/<slug>` da rotina continua passando.
     ["push -u de rotina com upstream origin/dev", () => "git push -u origin feat/up", () => wtUp, "pass"],
     ["push -u de rotina com upstream próprio", () => "git push -u origin feat/x", () => wt, "pass"],
@@ -348,6 +360,14 @@ describe("os três chamadores dão a mesma decisão", () => {
 
   it.each(cases)("%s", async (_name, command, cwd, expected) => {
     expect(await decisions(command(), cwd())).toEqual([expected, expected, expected]);
+  });
+
+  it("o bloqueio do push sem upstream pede o destino explícito e não pergunta", () => {
+    const outcome = hookOutcome(`git -C ${wtNew} push`, CLAUDE_RULES, { root, cwd: root, home });
+    const output = JSON.parse(outcome.stdout!).hookSpecificOutput;
+    expect(output.permissionDecision).toBe("deny");
+    expect(output.permissionDecisionReason).toContain("git push origin <branch>");
+    expect(output.permissionDecisionReason).not.toContain("(ask)");
   });
 
   it("workdir do Codex e do OpenCode decide o diretório", async () => {

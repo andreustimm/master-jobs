@@ -807,9 +807,14 @@ function globMayBeSecret(word) {
   }
 }
 
-/** A política de permissões: editar pela shell também pergunta. */
-const POLICY_PATH = /(?:^|\/)(?:\.claude\/settings\.json$|\.claude\/hooks(?:\/|$)|scripts\/harness(?:\/|$)|opencode\.json$|\.codex(?:\/|$)|\.opencode\/plugins(?:\/|$))/;
-const POLICY_WRITE = "altera a política de permissões (.claude/settings.json, hooks, scripts/harness, opencode.json, .codex, .opencode/plugins)";
+/**
+ * A lista de permissões: editar pela shell também pergunta, como a ferramenta
+ * de edição (`Edit/Write(**\/.claude/settings.json)`). Desde 11/10/2026, por
+ * decisão do dono, hooks, `scripts/harness/`, `opencode.json`, `.codex/` e
+ * `.opencode/plugins/` são arquivo comum: editar não pergunta.
+ */
+const POLICY_PATH = /(?:^|\/)\.claude\/settings\.json$/;
+const POLICY_WRITE = "altera a lista de permissões (.claude/settings.json)";
 
 function isPolicyPath(word) {
   return POLICY_PATH.test(word.replace(/^\.\//, ""));

@@ -978,20 +978,33 @@ describe("OpenCode: tradução gerada de `.claude/settings.json`", () => {
     expect(permission.external_directory).toBe("ask");
   });
 
-  it.each([
-    ".claude/settings.json",
-    ".claude/hooks/shell-policy.mjs",
-    "scripts/harness/permissions.ts",
-    "opencode.json",
-    ".codex/hooks.json",
-    ".opencode/plugins/shell-guard.js",
-  ])("editar a própria política pergunta nos três harnesses, também dentro de worktree: %s", (path) => {
+  // Desde 11/10/2026 o dono autorizou editar hooks, `scripts/harness/`, `opencode.json`,
+  // `.codex/` e `.opencode/plugins/` (a rotina nunca pede autorização): só a lista de
+  // permissões em si, `.claude/settings.json`, continua perguntando.
+  it.each([".claude/settings.json"])("editar a lista de permissões pergunta nos três harnesses, também dentro de worktree: %s", (path) => {
     for (const prefix of ["", ".claude/worktrees/wt/"]) {
       const file = `${prefix}${path}`;
       expect(openCodeDecide(permission, "edit", `/repo/${file}`), file).toBe("ask");
       expect(decidePath(rules, "Edit", `/repo/${file}`, context), file).toBe("ask");
       const patch = `*** Begin Patch\n*** Update File: ${file}\n*** End Patch`;
       expect(judge({ tool_name: "apply_patch", tool_input: { command: patch } }, rules, context).decision, file).toBe("ask");
+    }
+  });
+
+  it.each([
+    ".claude/hooks/shell-policy.mjs",
+    ".claude/hooks/push-target.mjs",
+    "scripts/harness/permissions.ts",
+    "opencode.json",
+    ".codex/hooks.json",
+    ".opencode/plugins/shell-guard.js",
+  ])("editar hook, guarda e espelho passa sem pergunta nos três harnesses, também dentro de worktree: %s", (path) => {
+    for (const prefix of ["", ".claude/worktrees/wt/"]) {
+      const file = `${prefix}${path}`;
+      expect(openCodeDecide(permission, "edit", `/repo/${file}`), file).toBe("allow");
+      expect(decidePath(rules, "Edit", `/repo/${file}`, context), file).toBe("allow");
+      const patch = `*** Begin Patch\n*** Update File: ${file}\n*** End Patch`;
+      expect(judge({ tool_name: "apply_patch", tool_input: { command: patch } }, rules, context).decision, file).toBeNull();
     }
   });
 

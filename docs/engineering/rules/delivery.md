@@ -896,8 +896,8 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     `git config alias.*`; alias `!` em `-c`; `commit --no-verify/-n`),
     apagamento em massa (`rm` recursivo em qualquer ordem de flags,
     `find -delete`, `rm` atrás de `xargs`/`find -exec`), saída do projeto
-    (`ssh`, `scp`, `sftp`, `rsync`, `brew`, `chown`), edição da própria
-    política pela shell e **produção** por qualquer lançador: `vercel --prod`
+    (`ssh`, `scp`, `sftp`, `rsync`, `brew`, `chown`), edição da lista de
+    permissões (`.claude/settings.json`) pela shell e **produção** por qualquer lançador: `vercel --prod`
     (`--prod=<qualquer valor>`, `--target production` em qualquer caixa),
     `promote`, `rollback`, `remove`, `redeploy`, `alias`, `domains`, `dns`,
     `env add/rm/update`, `blob del/rm`; `supabase db push/reset`,
@@ -959,10 +959,13 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   lista nunca cobria tudo; as entradas `Bash(...)` de `allow` saíram por
   redundantes. No OpenCode a tradução vira `bash: { "*": "allow", …deny }`,
   sem padrão `allow` além do `*`. `ask` só para editar a
-  própria política (`.claude/settings.json`, `.claude/hooks/**`,
-  `scripts/harness/**`, `opencode.json`, `.codex/**`, `.opencode/plugins/**`,
-  com `**/` à frente para valer também dentro de `.claude/worktrees/<wt>/`),
-  que o classificador de shell não vê; e `deny` ancorado de reserva — push
+  lista de permissões (`Edit/Write(**/.claude/settings.json)`, com `**/` à
+  frente para valer também dentro de `.claude/worktrees/<wt>/`; a mesma
+  edição pela shell é do classificador). Hooks, `scripts/harness/`,
+  `opencode.json`, `.codex/` e `.opencode/plugins/` eram `ask` e deixaram de
+  ser em 11/10/2026, por decisão do dono: a rotina nunca pede autorização,
+  e editar um `.mjs` é rotina (os espelhos saem de `pnpm harness:sync`, e
+  `pnpm check:harness` confere). Fica `deny` ancorado de reserva — push
   protegido, `.env`, `sudo`, `chmod 777`, `rm -rf /`, `rm -rf / *`,
   `rm -rf ~`, `rm -rf ~/`, `rm -rf $HOME` (sem curinga depois de `/` ou `~`,
   que negaria `rm -rf /tmp/cache`) — escrito também como
