@@ -51,8 +51,8 @@ o dia em UTC.
   `firstSeenAt.slice(0, 10)` e `event.at.slice(0, 10)`, que devolvem o dia em
   UTC; o Funil e o histórico do recrutador já liam o dia pela ilha `LocalDate`
   (#494), no fuso do navegador.
-- **Fix commit:** `039a373`; o "conferido em" entra no commit seguinte da
-  mesma PR.
+- **Fix commit:** `039a373` (histórico e "visto em"), `888a6a9` ("conferido
+  em").
 - **Fix:** as três datas do detalhe (o "visto em", o "conferido em" da linha de
   disponibilidade e cada linha do histórico) saem pela mesma ilha `LocalDate`
   (`testId` `job-first-seen`, `job-checked-at` e
