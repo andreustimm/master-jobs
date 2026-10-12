@@ -592,6 +592,20 @@ describe("configuração persistida que desvia o push (#505)", () => {
     }
   });
 
+  it("juiz da #521: o destino em refs/remotes/* é um push de verdade (--dry-run) e nega nos três", async () => {
+    const dry = dryRun(wtUp, ["push", "--dry-run", "--porcelain", "origin", "feat/up:refs/remotes/origin/dev"]);
+    expect(dry).toContain("refs/heads/feat/up:refs/remotes/origin/dev");
+    for (const command of [
+      "git push origin feat/up:refs/remotes/origin/dev",
+      "git push origin feat/up:remotes/origin/dev",
+      "git push origin fix/x:refs/notes/x",
+    ]) {
+      expect(await decisions(command, wtUp), command).toEqual(["deny", "deny", "deny"]);
+    }
+    // O branch de trabalho escrito por inteiro segue passando.
+    expect(await decisions("git push origin feat/up:refs/heads/feat/up", wtUp)).toEqual(["pass", "pass", "pass"]);
+  });
+
   it("a rotina continua passando com a configuração do dia a dia", async () => {
     // Descrição e `rebase` do branch e `insteadOf` (reescreve fetch e push do mesmo jeito) não desviam o destino.
     const restores = [

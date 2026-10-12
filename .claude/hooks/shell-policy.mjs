@@ -878,11 +878,14 @@ const PERSONAL_CONFIG = /^(?:\.[^/]+$|\.(?:ssh|claude|codex|config)(?:\/|$))/;
 /**
  * `ask` quando o caminho gravado fica fora da árvore do projeto ou é
  * configuração pessoal (`~/.zshrc`, `~/.ssh/**`, `~/.claude/**`, `/etc`);
- * temporário passa.
+ * temporário passa. Com `readOnly` (a saída de um comando que só lê, como `git log`
+ * ou `cat`, redirecionada), a home que não é configuração pessoal também passa:
+ * `git log > ~/x.txt` não pergunta, `git log > ~/.zshrc` pergunta.
  * @param {string} target
  * @param {ShellEnv} env
+ * @param {boolean} [readOnly]
  */
-function outsideWrite(target, env) {
+function outsideWrite(target, env, readOnly = false) {
   if (!target) return null;
   const outside = ask(`escreve fora do projeto (${target})`);
   if (/^\$\{?TMPDIR\}?(?:\/|$)/.test(target)) return null;
@@ -902,6 +905,7 @@ function outsideWrite(target, env) {
   if (env.home && within(path, normalizePath(env.home))) {
     const relative = path.slice(normalizePath(env.home).length + 1);
     if (PERSONAL_CONFIG.test(relative)) return ask(`escreve na configuração pessoal (${target})`);
+    if (readOnly) return null;
   }
   return env.root && within(path, projectTree(env.root)) ? null : outside;
 }
@@ -2100,6 +2104,13 @@ function judgePush(rest, verified = null) {
     const source = colon === -1 ? bare : bare.slice(0, colon);
     let target = pushDestination(colon === -1 ? bare : bare.slice(colon + 1));
     if (PROTECTED_BRANCHES.has(target)) return deny(`push direto para ${target}`);
+    // Destino em `refs/remotes/…` (ou `remotes/…`, que o git casa com ele) e em namespace fora de
+    // `heads` e `tags` (`refs/notes/…`, `refs/stash`): não é branch de trabalho nem tag, e reescreve
+    // ref de acompanhamento ou de uso interno, como `refs/remotes/origin/dev`.
+    if (/^remotes\//.test(target) || (colon !== -1 && /^refs\/(?!heads\/|tags\/)/.test(bare.slice(colon + 1)))) {
+      worst = stronger(worst, deny(`git push para ${spec} escreve ref fora de heads e tags (refs/remotes, refs/notes…): empurre um branch <tipo>/<slug>`));
+      continue;
+    }
     // `:` (ou `+:`) é o push "matching": todo branch com o mesmo nome no remoto, `dev` inclusive.
     if (target === "") {
       worst = stronger(worst, deny(`git push ${spec} empurra todos os branches de mesmo nome, branches protegidas inclusive`));
@@ -3085,7 +3096,8 @@ function riskOf(text, depth, bulk = false, env = NO_ENV) {
       const writes = WRITE_REDIRECT.has(redirect.op) || (redirect.op === ">&" && !/^(?:\d+|-)$/.test(redirect.target));
       if (!writes) continue;
       worst = stronger(worst, policyPathVerdict(redirect.target));
-      worst = stronger(worst, outsideWrite(redirect.target, env));
+      // A saída de um comando que só lê pode ir para a home (fora da configuração pessoal).
+      worst = stronger(worst, outsideWrite(redirect.target, env, readOnlyWords(command.raw, [])));
     }
     for (const inner of command.subs) worst = stronger(worst, riskOf(inner, depth + 1, false, env));
     const words = commandWords(command.raw);

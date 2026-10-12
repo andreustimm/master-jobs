@@ -783,7 +783,9 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     pelo destino real que o git resolve — o push sem refspec vai para o
     `@{push}`, `HEAD` para o branch atual, `push.default=upstream` para o
     upstream, e a configuração persistida entra nesse cálculo; `--all`,
-    `--mirror`, `--branches` e o push "matching" (`:`); tag apagada ou
+    `--mirror`, `--branches` e o push "matching" (`:`); destino em `refs/remotes/*`
+    (`feat/x:refs/remotes/origin/dev`, `remotes/…`) ou em outro namespace fora de
+    `heads` e `tags` (`refs/notes/…`, `refs/stash`); tag apagada ou
     sobrescrita à força (regra 22) e ref sem `/` apagada ou forçada
     (`--delete v1.0.0`, `-f origin v1.0.0`, `HEAD:v1.0.0`); `--tags`
     forçado ou com `--delete`; `-c`/`--config-env`/`GIT_CONFIG_KEY_n`/
@@ -910,7 +912,9 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     agrupadas (`curl -sSo x`) ou coladas (`-ox`, `--output=x`), para `~`,
     `$HOME`, `/etc`, `~/.zshrc`, `~/.ssh`, `~/.claude`, `~/.codex`,
     `~/.config` ou caminho que sai do projeto —. `/tmp`, `/private/tmp`, `$TMPDIR` e `/var/folders`
-    passam. O chamador passa a raiz — `$CLAUDE_PROJECT_DIR`, o `cwd` do
+    passam, e a saída redirecionada de um comando que só lê (`git log`,
+    `git diff`, `cat`…) passa também para a home fora da configuração pessoal
+    (`git log > ~/x.txt`; `git log > ~/.zshrc` e `git log > /etc/x` perguntam). O chamador passa a raiz — `$CLAUDE_PROJECT_DIR`, o `cwd` do
     Codex, o `worktree` do OpenCode —, e a raiz dentro de
     `<repo>/.claude/worktrees/<wt>` vale como o repositório inteiro (os
     outros worktrees são o projeto); sem raiz, absoluto fora do temporário

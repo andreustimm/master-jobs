@@ -309,6 +309,14 @@ const GIT: readonly [string, Expected][] = [
   ["git --git-dir=.git config remote.origin.push HEAD:dev", "deny"],
   ['git -C "$PWD" config remote.origin.push HEAD:dev', "deny"],
   ["git -c alias.c=config c remote.origin.push HEAD:dev", "deny"],
+  // Minor do juiz da #521: destino em refs/remotes ou em outro namespace de ref (fora de heads e tags) nega.
+  ["git push origin feat/x:refs/remotes/origin/dev", "deny"],
+  ["git push origin feat/x:remotes/origin/dev", "deny"],
+  ["git push origin fix/x:refs/notes/x", "deny"],
+  ["git push origin fix/x:refs/stash", "deny"],
+  ["git push origin refs/remotes/origin/dev", "deny"],
+  ["git push origin :refs/remotes/origin/dev", "deny"],
+  ["git push --delete origin refs/remotes/origin/dev", "deny"],
   // M1 (juiz da #521): a opção que nomeia um programa que o git roda no repositório local nega.
   ["git push --receive-pack=/tmp/evil /tmp/r fix/x", "deny"],
   ["git push --receive-pack /tmp/evil /tmp/r fix/x", "deny"],
@@ -345,6 +353,8 @@ const PUSH_ALLOWED: readonly string[] = [
   "git push origin HEAD:fix/x",
   "git push -f origin HEAD:refs/heads/fix/x",
   "git push origin fix/x:fix/x",
+  "git push origin fix/x:refs/heads/fix/x",
+  "git push origin fix/x:refs/tags/v1.2.3",
   "git push origin --delete fix/x",
   "git push origin :fix/x",
   "git push -d origin fix/x",
@@ -1212,6 +1222,17 @@ describe("escrita fora da árvore do projeto, com a raiz informada pelo chamador
     // O git de fora do projeto não pergunta (11/10/2026); a escrita de `sort -o` fora, sim.
     for (const command of ["git -C /home/eu/outro commit -m x", "git -C /repo2 commit -m x"]) expect(classifyRisk(command, fromWorktree), command).toBeNull();
     expect(classifyRisk("sort -o /home/eu/x in", fromWorktree)?.decision).toBe("ask");
+  });
+
+  it("a saída redirecionada de um comando que só lê vai para a home, fora da configuração pessoal (juiz da #521)", () => {
+    const casa = { root: "/repo", cwd: "/repo", home: "/home/eu" };
+    for (const command of ["git log > ~/x.txt", "git diff > $HOME/out.diff", "git status --short > ~/Documents/status.txt", "cat a > ~/b.txt", "git log 2> ~/erro.txt"]) {
+      expect(classifyRisk(command, casa), command).toBeNull();
+    }
+    // Configuração pessoal, fora da home e comando que escreve continuam perguntando.
+    for (const command of ["git log > ~/.zshrc", "git log > ~/.ssh/config", "git log > ~/.claude/x", "git log > /etc/x", "git log > /usr/local/bin/x", "echo x > ~/y.txt", "git commit > ~/z.txt"]) {
+      expect(classifyRisk(command, casa)?.decision, command).toBe("ask");
+    }
   });
 
   it("caminho relativo do git vale a partir do `-C`", () => {

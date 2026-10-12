@@ -10,6 +10,7 @@
 
 ### Corrigido
 
+- Política de shell (juiz da #521, menores): `git push` com destino em `refs/remotes/*` (ou outro namespace fora de heads e tags) nega, e a saída redirecionada de um comando que só lê (`git log > ~/x.txt`) passa para a home fora da configuração pessoal.
 - Política de shell (juiz da #521): `GIT_CONFIG_KEY_n=alias.*` nega com ou sem `!`, a detecção de push considera `-c alias.<x>=push`, e `push --receive-pack`/`--exec`, `fetch|pull|clone|ls-remote --upload-pack` e `archive --exec` negam, porque rodam o programa indicado no repositório local.
 
 - Política de shell (#475): o git aceita o prefixo único de uma opção longa (`reset --har`, `switch --discard`, `checkout --forc`, `worktree remove --forc`, `tag --dele`, `gc --prun`, `rebase --exe`, `restore --work`, `config --glo`), e o classificador só reconhecia a forma completa, então a abreviada passava sem pergunta nos três harnesses. `expandGitOptions` troca a abreviação pela opção completa, por subcomando (`GIT_LONG_OPTIONS`), antes de julgar, nas duas direções (a que escreve e a que libera, como `clean --dr` e `rm --cac`); a forma exata vence (`fetch --prune`), o que vem depois de `--` não muda e o prefixo ambíguo vale como a opção mais perigosa.
