@@ -133,9 +133,14 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
               : AVAILABILITY_LABEL[availability.state],
           )}{" "}
           ·{" "}
-          {availability.lastCheckedAt
-            ? `${t("jobDetail.checkedOn")} ${availability.lastCheckedAt.slice(0, 10)}`
-            : t("jobDetail.checkedNever")}
+          {availability.lastCheckedAt ? (
+            <>
+              {t("jobDetail.checkedOn")}{" "}
+              <LocalDate iso={availability.lastCheckedAt} locale={locale} testId="job-checked-at" />
+            </>
+          ) : (
+            t("jobDetail.checkedNever")
+          )}
         </p>
 
         {/* Two destinations: the bare URL shows the description, /apply opens
