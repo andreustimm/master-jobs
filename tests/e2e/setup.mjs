@@ -12,7 +12,7 @@
  */
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { closeDb, getDb } from "../../src/core/db/client.ts";
-import { application, authEvent, authIdentity, authLoginToken, authUser, candidate, candidateDocument, candidateSkill, fxRate, job, jobScore, recruiterAccessEvent, recruiterDirectoryQuery, recruiterGrant, recruiterInvite, savedTerm, scoreTask, skill, targetAccount, termAttribution } from "../../src/core/db/schema.ts";
+import { application, applicationEvent, authEvent, authIdentity, authLoginToken, authUser, candidate, candidateDocument, candidateSkill, fxRate, job, jobScore, recruiterAccessEvent, recruiterDirectoryQuery, recruiterGrant, recruiterInvite, savedTerm, scoreTask, skill, targetAccount, termAttribution } from "../../src/core/db/schema.ts";
 import { linkRecruiterToCandidate } from "../../src/contexts/auth/index.ts";
 import { seedOwner } from "../../src/contexts/auth/app/seed.ts";
 import { hashToken } from "../../src/contexts/auth/infra/drizzle-store.ts";
@@ -1040,6 +1040,9 @@ try {
       descriptionText: "Pipeline filter fixture.",
       url: `https://jobs.example.com/${fixture.id}`,
       raw: { e2e: true },
+      // `undefined` cai no default do banco (agora); só a vaga que prova o dia
+      // local do detalhe (#500) fixa o instante.
+      firstSeenAt: fixture.firstSeenAt,
     }))).onConflictDoNothing({ target: job.id });
     await getDb().insert(jobScore).values(fixtures.map((fixture) => ({
       candidateId: funnelId,
@@ -1069,6 +1072,30 @@ try {
       channel: fixture.channel,
       appliedAt: fixture.appliedAt ?? null,
     }))).onConflictDoNothing();
+    // O histórico do detalhe (#500): um evento "registrada em Candidatura
+    // enviada" no instante da candidatura, para a data da linha ser lida no
+    // fuso de quem vê. Só para quem tem `appliedAt` e ainda não tem evento.
+    for (const fixture of fixtures.filter((item) => item.appliedAt)) {
+      const [row] = await getDb()
+        .select({ id: application.id })
+        .from(application)
+        .where(and(eq(application.candidateId, funnelId), eq(application.jobId, fixture.id)))
+        .limit(1);
+      if (!row) continue;
+      const [known] = await getDb()
+        .select({ id: applicationEvent.id })
+        .from(applicationEvent)
+        .where(eq(applicationEvent.applicationId, row.id))
+        .limit(1);
+      if (known) continue;
+      await getDb().insert(applicationEvent).values({
+        applicationId: row.id,
+        at: fixture.appliedAt,
+        kind: "status_change",
+        fromStatus: null,
+        toStatus: fixture.status,
+      });
+    }
     await getDb().delete(scoreTask).where(eq(scoreTask.candidateId, funnelId));
   }
 

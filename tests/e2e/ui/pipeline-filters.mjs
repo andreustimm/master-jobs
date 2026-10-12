@@ -151,6 +151,33 @@ export async function run(ctx) {
     check("E2E-494 o seletor de canal também traduz o canal",
       (await page.locator("label", { has: page.getByTestId("pipeline-channel-option-referral") }).textContent())?.trim() === "indicação");
 
+    // E2E-500: o detalhe da vaga lê o mesmo dia que o Funil. A vaga da fixture foi
+    // vista às 22:30 de 5/10 em São Paulo (6/10 em UTC) e a candidatura foi
+    // registrada às 23:45 de 6/10 (7/10 em UTC): em UTC as duas datas sairiam um
+    // dia adiante.
+    await page.goto(`${BASE}/jobs/${backend}`, { waitUntil: "networkidle" });
+    await ready(page);
+    await page.getByTestId("application-timeline").waitFor({ state: "visible", timeout: 15_000 });
+    const detailDays = await page.evaluate(() => {
+      const format = (iso, timeZone) => new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeZone }).format(new Date(iso));
+      const read = (element) => {
+        const iso = element?.getAttribute("datetime") ?? "";
+        return { shown: element?.textContent, local: format(iso, "America/Sao_Paulo"), utc: format(iso, "UTC") };
+      };
+      return {
+        firstSeen: read(document.querySelector('[data-testid="job-first-seen"]')),
+        events: [...document.querySelectorAll('[data-testid="application-timeline-event-date"]')].map(read),
+      };
+    });
+    check("E2E-500 'visto em' do detalhe mostra o dia no fuso de quem lê, não em UTC",
+      detailDays.firstSeen.shown === detailDays.firstSeen.local && detailDays.firstSeen.local !== detailDays.firstSeen.utc,
+      JSON.stringify(detailDays.firstSeen));
+    check("E2E-500 o histórico do detalhe mostra o dia no fuso de quem lê, e é o mesmo do Funil",
+      detailDays.events.length === 1
+        && detailDays.events.every((day) => day.shown === day.local && day.local !== day.utc)
+        && detailDays.events[0].shown === appliedDay.shown,
+      JSON.stringify({ events: detailDays.events, funnel: appliedDay.shown }));
+
     await page.goto(`${BASE}/pipeline`, { waitUntil: "networkidle" });
     await ready(page);
     await page.getByTestId("pipeline-score-min").fill("60");
