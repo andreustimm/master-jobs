@@ -81,9 +81,18 @@ export type RecruiterSuggestionRow = {
 
 export type Paged<T> = { rows: T[]; total: number; page: number; pages: number };
 
+/** `?page=` como a URL o entrega; `pageWithin` decide a página que existe. */
+export type PageParam = string | string[] | undefined;
+
 function pagesOf(total: number): number {
   return Math.max(1, Math.ceil(total / SUGGESTIONS_PAGE_SIZE));
 }
+
+/**
+ * Como o recrutador aparece para o candidato: o nome de exibição da conta, o
+ * e-mail dela ou, se a conta sumiu, o e-mail que a sugestão guardou.
+ */
+const displayName = sql<string>`coalesce(nullif(btrim(${authUser.fullName}), ''), ${authUser.email}, ${recruiterSuggestionBy.recruiterEmail})`;
 
 /** "Título · Empresa" no histórico: a vaga como era quando o fato aconteceu. */
 function jobSnapshot(title: string, company: string): string {
@@ -274,23 +283,24 @@ export const drizzleRecruiterSuggestions = {
             .from(application)
             .where(and(eq(application.candidateId, input.candidateId), eq(application.jobId, row.jobId)))
             .limit(1);
-          applicationId = created?.id ?? null;
+          applicationId = created!.id;
         } else {
           applicationId = existing!.id;
         }
       }
 
-      const decided = await tx
+      // A linha está travada e foi lida pendente: o UPDATE condicional não
+      // perde para ninguém, e a condição fica como a regra escrita.
+      await tx
         .update(recruiterSuggestion)
         .set({
           status: input.decision === "accept" ? "accepted" : "declined",
           applicationId,
           decidedAt: input.nowIso,
         })
-        .where(and(eq(recruiterSuggestion.id, row.id), eq(recruiterSuggestion.status, "pending")))
-        .returning({ id: recruiterSuggestion.id });
-      if (decided.length === 0) return { ok: false, error: "already_decided" };
+        .where(and(eq(recruiterSuggestion.id, row.id), eq(recruiterSuggestion.status, "pending")));
 
+      // A sugestão some com a vaga (FK em cascata): ela existe aqui.
       const [posting] = await tx
         .select({ title: job.title, company: job.companyName })
         .from(job)
@@ -307,7 +317,7 @@ export const drizzleRecruiterSuggestions = {
           kind: input.decision === "accept" ? ("suggestion_accepted" as const) : ("suggestion_declined" as const),
           actor: "candidate" as const,
           actorUserId: input.actorUserId,
-          detail: posting ? jobSnapshot(posting.title, posting.company) : null,
+          detail: jobSnapshot(posting!.title, posting!.company),
           at: input.nowIso,
         })),
       );
@@ -337,7 +347,7 @@ export const drizzleRecruiterSuggestions = {
       if (!digestDue(last?.at ?? null, Date.parse(input.nowIso))) return null;
 
       const rows = await tx
-        .select({ id: recruiterSuggestionBy.id, title: job.title, company: job.companyName, email: recruiterSuggestionBy.recruiterEmail })
+        .select({ id: recruiterSuggestionBy.id, title: job.title, company: job.companyName })
         .from(recruiterSuggestionBy)
         .innerJoin(recruiterSuggestion, eq(recruiterSuggestion.id, recruiterSuggestionBy.suggestionId))
         .innerJoin(job, eq(job.id, recruiterSuggestion.jobId))
@@ -363,9 +373,10 @@ export const drizzleRecruiterSuggestions = {
         .where(eq(candidate.id, input.candidateId))
         .limit(1);
       const [recruiter] = await tx
-        .select({ fullName: authUser.fullName, email: authUser.email })
-        .from(authUser)
-        .where(eq(authUser.id, input.recruiterUserId))
+        .select({ name: displayName })
+        .from(recruiterSuggestionBy)
+        .leftJoin(authUser, eq(authUser.id, recruiterSuggestionBy.recruiterUserId))
+        .where(eq(recruiterSuggestionBy.id, byIds[0]!))
         .limit(1);
       return {
         byIds,
@@ -373,7 +384,7 @@ export const drizzleRecruiterSuggestions = {
         to: firstNonEmpty(account?.email, person?.email),
         locale: account?.locale ?? null,
         recruiterUserId: input.recruiterUserId,
-        recruiterName: firstNonEmpty(recruiter?.fullName, recruiter?.email) ?? rows[0]!.email,
+        recruiterName: recruiter!.name,
         items: rows.map((row) => ({ title: row.title, company: row.company })),
       };
     });
@@ -406,11 +417,11 @@ export const drizzleRecruiterSuggestions = {
   },
 
   /** As sugestões do candidato: pendentes primeiro, depois as decididas, mais novas antes. */
-  async candidateList(candidateId: number, requested: string | undefined): Promise<Paged<CandidateSuggestionRow>> {
+  async candidateList(candidateId: number, requested: PageParam): Promise<Paged<CandidateSuggestionRow>> {
     const db = getDb();
     const where = eq(recruiterSuggestion.candidateId, candidateId);
     const [counted] = await db.select({ n: count() }).from(recruiterSuggestion).where(where);
-    const total = Number(counted?.n ?? 0);
+    const total = Number(counted!.n);
     const page = pageWithin(requested, total, SUGGESTIONS_PAGE_SIZE);
     const suggestions = await db
       .select({
@@ -444,8 +455,7 @@ export const drizzleRecruiterSuggestions = {
         : await db
             .select({
               suggestionId: recruiterSuggestionBy.suggestionId,
-              email: recruiterSuggestionBy.recruiterEmail,
-              fullName: authUser.fullName,
+              name: displayName,
               note: recruiterSuggestionBy.note,
               grantId: recruiterSuggestionBy.grantId,
               at: recruiterSuggestionBy.createdAt,
@@ -470,12 +480,7 @@ export const drizzleRecruiterSuggestions = {
         fit: row.fit,
         recruiters: authors
           .filter((author) => author.suggestionId === row.id)
-          .map((author) => ({
-            name: firstNonEmpty(author.fullName, author.email) ?? author.email,
-            note: author.note,
-            grantId: author.grantId,
-            at: author.at,
-          })),
+          .map(({ name, note, grantId, at }) => ({ name, note, grantId, at })),
       })),
     };
   },
@@ -486,7 +491,7 @@ export const drizzleRecruiterSuggestions = {
       .select({ n: count() })
       .from(recruiterSuggestion)
       .where(and(eq(recruiterSuggestion.candidateId, candidateId), eq(recruiterSuggestion.status, "pending")));
-    return Number(row?.n ?? 0);
+    return Number(row!.n);
   },
 
   /**
@@ -498,7 +503,7 @@ export const drizzleRecruiterSuggestions = {
     recruiterUserId: number;
     candidateId: number;
     grantId: number;
-    page: string | undefined;
+    page: PageParam;
   }): Promise<Paged<RecruiterSuggestionRow>> {
     const db = getDb();
     const where = and(
@@ -511,7 +516,7 @@ export const drizzleRecruiterSuggestions = {
       .from(recruiterSuggestionBy)
       .innerJoin(recruiterSuggestion, eq(recruiterSuggestion.id, recruiterSuggestionBy.suggestionId))
       .where(where);
-    const total = Number(counted?.n ?? 0);
+    const total = Number(counted!.n);
     const page = pageWithin(input.page, total, SUGGESTIONS_PAGE_SIZE);
     const rows = await db
       .select({

@@ -38,6 +38,8 @@ import {
 } from "../src/contexts/pursuit/app/recruiter-suggestions.ts";
 import { drizzleRecruiterSuggestions } from "../src/contexts/pursuit/infra/drizzle-recruiter-suggestions.ts";
 import {
+  candidateSuggestionsFor,
+  decideRecruiterSuggestion,
   followedCandidateName,
   pendingSuggestionCount,
   recruiterCandidateCv,
@@ -53,6 +55,7 @@ import type { DB } from "../src/core/db/client.ts";
 import {
   application,
   authEvent,
+  authUser,
   job,
   jobScore,
   recruiterAccessEvent,
@@ -711,6 +714,22 @@ describe("bordas da fachada e do aviso", () => {
     // Nada pendente sem aviso, ou aviso dentro da hora: a reserva não devolve lote.
     expect(await drizzleRecruiterSuggestions.claimDigest({ recruiterUserId: sara.id, candidateId: ana, nowIso: T0 })).toBeNull();
     await drizzleRecruiterSuggestions.releaseDigest([], T0);
+  });
+
+  it("vaga que não existe é not_found; o aviso sai no idioma da conta da candidata", async () => {
+    expect(await suggest(rui, 999_999_999)).toEqual({ ok: false, error: "not_found" });
+    await db.update(authUser).set({ locale: "en" }).where(eq(authUser.id, anaUser.id));
+    expect(await suggest(rui, await seedJob("English digest"))).toMatchObject({ ok: true });
+    expect(sent[0]!.subject).toBe("rui suggested jobs for you");
+  });
+
+  it("decidir e ler sugestões exigem o candidato da própria sessão", async () => {
+    const recruiterSession = await session(rui.token);
+    expect(() => decideRecruiterSuggestion(recruiterSession, 1, "accept")).toThrow(/negado: suggestion:decide/);
+    await expect(candidateSuggestionsFor(recruiterSession, undefined)).rejects.toThrow(/negado: candidate:read/);
+    await seedSuggestion({ recruiter: rui, grantId: ruiGrant, jobId: await seedJob() });
+    const view = await candidateSuggestionsFor(await session(anaUser.token), ["1", "2"]);
+    expect(view.rows).toHaveLength(1);
   });
 
   it("fachada: sem concessão não há lista nem último acesso; candidato que sumiu responde nulo", async () => {

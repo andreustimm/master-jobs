@@ -146,6 +146,10 @@ describe("IT-004 — a leitura escopada não alcança quem está fora", () => {
     expect(summaries[0]!.total).toBe(0);
   });
 
+  it("escopo só com quem não existe mais devolve vazio, sem contar candidatura", async () => {
+    expect(await recruiterCandidateSummaries(scope([999_999]), FIRST_PAGE)).toEqual([]);
+  });
+
   it("id inexistente no escopo não inventa linha", async () => {
     const summaries = await recruiterCandidateSummaries(scope([followed, 999_999]), FIRST_PAGE);
     expect(summaries.map((s) => s.candidateId)).toEqual([followed]);

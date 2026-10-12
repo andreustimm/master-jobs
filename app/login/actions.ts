@@ -1,5 +1,6 @@
 "use server";
 
+import type { Route } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { landingForSession, passwordSignIn, safeNext } from "../../src/contexts/auth/index.ts";
@@ -51,5 +52,5 @@ export async function passwordLoginAction(formData: FormData) {
   // aderência. Quem não é candidato não tem nada lá — e mandar todo mundo para
   // `/` era o que fazia um recrutador cair em 403 logo depois de acertar a
   // senha. `landingForSession` é a mesma regra do login social.
-  redirect(landingForSession(result.session, next));
+  redirect(landingForSession(result.session, next) as Route);
 }

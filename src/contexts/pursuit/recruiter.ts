@@ -124,9 +124,8 @@ export async function recruiterCandidateWorkspace(
     offset: (page - 1) * RECRUITER_FUNNEL_PAGE_SIZE,
   });
   const grantId = await currentRecruiterGrantId(getDb(), session.userId, candidateId);
-  const suggestionsPage = Array.isArray(query.suggestionsPage) ? query.suggestionsPage[0] : query.suggestionsPage;
   const suggestions = await recruiterSuggestionsView(
-    { recruiterUserId: session.userId, candidateId, grantId, page: suggestionsPage },
+    { recruiterUserId: session.userId, candidateId, grantId, page: query.suggestionsPage },
     { store: drizzleRecruiterSuggestions },
   );
   return {
@@ -218,9 +217,8 @@ export function decideRecruiterSuggestion(
 export async function candidateSuggestionsFor(session: Session, rawPage: string | string[] | undefined): Promise<CandidateSuggestionView> {
   const candidateId = candidateScope(session);
   authorize(session, "candidate:read", candidateId === null ? { kind: "global" } : followed(candidateId));
-  const page = Array.isArray(rawPage) ? rawPage[0] : rawPage;
   return candidateSuggestionsView(
-    { candidateId: candidateId as number, page, activeGrantIds: await activeRecruiterGrantIds(candidateId as number) },
+    { candidateId: candidateId as number, page: rawPage, activeGrantIds: await activeRecruiterGrantIds(candidateId as number) },
     { store: drizzleRecruiterSuggestions },
   );
 }

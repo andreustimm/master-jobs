@@ -18,6 +18,7 @@ import { validateNote, type SuggestError } from "../domain/recruiter-suggestion.
 import type {
   CandidateSuggestionRow,
   DigestBatch,
+  PageParam,
   RecruiterSuggestionRow,
   RecruiterSuggestionStore,
 } from "../infra/drizzle-recruiter-suggestions.ts";
@@ -136,7 +137,7 @@ export type CandidateSuggestionView = {
  * daquele recrutador já acabou (US-020.EC-2) — decidir continua possível.
  */
 export async function candidateSuggestionsView(
-  input: { candidateId: number; page: string | undefined; activeGrantIds: readonly number[] },
+  input: { candidateId: number; page: PageParam; activeGrantIds: readonly number[] },
   deps: Pick<SuggestionDeps, "store">,
 ): Promise<CandidateSuggestionView> {
   const list = await deps.store.candidateList(input.candidateId, input.page);
@@ -157,7 +158,7 @@ export type RecruiterSuggestionView = { rows: RecruiterSuggestionRow[]; page: nu
 
 /** As sugestões deste recrutador na concessão vigente; sem concessão, nenhuma (US-017.AC-3). */
 export async function recruiterSuggestionsView(
-  input: { recruiterUserId: number; candidateId: number; grantId: number | null; page: string | undefined },
+  input: { recruiterUserId: number; candidateId: number; grantId: number | null; page: PageParam },
   deps: Pick<SuggestionDeps, "store">,
 ): Promise<RecruiterSuggestionView> {
   if (input.grantId === null) return { rows: [], page: 1, pages: 1, total: 0 };

@@ -433,10 +433,10 @@ const ACCESS_TOUCH_MS = 60_000;
 /**
  * O recrutador desta sessão abriu a página ou o currículo do candidato: grava
  * o último acesso que o candidato vê em Minha conta, no máximo uma vez por
- * minuto. Só concessão vigente da própria sessão; nunca outra.
+ * minuto. O UPDATE é escopado à concessão vigente do usuário DA SESSÃO com
+ * este candidato: sem ela, não grava nada.
  */
 export async function touchRecruiterAccess(session: Session, candidateId: number): Promise<boolean> {
-  if (!session.linkedCandidateIds.includes(candidateId)) return false;
   const now = clock().now();
   return touchGrantAccess({
     recruiterUserId: session.userId,
