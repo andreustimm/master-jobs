@@ -25,8 +25,12 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import {
   INVITE_COOKIE,
   SIGNUP_COOKIE,
+  acceptRecruiterInvite,
   createUser,
   finishLogin,
+  recruiterInvitePage,
+  recruiterLandingAfterSignIn,
+  resolveSession,
   setPassword,
   setUserDisabled,
   startLogin,
@@ -654,6 +658,64 @@ describe("conta existente e estados com sessão (IT-093 – IT-097)", () => {
   });
 });
 
+/* --------------------------- Ramos da conclusão --------------------------- */
+
+describe("ramos da conclusão (ADR-018)", () => {
+  it("conta que não existe: o token conta como inválido, e sem token não há desfecho", async () => {
+    const token = await invite("bia@y.com");
+    expect(await completeInvitesForAccount({ userId: 999_999, token }, accessDeps())).toEqual({ outcome: "invalid", candidateId: null });
+    expect(await completeInvitesForAccount({ userId: 999_999, token: null }, accessDeps())).toEqual({ outcome: null, candidateId: null });
+    expect((await inviteRow("bia@y.com")).status).toBe("pending");
+  });
+
+  it("concessão vencida do par que a varredura não marcou: fecha com aviso de fim antes de gravar a nova", async () => {
+    // Conta sem e-mail confirmado: o candidato convida em vez de conceder.
+    const bia = await account("bia@y.com", ["recruiter"], { verified: false });
+    const token = await invite("bia@y.com");
+    await db.insert(recruiterGrant).values({
+      candidateId: seven,
+      recruiterUserId: bia,
+      recruiterEmail: "bia@y.com",
+      status: "active",
+      expiresAt: new Date(time.now() - 60_000).toISOString(),
+    });
+    expect(await completeInvitesForAccount({ userId: bia, token, proveMailbox: true }, accessDeps())).toEqual({
+      outcome: "completed",
+      candidateId: seven,
+    });
+    expect((await grants()).map((grant) => grant.status)).toEqual(["expired", "active"]);
+    expect((await historyOf()).map((event) => event.kind)).toEqual([
+      "invite_sent",
+      "invite_accepted",
+      "access_expired",
+      "grant_created",
+    ]);
+    expect(mails().filter((mail) => mail.to === "bia@y.com" && mail.subject.includes("terminou"))).toHaveLength(1);
+    expect(grantedMails("bia@y.com")).toHaveLength(1);
+  });
+
+  it("concessão já ativa para o par: o convite queima, nenhuma concessão a mais nem e-mail", async () => {
+    const token = await invite("bia@y.com");
+    const bia = await account("bia@y.com", ["recruiter"]);
+    await db.insert(recruiterGrant).values({ candidateId: seven, recruiterUserId: bia, recruiterEmail: "bia@y.com", status: "active" });
+    expect(await completeInvitesForAccount({ userId: bia, token }, accessDeps())).toEqual({ outcome: "completed", candidateId: seven });
+    expect((await inviteRow("bia@y.com")).status).toBe("accepted");
+    expect(await grants()).toHaveLength(1);
+    expect(grantedMails("bia@y.com")).toEqual([]);
+  });
+
+  it("o token de outro endereço não prova a caixa: descompasso, e o e-mail segue sem confirmação", async () => {
+    const token = await invite("carla@z.com");
+    const bia = await account("bia@y.com", ["recruiter"], { verified: false });
+    expect(await completeInvitesForAccount({ userId: bia, token, proveMailbox: true }, accessDeps())).toEqual({
+      outcome: "mismatch",
+      candidateId: null,
+    });
+    expect((await userByEmail("bia@y.com"))!.emailVerifiedAt).toBeNull();
+    expect((await inviteRow("carla@z.com")).status).toBe("pending");
+  });
+});
+
 /* ------------- Token fora do log, limites da #464, reativação, inventário ------------- */
 
 describe("token, limites, reativação e inventário (IT-098 – IT-102)", () => {
@@ -670,7 +732,8 @@ describe("token, limites, reativação e inventário (IT-098 – IT-102)", () =>
       await renderInvite(token);
       await startFromLink(token);
       await socialSignup("bia@y.com");
-      await renderInvite(token);
+      // Com a sessão do cadastro, o link já aceito leva direto à candidata.
+      expect(await outcome(() => renderInvite(token))).toBe(`NEXT_REDIRECT;/recruiter/${seven}`);
       expect(written.filter((line) => line.includes(token))).toEqual([]);
       const tables = await Promise.all([
         db.select().from(recruiterInvite),
@@ -730,6 +793,28 @@ describe("token, limites, reativação e inventário (IT-098 – IT-102)", () =>
     expect(back).toEqual({ kind: "redirect", location: "/login?error=unverified&provider=linkedin" });
     expect(await userByEmail("bia@y.com")).toBeNull();
     expect((await inviteRow("bia@y.com")).status).toBe("pending");
+  });
+
+  it("sessão emprestada não aceita nem conclui, e aceitar sem token cai no aviso de convite inválido", async () => {
+    const token = await invite("bia@y.com");
+    // Sem e-mail confirmado: nenhum convite ao endereço conclui sem o token.
+    const bia = await account("bia@y.com", ["recruiter"], { verified: false });
+    await signedIn("bia@y.com");
+    const own = (await resolveSession(boundary.jar.get("jho_session")!))!;
+    const borrowed = { ...own, impersonatedBy: 99 };
+
+    // O admin que assume a recrutadora vê o convite como conta sem o papel.
+    expect((await recruiterInvitePage(token, borrowed)).kind).toBe("needs_recruiter");
+    await expect(acceptRecruiterInvite(borrowed, token, { host: "127.0.0.1:3000", proto: "http" })).rejects.toThrow(
+      /^negado: account:read — sessão emprestada/,
+    );
+    expect(await recruiterLandingAfterSignIn(borrowed, token, "/jobs", { host: "127.0.0.1:3000", proto: "http" })).toBe("/jobs");
+    expect(await grants()).toEqual([]);
+
+    expect(await outcome(() => acceptInviteAction(form({})))).toBe("NEXT_REDIRECT;/recruiter?invite=invalid");
+    expect(await grants()).toEqual([]);
+    expect((await inviteRow("bia@y.com")).status).toBe("pending");
+    expect(bia).toBe(own.userId);
   });
 
   it("IT-102 inventário: página pública no proxy e na política, startInvitedSignup registrada, acceptInviteAction guardada, rota medida", async () => {

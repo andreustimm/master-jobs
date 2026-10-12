@@ -43,7 +43,7 @@ export default async function SignupInvitePage({ searchParams }: { searchParams:
     );
   }
 
-  const loginHref = `/login?next=${encodeURIComponent(`/signup/invite?token=${token ?? ""}`)}`;
+  const loginHref = `/login?next=${encodeURIComponent(`/signup/invite?token=${token ?? ""}`)}` as Route;
 
   return (
     <main className="flex min-h-[70vh] flex-col items-center justify-center py-16" data-testid="route-signup-invite">
