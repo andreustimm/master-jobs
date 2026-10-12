@@ -651,11 +651,12 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   produção, segredo e afrouxar regra continuam com o dono. O que ainda
   perguntar na rotina é defeito de configuração, a corrigir na política
   (`shell-policy.mjs`, junto do teste que o prova), nunca remendado na lista
-  `allow` de `.claude/settings.json`. O push é o caso fechado: passa ou
-  nega, nunca pergunta (G63/G85, "Push" na política de shell abaixo). O que
-  a política ainda pergunta por decisão registrada — descarte na checkout
-  principal (G44), `stash drop/clear`, gravar a configuração que desvia o
-  push — são exceções listadas, não rotina.
+  `allow` de `.claude/settings.json`. O `git` — o push inclusive — é o caso
+  fechado: passa ou nega, nunca pergunta (bullets "Git" e "Push" na política
+  de shell abaixo); o descarte na checkout principal (G44) e o destino
+  protegido negam com a instrução do que fazer, e o agente corrige sozinho.
+  O que a shell ainda pergunta fora do git — `rm` recursivo, escrita fora do
+  projeto, produção, ambiente impresso — é do classificador geral.
 - **Permissões** não são reescritas por harness. No OpenCode, a tradução
   mantém a precedência do Claude Code (deny > ask > allow) dentro da regra do
   OpenCode (a última que casa vence) e alarga padrão de arquivo em vez de
@@ -763,13 +764,11 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     `cwd` e deste diretório efetivo; dentro de `xargs`, `find -exec`,
     `sh -c` ou lançador ele não vale. A worktree conta como de trabalho
     quando é registrada, diferente da checkout principal e fora de
-    `main`/`staging`/`dev`. Continuam perguntando: descarte na checkout
-    principal ou num diretório que sobe até ela (G44), `stash drop/clear` em
-    qualquer lugar (o stash é comum às worktrees) e o resto da lista abaixo
-    (reescrita de histórico, poda de objetos, ref protegida local, git que
-    executa programa). O push não pergunta: passa ou nega (bullet seguinte).
-    O diretório é o `workdir` do comando quando o Codex ou o OpenCode o
-    informa.
+    `main`/`staging`/`dev`. O que descarta trabalho fora dela nega (G44, com a
+    instrução de rodar numa worktree) e o resto da lista abaixo também (reescrita
+    de histórico, poda de objetos, ref protegida local, git que executa
+    programa); o git não pergunta (bullet "Git"). O diretório é o `workdir` do
+    comando quando o Codex ou o OpenCode o informa.
   - **Push: passa ou nega, nunca pergunta (11/10/2026).** Decisão do dono:
     "git push não precisa de autorização". `judgePush` só devolve `deny` ou
     nada, nos três harnesses (`pnpm check:harness`; no Codex e no OpenCode
@@ -810,10 +809,9 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     `<r>.url`, `<r>.mirror`, `pushDefault`…), `url.*.insteadOf` e
     `.pushInsteadOf`, `branch.<b>.merge`/`.remote`/`.pushRemote` e
     `include.path`/`includeIf.*.path` (que carrega outro arquivo com elas)
-    pergunta nos três harnesses, em qualquer contexto: é gravação rara, e o
-    push seguinte só vê a configuração com o contexto do git. Ler (`--get`,
-    `--list`) e gravar o resto de `branch.*` (`description`, `rebase`) não
-    pergunta. Com a configuração já gravada, seja qual for o meio (`git
+    passa nos três harnesses, em qualquer contexto (o git não pergunta; o push
+    que a usar é quem nega, como abaixo). Ler (`--get`, `--list`) e gravar o
+    resto de `branch.*` (`description`, `rebase`) passam também. Com a configuração já gravada, seja qual for o meio (`git
     config` fora da guarda, edição do `.git/config`, `git remote`), o
     contexto conferido a lê (`git config --get-regexp` de `push`, `remote`,
     `branch` e `url`, todas as origens e arquivos incluídos): `remote.*.push`,
@@ -846,54 +844,69 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     de diff (`--output`, `--ext-diff`, `--textconv`), que o git não aceita
     abreviadas. Opção nova de um subcomando que o classificador passe a ler
     entra na tabela no mesmo commit.
-  - **Pergunta (`ask`):** perda de trabalho fora do contexto conferido
-    acima (`reset --hard/--merge`; `clean`; `checkout -- <caminho>`,
-    `checkout .`, `checkout <ref> <caminho>`, `checkout -f/-B`;
-    `switch -f/--discard-changes/-C`; `restore` fora de `--staged`), e em
-    qualquer contexto `stash drop/clear`; `worktree remove --force` fora de worktree de
-    trabalho — em `.claude/worktrees/<nome>` ou `~/.codex/worktrees/<id>/<nome>`
-    passa, por autorização do dono de 06/10/2026, porque é a limpeza de rotina
-    depois do merge; `-ff` (worktree travada), alvo com variável, curinga ou
-    `..`, alvo montado por `xargs`/`find -exec` e comando sem alvo perguntam; link simbólico com nome de worktree não
-    é resolvido; `git rm -r/-f`), reescrita de
-    histórico (`filter-branch`, `filter-repo`, `update-ref -d`,
-    `reflog expire`, `gc --prune`, `prune`, `replace`), escrita de ref
-    local por uma checagem única — `HEAD`, `main`/`staging`/`dev` (também
-    `refs/heads/…`, `heads/…`), qualquer tag e destino por variável ou
-    curinga fora de `refs/remotes/` —, valendo para `fetch`/`pull` com
-    `src:dst` (com `+`, `-f` ou `--update-head-ok`) ou `--refmap`,
-    `update-ref`, `branch -f/-M/-m/-D/-d/--force`, `symbolic-ref HEAD <ref>`,
-    criar protegida por `checkout -b/--orphan`, `switch -c/--create/--orphan`
-    e `worktree add -b`, recriar qualquer branch por cima (`checkout -B`,
+  - **Git: passa ou nega, nunca pergunta (11/10/2026).** Decisão do dono, depois
+    de reclamação formal: nenhum `git` devolve `ask`, nos três harnesses
+    (`tests/shell-policy.test.ts` roda todo comando `git` das tabelas, em toda
+    forma de invólucro, e `gitNeverAsks` converte em `deny` qualquer `ask` que
+    venha de dentro do comando `git`, como o programa de `rebase -x`,
+    `submodule foreach`, `bisect run` ou `GIT_EDITOR`). **Passa:** o que é
+    rotina, inclusive em repositório fora do projeto (`-C`, `--git-dir`,
+    `--work-tree`, `GIT_DIR=`), `stash drop/clear`, gravar chave do push
+    (o push que a usar nega se o destino for protegido) e `-c` de chave do
+    push fora do push. **Nega**, com a razão e o que fazer em vez disso:
+    descarte fora de worktree de trabalho conferida (G44) — `reset
+    --hard/--merge`, `clean`, `checkout -- <caminho>`/`.`/`<ref> <caminho>`/
+    `-f`/`-B`, `switch -f/--discard-changes/-C`, `restore` fora de
+    `--staged`, `rm -r/-f`, `commit --no-verify/-n` —, e a mensagem manda
+    "rode isso numa worktree de trabalho (`git worktree add -b <tipo>/<slug>
+    .claude/worktrees/<nome> origin/dev`)"; `worktree remove --force` fora de
+    worktree de trabalho (em `.claude/worktrees/<nome>` ou
+    `~/.codex/worktrees/<id>/<nome>` passa, por autorização do dono de
+    06/10/2026, porque é a limpeza de rotina depois do merge), `-ff`, alvo
+    com variável, curinga ou `..`, alvo montado por `xargs`/`find -exec` e
+    comando sem alvo; `worktree add` fora do projeto e do temporário;
+    reescrita de histórico (`filter-branch`, `filter-repo`, `update-ref
+    -d/--stdin`, `reflog expire/delete`, `gc --prune`, `prune`, `replace`);
+    escrita de ref local por uma checagem única — `HEAD`,
+    `main`/`staging`/`dev` (também `refs/heads/…`, `heads/…`), qualquer tag e
+    destino por variável ou curinga fora de `refs/remotes/` —, valendo para
+    `fetch`/`pull` com `src:dst` (com `+`, `-f` ou `--update-head-ok`) ou
+    `--refmap`, `update-ref`, `branch -f/-M/-m/-D/-d/--force`, `symbolic-ref`,
+    criar protegida por `checkout -b/--orphan`, `switch -c/--create/--orphan` e
+    `worktree add -b`, recriar qualquer branch por cima (`checkout -B`,
     `switch -C/--force-create`, `worktree add -B`, inclusive colado ou
-    agrupado: `-Bmain`, `-fB`), `tag -f/-d/--force/--delete`,
-    `fetch --prune-tags`/`-P` e `fetch --force --tags` (regra 22; criar tag
-    nova passa), `receive-pack` (atualiza ref lida da entrada), escrita fora
+    agrupado: `-Bmain`, `-fB`), `tag -f/-d/--force/--delete`, `fetch
+    --prune-tags`/`-P` e `fetch --force --tags` (regra 22; criar tag nova
+    passa), `receive-pack` e `checkout`/`switch --ignore-other-worktrees` para
+    branch protegida; git que executa programa ou pula hook (`-c`,
+    `GIT_CONFIG_KEY_n` ou `git config` com `core.pager`, `core.editor`,
+    `core.sshCommand`, `core.fsmonitor`, `core.hooksPath`, `diff.external`,
+    `*.textconv`, `sequence.editor`, `credential.helper`, `gpg.program`;
+    alias `!`; `GIT_EXTERNAL_DIFF`; `GIT_SSH_COMMAND` com `ssh` que roda
+    comando local; `GIT_CONFIG_PARAMETERS`, que o texto não lê); `git config`
+    que grava a configuração pessoal ou do sistema (`--global`, `--system`,
+    `--file` fora do projeto), `--edit` e `alias.*`; escrita de arquivo fora do
+    projeto ou na lista de permissões pelas opções do git (`diff|log|show
+    --output`, `format-patch -o/--output-directory`, `archive -o`); e alias de
+    `-c` encadeado demais. Fica de fora do git, e ainda pergunta, o que a
+    shell faz em volta dele: redirecionamento (`git log > /etc/x`) e
+    substituição (`git commit -m "$(rm -rf x)"`), que são do classificador
+    geral, e os limites de profundidade e tamanho do julgamento.
+  - **Pergunta (`ask`), fora do git:** escrita fora
     da árvore do projeto ou na configuração pessoal — redirecionamento
     (`>`, `>>`, `>|`, `>&`), destino de `tee`, `cp`/`ln`/`install`, `mv`,
     `dd of=`, saída de `uniq` e `tar` (`-f` ao criar, `-C` ao extrair) e a
     tabela única de opções que escrevem arquivo (`curl -o/--output/
     --output-dir/-D/-c`, `wget -O/-o/-a/-P`, `sort -o/--output`,
-    `openssl -out/-keyout`, `git diff|log|show --output`,
-    `git format-patch -o/--output-directory`, `git archive -o`), também
+    `openssl -out/-keyout`), também
     agrupadas (`curl -sSo x`) ou coladas (`-ox`, `--output=x`), para `~`,
     `$HOME`, `/etc`, `~/.zshrc`, `~/.ssh`, `~/.claude`, `~/.codex`,
-    `~/.config` ou caminho que sai do projeto —, e o git apontado para
-    repositório fora do projeto (`-C`, encadeado; `--git-dir`,
-    `--work-tree`, `GIT_DIR=`/`GIT_WORK_TREE=`) em subcomando que não só lê
-    (`commit`, `checkout`, `reset`, `add`, `rm`, `merge`, `rebase`, `stash`,
-    `clean`…; `push`, `status`, `log` e `diff` passam), além do caminho de
-    `worktree add`. `/tmp`, `/private/tmp`, `$TMPDIR` e `/var/folders`
+    `~/.config` ou caminho que sai do projeto —. `/tmp`, `/private/tmp`, `$TMPDIR` e `/var/folders`
     passam. O chamador passa a raiz — `$CLAUDE_PROJECT_DIR`, o `cwd` do
     Codex, o `worktree` do OpenCode —, e a raiz dentro de
     `<repo>/.claude/worktrees/<wt>` vale como o repositório inteiro (os
     outros worktrees são o projeto); sem raiz, absoluto fora do temporário
     pergunta,
-    git que executa programa ou
-    pula hook (`-c` ou `git config` com `core.pager`, `core.editor`,
-    `core.sshCommand`, `core.fsmonitor`, `core.hooksPath`, `diff.external`,
-    `*.textconv`, `sequence.editor`, `credential.helper`, `gpg.program`;
-    `git config alias.*`; alias `!` em `-c`; `commit --no-verify/-n`),
     apagamento em massa (`rm` recursivo em qualquer ordem de flags,
     `find -delete`, `rm` atrás de `xargs`/`find -exec`), saída do projeto
     (`ssh`, `scp`, `sftp`, `rsync`, `brew`, `chown`), edição da lista de
@@ -1105,10 +1118,10 @@ repositório descartável de verdade (remoto bare com `main`, `staging` e
 `dev`; worktrees criadas de `origin/dev`), prova com `git push --dry-run`
 real que as formas dos quatro Critical da primeira versão empurrariam
 `dev` ou `main`, que elas negam nos três chamadores (o push não pergunta), que o git
-destrutivo passa na worktree de trabalho e pergunta na checkout principal,
-que o push forçado de branch de trabalho passa, que a configuração
-persistida (#505) pergunta ao ser gravada e nega o push seguinte, com a
-forma explícita que a mensagem manda usar passando, e que o
+destrutivo passa na worktree de trabalho e nega na checkout principal (com a
+instrução de rodar numa worktree), que o push forçado de branch de trabalho
+passa, que a configuração persistida (#505) passa ao ser gravada e nega o
+push seguinte, com a forma explícita que a mensagem manda usar passando, e que o
 `git -C <wt> push` liberado atualiza só o branch de trabalho no remoto. O plugin foi carregado no runtime do
 OpenCode (Bun 1.3.14) e `opencode debug config` o lista entre os plugins do
 projeto.

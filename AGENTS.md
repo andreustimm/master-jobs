@@ -27,9 +27,11 @@ exceções e prova de cada regra estão em
   inclusive), qualquer `git` (push e force-push em branch de trabalho própria
   inclusive) e qualquer `gh` passam sem pergunta; só destino
   `main`/`staging`/`dev`, escrita no banco de produção, segredo e afrouxar
-  regra continuam com o dono. O que ainda perguntar é defeito de configuração,
-  a corrigir na política (`shell-policy.mjs`), não na lista `allow` (decisão
-  do dono, 11/10/2026). [[G85](docs/engineering/rules/delivery.md#g85)]
+  regra continuam com o dono. O `git` passa ou nega, nunca pergunta: o que
+  nega (destino protegido, descarte na checkout principal) traz a instrução
+  do que fazer, e o agente corrige sozinho. O que ainda perguntar é defeito de
+  configuração, a corrigir na política (`shell-policy.mjs`), não na lista
+  `allow` (decisão do dono, 11/10/2026). [[G85](docs/engineering/rules/delivery.md#g85)]
 - Entregue o pedido, no escopo pedido; melhoria fora dele vira uma frase na PR
   ou uma issue.
 - Relate só o que um comando desta sessão mostrou; o resto é "não verificado".

@@ -1406,6 +1406,17 @@ const GIT_GLOBAL_VALUE = new Set(["-C", "-c", "--git-dir", "--work-tree", "--nam
 /** O `push` e o encanamento dele: o mesmo julgamento de destino (`judgePush`). */
 const GIT_PUSH_SUBCOMMANDS = new Set(["push", "send-pack", "http-push"]);
 
+/**
+ * O git não pergunta (decisão do dono, 11/10/2026): passa ou nega. O que
+ * perguntava — descarte fora de worktree de trabalho (G44), programa que o git
+ * executa, ref protegida, tag, histórico, configuração pessoal — nega, com a
+ * razão e o que fazer em vez disso.
+ */
+const GIT_NEVER_ASKS = "o git passa ou nega, não pergunta";
+/** Como o agente corrige o descarte negado: o git que descarta trabalho é de worktree de trabalho. */
+const IN_WORKTREE = "rode isso numa worktree de trabalho (`git worktree add -b <tipo>/<slug> .claude/worktrees/<nome> origin/dev`)";
+const needsWorktree = (what) => deny(`${what}; ${IN_WORKTREE}`);
+
 // ---------------------------------------------------------------------------
 // Opção longa abreviada do git (#475)
 
@@ -1503,27 +1514,19 @@ function expandGitOptions(sub, args) {
 function judgeGit(args, context) {
   let k = 0;
   const configs = [];
-  /** `-C` encadeia (`git -C a -C b` roda em `a/b`); `--git-dir`, `--work-tree` e `GIT_DIR=` apontam o repositório. */
+  /** `-C` encadeia: `git -C a -C b` roda em `a/b`. */
   let place = null;
-  const repos = [];
-  for (const assignment of context.assigned ?? []) {
-    const match = /^(?:GIT_DIR|GIT_WORK_TREE)=(.*)$/s.exec(assignment);
-    if (match) repos.push(match[1]);
-  }
   while (k < args.length && args[k].startsWith("-")) {
     const arg = args[k];
     const next = args[k + 1] ?? "";
     if (GIT_GLOBAL_VALUE.has(arg)) {
       if (arg === "-c" || arg === "--config-env") configs.push(next);
       if (arg === "-C") place = joinPath(place, next);
-      if (arg === "--git-dir" || arg === "--work-tree") repos.push(next);
       k += 2;
       continue;
     }
     if (/^-c./.test(arg)) configs.push(arg.slice(2));
     if (arg.startsWith("--config-env=")) configs.push(arg.slice("--config-env=".length));
-    const repo = /^--(?:git-dir|work-tree)=(.*)$/s.exec(arg);
-    if (repo) repos.push(repo[1]);
     k++;
   }
   const sub = args[k];
@@ -1535,20 +1538,18 @@ function judgeGit(args, context) {
     const eq = entry.indexOf("=");
     const key = (eq === -1 ? entry : entry.slice(0, eq)).toLowerCase();
     const value = eq === -1 ? "" : entry.slice(eq + 1);
-    if (GIT_EXEC_KEY.test(key)) worst = stronger(worst, ask(`git -c ${key} executa programa ou desliga os hooks`));
-    if (key.startsWith("alias.") && value.trimStart().startsWith("!")) worst = stronger(worst, ask("alias do git que roda shell"));
+    if (GIT_EXEC_KEY.test(key)) worst = stronger(worst, deny(`git -c ${key} executa programa ou desliga os hooks; ${GIT_NEVER_ASKS}`));
+    if (key.startsWith("alias.") && value.trimStart().startsWith("!")) worst = stronger(worst, deny(`alias do git que roda shell; ${GIT_NEVER_ASKS}`));
     else if (sub !== undefined && key === `alias.${sub.toLowerCase()}` && value.trim() !== "") aliased.push(value);
     // `remote.<r>.push`, `push.default=upstream`, `branch.<b>.merge`, `url.*.pushInsteadOf`:
     // trocam o destino do push por fora do refspec que se lê (#476). Também
     // `include.path`, que carrega um arquivo com qualquer uma delas (#505). No
-    // push o destino não se resolve pelo texto, então nega (o push não
-    // pergunta) e manda tirar o `-c`; fora do push, pergunta como antes.
-    if (/^(?:push|remote|branch|url)\./.test(key) || GIT_PUSH_KEY.test(key)) {
+    // push o destino não se resolve pelo texto, então nega e manda tirar o
+    // `-c`; fora do push a chave não decide destino nenhum e passa.
+    if (pushing && (/^(?:push|remote|branch|url)\./.test(key) || GIT_PUSH_KEY.test(key))) {
       worst = stronger(
         worst,
-        pushing
-          ? deny(`git -c ${key} troca o destino do push e o texto não o resolve: tire o -c e explicite o destino (\`git push origin <branch>\`)`)
-          : ask(`git -c ${key} pode trocar o destino do push`),
+        deny(`git -c ${key} troca o destino do push e o texto não o resolve: tire o -c e explicite o destino (\`git push origin <branch>\`)`),
       );
     }
   }
@@ -1556,16 +1557,12 @@ function judgeGit(args, context) {
   // abaixo lê a forma completa.
   const rest = expandGitOptions(sub, args.slice(k + 1));
   const env = context.env ?? NO_ENV;
-  // O repositório fora do projeto (e fora do temporário): o que não só lê
-  // pergunta. O push só move ref remota, não toca arquivo de lá: o destino
-  // protegido nega por nome, em qualquer repositório.
-  if (sub !== undefined && !GIT_READ_SUBCOMMANDS.has(sub) && !pushing) {
-    for (const dir of [place, ...repos.map((repo) => joinPath(place, repo))]) {
-      if (dir !== null && outsideWrite(dir, env)) worst = stronger(worst, ask(`git ${sub} num repositório fora do projeto (${dir})`));
-    }
+  // Arquivo de saída: relativo ao diretório do `-C`. Escrever fora do projeto
+  // (ou na lista de permissões) nega: o git não pergunta.
+  for (const out of gitOutputs(sub, rest)) {
+    const written = writeRisk(joinPath(place, out), env);
+    if (written) worst = stronger(worst, deny(`${written.reason}; ${GIT_NEVER_ASKS}`));
   }
-  // Arquivo de saída: relativo ao diretório do `-C`.
-  for (const out of gitOutputs(sub, rest)) worst = stronger(worst, writeRisk(joinPath(place, out), env));
   // O alias vale além do subcomando de mesmo nome (o git não deixa alias
   // sobrescrever comando interno, então os dois são julgados): `git -c
   // alias.p=push p origin main` é push para `main`.
@@ -1574,7 +1571,7 @@ function judgeGit(args, context) {
     worst = stronger(
       worst,
       depth >= 4
-        ? ask("alias do git encadeado demais para julgar")
+        ? deny(`alias do git encadeado demais para julgar; ${GIT_NEVER_ASKS}`)
         : judgeGit([...args.slice(0, k), ...splitString(value, {}), ...args.slice(k + 1)], { ...context, aliasDepth: depth + 1 }),
     );
   }
@@ -1667,7 +1664,7 @@ function ignoreOtherWorktrees(rest, verb) {
   const args = end === -1 ? rest : rest.slice(0, end);
   if (!args.includes("--ignore-other-worktrees")) return null;
   const risky = args.some((arg) => arg === "-" || (!arg.startsWith("-") && (/[@$`*?[\]{}~^]/.test(arg) || PROTECTED_BRANCHES.has(pushDestination(arg)) || pushDestination(arg) === "HEAD")));
-  return risky ? ask(`${verb} --ignore-other-worktrees põe uma branch protegida nesta worktree`) : null;
+  return risky ? deny(`${verb} --ignore-other-worktrees põe uma branch protegida (main/staging/dev) nesta worktree`) : null;
 }
 
 function judgeGitSubcommand(sub, rest, context) {
@@ -1686,12 +1683,12 @@ function judgeGitSubcommand(sub, rest, context) {
         has(rest, "--stdin") ? deny(`git ${sub} --stdin lê os refs da entrada e o destino não se vê pelo texto: explicite o destino (\`git push origin <branch>\`)`) : null,
       );
     case "receive-pack":
-      return ask("git receive-pack atualiza refs lidos da entrada");
+      return deny(`git receive-pack atualiza refs lidos da entrada; ${GIT_NEVER_ASKS}`);
     case "branch":
       return judgeBranchWrite(rest);
     case "symbolic-ref": {
       const positional = rest.filter((arg) => !arg.startsWith("-"));
-      return positional.length >= 2 || has(rest, "-d", "--delete") ? ask("git symbolic-ref reescreve o HEAD") : null;
+      return positional.length >= 2 || has(rest, "-d", "--delete") ? deny("git symbolic-ref reescreve o HEAD: troque de branch com `git switch`") : null;
     }
     // `commit --amend` e `rebase`/`rebase -i` em branch de trabalho são rotina
     // (G85): o portão da reescrita é o push para branch protegida, que nega.
@@ -1717,13 +1714,14 @@ function judgeGitSubcommand(sub, rest, context) {
     case "config":
       return judgeGitConfig(rest, context);
     // Em worktree de trabalho conferida, o que descarta só o trabalho dela
-    // passa (#476); na checkout principal ou sem contexto, pergunta (G44).
+    // passa (#476); na checkout principal ou sem contexto, nega e manda rodar
+    // numa worktree (G44, que protege o WIP do dono).
     case "commit":
       return work ? null : judgeCommit(rest);
     case "reset":
-      return !work && has(rest, "--hard", "--merge") ? ask("git reset --hard/--merge descarta mudanças") : null;
+      return !work && has(rest, "--hard", "--merge") ? needsWorktree("git reset --hard/--merge descarta mudanças") : null;
     case "clean":
-      return work || has(rest, "-n", "--dry-run") || rest.some((arg) => shortCluster(arg, "n")) ? null : ask("git clean apaga arquivo não versionado");
+      return work || has(rest, "-n", "--dry-run") || rest.some((arg) => shortCluster(arg, "n")) ? null : needsWorktree("git clean apaga arquivo não versionado");
     case "checkout":
       return stronger(
         stronger(work ? null : judgeCheckout(rest), branchOptions(rest, "git checkout", "b", "B", ["--orphan"], [], work)),
@@ -1732,7 +1730,7 @@ function judgeGitSubcommand(sub, rest, context) {
     case "switch": {
       const discard = has(rest, "-f", "--force", "--discard-changes") || rest.some((arg) => shortCluster(arg, "f"));
       return stronger(
-        stronger(discard && !work ? ask("git switch descarta mudanças") : null, ignoreOtherWorktrees(rest, "git switch")),
+        stronger(discard && !work ? needsWorktree("git switch descarta mudanças") : null, ignoreOtherWorktrees(rest, "git switch")),
         branchOptions(rest, "git switch", "c", "C", ["--create", "--orphan"], ["--force-create"], work),
       );
     }
@@ -1744,19 +1742,16 @@ function judgeGitSubcommand(sub, rest, context) {
         if (k > 0 && /^(?:-[mFu]|--message|--file|--local-user)$/.test(rest[k - 1])) return false;
         return arg === "--force" || arg === "--delete" || (/^-[A-Za-z]+$/.test(arg) && /[fd]/.test(arg.slice(1)));
       });
-      return rewrites ? ask("git tag -f/-d reescreve ou apaga tag (regra 22)") : null;
+      return rewrites ? deny("git tag -f/-d reescreve ou apaga tag (regra 22: toda tag SemVer tem Release)") : null;
     }
     case "replace":
-      return rest.length === 0 || has(rest, "-l", "--list") ? null : ask("git replace troca um objeto por outro em todo o histórico");
+      return rest.length === 0 || has(rest, "-l", "--list") ? null : deny("git replace troca um objeto por outro em todo o histórico");
     case "restore": {
       const staged = has(rest, "--staged", "-S") || rest.some((arg) => shortCluster(arg, "S"));
       const worktree = has(rest, "--worktree", "-W") || rest.some((arg) => shortCluster(arg, "W"));
-      return work || (staged && !worktree) ? null : ask("git restore sobrescreve arquivo do working tree");
+      return work || (staged && !worktree) ? null : needsWorktree("git restore sobrescreve arquivo do working tree");
     }
-    // O stash é do repositório inteiro (`refs/stash` é comum às worktrees):
-    // `drop`/`clear` numa worktree de trabalho apagam o WIP do dono (G44).
-    case "stash":
-      return rest[0] === "drop" || rest[0] === "clear" ? ask(`git stash ${rest[0]} apaga stash`) : null;
+    // `stash drop/clear` passa (11/10/2026): o stash é descartável, e o git não pergunta.
     case "worktree":
       if (rest[0] === "add") {
         const positional = [];
@@ -1764,7 +1759,8 @@ function judgeGitSubcommand(sub, rest, context) {
           if (/^(?:-[bB]|--orphan|--reason)$/.test(rest[k])) k++;
           else if (!rest[k].startsWith("-")) positional.push(rest[k]);
         }
-        const path = positional[0] === undefined ? null : outsideWrite(joinPath(context.place ?? null, positional[0]), context.env ?? NO_ENV);
+        const written = positional[0] === undefined ? null : outsideWrite(joinPath(context.place ?? null, positional[0]), context.env ?? NO_ENV);
+        const path = written ? deny(`${written.reason}; crie a worktree em .claude/worktrees/<nome> ou no temporário`) : null;
         return stronger(path, branchOptions(rest.slice(1), "git worktree add", "b", "B", ["--orphan"], []));
       }
       if (rest[0] !== "remove") return null;
@@ -1776,35 +1772,35 @@ function judgeGitSubcommand(sub, rest, context) {
         const forces = options.reduce((n, arg) => n + (arg === "--force" ? 1 : /^-[A-Za-z]+$/.test(arg) ? [...arg.slice(1)].filter((c) => c === "f").length : 0), 0);
         if (forces === 0) return null;
         // Dentro de `xargs`/`find -exec` o alvo só existe na execução
-        // (`xargs -I@ … .claude/worktrees/@`): pergunta sempre.
-        if (context.bulk) return ask("git worktree remove --force em massa (xargs/find) monta o alvo na execução");
-        // `-ff` remove worktree travada: a trava é de outra sessão, pergunta sempre.
-        if (forces > 1) return ask("git worktree remove -ff passa por cima de worktree travada");
+        // (`xargs -I@ … .claude/worktrees/@`): nega sempre.
+        if (context.bulk) return deny("git worktree remove --force em massa (xargs/find) monta o alvo na execução: remova uma worktree por comando, com o caminho escrito");
+        // `-ff` remove worktree travada: a trava é de outra sessão, nega sempre.
+        if (forces > 1) return deny("git worktree remove -ff passa por cima de worktree travada por outra sessão: use `--force` uma vez");
         // Worktree de trabalho sai sem pergunta, por autorização do dono
         // (06/10/2026): é a limpeza de rotina depois do merge. Sem alvo ou
-        // com qualquer outro caminho, continua perguntando.
+        // com qualquer outro caminho, nega.
         return targets.length > 0 && targets.every(isWorkWorktree)
           ? null
-          : ask("git worktree remove --force fora de worktree de trabalho descarta mudanças");
+          : deny("git worktree remove --force fora de worktree de trabalho (.claude/worktrees/<nome>) descarta mudanças: escreva o caminho dela");
       }
     case "filter-branch":
     case "filter-repo":
-      return ask(`git ${sub} reescreve histórico`);
+      return deny(`git ${sub} reescreve histórico; ${GIT_NEVER_ASKS}`);
     case "update-ref": {
-      if (has(rest, "-d", "--stdin")) return ask("git update-ref apaga referência");
+      if (has(rest, "-d", "--stdin")) return deny("git update-ref -d/--stdin apaga ou reescreve referência fora do que se lê");
       return refWrite(rest.find((arg) => !arg.startsWith("-")), "git update-ref");
     }
     case "reflog":
-      return rest[0] === "expire" || rest[0] === "delete" ? ask(`git reflog ${rest[0]} apaga histórico de referência`) : null;
+      return rest[0] === "expire" || rest[0] === "delete" ? deny(`git reflog ${rest[0]} apaga histórico de referência; ${GIT_NEVER_ASKS}`) : null;
     case "gc":
-      return rest.some((arg) => arg.startsWith("--prune")) ? ask("git gc --prune descarta objetos") : null;
+      return rest.some((arg) => arg.startsWith("--prune")) ? deny("git gc --prune descarta objetos; use `git gc` sem --prune") : null;
     case "prune":
-      return ask("git prune descarta objetos");
+      return deny("git prune descarta objetos; use `git gc` sem --prune");
     case "rm": {
       if (work || rest.includes("--cached")) return null;
       const recursive = rest.some((arg) => arg === "-r" || shortCluster(arg, "r"));
       const force = rest.some((arg) => arg === "-f" || arg === "--force" || shortCluster(arg, "f"));
-      return recursive || force ? ask("git rm -r/-f apaga arquivos") : null;
+      return recursive || force ? needsWorktree("git rm -r/-f apaga arquivos") : null;
     }
     default:
       return null;
@@ -1823,17 +1819,20 @@ const CONFIG_WRITE = new Set(["--add", "--replace-all", "--unset", "--unset-all"
  * o remoto de push), além de `include.path`/`includeIf.*.path`, que carregam
  * outro arquivo com qualquer uma delas. Gravada, a chave persiste: o `git push
  * origin feat/x` seguinte vai para onde ela manda, sem que o refspec diga —
- * `remote.origin.push=refs/heads/feat/x:refs/heads/dev` empurra `dev`. O `-c`
- * dessas chaves já perguntava (#476); `branch.<b>.description`, `.rebase` e o
- * resto de `branch.*` não desviam nada e passam.
+ * `remote.origin.push=refs/heads/feat/x:refs/heads/dev` empurra `dev`.
+ * Gravá-la passa (decisão do dono, 11/10/2026: o git não pergunta): o push que
+ * a usar nega quando o destino é protegido ou o texto não o resolve, e o `-c`
+ * dela no `git push` nega. `branch.<b>.description`, `.rebase` e o resto de
+ * `branch.*` não desviam nada.
  */
 const GIT_PUSH_KEY = /^(?:push\..+|remote\..+|url\..+\.(?:push)?insteadof|branch\..+\.(?:merge|remote|pushremote)|include\.path|includeif\..+\.path)$/;
 
 /**
  * `git config` que grava chave que executa programa (`core.pager`,
- * `core.hooksPath`…), qualquer `alias.*` ou chave que desvia o destino do
- * push (`GIT_PUSH_KEY`): o efeito persiste depois da chamada. Leitura
- * (`--get`, `--list`, `get`, `list`) não pergunta.
+ * `core.hooksPath`…), qualquer `alias.*`, a configuração pessoal ou do sistema
+ * (`--global`, `--system`, `--file` fora do projeto) ou `--edit` nega: o efeito
+ * persiste depois da chamada. Gravar chave do push (`GIT_PUSH_KEY`), ler
+ * (`--get`, `--list`, `get`, `list`) e o resto da configuração local passam.
  */
 function judgeGitConfig(rest, context) {
   const positional = [];
@@ -1842,7 +1841,7 @@ function judgeGitConfig(rest, context) {
   let personal = null;
   for (let k = 0; k < rest.length; k++) {
     const arg = rest[k];
-    if (arg === "-e" || arg === "--edit") return ask("git config --edit grava qualquer chave");
+    if (arg === "-e" || arg === "--edit") return deny("git config --edit grava qualquer chave: use `git config <chave> <valor>`");
     if (CONFIG_READ.has(arg)) return null;
     if (arg === "--global" || arg === "--system") personal = arg;
     else if (arg.startsWith("--file=")) files.push(arg.slice("--file=".length));
@@ -1852,19 +1851,18 @@ function judgeGitConfig(rest, context) {
     else if (!arg.startsWith("-")) positional.push(arg);
   }
   if (positional[0] === "get" || positional[0] === "list") return null;
-  if (positional[0] === "edit") return ask("git config edit grava qualquer chave");
+  if (positional[0] === "edit") return deny("git config edit grava qualquer chave: use `git config <chave> <valor>`");
   const subcommand = ["set", "unset", "rename-section", "remove-section"].includes(positional[0]);
   const key = (subcommand ? positional[1] : positional[0])?.toLowerCase();
   // `git config chave` sozinho lê.
   if (!key || !(write || subcommand || positional.length >= 2)) return null;
   // Gravar em `--global`/`--system` ou em arquivo fora do projeto é configuração pessoal.
-  if (personal) return ask(`git config ${personal} grava na configuração pessoal ou do sistema`);
+  if (personal) return deny(`git config ${personal} grava na configuração pessoal ou do sistema: use --local`);
   for (const file of files) {
-    if (outsideWrite(joinPath(context.place ?? null, file), context.env ?? NO_ENV)) return ask(`git config --file grava fora do projeto (${file})`);
+    if (outsideWrite(joinPath(context.place ?? null, file), context.env ?? NO_ENV)) return deny(`git config --file grava fora do projeto (${file}): use --local`);
   }
-  if (GIT_EXEC_KEY.test(key)) return ask(`git config ${key} executa programa ou desliga os hooks`);
-  if (key.startsWith("alias.") || key === "alias") return ask("git config alias.* cria comando do git");
-  if (GIT_PUSH_KEY.test(key)) return ask(`git config ${key} pode trocar o destino do push`);
+  if (GIT_EXEC_KEY.test(key)) return deny(`git config ${key} executa programa ou desliga os hooks; ${GIT_NEVER_ASKS}`);
+  if (key.startsWith("alias.") || key === "alias") return deny("git config alias.* cria comando do git: chame o comando inteiro");
   return null;
 }
 
@@ -1875,11 +1873,11 @@ function judgeCommit(rest) {
   for (let k = 0; k < rest.length; k++) {
     const arg = rest[k];
     if (arg === "--") break;
-    if (arg === "--no-verify") return ask("git commit --no-verify pula os hooks do projeto");
+    if (arg === "--no-verify") return needsWorktree("git commit --no-verify pula os hooks do projeto");
     if (/^--(?:message|file|reuse-message|reedit-message|template|author|date|fixup|squash|trailer|cleanup)$/.test(arg)) k++;
     else if (/^-[A-Za-z]+$/.test(arg)) {
       for (let i = 1; i < arg.length; i++) {
-        if (arg[i] === "n") return ask("git commit -n pula os hooks do projeto");
+        if (arg[i] === "n") return needsWorktree("git commit -n pula os hooks do projeto");
         if (COMMIT_VALUE.includes(arg[i])) {
           if (i === arg.length - 1) k++;
           break;
@@ -1903,17 +1901,17 @@ function judgeCheckout(rest) {
   const positional = [];
   for (let k = 0; k < rest.length; k++) {
     const arg = rest[k];
-    if (arg === "--") return rest.length > k + 1 ? ask("git checkout -- <caminho> sobrescreve arquivo") : null;
-    if (arg === "-f" || arg === "--force" || shortCluster(arg, "f")) return ask("git checkout -f descarta mudanças");
-    if (arg === "-B") return ask("git checkout -B recria o branch");
-    if (arg.startsWith("--pathspec-from-file")) return ask("git checkout de caminhos sobrescreve arquivo");
+    if (arg === "--") return rest.length > k + 1 ? needsWorktree("git checkout -- <caminho> sobrescreve arquivo") : null;
+    if (arg === "-f" || arg === "--force" || shortCluster(arg, "f")) return needsWorktree("git checkout -f descarta mudanças");
+    if (arg === "-B") return needsWorktree("git checkout -B recria o branch");
+    if (arg.startsWith("--pathspec-from-file")) return needsWorktree("git checkout de caminhos sobrescreve arquivo");
     if (arg === "-b" || arg === "--orphan") k++;
     else if (!arg.startsWith("-")) positional.push(arg);
   }
-  if (positional.includes(".")) return ask("git checkout . sobrescreve o working tree");
-  if (positional.length >= 2) return ask("git checkout <ref> <caminho> sobrescreve arquivo");
+  if (positional.includes(".")) return needsWorktree("git checkout . sobrescreve o working tree");
+  if (positional.length >= 2) return needsWorktree("git checkout <ref> <caminho> sobrescreve arquivo");
   if (positional.length === 1 && (FILE_LIKE.test(positional[0]) || PATH_ONLY.test(positional[0]))) {
-    return ask("git checkout <caminho> sobrescreve arquivo");
+    return needsWorktree("git checkout <caminho> sobrescreve arquivo");
   }
   return null;
 }
@@ -2128,7 +2126,7 @@ function judgeBranchWrite(rest) {
   );
   if (!writes) return null;
   const target = rest.find((arg) => !arg.startsWith("-") && PROTECTED_BRANCHES.has(pushDestination(arg)));
-  return target ? ask(`git branch reescreve a branch protegida ${target}`) : null;
+  return target ? deny(`git branch reescreve a branch protegida ${target}`) : null;
 }
 
 /**
@@ -2145,11 +2143,11 @@ function refWrite(ref, verb) {
   const bare = ref.replace(/^\+/, "");
   const target = pushDestination(bare);
   if (/[$`*{]/.test(bare)) {
-    return /^(?:remotes|notes)\//.test(target) ? null : ask(`${verb} escreve ref por curinga ou variável (${ref})`);
+    return /^(?:remotes|notes)\//.test(target) ? null : deny(`${verb} escreve ref por curinga ou variável (${ref}): escreva o nome da ref`);
   }
-  if (target === "HEAD") return ask(`${verb} reescreve o HEAD`);
-  if (PROTECTED_BRANCHES.has(target)) return ask(`${verb} reescreve a branch protegida ${target}`);
-  if (target.startsWith("tags/")) return ask(`${verb} escreve a tag ${target.slice("tags/".length)} (regra 22)`);
+  if (target === "HEAD") return deny(`${verb} reescreve o HEAD`);
+  if (PROTECTED_BRANCHES.has(target)) return deny(`${verb} reescreve a branch protegida ${target}`);
+  if (target.startsWith("tags/")) return deny(`${verb} escreve a tag ${target.slice("tags/".length)} (regra 22)`);
   return null;
 }
 
@@ -2171,11 +2169,11 @@ function refWrite(ref, verb) {
 function branchOptions(rest, verb, createLetters, forceLetters, createLong, forceLong, work = false) {
   let worst = null;
   const created = (name) => {
-    if (name && PROTECTED_BRANCHES.has(pushDestination(name))) worst = stronger(worst, ask(`${verb} cria a branch protegida ${name}`));
+    if (name && PROTECTED_BRANCHES.has(pushDestination(name))) worst = stronger(worst, deny(`${verb} cria a branch protegida ${name}`));
   };
   const forced = (name) => {
     if (work && name && !/[$`*?[\]{}]/.test(name) && !PROTECTED_BRANCHES.has(pushDestination(name)) && pushDestination(name) !== "HEAD") return;
-    worst = stronger(worst, ask(`${verb} recria o branch por cima (-B/-C)`));
+    worst = stronger(worst, needsWorktree(`${verb} recria o branch por cima (-B/-C)`));
   };
   for (let k = 0; k < rest.length; k++) {
     const arg = rest[k];
@@ -2219,14 +2217,14 @@ function judgeFetch(sub, rest) {
       specs.push(...rest.slice(k + 1));
       break;
     }
-    if (arg === "--prune-tags" || (/^-[A-Za-z]+$/.test(arg) && arg.includes("P"))) worst = stronger(worst, ask(`git ${sub} --prune-tags apaga tag local`));
+    if (arg === "--prune-tags" || (/^-[A-Za-z]+$/.test(arg) && arg.includes("P"))) worst = stronger(worst, deny(`git ${sub} --prune-tags apaga tag local (regra 22)`));
     if (arg === "--force" || shortCluster(arg, "f")) force = true;
     if (arg === "--tags" || shortCluster(arg, "t")) tags = true;
     if (arg === "--refmap") specs.push(rest[++k] ?? "");
     else if (arg.startsWith("--refmap=")) specs.push(arg.slice("--refmap=".length));
     else if (!arg.startsWith("-")) specs.push(arg);
   }
-  if (force && tags) worst = stronger(worst, ask(`git ${sub} --force --tags sobrescreve tag local`));
+  if (force && tags) worst = stronger(worst, deny(`git ${sub} --force --tags sobrescreve tag local (regra 22)`));
   for (const spec of specs) {
     const colon = spec.lastIndexOf(":");
     if (colon !== -1) worst = stronger(worst, refWrite(spec.slice(colon + 1), `git ${sub}`));
@@ -2813,8 +2811,8 @@ const SSH_RUNS_LOCAL = [/(?:proxy|local|knownhosts)command|pkcs11provider|securi
  * Risco das atribuições de um comando: o valor de variável que executa
  * programa é julgado como comando (vale a decisão mais forte), e config do
  * git por variável (`GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n`) vale como `git -c`.
- * `GIT_CONFIG_PARAMETERS` não é lido: pergunta, e no `git push` nega (o push
- * não pergunta; `command` são as palavras do comando já sem atribuição).
+ * `GIT_CONFIG_PARAMETERS` não é lido: nega (o git não pergunta; `command` são
+ * as palavras do comando já sem atribuição).
  */
 function variableRisk(assignments, context, command = []) {
   if (assignments.length === 0) return null;
@@ -2828,18 +2826,21 @@ function variableRisk(assignments, context, command = []) {
     if (PROGRAM_VARIABLES.has(name)) {
       // O transporte do git já é o `ssh`: `GIT_SSH_COMMAND="ssh -i chave"` é rotina, se for só o `ssh`.
       const ssh = (name === "GIT_SSH_COMMAND" || name === "GIT_SSH") && /^\s*(?:[\w./~-]*\/)?ssh(?:\s[^;&|`$()<>{}\n\\'"]*)?$/.test(value);
-      if (ssh) worst = stronger(worst, SSH_RUNS_LOCAL.some((pattern) => pattern.test(value)) ? ask(`${name} com ssh que roda comando local`) : null);
+      if (ssh) worst = stronger(worst, SSH_RUNS_LOCAL.some((pattern) => pattern.test(value)) ? deny(`${name} com ssh que roda comando local; ${GIT_NEVER_ASKS}`) : null);
       // O programa recebe argumentos do git (o arquivo a editar, o host): `EDITOR=rm` apaga, como em `xargs`.
       else worst = stronger(worst, riskOf(value, context.depth + 1, true, context.env));
       // Como `diff.external`: o git passa o caminho do arquivo do projeto ao programa (`GIT_EXTERNAL_DIFF=rm`).
-      if (name === "GIT_EXTERNAL_DIFF") worst = stronger(worst, ask("GIT_EXTERNAL_DIFF executa programa sobre os arquivos, como diff.external"));
+      if (name === "GIT_EXTERNAL_DIFF") worst = stronger(worst, deny(`GIT_EXTERNAL_DIFF executa programa sobre os arquivos, como diff.external; ${GIT_NEVER_ASKS}`));
     } else if (name === "GIT_CONFIG_PARAMETERS") {
+      // O texto não é lido: nega, e no push manda explicitar o destino.
       const pushing = command[0] === "git" && command.slice(1).some((word) => GIT_PUSH_SUBCOMMANDS.has(word));
       worst = stronger(
         worst,
-        pushing
-          ? deny("GIT_CONFIG_PARAMETERS configura o git por variável e o texto não resolve o destino do push: tire a variável e explicite o destino (`git push origin <branch>`)")
-          : ask("GIT_CONFIG_PARAMETERS configura o git por variável"),
+        deny(
+          pushing
+            ? "GIT_CONFIG_PARAMETERS configura o git por variável e o texto não resolve o destino do push: tire a variável e explicite o destino (`git push origin <branch>`)"
+            : "GIT_CONFIG_PARAMETERS configura o git por variável e o texto não é lido: use `git -c chave=valor`",
+        ),
       );
     } else {
       const index = /^GIT_CONFIG_KEY_(\d+)$/.exec(name);
@@ -2847,20 +2848,15 @@ function variableRisk(assignments, context, command = []) {
       const key = value.toLowerCase();
       const configured = values.get(`GIT_CONFIG_VALUE_${index[1]}`) ?? "";
       if (GIT_EXEC_KEY.test(key)) {
-        worst = stronger(worst, ask(`${name}=${key} executa programa ou desliga os hooks`));
+        worst = stronger(worst, deny(`${name}=${key} executa programa ou desliga os hooks; ${GIT_NEVER_ASKS}`));
         worst = stronger(worst, riskOf(configured, context.depth + 1, false, context.env));
       }
-      if (key.startsWith("alias.") && configured.trimStart().startsWith("!")) worst = stronger(worst, ask("alias do git que roda shell"));
+      if (key.startsWith("alias.") && configured.trimStart().startsWith("!")) worst = stronger(worst, deny(`alias do git que roda shell; ${GIT_NEVER_ASKS}`));
       // Como o `-c`: a chave que desvia o destino do push (#505), por variável.
-      // No `git push` nega e manda tirar a variável; fora dele, pergunta.
-      if (/^(?:push|remote|branch|url)\./.test(key) || GIT_PUSH_KEY.test(key)) {
-        const pushing = command[0] === "git" && command.slice(1).some((word) => GIT_PUSH_SUBCOMMANDS.has(word));
-        worst = stronger(
-          worst,
-          pushing
-            ? deny(`${name}=${key} troca o destino do push e o texto não o resolve: tire a variável e explicite o destino (\`git push origin <branch>\`)`)
-            : ask(`${name}=${key} pode trocar o destino do push`),
-        );
+      // No `git push` nega e manda tirar a variável; fora dele não decide destino nenhum e passa.
+      const pushing = command[0] === "git" && command.slice(1).some((word) => GIT_PUSH_SUBCOMMANDS.has(word));
+      if (pushing && (/^(?:push|remote|branch|url)\./.test(key) || GIT_PUSH_KEY.test(key))) {
+        worst = stronger(worst, deny(`${name}=${key} troca o destino do push e o texto não o resolve: tire a variável e explicite o destino (\`git push origin <branch>\`)`));
       }
     }
     if (worst?.decision === "deny") return worst;
@@ -2902,7 +2898,15 @@ function judgeWords(input, context) {
   // Programa apontado por variável (`GIT_SSH_COMMAND="rm -rf src" git fetch`): só as atribuições deste comando.
   const launched = stronger(escaped, variableRisk(assigned.slice(inherited), context, words));
   if (launched?.decision === "deny") return launched;
-  return stronger(launched, judgeCommand(words, assigned, printsEnv, context));
+  const verdict = stronger(launched, judgeCommand(words, assigned, printsEnv, context));
+  // O git não pergunta (11/10/2026): o que viria como `ask` — inclusive o que
+  // vem de dentro dele, como o programa de `rebase -x` ou de `GIT_EDITOR` — nega.
+  return words[0] === "git" ? gitNeverAsks(verdict) : verdict;
+}
+
+/** `ask` no comando `git` vira `deny`, com a mesma razão. */
+function gitNeverAsks(verdict) {
+  return verdict?.decision === "ask" ? deny(`${verdict.reason}; ${GIT_NEVER_ASKS}`) : verdict;
 }
 
 /** Builtins que atribuem (e exportam) `NOME=valor` dos argumentos. */

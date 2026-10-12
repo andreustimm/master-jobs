@@ -2,15 +2,15 @@
 // Invariant: o comando `git` simples numa worktree registrada diferente da
 //   checkout principal, fora de branch protegida, passa sem pergunta — push
 //   sem refspec, forçado, `--delete` de branch de trabalho, `reset --hard`,
-//   `clean`, `checkout` com descarte. Continuam perguntando ou negando: push
-//   cujo destino real é `main`/`staging`/`dev` (destino não resolvido nega),
-//   descarte na checkout principal (G44, pergunta) e segredo. Os quatro
+//   `clean`, `checkout` com descarte. Continuam negando: push cujo destino real
+//   é `main`/`staging`/`dev` (destino não resolvido nega), descarte na checkout
+//   principal (G44, com a instrução de rodar numa worktree) e segredo. Os quatro
 //   Critical da primeira versão (diretório comum sob `.claude/worktrees/`,
 //   `--git-dir`/`GIT_DIR=`, `-c push.*`/`remote.*`, `env -C`/`sh -c`)
 //   negam: desde 11/10/2026 o push nunca pergunta, passa ou nega, e o que o
-//   texto não resolve nega com a instrução de explicitar o destino. Gravar a
-//   configuração que desvia o push (#505) pergunta. Os três chamadores dão a
-//   mesma decisão.
+//   texto não resolve nega com a instrução de explicitar o destino. O git não
+//   pergunta: passa ou nega. Gravar a configuração que desvia o push (#505)
+//   passa, e o push que a usar nega. Os três chamadores dão a mesma decisão.
 // Boundary IN: `.claude/hooks/push-target.mjs` sobre um repositório git
 //   descartável de verdade (remoto bare com main, staging e dev; worktrees
 //   criadas de `origin/dev`), a política `.claude/hooks/shell-policy.mjs` e
@@ -247,7 +247,7 @@ describe("os três chamadores dão a mesma decisão", () => {
     ["rebase", () => "git rebase origin/dev", () => wt, "pass"],
     ["branch -D de trabalho", () => "git branch -D feat/velha", () => wt, "pass"],
     // #475: o prefixo único de opção longa vale como a opção completa, com o
-    // contexto real do git: passa onde a forma completa passa, pergunta onde ela pergunta.
+    // contexto real do git: passa onde a forma completa passa, nega onde ela nega.
     ["push --force-with abreviado com refspec de trabalho", () => "git push --force-with origin feat/x", () => wt, "pass"],
     ["push --no-veri abreviado", () => "git push --no-veri", () => wt, "pass"],
     ["push --delet abreviado de branch de trabalho", () => "git push origin --delet feat/velha", () => wt, "pass"],
@@ -259,15 +259,15 @@ describe("os três chamadores dão a mesma decisão", () => {
     ["push --mirro abreviado", () => "git push --mirro", () => wt, "deny"],
     ["push --al abreviado", () => "git push --al", () => wt, "deny"],
     ["push --prun abreviado", () => "git push --prun origin feat/x", () => wt, "pass"],
-    ["reset --har abreviado na principal", () => "git reset --har", () => root, "ask"],
-    ["reset --har abreviado por -C na principal", () => `git -C ${root} reset --har`, () => wt, "ask"],
+    ["reset --har abreviado na principal", () => "git reset --har", () => root, "deny"],
+    ["reset --har abreviado por -C na principal", () => `git -C ${root} reset --har`, () => wt, "deny"],
     ["clean --dr -fd (dry-run abreviado) na principal", () => "git clean --dr -fd", () => root, "pass"],
-    ["clean -fd na principal", () => "git clean -fd", () => root, "ask"],
-    ["checkout --forc abreviado na principal", () => "git checkout --forc", () => root, "ask"],
-    ["switch --discard abreviado na principal", () => "git switch --discard feat/x", () => root, "ask"],
-    ["restore --staged --work abreviado na principal", () => "git restore --staged --work a.txt", () => root, "ask"],
-    ["rm --forc abreviado na principal", () => "git rm --forc a.txt", () => root, "ask"],
-    ["worktree remove --forc abreviado de fora", () => `git worktree remove --forc ${base}/fora`, () => root, "ask"],
+    ["clean -fd na principal", () => "git clean -fd", () => root, "deny"],
+    ["checkout --forc abreviado na principal", () => "git checkout --forc", () => root, "deny"],
+    ["switch --discard abreviado na principal", () => "git switch --discard feat/x", () => root, "deny"],
+    ["restore --staged --work abreviado na principal", () => "git restore --staged --work a.txt", () => root, "deny"],
+    ["rm --forc abreviado na principal", () => "git rm --forc a.txt", () => root, "deny"],
+    ["worktree remove --forc abreviado de fora", () => `git worktree remove --forc ${base}/fora`, () => root, "deny"],
     ["worktree remove --forc abreviado de worktree de trabalho", () => "git worktree remove --forc .claude/worktrees/feat-x", () => root, "pass"],
     // O pedido do dono (11/10/2026): `git -C <worktree> push` resolve o destino real do branch do
     // diretório de `-C`; branch de trabalho com upstream do mesmo nome passa, sem upstream nega
@@ -283,28 +283,28 @@ describe("os três chamadores dão a mesma decisão", () => {
     ["push --set-upstream de rotina", () => "git push --set-upstream origin feat/up", () => wtUp, "pass"],
     ["leitura da configuração do push", () => "git config --get remote.origin.push", () => wt, "pass"],
     ["leitura de push.default", () => "git config --get push.default", () => wt, "pass"],
-    // #505: gravar a configuração que desvia o destino do push pergunta (o push
+    // #505: gravar a configuração que desvia o destino do push passa (o push
     // seguinte é provado com o git de verdade no bloco abaixo).
-    ["config remote.origin.push com destino dev", () => "git config remote.origin.push refs/heads/feat/up:refs/heads/dev", () => wtUp, "ask"],
-    ["config push.default upstream", () => "git config push.default upstream", () => wtUp, "ask"],
-    ["config branch.<b>.merge", () => "git config branch.feat/x.merge refs/heads/dev", () => wt, "ask"],
-    ["config branch.<b>.pushRemote", () => "git config branch.feat/x.pushRemote fork", () => wt, "ask"],
-    ["config remote.pushDefault", () => "git config remote.pushDefault fork", () => wt, "ask"],
-    ["config url.*.pushInsteadOf", () => "git config url.https://x.test/.pushInsteadOf https://y.test/", () => wt, "ask"],
-    ["config --unset de remote.origin.push", () => "git config --unset remote.origin.push", () => wt, "ask"],
-    ["config --file do projeto com remote.origin.push", () => `git config --file ${root}/.git/config remote.origin.push HEAD:main`, () => wt, "ask"],
+    ["config remote.origin.push com destino dev", () => "git config remote.origin.push refs/heads/feat/up:refs/heads/dev", () => wtUp, "pass"],
+    ["config push.default upstream", () => "git config push.default upstream", () => wtUp, "pass"],
+    ["config branch.<b>.merge", () => "git config branch.feat/x.merge refs/heads/dev", () => wt, "pass"],
+    ["config branch.<b>.pushRemote", () => "git config branch.feat/x.pushRemote fork", () => wt, "pass"],
+    ["config remote.pushDefault", () => "git config remote.pushDefault fork", () => wt, "pass"],
+    ["config url.*.pushInsteadOf", () => "git config url.https://x.test/.pushInsteadOf https://y.test/", () => wt, "pass"],
+    ["config --unset de remote.origin.push", () => "git config --unset remote.origin.push", () => wt, "pass"],
+    ["config --file do projeto com remote.origin.push", () => `git config --file ${root}/.git/config remote.origin.push HEAD:main`, () => wt, "pass"],
     // Refspec sem `:` que não é o branch atual: o git o resolve localmente
     // (ref simbólica, upstream), então o destino forçado não é conhecido.
     ["push forçado de outro branch a partir da principal", () => "git push --force origin feat/x", () => root, "pass"],
     // Rodada 1 da L2: ref simbólica, link com `..`, tag forçada, worktree alheia.
     ["push forçado de main-worktree/HEAD", () => "git push -f origin main-worktree/HEAD", () => wt, "deny"],
     ["push de worktrees/<n>/HEAD", () => "git push origin worktrees/em-dev/HEAD", () => wt, "deny"],
-    ["reset --hard por -C com link e ..", () => `git -C ${link}/sub/.. reset --hard`, () => wt, "ask"],
+    ["reset --hard por -C com link e ..", () => `git -C ${link}/sub/.. reset --hard`, () => wt, "deny"],
     ["push -f --tags", () => "git push -f --tags", () => wt, "deny"],
     ["push -f de tag por nome", () => "git push -f origin tag v1.0.0", () => wt, "deny"],
     ["push -f de refs/tags", () => "git push -f origin refs/tags/v1.0.0", () => wt, "deny"],
-    ["switch --ignore-other-worktrees para dev", () => "git switch --ignore-other-worktrees dev", () => wt, "ask"],
-    // Destino real protegido: nega ou pergunta.
+    ["switch --ignore-other-worktrees para dev", () => "git switch --ignore-other-worktrees dev", () => wt, "deny"],
+    // Destino real protegido: nega.
     ["push forçado para dev", () => "git push --force origin dev", () => wt, "deny"],
     ["push HEAD:main", () => "git push origin HEAD:main", () => wt, "deny"],
     ["push HEAD numa worktree em dev", () => "git push origin HEAD", () => wtDev, "deny"],
@@ -344,16 +344,16 @@ describe("os três chamadores dão a mesma decisão", () => {
     ["bash -c com git -C", () => `bash -c "git -C ${root} push"`, () => wt, "deny"],
     ["find -exec", () => `find . -maxdepth 0 -exec git -C ${wt} push \\;`, () => wt, "deny"],
     // Descarte na checkout principal (G44) e em worktree em dev.
-    ["reset --hard na principal", () => "git reset --hard", () => root, "ask"],
-    ["reset --hard na principal por -C", () => `git -C ${root} reset --hard`, () => wt, "ask"],
-    ["reset --hard no diretório comum sob .claude/worktrees", () => `git -C ${plainDir} reset --hard`, () => root, "ask"],
-    ["clean na principal", () => "git clean -fd", () => root, "ask"],
-    ["checkout -- caminho na principal", () => "git checkout -- a.txt", () => root, "ask"],
-    ["checkout -f na principal", () => "git checkout -f", () => root, "ask"],
-    ["reset --hard numa worktree em dev", () => "git reset --hard", () => wtDev, "ask"],
-    ["reset --hard por sh -c", () => `sh -c "git -C ${wt} reset --hard"`, () => root, "ask"],
-    // O stash é comum às worktrees: apagar pergunta em qualquer lugar.
-    ["stash drop na worktree", () => "git stash drop", () => wt, "ask"],
+    ["reset --hard na principal", () => "git reset --hard", () => root, "deny"],
+    ["reset --hard na principal por -C", () => `git -C ${root} reset --hard`, () => wt, "deny"],
+    ["reset --hard no diretório comum sob .claude/worktrees", () => `git -C ${plainDir} reset --hard`, () => root, "deny"],
+    ["clean na principal", () => "git clean -fd", () => root, "deny"],
+    ["checkout -- caminho na principal", () => "git checkout -- a.txt", () => root, "deny"],
+    ["checkout -f na principal", () => "git checkout -f", () => root, "deny"],
+    ["reset --hard numa worktree em dev", () => "git reset --hard", () => wtDev, "deny"],
+    ["reset --hard por sh -c", () => `sh -c "git -C ${wt} reset --hard"`, () => root, "deny"],
+    // O stash é descartável: apagar passa em qualquer lugar (11/10/2026).
+    ["stash drop na worktree", () => "git stash drop", () => wt, "pass"],
     // Segredo continua negado.
     ["segredo", () => "git add .env", () => wt, "deny"],
   ];
@@ -382,7 +382,7 @@ describe("os três chamadores dão a mesma decisão", () => {
   it("tag local com nome de branch protegida não faz a worktree em dev virar de trabalho", () => {
     git(root, "tag", "dev");
     try {
-      expect(claude("git reset --hard", wtDev)).toBe("ask");
+      expect(claude("git reset --hard", wtDev)).toBe("deny");
     } finally {
       git(root, "tag", "-d", "dev");
     }
@@ -436,7 +436,7 @@ describe("configuração persistida que desvia o push (#505)", () => {
   });
 
   /**
-   * Os dois passos do achado: gravar a configuração (pergunta) e, com ela
+   * Os dois passos do achado: gravar a configuração (passa) e, com ela
    * persistida, empurrar (nega, porque o push não pergunta). O git de verdade,
    * em `--dry-run`, diz para onde o push iria — nos três primeiros, `dev`.
    */
@@ -521,10 +521,10 @@ describe("configuração persistida que desvia o push (#505)", () => {
 
   it.each(persisted.map((entry) => [entry.name, entry] as const))("%s", async (_name, entry) => {
     const cwd = entry.cwd();
-    // Passo 1: gravar a chave pergunta nos três harnesses.
+    // Passo 1: gravar a chave passa nos três harnesses.
     for (const [key, value] of entry.settings()) {
       const write = `git config ${key} ${value}`;
-      expect(await decisions(write, cwd), write).toEqual(["ask", "ask", "ask"]);
+      expect(await decisions(write, cwd), write).toEqual(["pass", "pass", "pass"]);
     }
     // Sem a configuração, o push da rotina passa.
     expect(await decisions(entry.push, cwd), entry.push).toEqual(["pass", "pass", "pass"]);
