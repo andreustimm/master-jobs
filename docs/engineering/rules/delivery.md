@@ -644,6 +644,18 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
 - **Comando** tem só `description` no frontmatter: o OpenCode lê o mesmo
   arquivo e ignora o que só o Claude Code entende (`allowed-tools` ficaria
   mais largo do outro lado).
+- **A rotina nunca pede autorização ao dono (11/10/2026).** Criar e editar
+  arquivo (`.mjs` inclusive), qualquer `git` — push e force-push em branch de
+  trabalho própria inclusive — e qualquer `gh` passam sem pergunta nos três
+  harnesses; só destino `main`/`staging`/`dev`, escrita no banco de
+  produção, segredo e afrouxar regra continuam com o dono. O que ainda
+  perguntar na rotina é defeito de configuração, a corrigir na política
+  (`shell-policy.mjs`, junto do teste que o prova), nunca remendado na lista
+  `allow` de `.claude/settings.json`. O push é o caso fechado: passa ou
+  nega, nunca pergunta (G63/G85, "Push" na política de shell abaixo). O que
+  a política ainda pergunta por decisão registrada — descarte na checkout
+  principal (G44), `stash drop/clear`, gravar a configuração que desvia o
+  push — são exceções listadas, não rotina.
 - **Permissões** não são reescritas por harness. No OpenCode, a tradução
   mantém a precedência do Claude Code (deny > ask > allow) dentro da regra do
   OpenCode (a última que casa vence) e alarga padrão de arquivo em vez de
@@ -751,50 +763,70 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     `cwd` e deste diretório efetivo; dentro de `xargs`, `find -exec`,
     `sh -c` ou lançador ele não vale. A worktree conta como de trabalho
     quando é registrada, diferente da checkout principal e fora de
-    `main`/`staging`/`dev`. Continuam perguntando ou negando: push cujo
-    destino real é branch protegida (`@{push}` em `dev`, `HEAD` numa
-    worktree em `dev`; destino não resolvido conta como protegido, e com
-    `-c`, `--config-env`, `--git-dir`, `GIT_DIR=`, `env -C` ou shell
-    aninhado o push volta ao julgamento pelo texto); descarte na checkout
-    principal ou num diretório que sobe até ela (G44); `stash drop/clear`
-    em qualquer lugar, porque o stash é comum às worktrees; e o resto da
-    lista abaixo (tag, `--all`/`--mirror`/`--prune`, reescrita de
-    histórico, poda de objetos, ref protegida local, git que executa
-    programa). Push de branch de trabalho a partir da checkout principal
-    também passa forçado, porque o destino é conferido. Refspec sem `:`
-    só conta como destino conhecido quando é o branch atual (`HEAD`/`@`
-    inclusive; com `push.default=upstream`, o destino é o `@{push}`): outro
-    nome forçado, ref simbólica (`main-worktree/HEAD`, `worktrees/<n>/HEAD`,
-    branch que é symref), tag forçada (`--tags`, `tag <nome>`,
-    `refs/tags/…`), `-C` com `..`, remoto legado em `remotes/`/`branches/`
-    e `checkout`/`switch --ignore-other-worktrees` para branch protegida
-    perguntam. O diretório é o `workdir` do comando quando o Codex ou o
-    OpenCode o informa. Em qualquer contexto, `-c`/`--config-env` de
-    `push.*`, `remote.*`, `branch.*` ou `url.*` pergunta: troca o destino do
-    push por fora do refspec que se lê.
+    `main`/`staging`/`dev`. Continuam perguntando: descarte na checkout
+    principal ou num diretório que sobe até ela (G44), `stash drop/clear` em
+    qualquer lugar (o stash é comum às worktrees) e o resto da lista abaixo
+    (reescrita de histórico, poda de objetos, ref protegida local, git que
+    executa programa). O push não pergunta: passa ou nega (bullet seguinte).
+    O diretório é o `workdir` do comando quando o Codex ou o OpenCode o
+    informa.
+  - **Push: passa ou nega, nunca pergunta (11/10/2026).** Decisão do dono:
+    "git push não precisa de autorização". `judgePush` só devolve `deny` ou
+    nada, nos três harnesses (`pnpm check:harness`; no Codex e no OpenCode
+    `deny` é bloqueio, como sempre). **Passa:** push para branch de
+    trabalho `<tipo>/<slug>`, forçado (`-f`, `--force`, `--force-with-lease`,
+    `--force-if-includes`, `+ref`) ou não, `--no-verify`, `--prune`, apagar
+    branch de trabalho (`--delete`, `-d`, `:ref`), tag nova, `--tags`;
+    também a partir da checkout principal e em repositório fora do projeto
+    (o push só move ref remota; o destino protegido nega por nome em
+    qualquer repositório). **Nega:** destino `main`/`staging`/`dev` por
+    qualquer refspec (`HEAD:main`, `refs/heads/main`, `:main`, `+dev`) ou
+    pelo destino real que o git resolve — o push sem refspec vai para o
+    `@{push}`, `HEAD` para o branch atual, `push.default=upstream` para o
+    upstream, e a configuração persistida entra nesse cálculo; `--all`,
+    `--mirror`, `--branches` e o push "matching" (`:`); tag apagada ou
+    sobrescrita à força (regra 22) e ref sem `/` apagada ou forçada
+    (`--delete v1.0.0`, `-f origin v1.0.0`, `HEAD:v1.0.0`); `--tags`
+    forçado ou com `--delete`; `-c`/`--config-env`/`GIT_CONFIG_KEY_n`/
+    `GIT_CONFIG_PARAMETERS` de `push.*`, `remote.*`, `branch.*`, `url.*` ou
+    `include.path`, que o texto não resolve; e `send-pack --stdin`. **O
+    destino que não dá para resolver também nega** — variável ou curinga no
+    refspec, `HEAD` sem o contexto do git, ref simbólica
+    (`main-worktree/HEAD`, `worktrees/<n>/HEAD`, branch que é symref),
+    `push.default=upstream` com upstream que não resolve, push sem refspec
+    cujo `@{push}` o git não resolve ou cuja configuração desvia o destino
+    — e a mensagem manda o agente corrigir sozinho: "explicite o destino
+    (`git push origin <branch>`)", ou `<branch>:<branch>` quando a
+    configuração desvia o refspec sem `:`, porque o `:` explícito a
+    configuração não troca. `-c alias.<sub>=<valor>` sem `!` vale como o
+    que ele expande (`git -c alias.p=push p origin main` é push para
+    `main`); o interno de mesmo nome também é julgado, porque o git não
+    deixa alias sobrescrevê-lo, e o alias gravado em configuração segue
+    fora da vista (limite abaixo). Provado com git de verdade e `--dry-run`
+    (`tests/git-target.test.ts`).
   - **Configuração persistida do push (#505).** A mesma troca de destino
     vale gravada: `git config` (também `--add`, `--unset`, `--replace-all`,
     `set`/`unset`, `--file` do projeto) de `push.*`, `remote.*` (`<r>.push`,
     `<r>.url`, `<r>.mirror`, `pushDefault`…), `url.*.insteadOf` e
     `.pushInsteadOf`, `branch.<b>.merge`/`.remote`/`.pushRemote` e
     `include.path`/`includeIf.*.path` (que carrega outro arquivo com elas)
-    pergunta nos três harnesses, em qualquer contexto; `-c include.path`,
-    igual. Ler (`--get`, `--list`) e gravar o resto de `branch.*`
-    (`description`, `rebase`) não pergunta. Com a configuração já gravada,
-    seja qual for o meio (`git config` fora da guarda, edição do
-    `.git/config`, `git remote`), o contexto conferido a lê (`git config
-    --get-regexp` de `push`, `remote`, `branch` e `url`, todas as origens e
-    arquivos incluídos): `remote.*.push`, `push.default` de mais de um branch,
-    `remote.pushDefault`, `branch.<b>.pushRemote` e `url.*.pushInsteadOf`
-    fazem o refspec sem `:` e o push sem refspec perguntarem, e
-    `push.default=upstream` leva o destino ao `@{push}`. `git push -u origin
-    <tipo>/<slug>` e `git push` numa branch de trabalho, com
-    `branch.<b>.merge`/`.remote` do `push -u` e `url.*.insteadOf` de leitura,
-    seguem passando. Limite: fora do contexto conferido (forma que
-    `plainGitCommand` recusa, tempo estourado, erro do git), o refspec sem
-    `:` volta a valer como "mesmo nome" — perguntar sempre faria o `push -u`
-    da rotina perguntar —, e a configuração gravada por meio que o
-    classificador não lê (edição direta do `.git/config`) só é vista com o
+    pergunta nos três harnesses, em qualquer contexto: é gravação rara, e o
+    push seguinte só vê a configuração com o contexto do git. Ler (`--get`,
+    `--list`) e gravar o resto de `branch.*` (`description`, `rebase`) não
+    pergunta. Com a configuração já gravada, seja qual for o meio (`git
+    config` fora da guarda, edição do `.git/config`, `git remote`), o
+    contexto conferido a lê (`git config --get-regexp` de `push`, `remote`,
+    `branch` e `url`, todas as origens e arquivos incluídos): `remote.*.push`,
+    `push.default` de mais de um branch, `remote.pushDefault`,
+    `branch.<b>.pushRemote` e `url.*.pushInsteadOf` fazem o refspec sem `:` e
+    o push sem refspec negarem, e `push.default=upstream` leva o destino ao
+    `@{push}`. `git push -u origin <tipo>/<slug>` e `git push` numa branch de
+    trabalho, com `branch.<b>.merge`/`.remote` do `push -u` e
+    `url.*.insteadOf` de leitura, seguem passando. Limite: fora do contexto
+    conferido (forma que `plainGitCommand` recusa, tempo estourado, erro do
+    git), o refspec sem `:` volta a valer como "mesmo nome" — negar sempre
+    faria o `push -u` da rotina negar —, e a configuração gravada por meio que
+    o classificador não lê (edição direta do `.git/config`) só é vista com o
     contexto.
   - **Opção longa abreviada (#475).** O git aceita o prefixo único de uma
     opção longa: `reset --har`, `switch --discard`, `checkout --forc`,
@@ -815,12 +847,10 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     abreviadas. Opção nova de um subcomando que o classificador passe a ler
     entra na tabela no mesmo commit.
   - **Pergunta (`ask`):** perda de trabalho fora do contexto conferido
-    acima (push forçado ou `+ref`, `--no-verify`, push sem refspec, `HEAD`
-    sem destino; `reset --hard/--merge`; `clean`; `checkout -- <caminho>`,
+    acima (`reset --hard/--merge`; `clean`; `checkout -- <caminho>`,
     `checkout .`, `checkout <ref> <caminho>`, `checkout -f/-B`;
     `switch -f/--discard-changes/-C`; `restore` fora de `--staged`), e em
-    qualquer contexto `--mirror`, `--all`, `--prune`, refspec variável,
-    `stash drop/clear`; `worktree remove --force` fora de worktree de
+    qualquer contexto `stash drop/clear`; `worktree remove --force` fora de worktree de
     trabalho — em `.claude/worktrees/<nome>` ou `~/.codex/worktrees/<id>/<nome>`
     passa, por autorização do dono de 06/10/2026, porque é a limpeza de rotina
     depois do merge; `-ff` (worktree travada), alvo com variável, curinga ou
@@ -838,8 +868,7 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     `switch -C/--force-create`, `worktree add -B`, inclusive colado ou
     agrupado: `-Bmain`, `-fB`), `tag -f/-d/--force/--delete`,
     `fetch --prune-tags`/`-P` e `fetch --force --tags` (regra 22; criar tag
-    nova passa), encanamento do push (`send-pack` e `http-push` com o
-    julgamento de `push`, `send-pack --stdin`, `receive-pack`), escrita fora
+    nova passa), `receive-pack` (atualiza ref lida da entrada), escrita fora
     da árvore do projeto ou na configuração pessoal — redirecionamento
     (`>`, `>>`, `>|`, `>&`), destino de `tee`, `cp`/`ln`/`install`, `mv`,
     `dd of=`, saída de `uniq` e `tar` (`-f` ao criar, `-C` ao extrair) e a
@@ -853,7 +882,7 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     repositório fora do projeto (`-C`, encadeado; `--git-dir`,
     `--work-tree`, `GIT_DIR=`/`GIT_WORK_TREE=`) em subcomando que não só lê
     (`commit`, `checkout`, `reset`, `add`, `rm`, `merge`, `rebase`, `stash`,
-    `clean`, `push`…; `status`, `log`, `diff` passam), além do caminho de
+    `clean`…; `push`, `status`, `log` e `diff` passam), além do caminho de
     `worktree add`. `/tmp`, `/private/tmp`, `$TMPDIR` e `/var/folders`
     passam. O chamador passa a raiz — `$CLAUDE_PROJECT_DIR`, o `cwd` do
     Codex, o `worktree` do OpenCode —, e a raiz dentro de
@@ -864,9 +893,7 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     pula hook (`-c` ou `git config` com `core.pager`, `core.editor`,
     `core.sshCommand`, `core.fsmonitor`, `core.hooksPath`, `diff.external`,
     `*.textconv`, `sequence.editor`, `credential.helper`, `gpg.program`;
-    `git config alias.*`; alias `!` em `-c`; `commit --no-verify/-n`), tag
-    remota apagada (`push :refs/tags/v1`, `push --delete origin v1.0.0` —
-    apagar branch `<tipo>/<slug>` passa),
+    `git config alias.*`; alias `!` em `-c`; `commit --no-verify/-n`),
     apagamento em massa (`rm` recursivo em qualquer ordem de flags,
     `find -delete`, `rm` atrás de `xargs`/`find -exec`), saída do projeto
     (`ssh`, `scp`, `sftp`, `rsync`, `brew`, `chown`), edição da própria
@@ -910,7 +937,9 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     nome (imprimem o ambiente) e `vercel env pull`/`vercel pull` em
     qualquer destino (gravam segredo em arquivo).
   - **Nega (`deny`):** push para `main`/`staging`/`dev` por qualquer refspec
-    (`HEAD:main`, `refs/heads/main`, `heads/main`, `:main`, `$'\x6dain'`),
+    (`HEAD:main`, `refs/heads/main`, `heads/main`, `:main`, `$'\x6dain'`) ou
+    pelo destino real, e o push cujo destino o texto não resolve (bullet
+    "Push", acima),
     `.env*` e `.linkedin.token.json` em qualquer palavra (`cat .env*`,
     `curl -d @.env`, `-F f=@.env`, `--env-file=.env`, `< .env`, cabeçalho de
     laço) ou por curinga fora de aspas que o shell pode expandir para eles
@@ -1053,9 +1082,11 @@ prova, sobre o `.claude/settings.json` real, que Codex (guarda) e OpenCode
 todos os achados da revisão da #462 — com e sem `rtk`/`rtk proxy` —, que a
 rotina passa sem pergunta nos três e que o composto é recusado nos três com a
 mesma mensagem; desde a #481, também que ferramenta fora da antiga lista
-(`docker ps`, `codex exec`, `opencode run`) passa nos três e que push
-forçado, `rm -rf`, `vercel --prod`, `.env`, `sudo` e push protegido dão a
-mesma decisão (`ask` ou `deny`) nos três; desde a #485, que os comandos
+(`docker ps`, `codex exec`, `opencode run`) passa nos três e que `rm -rf`,
+`vercel --prod`, `.env`, `sudo` e push protegido dão a mesma decisão (`ask`
+ou `deny`) nos três, enquanto o push forçado de branch de trabalho passa nos
+três e o push sem destino resolvível nega nos três, com a mensagem de
+explicitar o destino; desde a #485, que os comandos
 dos achados da revisão L2 da #485 (invólucro desconhecido, ferramenta fora
 do catálogo, segredo, Docker da #488 e programa por variável de ambiente)
 que a política passou a cobrir dão `ask` ou `deny` nos três — o resto está
@@ -1070,10 +1101,12 @@ forma (pura, `rtk`, `git -C`, `git -c`, laço, `sh -c`, `xargs`,
 repositório descartável de verdade (remoto bare com `main`, `staging` e
 `dev`; worktrees criadas de `origin/dev`), prova com `git push --dry-run`
 real que as formas dos quatro Critical da primeira versão empurrariam
-`dev` ou `main`, que elas perguntam nos três chamadores, que o git
+`dev` ou `main`, que elas negam nos três chamadores (o push não pergunta), que o git
 destrutivo passa na worktree de trabalho e pergunta na checkout principal,
-e que o `git -C <wt> push` liberado atualiza só o branch de trabalho no
-remoto. O plugin foi carregado no runtime do
+que o push forçado de branch de trabalho passa, que a configuração
+persistida (#505) pergunta ao ser gravada e nega o push seguinte, com a
+forma explícita que a mensagem manda usar passando, e que o
+`git -C <wt> push` liberado atualiza só o branch de trabalho no remoto. O plugin foi carregado no runtime do
 OpenCode (Bun 1.3.14) e `opencode debug config` o lista entre os plugins do
 projeto.
 

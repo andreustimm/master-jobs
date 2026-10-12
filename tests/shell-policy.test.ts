@@ -30,6 +30,14 @@ const decision = (command: string) => classifyRisk(command)?.decision ?? null;
 /** Comandos `git` dos achados: valem também com `git -C dir` e `git -c k=v`. */
 const GIT: readonly [string, Expected][] = [
   ["git push origin main", "deny"],
+  // Alias de `-c` sem `!` vale como o subcomando que ele expande (e o interno de mesmo nome também).
+  ["git -c alias.p=push p origin main", "deny"],
+  ["git -c alias.p=push p origin fix/x:dev", "deny"],
+  ["git -c alias.a=b -c alias.b=push a origin staging", "deny"],
+  ["git -c alias.push=status push origin main", "deny"],
+  ["git -c alias.p=push p", "deny"],
+  ["git -c alias.r=reset r --hard", "ask"],
+  ["git -c alias.a=a a", "ask"],
   ["git push origin staging", "deny"],
   ["git push origin dev", "deny"],
   ["git push origin HEAD:main", "deny"],
@@ -37,19 +45,14 @@ const GIT: readonly [string, Expected][] = [
   ["git push origin refs/heads/staging", "deny"],
   ["git push origin :dev", "deny"],
   ["git push origin fix/x:main", "deny"],
-  ["git push --force", "ask"],
-  ["git push -f origin fix/x", "ask"],
-  ["git push -uf origin fix/x", "ask"],
-  ["git push --force-with-lease origin fix/x", "ask"],
-  ["git push origin +fix/x", "ask"],
-  ["git push --mirror", "ask"],
-  ["git push --all", "ask"],
-  ["git push --prune origin", "ask"],
-  ["git push --no-verify origin fix/x", "ask"],
-  ["git push", "ask"],
-  ["git push origin", "ask"],
-  ["git push origin HEAD", "ask"],
-  ["git push origin $BRANCH", "ask"],
+  ["git push --force", "deny"],
+  ["git push --mirror", "deny"],
+  ["git push --all", "deny"],
+  ["git push --prune origin", "deny"],
+  ["git push", "deny"],
+  ["git push origin", "deny"],
+  ["git push origin HEAD", "deny"],
+  ["git push origin $BRANCH", "deny"],
   ["git reset --hard", "ask"],
   ["git reset --merge HEAD~1", "ask"],
   ["git clean -fd", "ask"],
@@ -93,15 +96,15 @@ const GIT: readonly [string, Expected][] = [
   ["git rm -r src", "ask"],
   ["git rm -f src/a.ts", "ask"],
   // Revisão da #462: destino do refspec normalizado (`@`, `heads/`).
-  ["git push origin @", "ask"],
-  ["git push origin @:@", "ask"],
+  ["git push origin @", "deny"],
+  ["git push origin @:@", "deny"],
   ["git push origin HEAD:heads/main", "deny"],
   ["git push origin heads/dev", "deny"],
   ["git push origin refs/heads/staging:heads/staging", "deny"],
-  // Tag remota apagada pergunta (regra 22).
-  ["git push origin :refs/tags/v1", "ask"],
-  ["git push --delete origin v1.0.0", "ask"],
-  ["git push origin -d v1.0.0", "ask"],
+  // Tag remota apagada é negada (regra 22).
+  ["git push origin :refs/tags/v1", "deny"],
+  ["git push --delete origin v1.0.0", "deny"],
+  ["git push origin -d v1.0.0", "deny"],
   ["git push origin --delete main", "deny"],
   // Chave que executa programa, por `-c` ou gravada; hooks pulados.
   ["git -c core.pager=less log", "ask"],
@@ -170,12 +173,10 @@ const GIT: readonly [string, Expected][] = [
   // Revisão da #462 (terceira rodada): encanamento do push com a mesma proteção.
   ["git send-pack --force git@github.com:o/r.git HEAD:refs/heads/dev", "deny"],
   ["git send-pack origin main", "deny"],
-  ["git send-pack --force origin fix/x", "ask"],
-  ["git send-pack --all origin", "ask"],
-  ["git send-pack --mirror origin", "ask"],
-  ["git send-pack --stdin origin", "ask"],
+  ["git send-pack --all origin", "deny"],
+  ["git send-pack --mirror origin", "deny"],
+  ["git send-pack --stdin origin", "deny"],
   ["git http-push https://x.test/r.git main", "deny"],
-  ["git http-push --force https://x.test/r.git fix/x", "ask"],
   ["git receive-pack /tmp/r.git", "ask"],
   // Branch protegida local reescrita ou apagada.
   ["git branch -f dev HEAD~1", "ask"],
@@ -229,21 +230,13 @@ const GIT: readonly [string, Expected][] = [
   ["git diff --output=.claude/settings.json", "ask"],
   // #475: o git aceita o prefixo único de uma opção longa; a abreviada vale
   // como a completa (conferido com git real: `reset --har` zera o working tree).
-  ["git push --force-with origin fix/x", "ask"],
-  ["git push --force-i origin fix/x", "ask"],
-  ["git push --forc origin fix/x", "ask"],
-  ["git push --f origin fix/x", "ask"],
-  ["git push --delet origin v1.0.0", "ask"],
-  ["git push --mirro origin fix/x", "ask"],
-  ["git push --al origin fix/x", "ask"],
-  ["git push --prun origin fix/x", "ask"],
-  ["git push --no-veri origin fix/x", "ask"],
-  ["git push --branche origin fix/x", "ask"],
-  ["git send-pack --forc origin fix/x", "ask"],
-  ["git send-pack --al origin fix/x", "ask"],
-  ["git send-pack --mirro origin fix/x", "ask"],
-  ["git send-pack --std origin fix/x", "ask"],
-  ["git http-push --forc https://x.test/r.git fix/x", "ask"],
+  ["git push --delet origin v1.0.0", "deny"],
+  ["git push --mirro origin fix/x", "deny"],
+  ["git push --al origin fix/x", "deny"],
+  ["git push --branche origin fix/x", "deny"],
+  ["git send-pack --al origin fix/x", "deny"],
+  ["git send-pack --mirro origin fix/x", "deny"],
+  ["git send-pack --std origin fix/x", "deny"],
   ["git worktree remove --forc /tmp/wt", "ask"],
   ["git worktree remove --forc .claude/worktrees/../../x", "ask"],
   ["git worktree remove --forc", "ask"],
@@ -316,6 +309,72 @@ const GIT: readonly [string, Expected][] = [
   ["git config -f .git/config push.default upstream", "ask"],
   ["git config include.path ../x.cfg", "ask"],
   ["git config includeIf.gitdir:/x/.path ../x.cfg", "ask"],
+];
+
+/**
+ * Push que passa sem pergunta (decisão do dono, 11/10/2026): destino de
+ * trabalho `<tipo>/<slug>`, também forçado (`-f`, `--force-with-lease`, `+ref`),
+ * `--no-verify`, `--prune`, apagar branch de trabalho e tag nova. A opção
+ * abreviada (#475) vale como a completa.
+ */
+const PUSH_ALLOWED: readonly string[] = [
+  "git push -u origin fix/x",
+  "git push origin fix/x",
+  "git push -f origin fix/x",
+  "git push -uf origin fix/x",
+  "git push --force origin fix/x",
+  "git push --force-with-lease origin fix/x",
+  "git push --force-with-lease=fix/x:abc123 origin fix/x",
+  "git push --force-if-includes origin fix/x",
+  "git push origin +fix/x",
+  "git push origin +fix/x:fix/y",
+  "git push --no-verify origin fix/x",
+  "git push --prune origin fix/x",
+  "git push origin HEAD:fix/x",
+  "git push -f origin HEAD:refs/heads/fix/x",
+  "git push origin fix/x:fix/x",
+  "git push origin --delete fix/x",
+  "git push origin :fix/x",
+  "git push -d origin fix/x",
+  "git push --tags",
+  "git push --tags origin",
+  "git push origin v1.2.3",
+  "git push --repo=git@github.com:o/r.git fix/x",
+  "git send-pack --force origin fix/x",
+  "git http-push --force https://x.test/r.git fix/x",
+  "git push --force-with origin fix/x",
+  "git push --force-i origin fix/x",
+  "git push --forc origin fix/x",
+  "git push --f origin fix/x",
+  "git push --prun origin fix/x",
+  "git push --no-veri origin fix/x",
+  "git send-pack --forc origin fix/x",
+  "git http-push --forc https://x.test/r.git fix/x",
+];
+
+/** Push que nega, e nunca pergunta, em qualquer forma: destino protegido, ou que o texto não resolve. */
+const PUSH_DENIED_FORMS: readonly string[] = [
+  "git push origin main",
+  "git push -f origin dev",
+  "git push origin +staging",
+  "git push origin :",
+  "git push origin +:",
+  "git push -f origin v1.0.0",
+  "git push -f origin tag v1.0.0",
+  "git push -f origin refs/tags/v1.0.0",
+  "git push -f origin HEAD:v1.0.0",
+  "git push -f --tags",
+  "git push --follow-tags --delete origin fix/x",
+  "git push origin feat/*",
+  "git push origin $BRANCH",
+  "git push --force",
+  "git push origin HEAD",
+  "git push --repo=git@github.com:o/r.git dev",
+  "git -c remote.origin.push=refs/heads/fix/x:refs/heads/dev push origin fix/x",
+  "git -c push.default=upstream push origin fix/x",
+  "git -c include.path=../x.cfg push origin fix/x",
+  "git --config-env=push.default=PD push origin fix/x",
+  "git send-pack --stdin origin",
 ];
 
 /** O resto dos achados, sem `git` à frente. */
@@ -533,6 +592,49 @@ describe("classifyRisk: a mesma operação, a mesma decisão, em qualquer forma"
     });
   }
 
+  // Decisão do dono (11/10/2026): "git push não precisa de autorização". Push
+  // para branch de trabalho passa em qualquer forma, forçado ou não; o que
+  // nega, nega com a instrução de explicitar o destino.
+  for (const command of PUSH_ALLOWED) {
+    // `find -execdir … {} +` acrescenta o `{}` ao push: um refspec que só existe na execução, e nega.
+    it.each(forms(command).filter((form) => !form.includes("-execdir")))("push passa: %s", (form) => {
+      expect(classifyRisk(form)).toBeNull();
+    });
+  }
+
+  it.each(PUSH_DENIED_FORMS.flatMap((command) => forms(command)))("push nunca pergunta: %s", (form) => {
+    expect(decision(form)).not.toBe("ask");
+  });
+
+  it.each([
+    ["GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.push GIT_CONFIG_VALUE_0=HEAD:main git push origin fix/x", "deny"],
+    ["GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=push.default GIT_CONFIG_VALUE_0=upstream git push origin fix/x", "deny"],
+    ["GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=include.path GIT_CONFIG_VALUE_0=../x.cfg git -C /wt push origin fix/x", "deny"],
+    ['GIT_CONFIG_PARAMETERS="\'push.default=upstream\'" git push origin fix/x', "deny"],
+    // Fora do push, a variável que muda a configuração do git segue perguntando.
+    ["GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=push.default GIT_CONFIG_VALUE_0=upstream git fetch", "ask"],
+    ['GIT_CONFIG_PARAMETERS="\'push.default=upstream\'" git fetch', "ask"],
+    ["git -c push.default=upstream fetch", "ask"],
+  ] as const)("config do push por variável ou -c: %s -> %s", (command, expected) => {
+    expect(decision(command)).toBe(expected);
+  });
+
+  it("a mensagem do que nega manda explicitar o destino", () => {
+    for (const command of ["git push", "git push --force", "git push origin HEAD", "git push origin $BRANCH", "git -c push.default=upstream push origin fix/x"]) {
+      expect(classifyRisk(command), command).toMatchObject({ decision: "deny", reason: expect.stringContaining("explicite o destino") });
+    }
+    expect(classifyRisk("git push origin main")?.reason).toContain("push direto para main");
+  });
+
+  it("o push em repositório fora do projeto não pergunta; o resto do git, sim", () => {
+    const env = { root: "/repo", cwd: "/repo", home: "/home/eu" };
+    expect(classifyRisk("git -C /etc/outro push origin fix/x", env)).toBeNull();
+    expect(classifyRisk("git --git-dir=/etc/outro/.git push -f origin fix/x", env)).toBeNull();
+    expect(classifyRisk("git -C /etc/outro push origin main", env)?.decision).toBe("deny");
+    expect(classifyRisk("git -C /etc/outro commit -m x", env)?.decision).toBe("ask");
+    expect(classifyRisk("git -C /etc/outro reset --hard", env)?.decision).toBe("ask");
+  });
+
   // Produção pede confirmação por qualquer lançador.
   for (const command of [
     "vercel --prod",
@@ -566,7 +668,7 @@ describe("classifyRisk: a mesma operação, a mesma decisão, em qualquer forma"
 
   it.each([
     ["find . -exec git push -f origin main \\;", "deny"],
-    ["xargs git push --force", "ask"],
+    ["xargs git push --force", "deny"],
     ["find -exec /bin/rm -f {} +", "ask"],
     ["find . -ok rm {} \\;", "ask"],
     ["find . -okdir rm {} \\;", "ask"],
@@ -576,17 +678,17 @@ describe("classifyRisk: a mesma operação, a mesma decisão, em qualquer forma"
     ["echo $(git push origin main)", "deny"],
     ["echo `git reset --hard`", "ask"],
     ['git commit -m "$(rm -rf src)"', "ask"],
-    ["diff <(git push --force) x", "ask"],
+    ["diff <(git push --force) x", "deny"],
     ["bash <<<'rm -rf src'", "ask"],
     ["bash <<EOF\nrm -rf src\nEOF", "ask"],
-    ["watch -n 1 'git push --force'", "ask"],
+    ["watch -n 1 'git push --force'", "deny"],
     ["eval 'git push origin main'", "deny"],
     ["exec -a x sudo ls", "deny"],
     ["command -p rm -rf src", "ask"],
     ["git -c core.hooksPath=/dev/null push origin fix/x", "ask"],
     ["git -c alias.x='!rm -rf src' x", "ask"],
     ["case $x in a|b) git push origin main;; esac", "deny"],
-    ["for b in main; do git push origin $b; done", "ask"],
+    ["for b in main; do git push origin $b; done", "deny"],
     ["for f in .env; do cat $f; done", "deny"],
     // Revisão da #462: `$'…'` decodificado como o bash (`\x`, `\NNN`).
     ["git push origin $'\\x6dain'", "deny"],
@@ -597,7 +699,7 @@ describe("classifyRisk: a mesma operação, a mesma decisão, em qualquer forma"
     ['git rebase -x "rm -rf ~" HEAD~1', "deny"],
     ['git rebase --exec="git push origin main" HEAD~1', "deny"],
     ['git rebase --exec "git push origin main" HEAD~1', "deny"],
-    ['git rebase -ix "git push --force" HEAD~3', "ask"],
+    ['git rebase -ix "git push --force" HEAD~3', "deny"],
     ["git rebase -x 'rm -f x' HEAD~1", "ask"],
     ['git submodule foreach "rm -rf ~"', "deny"],
     ['git submodule --quiet foreach --recursive "git push origin main"', "deny"],
@@ -665,6 +767,8 @@ describe("classifyRisk: a mesma operação, a mesma decisão, em qualquer forma"
     'git commit -m "git push origin main --force"',
     "git commit -m 'limpa o .env de exemplo'",
     "git push -u origin fix/x",
+    "git -c alias.p=push p origin fix/x",
+    "git -c alias.f=fetch f origin",
     "git push origin fix/dev-tools",
     "git push origin --delete fix/x",
     "git checkout -b fix/x-foo origin/dev",
@@ -964,7 +1068,7 @@ describe("uma fonte de verdade para o risco de shell", () => {
     // #488: apagar contêiner pergunta, também no corpo.
     expect(judgeShell("for f in a; do docker rm $f; done", REAL_BASH)).toMatchObject({ decision: "ask", kind: "risk" });
     expect(judgeShell("for f in a; do rm -rf $f; done", REAL_BASH)).toMatchObject({ decision: "ask", kind: "risk" });
-    expect(judgeShell("for f in a; do git push --force origin $f; done", REAL_BASH)).toMatchObject({ decision: "ask" });
+    expect(judgeShell("for f in a; do git push --force origin $f; done", REAL_BASH)).toMatchObject({ decision: "deny" });
     expect(judgeShell("for f in a; do sudo ls; done", REAL_BASH)).toMatchObject({ decision: "deny" });
     expect(judgeShell("for f in a; do cat .env; done", REAL_BASH)).toMatchObject({ decision: "deny" });
   });
@@ -1057,17 +1161,17 @@ describe("#485: invólucro desconhecido, ferramenta fora do catálogo e segredo"
 
   it.each<[string, Expected]>([
     // Busca de sufixo: executável conhecido em qualquer posição do argv.
-    ["foo --bar git push --force origin x", "ask"],
+    ["foo --bar git push --force origin main", "deny"],
     ["/opt/x/bin/wrap -q /bin/rm -rf src", "ask"],
     ["nice arch -arm64 xcrun git push origin main", "deny"],
     ["docker run -v /:/host alpine rm -rf /host/etc", "ask"],
     ["python3 x.py sudo ls", "deny"],
     // Texto novo dentro de um sufixo (`env -S`) também é buscado.
-    ['wrap env -S "foo git push --force origin x"', "ask"],
+    ['wrap env -S "foo git push --force origin main"', "deny"],
     // Invólucros nomeados, inclusive texto de shell entre aspas.
     ['hyperfine --prepare "git reset --hard" "ls"', "ask"],
     ['parallel "rm -rf {}" ::: a b', "ask"],
-    ['flock /tmp/l -c "git push --force origin x"', "ask"],
+    ['flock /tmp/l -c "git push --force origin main"', "deny"],
     ["mise x node@20 -- vercel --prod", "ask"],
     // Postgres: remoto por host, URL, conninfo, variável ou atribuição.
     ["psql -h db.supabase.co -c 'delete from job'", "ask"],

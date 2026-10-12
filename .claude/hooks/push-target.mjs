@@ -11,7 +11,8 @@
 //
 // Falha fecha: comando fora da forma simples (`plainGitCommand`), erro do git
 // ou estouro do tempo devolvem `null`, e o git volta a ser julgado só pelo
-// texto — o push sem refspec, o forçado e o que descarta trabalho perguntam.
+// texto — o push sem refspec nega, com a instrução de explicitar o destino
+// (o push nunca pergunta), e o que descarta trabalho pergunta.
 import { spawnSync } from "node:child_process";
 import { readdirSync, realpathSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";

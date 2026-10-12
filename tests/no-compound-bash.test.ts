@@ -103,8 +103,8 @@ describe("processo real do hook: bloqueia composto, libera simples", () => {
 
   // #461: risco sai em JSON de PreToolUse (saída 0), com ou sem `rtk`.
   it.each([
-    ["rtk git push --force", "ask"],
-    ["git push --force origin fix/x", "ask"],
+    ["rtk git push --force", "deny"],
+    ["git push --force origin main", "deny"],
     ["npx -y vercel --prod", "ask"],
     ["for f in a; do rm -rf $f; done", "ask"],
     ["vercel --prod", "ask"],
@@ -124,10 +124,25 @@ describe("processo real do hook: bloqueia composto, libera simples", () => {
     expect(output.hookSpecificOutput.permissionDecisionReason).toContain("Política de shell do projeto");
   });
 
+  it("o push que o texto não resolve nega, com a instrução de explicitar o destino, e nunca pergunta", () => {
+    for (const command of ["git push", "git push --force", "git push origin HEAD", "git push origin $BRANCH"]) {
+      const result = run(JSON.stringify({ tool_name: "Bash", tool_input: { command } }));
+      expect(result.status, command).toBe(0);
+      const output = JSON.parse(result.stdout) as { hookSpecificOutput: Record<string, string> };
+      expect(output.hookSpecificOutput.permissionDecision, command).toBe("deny");
+      expect(output.hookSpecificOutput.permissionDecisionReason, command).toContain("explicite o destino");
+    }
+  });
+
   it("rotina e laço com corpo liberado saem com 0 e sem saída", () => {
     // #481: a lista libera `Bash` inteiro; ferramenta fora da antiga lista passa.
     const routine = [
       "git push -u origin fix/x",
+      // 11/10/2026: push não precisa de autorização, forçado de branch de trabalho inclusive.
+      "git push --force origin fix/x",
+      "git push -f origin fix/x",
+      "git push --force-with-lease origin fix/x",
+      "git push --no-verify origin fix/x",
       "for f in a b; do echo $f; done",
       "git log | head",
       "gh secret set X",

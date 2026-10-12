@@ -1398,6 +1398,8 @@ function judgeChmod(args) {
 }
 
 const GIT_GLOBAL_VALUE = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--super-prefix", "--list-cmds"]);
+/** O `push` e o encanamento dele: o mesmo julgamento de destino (`judgePush`). */
+const GIT_PUSH_SUBCOMMANDS = new Set(["push", "send-pack", "http-push"]);
 
 // ---------------------------------------------------------------------------
 // Opção longa abreviada do git (#475)
@@ -1519,31 +1521,58 @@ function judgeGit(args, context) {
     if (repo) repos.push(repo[1]);
     k++;
   }
+  const sub = args[k];
+  const pushing = sub !== undefined && GIT_PUSH_SUBCOMMANDS.has(sub);
   let worst = null;
+  /** `-c alias.<sub>=<valor>` sem `!`: o git roda `<valor> <resto>` no lugar do subcomando. */
+  const aliased = [];
   for (const entry of configs) {
     const eq = entry.indexOf("=");
     const key = (eq === -1 ? entry : entry.slice(0, eq)).toLowerCase();
     const value = eq === -1 ? "" : entry.slice(eq + 1);
     if (GIT_EXEC_KEY.test(key)) worst = stronger(worst, ask(`git -c ${key} executa programa ou desliga os hooks`));
     if (key.startsWith("alias.") && value.trimStart().startsWith("!")) worst = stronger(worst, ask("alias do git que roda shell"));
+    else if (sub !== undefined && key === `alias.${sub.toLowerCase()}` && value.trim() !== "") aliased.push(value);
     // `remote.<r>.push`, `push.default=upstream`, `branch.<b>.merge`, `url.*.pushInsteadOf`:
     // trocam o destino do push por fora do refspec que se lê (#476). Também
-    // `include.path`, que carrega um arquivo com qualquer uma delas (#505).
-    if (/^(?:push|remote|branch|url)\./.test(key) || GIT_PUSH_KEY.test(key)) worst = stronger(worst, ask(`git -c ${key} pode trocar o destino do push`));
+    // `include.path`, que carrega um arquivo com qualquer uma delas (#505). No
+    // push o destino não se resolve pelo texto, então nega (o push não
+    // pergunta) e manda tirar o `-c`; fora do push, pergunta como antes.
+    if (/^(?:push|remote|branch|url)\./.test(key) || GIT_PUSH_KEY.test(key)) {
+      worst = stronger(
+        worst,
+        pushing
+          ? deny(`git -c ${key} troca o destino do push e o texto não o resolve: tire o -c e explicite o destino (\`git push origin <branch>\`)`)
+          : ask(`git -c ${key} pode trocar o destino do push`),
+      );
+    }
   }
-  const sub = args[k];
   // A opção longa abreviada vale como a completa (#475): todo julgamento
   // abaixo lê a forma completa.
   const rest = expandGitOptions(sub, args.slice(k + 1));
   const env = context.env ?? NO_ENV;
-  // O repositório fora do projeto (e fora do temporário): o que não só lê pergunta.
-  if (sub !== undefined && !GIT_READ_SUBCOMMANDS.has(sub)) {
+  // O repositório fora do projeto (e fora do temporário): o que não só lê
+  // pergunta. O push só move ref remota, não toca arquivo de lá: o destino
+  // protegido nega por nome, em qualquer repositório.
+  if (sub !== undefined && !GIT_READ_SUBCOMMANDS.has(sub) && !pushing) {
     for (const dir of [place, ...repos.map((repo) => joinPath(place, repo))]) {
       if (dir !== null && outsideWrite(dir, env)) worst = stronger(worst, ask(`git ${sub} num repositório fora do projeto (${dir})`));
     }
   }
   // Arquivo de saída: relativo ao diretório do `-C`.
   for (const out of gitOutputs(sub, rest)) worst = stronger(worst, writeRisk(joinPath(place, out), env));
+  // O alias vale além do subcomando de mesmo nome (o git não deixa alias
+  // sobrescrever comando interno, então os dois são julgados): `git -c
+  // alias.p=push p origin main` é push para `main`.
+  for (const value of aliased) {
+    const depth = context.aliasDepth ?? 0;
+    worst = stronger(
+      worst,
+      depth >= 4
+        ? ask("alias do git encadeado demais para julgar")
+        : judgeGit([...args.slice(0, k), ...splitString(value, {}), ...args.slice(k + 1)], { ...context, aliasDepth: depth + 1 }),
+    );
+  }
   return stronger(worst, judgeGitSubcommand(sub, rest, { ...context, place }));
 }
 
@@ -1643,10 +1672,14 @@ function judgeGitSubcommand(sub, rest, context) {
       // O destino real (#476): resolvido pelo git no comando conferido; sem
       // ele, o julgamento pelo texto de sempre.
       return judgePush(rest, verifiedGit(context));
-    // Encanamento do push: mesmo destino, mesma proteção. `--stdin` lê os refs da entrada.
+    // Encanamento do push: mesmo destino, mesma proteção. `--stdin` lê os refs
+    // da entrada, e o destino não se vê pelo texto: nega, como o push que não resolve.
     case "send-pack":
     case "http-push":
-      return stronger(judgePush(rest), has(rest, "--stdin") ? ask(`git ${sub} --stdin lê os refs da entrada`) : null);
+      return stronger(
+        judgePush(rest),
+        has(rest, "--stdin") ? deny(`git ${sub} --stdin lê os refs da entrada e o destino não se vê pelo texto: explicite o destino (\`git push origin <branch>\`)`) : null,
+      );
     case "receive-pack":
       return ask("git receive-pack atualiza refs lidos da entrada");
     case "branch":
@@ -1656,7 +1689,7 @@ function judgeGitSubcommand(sub, rest, context) {
       return positional.length >= 2 || has(rest, "-d", "--delete") ? ask("git symbolic-ref reescreve o HEAD") : null;
     }
     // `commit --amend` e `rebase`/`rebase -i` em branch de trabalho são rotina
-    // (G85): o portão de reescrita é o push forçado, que já pergunta.
+    // (G85): o portão da reescrita é o push para branch protegida, que nega.
     case "rebase": {
       let worst = null;
       for (const payload of optionPayloads(rest, "x", "--exec")) worst = stronger(worst, riskOf(payload, context.depth + 1, true, context.env));
@@ -1883,20 +1916,28 @@ function judgeCheckout(rest) {
 const PUSH_VALUE = new Set(["--repo", "--receive-pack", "--exec", "--push-option"]);
 
 /**
- * Push: `main`, `staging` e `dev` por qualquer refspec (`HEAD:main`,
- * `refs/heads/main`, `:main`) são negados; `--all`/`--mirror`/`--branches`,
- * `--prune`, refspec com variável e tag apagada perguntam sempre. Sem o
- * contexto conferido (#476), também perguntam o push forçado, `--no-verify`,
- * `HEAD` sem destino e o push sem refspec. Com ele, o destino real vem do git:
- * o push sem refspec vai para o `@{push}`, `HEAD` vai para o branch atual, e
- * forçado ou `--no-verify` passam quando nenhum destino é protegido.
+ * Push, por decisão do dono (11/10/2026): "git push não precisa de
+ * autorização". O julgamento tem dois resultados, passa ou nega — nunca
+ * `ask` —, e o que nega é bloqueio que o agente corrige sozinho.
+ *
+ * Nega: `main`, `staging` e `dev` por qualquer refspec (`HEAD:main`,
+ * `refs/heads/main`, `:main`, `+dev`) ou pelo destino real (`@{push}`,
+ * upstream, `HEAD`, configuração); `--all`/`--mirror`/`--branches` e o push
+ * "matching" (`:`); tag apagada ou sobrescrita (regra 22) e ref sem `/`
+ * apagada; e o destino que não dá para resolver — variável ou curinga no
+ * refspec, `HEAD` sem contexto, push sem refspec cujo `@{push}` o git não
+ * resolve ou cuja configuração (`remote.*.push`, `push.default`…) desvia —,
+ * com a instrução de explicitar o destino.
+ *
+ * Passa: o resto, inclusive forçado (`-f`, `--force`, `--force-with-lease`,
+ * `+ref`), `--no-verify`, `--prune` e apagar branch de trabalho
+ * `<tipo>/<slug>`. Sem o contexto conferido (#476) o refspec sem `:` vale como
+ * "mesmo nome"; com ele, o destino real vem do git: o push sem refspec vai
+ * para o `@{push}`, `HEAD` vai para o branch atual.
  *
  * Refspec sem `:` é resolvido pelo git local antes de virar destino: ref
  * simbólica (`atalho` → `dev`, `main-worktree/HEAD`) leva o destino do alvo, e
  * com `push.default=upstream` o nome de um branch vai para o upstream dele.
- * Por isso, com o contexto conferido, só o branch atual (ou `HEAD`/`@`) conta
- * como destino conhecido; outro nome passa no push comum, mas forçado ou com
- * `--no-verify` pergunta. Tag (regra 22) forçada pergunta sempre.
  * @param {string[]} rest
  * @param {GitTarget | null} [verified]
  */
@@ -1906,9 +1947,20 @@ function judgePush(rest, verified = null) {
   let deleting = false;
   let forced = false;
   let otherRepo = false;
-  let noVerify = false;
   let tags = false;
+  /** `--tags` sozinho empurra só as tags: o push padrão (`push.default`) não entra. */
+  let onlyTags = false;
   const positional = [];
+  /**
+   * Destino que não dá para resolver: nega com a forma que o agente pode usar.
+   * Com configuração do push que desvia o destino (ou `push.default=upstream`),
+   * o refspec sem `:` também não se resolve, então o exemplo traz o `:`.
+   * @param {string} why
+   */
+  const unresolved = (why) => {
+    const example = verified !== null && (!safe || upstreamMode) ? "git push origin <branch>:<branch>" : "git push origin <branch>";
+    return deny(`git push sem destino resolvível (${why}): explicite o destino (\`${example}\`)`);
+  };
   for (let k = 0; k < rest.length; k++) {
     const arg = rest[k];
     if (arg === "--") {
@@ -1920,11 +1972,12 @@ function judgePush(rest, verified = null) {
       if (flag === "--force" || flag === "--force-with-lease" || flag === "--force-if-includes") forced = true;
       else if (flag === "--mirror" || flag === "--all" || flag === "--branches") {
         everything = true;
-        worst = stronger(worst, ask(`git push ${flag} empurra todos os branches`));
-      } else if (flag === "--prune") worst = stronger(worst, ask("git push --prune apaga branch remoto"));
-      else if (flag === "--no-verify") noVerify = true;
-      else if (flag === "--delete") deleting = true;
-      else if (flag === "--tags" || flag === "--follow-tags") tags = true;
+        worst = stronger(worst, deny(`git push ${flag} empurra todos os branches, branches protegidas inclusive`));
+      } else if (flag === "--delete") deleting = true;
+      else if (flag === "--tags") {
+        tags = true;
+        onlyTags = true;
+      } else if (flag === "--follow-tags") tags = true;
       else if (flag === "--repo") otherRepo = true;
       if (PUSH_VALUE.has(flag) && !arg.includes("=")) k++;
       continue;
@@ -1940,14 +1993,15 @@ function judgePush(rest, verified = null) {
   const push = verified?.push ?? null;
   const safe = push !== null && push.safe === true;
   // `git push <remoto> tag <nome>` é `refs/tags/<nome>` (com `--delete`, `:refs/tags/<nome>`).
+  // Com `--repo`, o repositório já foi dado e toda palavra é refspec.
   const refspecs = [];
-  for (let k = 1; k < positional.length; k++) {
+  for (let k = otherRepo ? 0 : 1; k < positional.length; k++) {
     if (positional[k] === "tag" && k + 1 < positional.length) refspecs.push(`refs/tags/${positional[++k]}`);
     else refspecs.push(positional[k]);
   }
   if (refspecs.some((spec) => spec.startsWith("+"))) forced = true;
-  // `--tags`/`--follow-tags` forçado sobrescreve tag publicada (regra 22).
-  if (tags && (forced || deleting)) worst = stronger(worst, ask("git push forçado com --tags/--follow-tags sobrescreve tag (regra 22)"));
+  // `--tags`/`--follow-tags` forçado ou apagando sobrescreve tag publicada (regra 22).
+  if (tags && (forced || deleting)) worst = stronger(worst, deny("git push forçado com --tags/--follow-tags sobrescreve tag (regra 22)"));
   /** Branch atual conferido (`null` sem contexto ou com HEAD destacado). */
   const current =
     verified && typeof verified.branch === "string" && verified.branch !== "" && pushDestination(verified.branch) !== "HEAD" ? pushDestination(verified.branch) : null;
@@ -1958,13 +2012,22 @@ function judgePush(rest, verified = null) {
   // branch vai para o upstream dele, não para o mesmo nome.
   const upstreamMode = push !== null && (push.pushDefault === "upstream" || push.pushDefault === "tracking");
   const symrefs = new Set(Array.isArray(push?.symrefs) ? push.symrefs.filter((name) => typeof name === "string").map(pushDestination) : []);
-  /** Destino que o push escreve; `null` é "não resolvido". */
+  /** Destino que o push escreve, resolvido. */
   const destinations = [];
-  if (refspecs.length === 0 && !everything) {
-    const remote = positional[0] ?? null;
+  /** Destinos que o git inferiu (`@{push}`, upstream), sem que o comando os escreva. */
+  const inferred = new Set();
+  if (refspecs.length === 0 && !everything && !onlyTags) {
+    const remote = otherRepo ? null : positional[0] ?? null;
     const resolved = !otherRepo && pushTarget !== null && (remote === null || remote === push.remote);
-    if (!resolved) worst = stronger(worst, ask("git push sem refspec explícito pode ir para branch protegida"));
-    destinations.push(resolved ? pushTarget : null);
+    if (resolved) {
+      destinations.push(pushTarget);
+      inferred.add(pushTarget);
+    } else {
+      worst = stronger(
+        worst,
+        unresolved(verified === null ? "o contexto do git não foi conferido" : "o git não resolve o @{push} ou a configuração do push desvia o destino"),
+      );
+    }
   }
   for (const spec of refspecs) {
     const bare = spec.replace(/^\+/, "");
@@ -1974,74 +2037,78 @@ function judgePush(rest, verified = null) {
     if (PROTECTED_BRANCHES.has(target)) return deny(`push direto para ${target}`);
     // `:` (ou `+:`) é o push "matching": todo branch com o mesmo nome no remoto, `dev` inclusive.
     if (target === "") {
-      worst = stronger(worst, ask(`git push ${spec} empurra todos os branches de mesmo nome`));
-      destinations.push(null);
+      worst = stronger(worst, deny(`git push ${spec} empurra todos os branches de mesmo nome, branches protegidas inclusive`));
       continue;
     }
     // `$VAR`, curinga e o `{}` de `find -exec`/`xargs -I`: o destino só aparece na hora.
     if (/[$`*{]/.test(bare)) {
-      worst = stronger(worst, ask("refspec com variável ou curinga"));
-      destinations.push(null);
+      worst = stronger(worst, unresolved("refspec com variável ou curinga"));
       continue;
     }
     // Sem `:destino`, o git segue a ref simbólica até o branch dela:
     // `main-worktree/HEAD` e `worktrees/<n>/HEAD` são o branch de outra worktree.
     if (colon === -1 && !deleting && (/^(?:main-worktree|worktrees)\//.test(bare) || (target !== "HEAD" && bare.split("/").includes("HEAD")))) {
-      worst = stronger(worst, ask(`git push ${spec} empurra o branch de outra worktree`));
-      destinations.push(null);
+      worst = stronger(worst, unresolved(`${spec} é o branch de outra worktree`));
       continue;
     }
     // Branch local que é ref simbólica (`refs/heads/atalho` → `dev`): o push leva o alvo.
     if (!deleting && source !== "" && symrefs.has(pushDestination(source))) {
-      worst = stronger(worst, ask(`git push ${spec} nomeia ref simbólica, que leva o branch para onde ela aponta`));
-      destinations.push(null);
+      worst = stronger(worst, unresolved(`${spec} é ref simbólica e leva o branch para onde ela aponta`));
       continue;
     }
     // `HEAD` sem `:destino` vai para o branch atual, que só o contexto conferido conhece.
     if (target === "HEAD") {
       if (colon !== -1 || deleting || current === null) {
-        worst = stronger(worst, ask("git push HEAD sem destino explícito"));
-        destinations.push(null);
+        worst = stronger(worst, unresolved("HEAD sem destino explícito"));
         continue;
       }
       target = current;
       if (PROTECTED_BRANCHES.has(target)) return deny(`push direto para ${target} (HEAD é ${verified.branch})`);
     } else if (colon === -1 && !deleting && verified) {
       if (target !== current) {
-        // Outro nome: o git o resolve aqui (ref simbólica, upstream), e o
-        // destino não é conhecido. Com upstream, nem o push comum passa.
-        if (upstreamMode) worst = stronger(worst, ask(`git push ${spec} com push.default=upstream vai para o upstream de ${target}`));
-        destinations.push(null);
-        continue;
-      }
-      if (upstreamMode) {
+        // Outro nome: o git o resolve aqui (ref simbólica, upstream). Sem
+        // upstream, é o mesmo nome; com ele, o destino não é conhecido.
+        if (upstreamMode) {
+          worst = stronger(worst, unresolved(`push.default=upstream leva ${target} para o upstream dele`));
+          continue;
+        }
+      } else if (upstreamMode) {
         if (pushTarget === null) {
-          worst = stronger(worst, ask(`git push ${spec} com push.default=upstream e upstream não resolvido`));
-          destinations.push(null);
+          worst = stronger(worst, unresolved("push.default=upstream e o upstream não resolve"));
           continue;
         }
         target = pushTarget;
+        inferred.add(target);
       }
     }
     // Sem `:destino`, `remote.<r>.push` na configuração pode trocar o destino.
-    if (colon === -1 && verified && !safe) worst =stronger(worst, ask("git push com configuração que pode trocar o destino"));
-    // Apagar ref remoto (`:x` ou `--delete x`): branch de trabalho `<tipo>/<slug>`
-    // passa; tag (regra 22: toda tag SemVer tem Release) e nome sem `/` perguntam.
-    if ((deleting || (colon === 0 && bare.length > 1)) && (target.startsWith("tags/") || !target.includes("/"))) {
-      worst = stronger(worst, ask(`git push apaga ref remoto que pode ser tag (${target})`));
+    if (colon === -1 && !deleting && verified && !safe) {
+      worst = stronger(worst, unresolved("a configuração do push (remote.*.push, remote.pushDefault, url.*.pushInsteadOf…) pode trocar o destino"));
+      continue;
     }
-    // Forçado sobre tag (regra 22): `refs/tags/…`, `tag <nome>` ou destino curto
-    // sem `/`, que o remoto casa com a tag de mesmo nome (`HEAD:v1.0.0`).
-    if (forced && (target.startsWith("tags/") || (colon > 0 && !/^refs\/heads\//.test(bare.slice(colon + 1)) && !target.includes("/")))) {
-      worst = stronger(worst, ask(`git push forçado pode sobrescrever tag (${target})`));
+    // Apagar ref remoto (`:x` ou `--delete x`): branch de trabalho `<tipo>/<slug>`
+    // passa; tag (regra 22: toda tag SemVer tem Release) e nome sem `/` não.
+    if ((deleting || (colon === 0 && bare.length > 1)) && (target.startsWith("tags/") || !target.includes("/"))) {
+      worst = stronger(worst, deny(`git push apaga ref remoto que pode ser tag (${target}); regra 22`));
+    }
+    // Forçado sobre tag (regra 22): `refs/tags/…`, `tag <nome>`, destino curto
+    // sem `/`, que o remoto casa com a tag de mesmo nome (`HEAD:v1.0.0`), ou
+    // nome sem `/` que não é o branch atual (`-f origin v1.0.0`).
+    if (
+      forced &&
+      (target.startsWith("tags/") ||
+        (colon > 0 && !/^refs\/heads\//.test(bare.slice(colon + 1)) && !target.includes("/")) ||
+        (colon === -1 && !target.includes("/") && target !== current))
+    ) {
+      worst = stronger(worst, deny(`git push forçado pode sobrescrever tag (${target}); regra 22`));
     }
     destinations.push(target);
   }
-  const allKnown = verified !== null && destinations.length > 0 && destinations.every((name) => name !== null && name !== "HEAD" && !PROTECTED_BRANCHES.has(pushDestination(name)));
-  if (forced && !allKnown) worst = stronger(worst, ask("push forçado"));
-  if (noVerify && !allKnown) worst = stronger(worst, ask("git push --no-verify pula o hook pre-push"));
-  if (destinations.some((name) => name !== null && PROTECTED_BRANCHES.has(pushDestination(name)))) {
-    worst = stronger(worst, ask("git push cujo destino real é branch protegida"));
+  const protectedDestination = destinations.find((name) => PROTECTED_BRANCHES.has(pushDestination(name)));
+  if (protectedDestination !== undefined) {
+    // Destino que o git inferiu (`@{push}`, upstream): o branch de trabalho se empurra com o destino escrito.
+    const hint = inferred.has(protectedDestination) ? "; para empurrar o branch de trabalho, explicite o destino (`git push origin <branch>:<branch>`)" : "";
+    worst = stronger(worst, deny(`git push cujo destino real é branch protegida (${protectedDestination})${hint}`));
   }
   return worst;
 }
@@ -2741,9 +2808,10 @@ const SSH_RUNS_LOCAL = [/(?:proxy|local|knownhosts)command|pkcs11provider|securi
  * Risco das atribuições de um comando: o valor de variável que executa
  * programa é julgado como comando (vale a decisão mais forte), e config do
  * git por variável (`GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n`) vale como `git -c`.
- * `GIT_CONFIG_PARAMETERS` não é lido: pergunta.
+ * `GIT_CONFIG_PARAMETERS` não é lido: pergunta, e no `git push` nega (o push
+ * não pergunta; `command` são as palavras do comando já sem atribuição).
  */
-function variableRisk(assignments, context) {
+function variableRisk(assignments, context, command = []) {
   if (assignments.length === 0) return null;
   const values = new Map();
   for (const assignment of assignments) {
@@ -2760,8 +2828,15 @@ function variableRisk(assignments, context) {
       else worst = stronger(worst, riskOf(value, context.depth + 1, true, context.env));
       // Como `diff.external`: o git passa o caminho do arquivo do projeto ao programa (`GIT_EXTERNAL_DIFF=rm`).
       if (name === "GIT_EXTERNAL_DIFF") worst = stronger(worst, ask("GIT_EXTERNAL_DIFF executa programa sobre os arquivos, como diff.external"));
-    } else if (name === "GIT_CONFIG_PARAMETERS") worst = stronger(worst, ask("GIT_CONFIG_PARAMETERS configura o git por variável"));
-    else {
+    } else if (name === "GIT_CONFIG_PARAMETERS") {
+      const pushing = command[0] === "git" && command.slice(1).some((word) => GIT_PUSH_SUBCOMMANDS.has(word));
+      worst = stronger(
+        worst,
+        pushing
+          ? deny("GIT_CONFIG_PARAMETERS configura o git por variável e o texto não resolve o destino do push: tire a variável e explicite o destino (`git push origin <branch>`)")
+          : ask("GIT_CONFIG_PARAMETERS configura o git por variável"),
+      );
+    } else {
       const index = /^GIT_CONFIG_KEY_(\d+)$/.exec(name);
       if (!index) continue;
       const key = value.toLowerCase();
@@ -2771,6 +2846,17 @@ function variableRisk(assignments, context) {
         worst = stronger(worst, riskOf(configured, context.depth + 1, false, context.env));
       }
       if (key.startsWith("alias.") && configured.trimStart().startsWith("!")) worst = stronger(worst, ask("alias do git que roda shell"));
+      // Como o `-c`: a chave que desvia o destino do push (#505), por variável.
+      // No `git push` nega e manda tirar a variável; fora dele, pergunta.
+      if (/^(?:push|remote|branch|url)\./.test(key) || GIT_PUSH_KEY.test(key)) {
+        const pushing = command[0] === "git" && command.slice(1).some((word) => GIT_PUSH_SUBCOMMANDS.has(word));
+        worst = stronger(
+          worst,
+          pushing
+            ? deny(`${name}=${key} troca o destino do push e o texto não o resolve: tire a variável e explicite o destino (\`git push origin <branch>\`)`)
+            : ask(`${name}=${key} pode trocar o destino do push`),
+        );
+      }
     }
     if (worst?.decision === "deny") return worst;
   }
@@ -2809,7 +2895,7 @@ function judgeWords(input, context) {
     } else break;
   }
   // Programa apontado por variável (`GIT_SSH_COMMAND="rm -rf src" git fetch`): só as atribuições deste comando.
-  const launched = stronger(escaped, variableRisk(assigned.slice(inherited), context));
+  const launched = stronger(escaped, variableRisk(assigned.slice(inherited), context, words));
   if (launched?.decision === "deny") return launched;
   return stronger(launched, judgeCommand(words, assigned, printsEnv, context));
 }

@@ -283,16 +283,16 @@ async function openCode(command: string): Promise<Decision> {
 const RISKY: readonly [string, Decision][] = [
   // Critical 1: com `rtk`, a lista ancorada em `git …` não vale.
   ["rtk git push origin main", "deny"],
-  ["rtk git push --force", "ask"],
+  ["rtk git push --force", "deny"],
   ["rtk git reset --hard", "ask"],
   // Major 2: opção global antes do subcomando.
   ["git -c x=y push origin main", "deny"],
   ["git --git-dir=.git push origin main", "deny"],
-  ["git -c core.hooksPath=/dev/null push --force", "ask"],
+  ["git -c core.hooksPath=/dev/null push origin fix/x", "ask"],
   ["git --no-pager reset --hard", "ask"],
   // Major 3: `find -exec` e `xargs` carregam comando.
   ["find . -exec git push -f origin main \\;", "deny"],
-  ["xargs git push --force", "ask"],
+  ["xargs git push --force", "deny"],
   ["find -exec /bin/rm -f {} +", "ask"],
   ["find . -execdir rm {} \\;", "ask"],
   ["find . -ok rm {} \\;", "ask"],
@@ -315,9 +315,9 @@ const RISKY: readonly [string, Decision][] = [
   // Major 6: push protegido por ref completa, `--all` e sem refspec.
   ["git push origin HEAD:refs/heads/main", "deny"],
   ["git push origin refs/heads/main", "deny"],
-  ["git push --all", "ask"],
-  ["git push", "ask"],
-  ["git push origin", "ask"],
+  ["git push --all", "deny"],
+  ["git push", "deny"],
+  ["git push origin", "deny"],
   // Major 7: scripts que agem em produção.
   ["pnpm db:import-production --apply", "ask"],
   ["pnpm run db:import-production", "ask"],
@@ -338,7 +338,6 @@ const RISKY: readonly [string, Decision][] = [
   ["git rm -r src", "ask"],
   ["echo x > .claude/settings.json", "ask"],
   // Lista que já existia, agora no classificador.
-  ["git -C /repo push --force origin fix/x", "ask"],
   ["git reset --hard origin/dev", "ask"],
   ["git -C /repo clean -fd", "ask"],
   ["git restore src/a.ts", "ask"],
@@ -391,9 +390,9 @@ const RISKY: readonly [string, Decision][] = [
   // Corpo de laço arriscado pela política (#481: a lista libera o resto).
   ["for f in a; do rm -rf $f; done", "ask"],
   ["for f in a; do sudo ls; done", "deny"],
-  ["while true; do git push --force; done", "ask"],
+  ["while true; do git push --force; done", "deny"],
   // Revisão da #462 (segunda rodada).
-  ["git push origin @", "ask"],
+  ["git push origin @", "deny"],
   ["git push origin HEAD:heads/main", "deny"],
   ["git push origin heads/dev", "deny"],
   ["git push origin $'\\x6dain'", "deny"],
@@ -422,13 +421,12 @@ const RISKY: readonly [string, Decision][] = [
   ["vercel deploy --target=PRODUCTION", "ask"],
   ["npx vercel --prod=1", "ask"],
   ["git checkout src/", "ask"],
-  ["git push origin :refs/tags/v1", "ask"],
-  ["git push --delete origin v1.0.0", "ask"],
+  ["git push origin :refs/tags/v1", "deny"],
+  ["git push --delete origin v1.0.0", "deny"],
   // #475: o git aceita o prefixo único de opção longa; a abreviada pergunta
   // como a completa, nos três harnesses.
   ["git reset --har", "ask"],
-  ["git push --force-with origin fix/x", "ask"],
-  ["git push --delet origin v1.0.0", "ask"],
+  ["git push --delet origin v1.0.0", "deny"],
   ["git worktree remove --forc /tmp/wt", "ask"],
   ["git switch --discard main", "ask"],
   ["git checkout --forc main", "ask"],
@@ -450,6 +448,14 @@ const ROUTINE: readonly string[] = [
   'git -C /repo/.claude/worktrees/wt commit -m "chore: restore foo"',
   "git -C /wt log --grep clean",
   "git push -u origin fix/x",
+  "git push --force origin fix/x",
+  "git push -f origin fix/x",
+  "git push --force-with-lease origin fix/x",
+  "git push --force-with origin fix/x",
+  "git push --no-verify origin fix/x",
+  "git push --prune origin fix/x",
+  "git push origin +fix/x",
+  "git -C /repo push --force origin fix/x",
   "gh api -X DELETE repos/x/y/git/refs/heads/z",
   "gh secret set X",
   "gh pr merge 1 --merge --delete-branch",
@@ -542,11 +548,11 @@ const SAME: readonly [string, Decision][] = [
   // #488: apagar contêiner pergunta, também no corpo de laço.
   ["for f in a; do docker rm $f; done", "ask"],
   ["case $x in a|b) rm -rf build;; esac", "ask"],
-  ["for f in a; do git push --force origin $f; done", "ask"],
+  ["for f in a; do git push --force origin $f; done", "deny"],
   ["pnpm node scripts/migration/production.ts --source snapshot.db --apply", "ask"],
   ["pnpm node --run db:import-production", "ask"],
   ["git send-pack --force git@github.com:o/r.git HEAD:refs/heads/dev", "deny"],
-  ["git send-pack --mirror origin", "ask"],
+  ["git send-pack --mirror origin", "deny"],
   ["git branch -f dev HEAD~1", "ask"],
   ["git update-ref refs/heads/main HEAD~1", "ask"],
   ["git symbolic-ref HEAD refs/heads/main", "ask"],
@@ -625,9 +631,9 @@ const OUTSIDE_OLD_LIST: readonly string[] = [
 
 /** #481: com `Bash` liberado, o risco sai da política, com a mesma decisão nos três. */
 const RISK_AFTER_481: readonly [string, Decision][] = [
-  ["git push --force origin feat/x", "ask"],
-  ["git push -f origin feat/x", "ask"],
-  ["rtk git push --force origin feat/x", "ask"],
+  ["git push --force origin main", "deny"],
+  ["git push -f origin main", "deny"],
+  ["rtk git push --force origin main", "deny"],
   ["rm -rf build", "ask"],
   ["rtk rm -rf build", "ask"],
   ["vercel --prod", "ask"],
@@ -652,36 +658,36 @@ const RISK_AFTER_481: readonly [string, Decision][] = [
 const AFTER_485: readonly [string, Decision][] = [
   // Achado 1: invólucro desconhecido.
   ["coproc sudo ls", "deny"],
-  ["coproc git push --force origin x", "ask"],
+  ["coproc git push --force origin main", "deny"],
   ["coproc rm -rf src", "ask"],
   ["noglob rm -rf src", "ask"],
-  ["noglob git push --force origin x", "ask"],
+  ["noglob git push --force origin main", "deny"],
   ["nocorrect git reset --hard", "ask"],
   ["arch -arm64 rm -rf src", "ask"],
-  ["arch -arm64 git push --force origin x", "ask"],
+  ["arch -arm64 git push --force origin main", "deny"],
   ["arch -arm64 sudo ls", "deny"],
   ["arch -arm64 vercel --prod", "ask"],
   ["arch -arm64 git push origin main", "deny"],
   ["uv run rm -rf src", "ask"],
-  ["uv run git push --force origin x", "ask"],
+  ["uv run git push --force origin main", "deny"],
   ["poetry run git reset --hard", "ask"],
   ["bundle exec rm -rf src", "ask"],
-  ["direnv exec . git push --force origin x", "ask"],
+  ["direnv exec . git push --force origin main", "deny"],
   ["mise exec -- vercel --prod", "ask"],
   ["op run -- vercel --prod", "ask"],
-  ["doppler run -- git push -f", "ask"],
-  ["dotenv -- git push --force origin x", "ask"],
-  ["unbuffer git push --force origin x", "ask"],
-  ["setsid git push --force origin x", "ask"],
-  ["flock /tmp/l git push --force origin x", "ask"],
-  ["chronic git push --force origin x", "ask"],
+  ["doppler run -- git push -f", "deny"],
+  ["dotenv -- git push --force origin main", "deny"],
+  ["unbuffer git push --force origin main", "deny"],
+  ["setsid git push --force origin main", "deny"],
+  ["flock /tmp/l git push --force origin main", "deny"],
+  ["chronic git push --force origin main", "deny"],
   ["sandbox-exec -p x rm -rf src", "ask"],
   ["taskpolicy -b rm -rf src", "ask"],
   ["xcrun rm -rf src", "ask"],
-  ["parallel git push --force origin ::: x", "ask"],
+  ["parallel git push --force origin main ::: x", "deny"],
   ["parallel rm -rf ::: src", "ask"],
-  ['hyperfine "git push --force origin x"', "ask"],
-  ["entr git push --force origin x", "ask"],
+  ['hyperfine "git push --force origin main"', "deny"],
+  ["entr git push --force origin main", "deny"],
   ["fd -x rm -rf", "ask"],
   ["docker run -v /:/host alpine rm -rf /host/etc", "ask"],
   ["docker exec x rm -rf /", "deny"],
@@ -907,6 +913,7 @@ describe("OpenCode: tradução gerada de `.claude/settings.json`", () => {
     "rtk git push -u origin feat/x",
     "rtk git push origin staging",
     "git push --force origin feat/x",
+    "git push --force origin main",
     "git reset --hard HEAD~1",
     "git clean -fd",
     "gh api -X DELETE repos/x",
@@ -946,7 +953,8 @@ describe("OpenCode: tradução gerada de `.claude/settings.json`", () => {
     expect(openCodeDecide(permission, "bash", "rtk proxy sudo ls")).toBe("deny");
     expect(openCodeDecide(permission, "bash", "rtk rm -rf /")).toBe("deny");
     // O risco que não é deny ancorado fica com o plugin (#461), que bloqueia.
-    expect(await openCode("git push --force origin feat/x")).toBe("ask");
+    expect(await openCode("git push --force origin feat/x")).toBe("allow");
+    expect(await openCode("git push --force")).toBe("deny");
     expect(await openCode("rtk proxy rm -rf build")).toBe("ask");
   });
 
@@ -1136,7 +1144,8 @@ describe("guarda do Codex", () => {
   it("nega o que o Claude Code nega e o que ele perguntaria", () => {
     const bash = (command: string) => judge({ tool_name: "Bash", tool_input: { command } }, rules, context).decision;
     expect(bash("rtk git push origin main")).toBe("deny");
-    expect(bash("git push --force origin feat/x")).toBe("ask");
+    expect(bash("git push --force origin feat/x")).toBe("allow");
+    expect(bash("git push --force origin main")).toBe("deny");
     expect(bash("pnpm check")).toBe("allow");
     expect(bash("docker ps")).toBe("allow");
     expect(bash("rtk ls -la")).toBe("allow");
@@ -1150,7 +1159,8 @@ describe("guarda do Codex", () => {
     expect(bash("docker ps").decision).toBe("allow");
     expect(bash("sudo ls").decision).toBe("deny");
     expect(bash("rm -rf build")).toMatchObject({ decision: "ask", message: expect.stringContaining("rm") });
-    expect(bash("git push --force origin feat/x").decision).toBe("ask");
+    expect(bash("git push --force origin feat/x").decision).toBe("allow");
+    expect(bash("git push")).toMatchObject({ decision: "deny", message: expect.stringContaining("explicite o destino") });
     expect(bash("vercel --prod").decision).toBe("ask");
     const compound = bash("git status && docker ps");
     expect(compound.decision).toBe("deny");

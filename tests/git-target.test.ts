@@ -3,11 +3,14 @@
 //   checkout principal, fora de branch protegida, passa sem pergunta — push
 //   sem refspec, forçado, `--delete` de branch de trabalho, `reset --hard`,
 //   `clean`, `checkout` com descarte. Continuam perguntando ou negando: push
-//   cujo destino real é `main`/`staging`/`dev` (destino não resolvido conta
-//   como protegido), descarte na checkout principal (G44) e segredo. Os quatro
+//   cujo destino real é `main`/`staging`/`dev` (destino não resolvido nega),
+//   descarte na checkout principal (G44, pergunta) e segredo. Os quatro
 //   Critical da primeira versão (diretório comum sob `.claude/worktrees/`,
 //   `--git-dir`/`GIT_DIR=`, `-c push.*`/`remote.*`, `env -C`/`sh -c`)
-//   perguntam. Os três chamadores dão a mesma decisão.
+//   negam: desde 11/10/2026 o push nunca pergunta, passa ou nega, e o que o
+//   texto não resolve nega com a instrução de explicitar o destino. Gravar a
+//   configuração que desvia o push (#505) pergunta. Os três chamadores dão a
+//   mesma decisão.
 // Boundary IN: `.claude/hooks/push-target.mjs` sobre um repositório git
 //   descartável de verdade (remoto bare com main, staging e dev; worktrees
 //   criadas de `origin/dev`), a política `.claude/hooks/shell-policy.mjs` e
@@ -247,11 +250,11 @@ describe("os três chamadores dão a mesma decisão", () => {
     ["reset --har abreviado", () => `git -C ${wt} reset --har origin/dev`, () => root, "pass"],
     ["checkout --forc abreviado", () => "git checkout --forc", () => wt, "pass"],
     ["switch --discard abreviado", () => "git switch --discard feat/x", () => wt, "pass"],
-    ["push --force-with abreviado de outro branch a partir da principal", () => "git push --force-with origin feat/x", () => root, "ask"],
-    ["push --follow abreviado forçado", () => "git push --follow --force-with origin feat/x", () => wt, "ask"],
-    ["push --mirro abreviado", () => "git push --mirro", () => wt, "ask"],
-    ["push --al abreviado", () => "git push --al", () => wt, "ask"],
-    ["push --prun abreviado", () => "git push --prun origin feat/x", () => wt, "ask"],
+    ["push --force-with abreviado de outro branch a partir da principal", () => "git push --force-with origin feat/x", () => root, "pass"],
+    ["push --follow abreviado forçado", () => "git push --follow --force-with origin feat/x", () => wt, "deny"],
+    ["push --mirro abreviado", () => "git push --mirro", () => wt, "deny"],
+    ["push --al abreviado", () => "git push --al", () => wt, "deny"],
+    ["push --prun abreviado", () => "git push --prun origin feat/x", () => wt, "pass"],
     ["reset --har abreviado na principal", () => "git reset --har", () => root, "ask"],
     ["reset --har abreviado por -C na principal", () => `git -C ${root} reset --har`, () => wt, "ask"],
     ["clean --dr -fd (dry-run abreviado) na principal", () => "git clean --dr -fd", () => root, "pass"],
@@ -280,54 +283,54 @@ describe("os três chamadores dão a mesma decisão", () => {
     ["config --file do projeto com remote.origin.push", () => `git config --file ${root}/.git/config remote.origin.push HEAD:main`, () => wt, "ask"],
     // Refspec sem `:` que não é o branch atual: o git o resolve localmente
     // (ref simbólica, upstream), então o destino forçado não é conhecido.
-    ["push forçado de outro branch a partir da principal", () => "git push --force origin feat/x", () => root, "ask"],
+    ["push forçado de outro branch a partir da principal", () => "git push --force origin feat/x", () => root, "pass"],
     // Rodada 1 da L2: ref simbólica, link com `..`, tag forçada, worktree alheia.
-    ["push forçado de main-worktree/HEAD", () => "git push -f origin main-worktree/HEAD", () => wt, "ask"],
-    ["push de worktrees/<n>/HEAD", () => "git push origin worktrees/em-dev/HEAD", () => wt, "ask"],
+    ["push forçado de main-worktree/HEAD", () => "git push -f origin main-worktree/HEAD", () => wt, "deny"],
+    ["push de worktrees/<n>/HEAD", () => "git push origin worktrees/em-dev/HEAD", () => wt, "deny"],
     ["reset --hard por -C com link e ..", () => `git -C ${link}/sub/.. reset --hard`, () => wt, "ask"],
-    ["push -f --tags", () => "git push -f --tags", () => wt, "ask"],
-    ["push -f de tag por nome", () => "git push -f origin tag v1.0.0", () => wt, "ask"],
-    ["push -f de refs/tags", () => "git push -f origin refs/tags/v1.0.0", () => wt, "ask"],
+    ["push -f --tags", () => "git push -f --tags", () => wt, "deny"],
+    ["push -f de tag por nome", () => "git push -f origin tag v1.0.0", () => wt, "deny"],
+    ["push -f de refs/tags", () => "git push -f origin refs/tags/v1.0.0", () => wt, "deny"],
     ["switch --ignore-other-worktrees para dev", () => "git switch --ignore-other-worktrees dev", () => wt, "ask"],
     // Destino real protegido: nega ou pergunta.
     ["push forçado para dev", () => "git push --force origin dev", () => wt, "deny"],
     ["push HEAD:main", () => "git push origin HEAD:main", () => wt, "deny"],
     ["push HEAD numa worktree em dev", () => "git push origin HEAD", () => wtDev, "deny"],
-    ["push sem refspec na checkout principal (dev)", () => "git push", () => root, "ask"],
-    ["push sem refspec numa worktree em dev", () => `git -C ${wtDev} push`, () => root, "ask"],
-    ["push forçado sem refspec numa worktree em dev", () => `git -C ${wtDev} push --force`, () => root, "ask"],
-    ["push sem refspec com upstream origin/dev", () => "git push", () => wtUp, "ask"],
-    ["push --all", () => "git push --all", () => wt, "ask"],
-    ["push --mirror", () => "git push --mirror", () => wt, "ask"],
-    ["push --prune", () => "git push --prune origin feat/x", () => wt, "ask"],
-    ["push matching (:)", () => "git push origin :", () => wt, "ask"],
-    ["push matching forçado (+:)", () => "git push origin +:", () => wt, "ask"],
-    ["push matching na principal", () => "git push origin :", () => root, "ask"],
-    ["push apaga tag",() => "git push origin :refs/tags/v1.0.0", () => wt, "ask"],
-    ["push para outro remoto escrito", () => "git push upstream", () => wt, "ask"],
+    ["push sem refspec na checkout principal (dev)", () => "git push", () => root, "deny"],
+    ["push sem refspec numa worktree em dev", () => `git -C ${wtDev} push`, () => root, "deny"],
+    ["push forçado sem refspec numa worktree em dev", () => `git -C ${wtDev} push --force`, () => root, "deny"],
+    ["push sem refspec com upstream origin/dev", () => "git push", () => wtUp, "deny"],
+    ["push --all", () => "git push --all", () => wt, "deny"],
+    ["push --mirror", () => "git push --mirror", () => wt, "deny"],
+    ["push --prune", () => "git push --prune origin feat/x", () => wt, "pass"],
+    ["push matching (:)", () => "git push origin :", () => wt, "deny"],
+    ["push matching forçado (+:)", () => "git push origin +:", () => wt, "deny"],
+    ["push matching na principal", () => "git push origin :", () => root, "deny"],
+    ["push apaga tag",() => "git push origin :refs/tags/v1.0.0", () => wt, "deny"],
+    ["push para outro remoto escrito", () => "git push upstream", () => wt, "deny"],
     // Critical 1: diretório comum sob `.claude/worktrees/` e atalhos para a principal.
-    ["push em diretório comum sob .claude/worktrees", () => `git -C ${plainDir} push`, () => root, "ask"],
-    ["push pelo link simbólico para a principal", () => `git -C ${link} push`, () => root, "ask"],
-    ["push com .. até a principal", () => `git -C ${wt}/../../.. push`, () => root, "ask"],
+    ["push em diretório comum sob .claude/worktrees", () => `git -C ${plainDir} push`, () => root, "deny"],
+    ["push pelo link simbólico para a principal", () => `git -C ${link} push`, () => root, "deny"],
+    ["push com .. até a principal", () => `git -C ${wt}/../../.. push`, () => root, "deny"],
     // Critical 2: `--git-dir` e `GIT_DIR=` apontando a principal.
-    ["--git-dir para a principal", () => `git --git-dir=${root}/.git push`, () => wt, "ask"],
-    ["--git-dir separado para a principal", () => `git --git-dir ${root}/.git -C ${wt} push`, () => root, "ask"],
-    ["GIT_DIR= para a principal", () => `GIT_DIR=${root}/.git git push`, () => wt, "ask"],
+    ["--git-dir para a principal", () => `git --git-dir=${root}/.git push`, () => wt, "deny"],
+    ["--git-dir separado para a principal", () => `git --git-dir ${root}/.git -C ${wt} push`, () => root, "deny"],
+    ["GIT_DIR= para a principal", () => `GIT_DIR=${root}/.git git push`, () => wt, "deny"],
     // Critical 3: configuração na linha de comando.
-    ["-c push.default=upstream com upstream origin/dev", () => `git -c push.default=upstream -C ${wtUp} push`, () => root, "ask"],
-    ["-c remote.origin.push=HEAD:main", () => `git -c remote.origin.push=HEAD:main -C ${wt} push`, () => root, "ask"],
+    ["-c push.default=upstream com upstream origin/dev", () => `git -c push.default=upstream -C ${wtUp} push`, () => root, "deny"],
+    ["-c remote.origin.push=HEAD:main", () => `git -c remote.origin.push=HEAD:main -C ${wt} push`, () => root, "deny"],
     // Juiz da #502 (C1): `-c`/`--config-env` que desvia o refspec sem `:`.
-    ["-c remote.origin.push leva feat/up para dev", () => "git -c remote.origin.push=refs/heads/feat/up:refs/heads/dev push origin feat/up", () => wtUp, "ask"],
-    ["-c remote.origin.push leva feat/x para main", () => "git -c remote.origin.push=refs/heads/feat/x:refs/heads/main push origin feat/x", () => wt, "ask"],
-    ["-c push.default=upstream com refspec", () => "git -c push.default=upstream push origin feat/up", () => wtUp, "ask"],
-    ["--config-env push.default com refspec", () => "PD=upstream git --config-env=push.default=PD push origin feat/up", () => wtUp, "ask"],
-    ["--config-env",() => `git --config-env=push.default=X -C ${wt} push`, () => root, "ask"],
+    ["-c remote.origin.push leva feat/up para dev", () => "git -c remote.origin.push=refs/heads/feat/up:refs/heads/dev push origin feat/up", () => wtUp, "deny"],
+    ["-c remote.origin.push leva feat/x para main", () => "git -c remote.origin.push=refs/heads/feat/x:refs/heads/main push origin feat/x", () => wt, "deny"],
+    ["-c push.default=upstream com refspec", () => "git -c push.default=upstream push origin feat/up", () => wtUp, "deny"],
+    ["--config-env push.default com refspec", () => "PD=upstream git --config-env=push.default=PD push origin feat/up", () => wtUp, "deny"],
+    ["--config-env",() => `git --config-env=push.default=X -C ${wt} push`, () => root, "deny"],
     // Critical 4: diretório trocado por invólucro ou shell aninhado.
-    ["env -C para a principal", () => `env -C ${root} git push`, () => wt, "ask"],
-    ["env --chdir para a principal", () => `env --chdir=${root} git push`, () => wt, "ask"],
-    ["sh -c com cd para a principal", () => `sh -c "cd ${root} && git push"`, () => wt, "ask"],
-    ["bash -c com git -C", () => `bash -c "git -C ${root} push"`, () => wt, "ask"],
-    ["find -exec", () => `find . -maxdepth 0 -exec git -C ${wt} push \\;`, () => wt, "ask"],
+    ["env -C para a principal", () => `env -C ${root} git push`, () => wt, "deny"],
+    ["env --chdir para a principal", () => `env --chdir=${root} git push`, () => wt, "deny"],
+    ["sh -c com cd para a principal", () => `sh -c "cd ${root} && git push"`, () => wt, "deny"],
+    ["bash -c com git -C", () => `bash -c "git -C ${root} push"`, () => wt, "deny"],
+    ["find -exec", () => `find . -maxdepth 0 -exec git -C ${wt} push \\;`, () => wt, "deny"],
     // Descarte na checkout principal (G44) e em worktree em dev.
     ["reset --hard na principal", () => "git reset --hard", () => root, "ask"],
     ["reset --hard na principal por -C", () => `git -C ${root} reset --hard`, () => wt, "ask"],
@@ -378,8 +381,8 @@ describe("os três chamadores dão a mesma decisão", () => {
   it("contexto de outro comando ou de outro diretório não vale", () => {
     const forged = resolveGitTarget(`git -C ${wt} push`, { cwd: root });
     expect(forged).not.toBeNull();
-    expect(judgeShell("git push", CLAUDE_RULES, { root, cwd: root, home, gitTarget: forged })?.decision).toBe("ask");
-    expect(judgeShell(`git -C ${wt} push`, CLAUDE_RULES, { root, cwd: wt, home, gitTarget: forged })?.decision).toBe("ask");
+    expect(judgeShell("git push", CLAUDE_RULES, { root, cwd: root, home, gitTarget: forged })?.decision).toBe("deny");
+    expect(judgeShell(`git -C ${wt} push`, CLAUDE_RULES, { root, cwd: wt, home, gitTarget: forged })?.decision).toBe("deny");
     expect(judgeShell(`git -C ${wt} push`, CLAUDE_RULES, { root, cwd: root, home, gitTarget: forged })).toBeNull();
   });
 });
@@ -414,8 +417,8 @@ describe("configuração persistida que desvia o push (#505)", () => {
 
   /**
    * Os dois passos do achado: gravar a configuração (pergunta) e, com ela
-   * persistida, empurrar (pergunta). O git de verdade, em `--dry-run`, diz
-   * para onde o push iria — nos dois primeiros, `dev`.
+   * persistida, empurrar (nega, porque o push não pergunta). O git de verdade,
+   * em `--dry-run`, diz para onde o push iria — nos três primeiros, `dev`.
    */
   const persisted: Array<{
     name: string;
@@ -424,6 +427,7 @@ describe("configuração persistida que desvia o push (#505)", () => {
     push: string;
     dryRun: string[];
     reaches: () => string;
+    branch: string;
   }> = [
     {
       name: "remote.<r>.push leva feat/up para dev",
@@ -432,6 +436,7 @@ describe("configuração persistida que desvia o push (#505)", () => {
       push: "git push origin feat/up",
       dryRun: ["push", "--dry-run", "--porcelain", "origin", "feat/up"],
       reaches: () => "refs/heads/feat/up:refs/heads/dev",
+      branch: "feat/up",
     },
     {
       name: "push.default=upstream com upstream origin/dev",
@@ -440,6 +445,7 @@ describe("configuração persistida que desvia o push (#505)", () => {
       push: "git push origin feat/up",
       dryRun: ["push", "--dry-run", "--porcelain", "origin", "feat/up"],
       reaches: () => "refs/heads/feat/up:refs/heads/dev",
+      branch: "feat/up",
     },
     {
       name: "branch.<b>.merge para dev e push.default=upstream",
@@ -451,6 +457,7 @@ describe("configuração persistida que desvia o push (#505)", () => {
       push: "git push origin feat/x",
       dryRun: ["push", "--dry-run", "--porcelain", "origin", "feat/x"],
       reaches: () => "refs/heads/feat/x:refs/heads/dev",
+      branch: "feat/x",
     },
     {
       name: "remote.pushDefault leva o push sem remoto para outro repositório",
@@ -459,6 +466,7 @@ describe("configuração persistida que desvia o push (#505)", () => {
       push: "git push",
       dryRun: ["push", "--dry-run", "--porcelain"],
       reaches: () => fork,
+      branch: "feat/x",
     },
     {
       name: "branch.<b>.pushRemote leva o push sem remoto para outro repositório",
@@ -467,6 +475,7 @@ describe("configuração persistida que desvia o push (#505)", () => {
       push: "git push",
       dryRun: ["push", "--dry-run", "--porcelain"],
       reaches: () => fork,
+      branch: "feat/x",
     },
     {
       name: "url.*.pushInsteadOf leva o remoto escrito para outro repositório",
@@ -475,6 +484,7 @@ describe("configuração persistida que desvia o push (#505)", () => {
       push: "git push origin feat/x",
       dryRun: ["push", "--dry-run", "--porcelain", "origin", "feat/x"],
       reaches: () => fork,
+      branch: "feat/x",
     },
   ];
 
@@ -499,11 +509,22 @@ describe("configuração persistida que desvia o push (#505)", () => {
     // Sem a configuração, o push da rotina passa.
     expect(await decisions(entry.push, cwd), entry.push).toEqual(["pass", "pass", "pass"]);
     expect(dryRun(cwd, entry.dryRun)).not.toContain(entry.reaches());
-    // Passo 2: com ela persistida (gravada direto, fora da guarda), o push pergunta.
+    // Passo 2: com ela persistida (gravada direto, fora da guarda), o push nega
+    // — não pergunta — e a mensagem manda explicitar o destino com `:`.
     const restores = entry.settings().map(([key, value]) => persist(key, value));
     try {
       expect(dryRun(cwd, entry.dryRun), `o git de verdade leva o push para ${entry.reaches()}`).toContain(entry.reaches());
-      expect(await decisions(entry.push, cwd), entry.push).toEqual(["ask", "ask", "ask"]);
+      expect(await decisions(entry.push, cwd), entry.push).toEqual(["deny", "deny", "deny"]);
+      const blocked = hookOutcome(entry.push, CLAUDE_RULES, { root, cwd, home });
+      const reason = JSON.parse(blocked.stdout!).hookSpecificOutput.permissionDecisionReason as string;
+      expect(reason).toContain("explicite o destino");
+      expect(reason).toContain("git push origin <branch>:<branch>");
+      // O que a mensagem manda fazer passa nos três, e o git de verdade o leva para o branch escrito.
+      const explicit = `git push origin ${entry.branch}:${entry.branch}`;
+      expect(await decisions(explicit, cwd), explicit).toEqual(["pass", "pass", "pass"]);
+      const dry = dryRun(cwd, ["push", "--dry-run", "--porcelain", "origin", `${entry.branch}:${entry.branch}`]);
+      expect(dry).toContain(`refs/heads/${entry.branch}:refs/heads/${entry.branch}`);
+      expect(dry).not.toContain("refs/heads/dev");
     } finally {
       for (const restore of restores.reverse()) restore();
     }
