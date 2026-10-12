@@ -528,6 +528,19 @@ banco (vale entre instâncias), e 20 cartões por página. A linha do limite
 guarda só quem buscou e quando. Ver G21–G23 em
 [rules/security.md](engineering/rules/security.md#g21).
 
+**Área do recrutador com acesso concedido (#465).** `/recruiter/[id]`, o
+currículo atual (`/cv`), o download (`/cv/download`) e sugerir
+(`/suggest`) conferem o id contra `linkedCandidateIds` da sessão antes de
+qualquer leitura e respondem o mesmo 404 para quem não deu acesso, id
+malformado e acesso encerrado; depois, a política decide (`candidate:read`,
+`suggestion:create`). O funil sai por uma consulta própria, sem nota, canal nem
+fit; o currículo é só o documento corrente, nunca a lista de versões; a tela da
+vaga lê com o escopo de candidato da sessão, que no recrutador é nulo, e não
+mostra nota nem análise de quem ele acompanha. Sugestão é proposta: só o aceite
+do próprio candidato (`suggestion:decide`, negado à sessão emprestada) cria a
+candidatura. O id que o recrutador manda nas duas actions de sugerir é seletor
+registrado (G40).
+
 **Sem criptografia em repouso feita por este código.** Localmente, o
 PostgreSQL em Docker é legível por quem tem acesso à conta da máquina;
 criptografar aqui protegeria contra roubo do disco, o que o FileVault já faz

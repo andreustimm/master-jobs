@@ -142,7 +142,15 @@ import { MAX_ATTEMPTS, recentFailures } from "./infra/password-login.ts";
 export { MAX_CHANGE_ATTEMPTS } from "./infra/password-login.ts";
 import { randomBytes } from "node:crypto";
 import { candidateScope } from "./domain/policy.ts";
-import { drizzleRecruiterAccess } from "./infra/drizzle-recruiter-access.ts";
+import {
+  activeGrantIdFor,
+  activeGrantIdsOfCandidate,
+  activeGrantSummaries,
+  drizzleRecruiterAccess,
+  touchGrantAccess,
+  type RecruiterGrantSummary,
+} from "./infra/drizzle-recruiter-access.ts";
+import type { DB, DbTransaction } from "../../core/db/client.ts";
 import {
   candidateAccessView,
   cancelInvite,
@@ -381,6 +389,70 @@ export function adminRecruiterAccess(session: Session | null, candidateIds: read
 /** O trabalho horário da varredura: expira concessões e convites vencidos (ADR-016). */
 export function runRecruiterAccessMaintenance(): Promise<{ expired: number; invitesExpired: number }> {
   return expireRecruiterAccess(accessDeps());
+}
+
+/* ------------- O lado do recrutador e as sugestões de vaga (task_04) ------------ */
+
+export { capDecision } from "./domain/recruiter-access.ts";
+export { suggestionsDigestEmail } from "./app/recruiter-emails.ts";
+export type { RecruiterGrantSummary } from "./infra/drizzle-recruiter-access.ts";
+export {
+  appendHistory as appendRecruiterHistory,
+  lockCandidateAccess as lockRecruiterAccess,
+} from "./infra/drizzle-recruiter-access.ts";
+
+/**
+ * As concessões vigentes DESTA sessão de recrutador, com desde e até. A lista
+ * de `/recruiter` cruza com `linkedCandidateIds`, que a sessão resolveu na
+ * carga: o que a sessão não vê não entra, mesmo que a concessão exista.
+ */
+export async function recruiterGrantSummaries(session: Session): Promise<RecruiterGrantSummary[]> {
+  if (!session.roles.includes("recruiter")) return [];
+  const rows = await activeGrantSummaries(session.userId, clock().iso());
+  return rows.filter((row) => session.linkedCandidateIds.includes(row.candidateId));
+}
+
+/** A concessão vigente do par em `nowIso`, na transação de quem chama (a sugestão grava o id dela). */
+export function currentRecruiterGrantId(
+  db: DB | DbTransaction,
+  recruiterUserId: number,
+  candidateId: number,
+  nowIso: string = clock().iso(),
+): Promise<number | null> {
+  return activeGrantIdFor(db, recruiterUserId, candidateId, nowIso);
+}
+
+/** Quem ainda tem acesso ao candidato: as concessões vigentes dele. */
+export function activeRecruiterGrantIds(candidateId: number): Promise<number[]> {
+  return activeGrantIdsOfCandidate(candidateId, clock().iso());
+}
+
+/** Intervalo mínimo entre duas gravações do último acesso (US-014.AC-3). */
+const ACCESS_TOUCH_MS = 60_000;
+
+/**
+ * O recrutador desta sessão abriu a página ou o currículo do candidato: grava
+ * o último acesso que o candidato vê em Minha conta, no máximo uma vez por
+ * minuto. Só concessão vigente da própria sessão; nunca outra.
+ */
+export async function touchRecruiterAccess(session: Session, candidateId: number): Promise<boolean> {
+  if (!session.linkedCandidateIds.includes(candidateId)) return false;
+  const now = clock().now();
+  return touchGrantAccess({
+    recruiterUserId: session.userId,
+    candidateId,
+    nowIso: new Date(now).toISOString(),
+    notAfterIso: new Date(now - ACCESS_TOUCH_MS).toISOString(),
+  });
+}
+
+/**
+ * Falha de envio de um aviso, para o operador (`auth_event`): só o tipo da
+ * mensagem, nem destinatário nem dado do candidato — o mesmo registro que os
+ * e-mails de acesso gravam.
+ */
+export async function recordEmailSendFailure(userId: number | null, detail: string): Promise<void> {
+  await drizzleAuthRepository.record({ kind: "email_send_failed", userId, detail });
 }
 
 /**

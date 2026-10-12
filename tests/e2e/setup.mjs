@@ -12,7 +12,7 @@
  */
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { closeDb, getDb } from "../../src/core/db/client.ts";
-import { application, authEvent, authIdentity, authLoginToken, authUser, candidate, candidateDocument, candidateSkill, fxRate, job, jobScore, recruiterAccessEvent, recruiterDirectoryQuery, recruiterGrant, recruiterInvite, savedTerm, scoreTask, skill, targetAccount, termAttribution } from "../../src/core/db/schema.ts";
+import { application, authEvent, authIdentity, authLoginToken, authUser, candidate, candidateDocument, candidateSkill, fxRate, job, jobScore, recruiterAccessEvent, recruiterDirectoryQuery, recruiterGrant, recruiterInvite, recruiterSuggestion, savedTerm, scoreTask, skill, targetAccount, termAttribution } from "../../src/core/db/schema.ts";
 import { linkRecruiterToCandidate } from "../../src/contexts/auth/index.ts";
 import { seedOwner } from "../../src/contexts/auth/app/seed.ts";
 import { hashToken } from "../../src/contexts/auth/infra/drizzle-store.ts";
@@ -50,6 +50,7 @@ import { SOCIAL_FIXTURES } from "./social-fixtures.mjs";
 import { METHODS_FIXTURES } from "./account-methods-fixtures.mjs";
 import { DIRECTORY_FIXTURES } from "./recruiter-directory-fixtures.mjs";
 import { ACCESS_FIXTURES } from "./recruiter-access-fixtures.mjs";
+import { SUGGESTION_FIXTURES } from "./recruiter-suggestions-fixtures.mjs";
 import { PUBLIC_CV_FIXTURE, PUBLIC_FACTS_OFF_FIXTURE, factColumns } from "./public-cv-format.mjs";
 import { isolationRefusal } from "./database-guard.mjs";
 
@@ -123,6 +124,10 @@ export const E2E_ROLES = {
   accessCandidate: { email: ACCESS_FIXTURES.candidate.email, roles: ACCESS_FIXTURES.candidate.roles },
   accessRecruiter: { email: ACCESS_FIXTURES.recruiter.email, roles: ACCESS_FIXTURES.recruiter.roles },
   accessFresh: { email: ACCESS_FIXTURES.fresh.email, roles: ACCESS_FIXTURES.fresh.roles },
+  // Área do recrutador e sugestões (#465, task_04): ver `recruiter-suggestions-fixtures.mjs`.
+  suggestionsCandidate: { email: SUGGESTION_FIXTURES.candidate.email, roles: SUGGESTION_FIXTURES.candidate.roles },
+  suggestionsOther: { email: SUGGESTION_FIXTURES.other.email, roles: SUGGESTION_FIXTURES.other.roles },
+  suggestionsRecruiter: { email: SUGGESTION_FIXTURES.recruiter.email, roles: SUGGESTION_FIXTURES.recruiter.roles },
   // Formas de entrar (#464, task_04): ver `account-methods-fixtures.mjs`.
   ...Object.fromEntries(
     Object.entries(METHODS_FIXTURES).map(([key, fixture]) => [
@@ -710,6 +715,70 @@ try {
     .update(authUser)
     .set({ fullName: ACCESS_FIXTURES.recruiter.fullName, emailVerifiedAt: "2026-01-01T00:00:00.000Z" })
     .where(eq(authUser.email, ACCESS_FIXTURES.recruiter.email));
+
+  // Área do recrutador e sugestões (#465, task_04). A jornada sugere, aceita,
+  // recusa e revoga: a cada execução os dois candidatos voltam a ter só a
+  // concessão ao Rui, nenhuma sugestão nem histórico, o currículo da Ana e uma
+  // candidatura no funil dela. As vagas da área ficam abertas.
+  {
+    const suggestionCandidates = {};
+    for (const key of ["candidate", "other"]) {
+      const fixture = SUGGESTION_FIXTURES[key];
+      const [user] = await getDb()
+        .select({ candidateId: authUser.candidateId })
+        .from(authUser)
+        .where(eq(authUser.email, fixture.email));
+      if (user?.candidateId == null) throw new Error(`candidato da área de sugestões não criado: ${fixture.email}`);
+      await getDb().update(candidate).set({ name: fixture.name }).where(eq(candidate.id, user.candidateId));
+      suggestionCandidates[key] = user.candidateId;
+    }
+    const ids = Object.values(suggestionCandidates);
+    const [recruiterUser] = await getDb()
+      .update(authUser)
+      .set({ fullName: SUGGESTION_FIXTURES.recruiter.fullName, emailVerifiedAt: "2026-01-01T00:00:00.000Z" })
+      .where(eq(authUser.email, SUGGESTION_FIXTURES.recruiter.email))
+      .returning({ id: authUser.id });
+    await getDb().delete(recruiterSuggestion).where(inArray(recruiterSuggestion.candidateId, ids));
+    await getDb().delete(recruiterAccessEvent).where(inArray(recruiterAccessEvent.candidateId, ids));
+    await getDb().delete(recruiterGrant).where(inArray(recruiterGrant.candidateId, ids));
+    await getDb().delete(application).where(inArray(application.candidateId, ids));
+    await getDb()
+      .insert(job)
+      .values(
+        Object.values(SUGGESTION_FIXTURES.jobs).map((fixture) => ({
+          id: fixture.id,
+          fingerprint: `e2e:${fixture.id}`,
+          contentHash: `e2e:${fixture.id}`,
+          sourceId: "ashby:e2e",
+          externalId: String(fixture.id),
+          companyName: fixture.companyName,
+          title: fixture.title,
+          descriptionText: "Recruiter suggestion fixture.",
+          url: `https://jobs.example.com/${fixture.id}`,
+          raw: { e2e: true },
+        })),
+      )
+      .onConflictDoNothing({ target: job.id });
+    await getDb()
+      .update(job)
+      .set({ closedAt: null, archivedAt: null })
+      .where(inArray(job.id, Object.values(SUGGESTION_FIXTURES.jobs).map((fixture) => fixture.id)));
+    await getDb().insert(application).values({
+      candidateId: suggestionCandidates.candidate,
+      jobId: SUGGESTION_FIXTURES.jobs.funnel.id,
+      status: "applied",
+      appliedAt: "2026-09-01T12:00:00.000Z",
+    });
+    await saveDocument({
+      candidateId: suggestionCandidates.candidate,
+      kind: "cv",
+      label: "E2E CV da área de sugestões",
+      format: "markdown",
+      content: SUGGESTION_FIXTURES.cv,
+    });
+    await getDb().delete(scoreTask).where(inArray(scoreTask.candidateId, ids));
+    for (const candidateId of ids) await linkRecruiterToCandidate(recruiterUser.id, candidateId, recruiterUser.id);
+  }
 
   // #325: candidato sem conta, público e com o CV publicado, cujo texto veio
   // de PDF. `saveDocument` não regrava conteúdo igual, então rodar de novo

@@ -74,6 +74,7 @@ export type HistoryEntry = {
   actor: AccessActor;
   grantId?: number | null;
   inviteId?: number | null;
+  suggestionId?: number | null;
   actorUserId?: number | null;
   actorName?: string | null;
   detail?: string | null;
@@ -88,6 +89,7 @@ export async function appendHistory(db: Executor, entries: readonly HistoryEntry
       candidateId: entry.candidateId,
       grantId: entry.grantId ?? null,
       inviteId: entry.inviteId ?? null,
+      suggestionId: entry.suggestionId ?? null,
       recruiterEmail: entry.recruiterEmail,
       kind: entry.kind,
       actor: entry.actor,
@@ -261,6 +263,96 @@ export async function endGrantsOfRemovedAccount(tx: DbTransaction, recruiterUser
     })),
   );
   return ended.length;
+}
+
+/* -------------------------------------------------------------------------- */
+/* O lado do recrutador (task_04): lista, último acesso e a concessão vigente  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A concessão que vale agora para o par recrutador e candidato, ou `null`.
+ * Recebe a transação de quem chama: a sugestão grava o id da concessão sob a
+ * trava do candidato, e uma revogação que venceu a corrida devolve `null`.
+ */
+export async function activeGrantIdFor(
+  db: Executor,
+  recruiterUserId: number,
+  candidateId: number,
+  nowIso: string,
+): Promise<number | null> {
+  const [row] = await db
+    .select({ id: recruiterGrant.id })
+    .from(recruiterGrant)
+    .where(
+      and(
+        eq(recruiterGrant.recruiterUserId, recruiterUserId),
+        eq(recruiterGrant.candidateId, candidateId),
+        activeGrantCondition(nowIso),
+      ),
+    )
+    .limit(1);
+  return row?.id ?? null;
+}
+
+/** As concessões que valem agora para um candidato — quem ainda tem acesso a ele. */
+export async function activeGrantIdsOfCandidate(candidateId: number, nowIso: string): Promise<number[]> {
+  const rows = await getDb()
+    .select({ id: recruiterGrant.id })
+    .from(recruiterGrant)
+    .where(and(eq(recruiterGrant.candidateId, candidateId), activeGrantCondition(nowIso)));
+  return rows.map((row) => row.id);
+}
+
+export type RecruiterGrantSummary = {
+  grantId: number;
+  candidateId: number;
+  /** Desde quando o recrutador tem acesso (US-005.AC-2). */
+  since: string;
+  until: string | null;
+  untilTz: string | null;
+};
+
+/** As concessões vigentes de um recrutador, com as datas que a lista dele mostra. */
+export async function activeGrantSummaries(recruiterUserId: number, nowIso: string): Promise<RecruiterGrantSummary[]> {
+  const rows = await getDb()
+    .select({
+      grantId: recruiterGrant.id,
+      candidateId: recruiterGrant.candidateId,
+      since: recruiterGrant.createdAt,
+      until: recruiterGrant.expiresAt,
+      untilTz: recruiterGrant.expiryTz,
+    })
+    .from(recruiterGrant)
+    .where(and(eq(recruiterGrant.recruiterUserId, recruiterUserId), activeGrantCondition(nowIso)))
+    .orderBy(asc(recruiterGrant.candidateId));
+  return rows;
+}
+
+/**
+ * Grava o último acesso do recrutador ao candidato (US-014.AC-3), no máximo
+ * uma vez por intervalo: a condição está no próprio UPDATE, e duas aberturas
+ * simultâneas gravam uma vez só. Devolve se gravou.
+ */
+export async function touchGrantAccess(input: {
+  recruiterUserId: number;
+  candidateId: number;
+  nowIso: string;
+  /** Acesso gravado neste instante ou antes dele pode ser regravado. */
+  notAfterIso: string;
+}): Promise<boolean> {
+  const rows = await getDb()
+    .update(recruiterGrant)
+    .set({ lastAccessedAt: input.nowIso })
+    .where(
+      and(
+        eq(recruiterGrant.recruiterUserId, input.recruiterUserId),
+        eq(recruiterGrant.candidateId, input.candidateId),
+        activeGrantCondition(input.nowIso),
+        or(isNull(recruiterGrant.lastAccessedAt), lte(recruiterGrant.lastAccessedAt, input.notAfterIso)),
+      ),
+    )
+    .returning({ id: recruiterGrant.id });
+  return rows.length > 0;
 }
 
 /** Nome do administrador no momento do ato, para o histórico: nome de exibição ou, sem ele, o e-mail. */

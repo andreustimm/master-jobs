@@ -165,9 +165,20 @@ action aceita `candidateId` (ou outro identificador de posse) da própria
 entrada — id em FormData, JSON ou parâmetro é pedido, não prova. O escopo nasce
 da sessão.
 
+**Exceção registrada: id como seletor (#465, ADR-015).** `suggestJobAction` e
+`createRecruiterJobAction` (com `suggestFor`) recebem o id do candidato a quem
+o recrutador sugere a vaga. Ele só escolhe dentro de
+`session.linkedCandidateIds` — as concessões vigentes que a sessão resolveu na
+carga —, fora dela a resposta é o mesmo 404 de um candidato inexistente, antes
+de qualquer gravação, e `suggestion:create` decide com ele; o autor e a
+concessão vêm da sessão. A lista vive em `SELECTOR_ID_BY_DESIGN`
+(`tests/support/entry-inventory.ts`); ler `candidateId` ou `suggestFor` da
+entrada fora dela reprova.
+
 Origem: regra 15. Prova: `tests/auth-policy.test.ts`,
 `tests/entry-denial.test.ts` (ids da vítima numa sessão válida de outro
-candidato e de recrutador vinculado).
+candidato e de recrutador vinculado; id de quem não acompanha, IT-143),
+`tests/architecture.test.ts`.
 
 <a id="g16"></a>
 ## G16 — Política correta precisa funcionar na composição

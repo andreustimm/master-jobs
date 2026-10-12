@@ -1,9 +1,10 @@
 # Personas
 
-Quatro perfis. O primeiro é o usuário que o sistema serve primeiro — os outros
+Cinco perfis. O primeiro é o usuário que o sistema serve primeiro — os outros
 existem porque decisões de arquitetura já tomadas (modelagem multi-candidato,
-catálogo global de skills) só fazem sentido com eles, e porque um deles não é
-usuário nenhum: é quem está do outro lado e decide se a candidatura é lida.
+catálogo global de skills, acesso concedido pelo candidato) só fazem sentido
+com eles, e porque um deles não é usuário nenhum: é quem está do outro lado e
+decide se a candidatura é lida.
 
 **Como cada um chega (#464).** O cadastro é aberto em `/signup`: a pessoa
 escolhe **Candidato** ou **Recrutador** e entra pelo Google, pelo LinkedIn ou
@@ -153,6 +154,42 @@ decisão afeta. Sem isso ele revisa em ordem alfabética, que é a ordem errada.
 
 ---
 
+## P5 — Rui, o recrutador que a candidata convidou
+**Usuário convidado. Só existe para alguém porque essa pessoa o chamou (#465,
+ADR-009).**
+
+| | |
+|---|---|
+| Papel | Recrutador independente ou mentor de carreira |
+| Como chega | A candidata concede acesso pelo e-mail dele em Minha conta; sem conta, ele recebe convite |
+| O que vê | O funil dela só para leitura, o currículo atual como ela enviou e as próprias sugestões |
+| O que nunca vê | Notas, piso salarial, contatos do perfil, análises, versões antigas do currículo |
+
+### O que ele faz
+- Abre `/recruiter` e escolhe a pessoa — cada uma com "acesso desde", o fim
+  se houver e quantas sugestões dele esperam resposta.
+- Lê o funil e o currículo atual (e baixa o arquivo) para avaliar e
+  apresentar a pessoa. Abrir grava o "último acesso" que ela vê.
+- **Sugere vagas**: escolhe uma vaga aberta do acervo ou cadastra uma nova,
+  com nota opcional. A sugestão fica pendente; só a candidata a aceita (entra
+  no funil em Backlog, marcada "sugerida por recrutador") ou recusa.
+
+### O que o limita, de propósito
+- Ele nunca move o funil: a decisão é o único dado que a candidata não
+  recupera (regra 2). A tela dele não tem controle de escrita.
+- O acesso acaba quando ela revoga, quando chega a data de fim ou quando o
+  admin encerra; na próxima página ele recebe 404, e as sugestões que fez
+  ficam com ela, não com ele.
+- No máximo 20 sugestões por candidata a cada 24 h, e ela recebe no máximo um
+  e-mail dele por hora.
+
+### Por que ele está neste documento
+É a outra metade do gargalo de decisão: alguém que conhece vagas que o
+acervo não tem e conhece a pessoa. O desenho garante que ele **ajuda a
+decidir** sem **decidir por ela**.
+
+---
+
 ## Como as personas dirigem a prioridade
 
 | Item do backlog | Serve a quem | Por quê |
@@ -163,4 +200,5 @@ decisão afeta. Sem isso ele revisa em ordem alfabética, que é a ordem errada.
 | Gmail OAuth (F-01) | P1 | Elimina a triagem manual de 34 e-mails |
 | Análise estatística (E-02) | P1 | Recalibra o peso com o funil real |
 | Fila de curadoria | P4 | Catálogo sem curadoria degrada |
+| Acesso de recrutador e sugestões (#465) | P3 + P5 | Quem a acompanha traz vaga; só ela decide |
 | Submissão autônoma (E-03) | ninguém ainda | Acelera o gargalo errado — ver antivisão |

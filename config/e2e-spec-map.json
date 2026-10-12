@@ -198,7 +198,8 @@
         "/p/[slug]",
         "/pipeline",
         "/searches",
-        "/searches/tracks/new"
+        "/searches/tracks/new",
+        "/suggestions"
       ]
     },
     {
@@ -493,6 +494,40 @@
       ]
     },
     {
+      "id": "recruiter-suggestions",
+      "modules": [
+        "tests/e2e/ui/recruiter-suggestions.mjs",
+        "tests/e2e/recruiter-suggestions-fixtures.mjs"
+      ],
+      "patterns": [
+        "app/recruiter/page.tsx",
+        "app/recruiter/recruiter-ui.tsx",
+        "app/recruiter/[candidateId]/**",
+        "app/suggestions/**",
+        "app/jobs/new/**",
+        "app/login/actions.ts",
+        "src/contexts/pursuit/recruiter.ts",
+        "src/contexts/pursuit/app/recruiter-suggestions.ts",
+        "src/contexts/pursuit/domain/recruiter-suggestion.ts",
+        "src/contexts/pursuit/domain/recruiter-view.ts",
+        "src/contexts/pursuit/infra/drizzle-recruiter-suggestions.ts"
+      ],
+      "routes": [
+        "/",
+        "/account",
+        "/admin/users",
+        "/jobs/new",
+        "/login",
+        "/pipeline",
+        "/recruiter",
+        "/recruiter/[id]",
+        "/recruiter/[id]/cv",
+        "/recruiter/[id]/cv/download",
+        "/recruiter/[id]/suggest",
+        "/suggestions"
+      ]
+    },
+    {
       "id": "admin",
       "modules": [
         "tests/e2e/ui/admin.mjs"
@@ -559,6 +594,7 @@
         "/referrals",
         "/signup",
         "/signup/verify",
+        "/suggestions",
         "/terms"
       ]
     },
@@ -894,6 +930,7 @@
         "/referrals",
         "/signup",
         "/signup/verify",
+        "/suggestions",
         "/terms"
       ]
     }

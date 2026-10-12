@@ -17,6 +17,18 @@ let db: DB;
 let followed: number;
 let stranger: number;
 
+const FIRST_PAGE = { page: 1, pageSize: 25 };
+
+/** O escopo como a autenticação o entrega: uma concessão vigente por candidato. */
+function scope(candidateIds: number[]) {
+  return candidateIds.map((candidateId) => ({
+    candidateId,
+    since: "2026-10-01T12:00:00.000Z",
+    until: null,
+    untilTz: null,
+  }));
+}
+
 function recruiterSession(linked: number[]): Session {
   return {
     userId: 10,
@@ -113,7 +125,7 @@ describe("IT-004 — a leitura escopada não alcança quem está fora", () => {
     await seedApplication(followed, "b", "interviewing");
     await seedApplication(stranger, "c", "applied");
 
-    const summaries = await recruiterCandidateSummaries([followed]);
+    const summaries = await recruiterCandidateSummaries(scope([followed]), FIRST_PAGE);
 
     expect(summaries).toHaveLength(1);
     expect(summaries[0]!.candidateId).toBe(followed);
@@ -123,24 +135,24 @@ describe("IT-004 — a leitura escopada não alcança quem está fora", () => {
 
   it("escopo vazio não consulta e não devolve nada", async () => {
     await seedApplication(followed, "a", "applied");
-    expect(await recruiterCandidateSummaries([])).toEqual([]);
+    expect(await recruiterCandidateSummaries(scope([]), FIRST_PAGE)).toEqual([]);
   });
 
   it("candidato sem candidatura aparece com zero, não some", async () => {
     // Sumir seria indistinguível de "o vínculo não existe", e o recrutador
     // precisa saber que acompanha alguém que ainda não se candidatou.
-    const summaries = await recruiterCandidateSummaries([followed]);
+    const summaries = await recruiterCandidateSummaries(scope([followed]), FIRST_PAGE);
     expect(summaries).toHaveLength(1);
     expect(summaries[0]!.total).toBe(0);
   });
 
   it("id inexistente no escopo não inventa linha", async () => {
-    const summaries = await recruiterCandidateSummaries([followed, 999_999]);
+    const summaries = await recruiterCandidateSummaries(scope([followed, 999_999]), FIRST_PAGE);
     expect(summaries.map((s) => s.candidateId)).toEqual([followed]);
   });
 
   it("ordena por nome, para a lista não mudar de ordem a cada leitura", async () => {
-    const summaries = await recruiterCandidateSummaries([stranger, followed]);
+    const summaries = await recruiterCandidateSummaries(scope([stranger, followed]), FIRST_PAGE);
     expect(summaries.map((s) => s.name)).toEqual(["Ana Acompanhada", "Bruno Estranho"]);
   });
 });

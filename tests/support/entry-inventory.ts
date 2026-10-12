@@ -266,6 +266,35 @@ export const UNGUARDED_BY_DESIGN = new Map<string, { file: string; why: string }
   ],
 ]);
 
+/**
+ * As actions que leem um id de candidato da entrada, e por quê (G40).
+ *
+ * A regra 15 diz que nenhuma action aceita `candidateId` da entrada. Estas o
+ * aceitam só como SELETOR dentro de `session.linkedCandidateIds` — a lista que
+ * a sessão resolveu das concessões vigentes —, com o mesmo 404 de um
+ * candidato inexistente fora dela, e a política (`suggestion:create`) decide
+ * antes de qualquer efeito. O id escolhe entre o que a sessão já pode; não
+ * amplia nada. `tests/entry-denial.test.ts` cobre o id fora da lista (IT-143).
+ */
+export const SELECTOR_ID_BY_DESIGN = new Map<string, { file: string; field: string; why: string }>([
+  [
+    "suggestJobAction",
+    {
+      file: "app/recruiter/[candidateId]/suggest/actions.ts",
+      field: "candidateId",
+      why: "recrutador sugere vaga a um candidato acompanhado: o id só escolhe dentro de `linkedCandidateIds`, fora dela é 404, e `suggestion:create` decide",
+    },
+  ],
+  [
+    "createRecruiterJobAction",
+    {
+      file: "app/jobs/new/actions.ts",
+      field: "suggestFor",
+      why: "a vaga cadastrada também é sugerida: `suggestFor` só escolhe dentro de `linkedCandidateIds`, fora dela é 404 antes de a vaga nascer",
+    },
+  ],
+]);
+
 const GUARD_CALL = /^await\s+(guard|guardOwnCandidate)\s*\(/;
 
 /**

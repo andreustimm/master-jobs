@@ -14,6 +14,7 @@ import {
   isServerModule,
   productionSources,
   routeMethods,
+  SELECTOR_ID_BY_DESIGN,
   stripComments,
 } from "./support/entry-inventory.ts";
 import { ambientReads, forbiddenReach, moduleEdges, resolveLocal, type ForbiddenEdge } from "./support/module-graph.ts";
@@ -519,7 +520,6 @@ describe("V10-05 leque de consultas: toda composição de tela está no inventá
     "app/jobs/jobs-data.ts": { measuredBy: "loadJobsView" },
     "app/candidate/page.tsx": { declared: "pessoa e fila de pontuação: uma consulta cada, o resto em série" },
     "app/referrals/page.tsx": { declared: "oportunidades de indicação e empresas da rede, uma consulta cada" },
-    "app/recruiter/[candidateId]/page.tsx": { declared: "contagem e página do funil de um candidato, uma consulta cada" },
     "app/compare/page.tsx": { declared: "tradutor com sessão, depois currículo e detalhe da comparação" },
   };
 
@@ -587,6 +587,8 @@ describe("architecture inventory", () => {
       // O corpo do perfil, comum a `/p/[slug]` e ao diretório de recrutadores (#465).
       ["app/p/[slug]/profile-view.tsx", new Set(["profile.linkedinUrl", "profile.githubUrl"])],
       ["app/pipeline/page.tsx", new Set(["r.url"])],
+      // O download do currículo atual do candidato acompanhado (#465, US-015).
+      ["app/recruiter/[candidateId]/cv/page.tsx", new Set(["downloadHref"])],
       ["app/referrals/page.tsx", new Set(["externalUrl"])],
       // Termos e Política em outra aba, para o formulário de cadastro não
       // perder o que já foi digitado (#464, US-021).
@@ -1038,6 +1040,16 @@ describe("authorisation (AUTH-01)", () => {
     "app/recruiter/[candidateId]/page.tsx": {
       guard: 'requirePage("candidate:read", { kind: "candidate", candidateId })',
     },
+    // Currículo atual e sugerir vaga (#465, task_04): o vínculo da sessão dá o
+    // 404, a política decide a leitura e a sugestão.
+    "app/recruiter/[candidateId]/cv/page.tsx": {
+      guard: 'requirePage("candidate:read", { kind: "candidate", candidateId })',
+    },
+    "app/recruiter/[candidateId]/suggest/page.tsx": {
+      guard: 'requirePage("suggestion:create", { kind: "candidate", candidateId })',
+    },
+    // As sugestões que o próprio candidato decide; a sessão emprestada só lê.
+    "app/suggestions/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
     // Diretório de perfis (#465, ADR-013): só recrutador, antes de qualquer
     // leitura; as visibilidades são constante do servidor, não parâmetro.
     "app/recruiter/directory/page.tsx": { guard: 'requirePage("candidate:discover")' },
@@ -1139,7 +1151,8 @@ describe("authorisation (AUTH-01)", () => {
    * de rota nem leem dado privado; o layout só consulta a sessão para o crachá.
    */
   const SEGMENT_POLICY: Record<string, string> = {
-    "app/layout.tsx": "casca: lê a própria sessão (`renderSession`) só para crachá e navegação",
+    "app/layout.tsx":
+      "casca: lê a própria sessão (`renderSession`) só para crachá e navegação, e a contagem de sugestões pendentes do candidato dela",
     "app/error.tsx": "fallback de erro sem dado",
     "app/forbidden.tsx": "fallback 403 sem dado",
     "app/not-found.tsx": "fallback 404 sem dado",
@@ -1311,6 +1324,32 @@ describe("authorisation (AUTH-01)", () => {
     expect(APP.length).toBeGreaterThan(10);
   });
 
+  it("G40 id de candidato vindo da entrada só como seletor registrado, dentro do vínculo da sessão (#465)", () => {
+    // Uma action nova que lesse `candidateId` do formulário sem passar por
+    // `linkedCandidateIds` alcançaria quem a sessão não acompanha.
+    const reads = /\.get\(\s*["'](candidateId|suggestFor)["']\s*\)/g;
+    const offenders: string[] = [];
+    for (const file of APP) {
+      for (const match of stripComments(read(file)).matchAll(reads)) {
+        const registered = [...SELECTOR_ID_BY_DESIGN.values()].some((entry) => entry.file === file && entry.field === match[1]);
+        if (!registered) offenders.push(`${file}: lê ${match[1]} da entrada sem exceção registrada`);
+      }
+    }
+    for (const [name, { file, why }] of SELECTOR_ID_BY_DESIGN) {
+      if (!APP.includes(file) || !exportedBindings(read(file)).some((binding) => binding.exported === name)) {
+        offenders.push(`${name}: exceção órfã`);
+        continue;
+      }
+      const code = stripComments(read(file));
+      for (const control of [/linkedCandidateIds\.includes\(/, /notFound\(\)/, /authorize\(session, "suggestion:create"/]) {
+        if (!control.test(code)) offenders.push(`${file}: falta ${control.source}`);
+      }
+      if (why.trim().length < 20) offenders.push(`${name}: exceção sem justificativa`);
+    }
+    expect(offenders).toEqual([]);
+    expect(SELECTOR_ID_BY_DESIGN.size).toBeGreaterThan(0);
+  });
+
   it("V03-01 roteia só por app/: outro diretório de rotas seria superfície fora do inventário", () => {
     for (const dir of ["pages", "src/app", "src/pages"]) {
       expect(existsSync(dir), dir).toBe(false);
@@ -1458,12 +1497,18 @@ describe("authorisation (AUTH-01)", () => {
     // The classic multi-tenant leak: the UI filters correctly, and a hand-made
     // POST with someone else's id walks straight through. Scope must come from
     // the session, which is why `guardOwnCandidate` takes no id at all.
+    //
+    // The only files allowed to read it are the registered selector
+    // exceptions (ADR-015 of #465), where the id merely picks within
+    // `session.linkedCandidateIds`; the G40 case below holds them to that.
+    const selectors = new Set([...SELECTOR_ID_BY_DESIGN.values()].filter((entry) => entry.field === "candidateId").map((entry) => entry.file));
     const offenders: string[] = [];
     for (const file of APP) {
       const code = read(file);
-      if (/formData\.get\(\s*["']candidateId["']/.test(code)) offenders.push(file);
+      if (/formData\.get\(\s*["']candidateId["']/.test(code) && !selectors.has(file)) offenders.push(file);
     }
     expect(offenders).toEqual([]);
+    expect(selectors.size).toBeLessThanOrEqual(1);
   });
 
   it("redeems the magic link in a Route Handler, never in a page", () => {
