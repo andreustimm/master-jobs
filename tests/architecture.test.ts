@@ -1062,7 +1062,12 @@ describe("authorisation (AUTH-01)", () => {
     // Cadastro aberto (#464, ADR-012): pré-conta por natureza.
     "app/signup/page.tsx": {
       exception:
-        "pré-conta: formulário de cadastro; lê só a pendência do próprio cookie (e-mail verificado no modo social) e a própria sessão, para mandar quem já entrou à sua tela",
+        "pré-conta: formulário de cadastro; lê só a pendência e o convite dos próprios cookies (e-mail verificado no modo social, nome de quem convidou e endereço mascarado) e a própria sessão, para mandar quem já entrou à sua tela",
+    },
+    // Convite de recrutador (#465, ADR-018): quem foi convidado ainda não tem conta.
+    "app/signup/invite/page.tsx": {
+      exception:
+        "pré-conta: o token de uso único da URL, procurado pelo hash, é a autorização; link morto de qualquer tipo dá a mesma página neutra, e o GET não altera dado",
     },
     "app/signup/verify/page.tsx": {
       exception:

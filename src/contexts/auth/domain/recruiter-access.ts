@@ -7,9 +7,6 @@
  * virar acesso —, e por isso cada regra é testada sem I/O
  * (`tests/recruiter-access-rules.test.ts`).
  */
-import { testOverridesAllowed } from "./oidc-config.ts";
-import type { AuthEnvironment } from "./open-mode.ts";
-
 /** Validade do link de convite (ADR-006). */
 export const INVITE_TTL_MS = 7 * 86_400_000;
 /** Concessões e convites por candidato em 24 h (ADR-006, ADR-017). */
@@ -62,8 +59,7 @@ export type AccessError =
   | "date_past"
   | "date_too_far"
   | "already_ended"
-  | "not_found"
-  | "invites_unavailable";
+  | "not_found";
 
 export type AccessResult<T> = { ok: true; value: T } | { ok: false; error: AccessError; retryAt?: string };
 
@@ -200,20 +196,6 @@ export function readEndDateEventDetail(detail: string | null): { expiresAt: stri
 }
 
 /**
- * Convidar quem não tem conta de recrutador está ligado aqui?
- *
- * O link do convite leva a `/signup/invite`, que só chega com a task_03 do
- * #465. Até lá o convite fica desligado onde há usuário de verdade: só vale
- * com `JHO_RECRUITER_INVITES=on` num processo que se declara `local` ou `e2e`,
- * fora da Vercel (`testOverridesAllowed`, lista de permissão G27) — cadastrar
- * a variável em Production por engano não liga nada. A task_03 apaga este
- * portão junto com a página.
- */
-export function recruiterInvitesEnabled(env: AuthEnvironment): boolean {
-  return env.JHO_RECRUITER_INVITES?.trim().toLowerCase() === "on" && testOverridesAllowed(env);
-}
-
-/**
  * Conceder direto ou convidar.
  *
  * Concede direto só a uma conta habilitada, com papel de recrutador e e-mail
@@ -311,4 +293,112 @@ export function maskEmail(email: string): string {
   const at = email.lastIndexOf("@");
   if (at <= 0) return "•••";
   return `${email.slice(0, 1)}•••${email.slice(at)}`;
+}
+
+/* ------------------------- Chegada pelo convite --------------------------- */
+
+/**
+ * O cookie que leva o token cru do convite pelo cadastro social (ADR-018): a
+ * ida ao provedor sai do site, e só um cookie `httpOnly` atravessa. Vale no
+ * caminho inteiro (`/`), porque quem o lê é o cadastro, o login por senha e o
+ * retorno do provedor.
+ */
+export const INVITE_COOKIE = "jho_invite";
+
+/** Maior token aceito. O do convite tem 43 caracteres; maior é lixo ou ataque. */
+export const INVITE_TOKEN_MAX = 128;
+
+/** O token da URL ou do cookie, se tem forma de token; senão nulo, sem consulta. */
+export function inviteTokenOf(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const token = raw.trim();
+  return token.length === 0 || token.length > INVITE_TOKEN_MAX ? null : token;
+}
+
+/**
+ * Segundos que o cookie do convite vive: o que falta do link, nunca mais
+ * (ADR-018). Link vencido ou data ilegível dá zero, e quem chama não grava.
+ */
+export function inviteCookieMaxAge(expiresAt: string, now: number): number {
+  const left = Date.parse(expiresAt) - now;
+  return Number.isNaN(left) || left <= 0 ? 0 : Math.floor(left / 1000);
+}
+
+/** O que a página do convite sabe de um token, já procurado pelo hash. */
+export type InviteLookup = {
+  id: number;
+  candidateId: number;
+  candidateName: string;
+  email: string;
+  status: InviteStatus;
+  expiresAt: string;
+  accessExpiresAt: string | null;
+  acceptedUserId: number | null;
+  /** O candidato ainda tem conta habilitada. Desabilitado conta como convite morto (US-003.EC-10). */
+  candidateEnabled: boolean;
+};
+
+/** O convite ainda pode virar acesso: pendente, link no prazo e candidato habilitado. */
+export function inviteLinkLive(invite: InviteLookup, now: number): boolean {
+  const ends = Date.parse(invite.expiresAt);
+  return invite.status === "pending" && !Number.isNaN(ends) && ends > now && invite.candidateEnabled;
+}
+
+export type InvitePageState =
+  /** A mesma página para tudo que não serve (US-003.EC-1 a EC-3, EC-10): nada revela qual foi. */
+  | { kind: "neutral" }
+  /** Esta conta já aceitou este convite: vai direto à página do candidato (US-003.AC-5). */
+  | { kind: "open"; candidateId: number }
+  | { kind: "anonymous"; candidateName: string; maskedEmail: string }
+  | { kind: "accept"; candidateName: string; maskedEmail: string }
+  /** Sessão de outro endereço: só o endereço mascarado, nada do candidato (US-003.EC-6). */
+  | { kind: "other_email"; maskedEmail: string }
+  /** O endereço é o convidado, mas a conta não é de recrutador (US-003.EC-7). */
+  | { kind: "needs_recruiter" };
+
+/**
+ * O que `/signup/invite` mostra para um token e a sessão de quem abriu (ADR-018).
+ *
+ * Nenhum estado altera dado: aceitar com sessão é um clique numa Server
+ * Action, e o GET nunca concede — um pré-carregador de links com cookie
+ * concederia sem ninguém pedir. O endereço comparado é o normalizado, como na
+ * conclusão (US-004.EC-1).
+ */
+export function invitePageState(input: {
+  invite: InviteLookup | null;
+  session: { userId: number; email: string; roles: readonly string[] } | null;
+  now: number;
+}): InvitePageState {
+  const { invite, session } = input;
+  if (invite === null) return { kind: "neutral" };
+  if (session !== null && invite.status === "accepted" && invite.acceptedUserId === session.userId && invite.candidateEnabled) {
+    return { kind: "open", candidateId: invite.candidateId };
+  }
+  if (!inviteLinkLive(invite, input.now)) return { kind: "neutral" };
+  const maskedEmail = maskEmail(invite.email);
+  if (session === null) return { kind: "anonymous", candidateName: invite.candidateName, maskedEmail };
+  if (session.email.trim().toLowerCase() !== invite.email.trim().toLowerCase()) return { kind: "other_email", maskedEmail };
+  if (!session.roles.includes("recruiter")) return { kind: "needs_recruiter" };
+  return { kind: "accept", candidateName: invite.candidateName, maskedEmail };
+}
+
+/** Os desfechos que `/recruiter?invite=` sabe contar, nesta ordem de leitura. */
+export const INVITE_NOTICES = ["mismatch", "not_recruiter", "period_over", "invalid"] as const;
+export type ArrivalNotice = (typeof INVITE_NOTICES)[number];
+
+/** O aviso da URL, só se for um dos conhecidos. */
+export function inviteNoticeOf(raw: unknown): ArrivalNotice | null {
+  return typeof raw === "string" && (INVITE_NOTICES as readonly string[]).includes(raw) ? (raw as ArrivalNotice) : null;
+}
+
+/**
+ * Para onde vai quem acabou de entrar ou se cadastrar com o cookie do convite
+ * (ADR-018): a página do candidato quando o convite do cookie concluiu, o
+ * aviso em `/recruiter` nos outros desfechos. Sem cookie, o destino de sempre
+ * — os convites ao e-mail da conta concluem do mesmo jeito (US-002.EC-7).
+ */
+export function inviteLanding(outcome: InviteOutcome | null, candidateId: number | null, fallback: string): string {
+  if (outcome === null) return fallback;
+  if (outcome === "completed" && candidateId !== null) return `/recruiter/${candidateId}`;
+  return `/recruiter?invite=${outcome === "completed" ? "invalid" : outcome}`;
 }

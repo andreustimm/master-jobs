@@ -13,7 +13,19 @@
  * pela fachada (`index.ts`), que confere `access:manage` ou `user:manage`.
  */
 import { DEFAULT_LOCALE, isLocale, type LocaleId } from "../../../core/i18n/index.ts";
-import { INVITE_TTL_MS, normalizeEmail, parseEndDate } from "../domain/recruiter-access.ts";
+import {
+  INVITE_TTL_MS,
+  inviteCookieMaxAge,
+  inviteLinkLive,
+  invitePageState,
+  inviteTokenOf,
+  maskEmail,
+  normalizeEmail,
+  parseEndDate,
+  type InviteLookup,
+  type InviteOutcome,
+  type InvitePageState,
+} from "../domain/recruiter-access.ts";
 import type { Mailer, OutgoingMail } from "../ports-mailer.ts";
 import type {
   AccessFailure,
@@ -49,12 +61,8 @@ export type RecruiterAccessDeps = {
   origin: string | null;
   /** Token cru do convite e o SHA-256 dele; só o hash vai para o banco. */
   newToken(): { token: string; hash: string };
-  /**
-   * Convidar quem não tem conta de recrutador (`recruiterInvitesEnabled`).
-   * Falso, o convite e o reenvio são recusados com `invites_unavailable` antes
-   * de gravar: o link levaria a uma página que ainda não existe.
-   */
-  invitesEnabled: boolean;
+  /** O mesmo SHA-256, para procurar o convite de um token que chegou pela URL ou pelo cookie. */
+  hashToken(token: string): string;
 };
 
 function localeOf(value: string | null): LocaleId {
@@ -70,7 +78,7 @@ type MessageKind = "recruiter_invite" | "access_granted" | "end_date_changed" | 
  * da mensagem — nem destinatário nem dado do candidato.
  */
 async function deliver(
-  deps: RecruiterAccessDeps,
+  deps: Pick<RecruiterAccessDeps, "mailer" | "audit">,
   to: string,
   mail: RecruiterEmail | null,
   failure: { kind: MessageKind; userId: number | null },
@@ -90,7 +98,7 @@ async function deliver(
   return delivered;
 }
 
-function recruiterPage(deps: RecruiterAccessDeps, candidateId: number): string | null {
+function recruiterPage(deps: Pick<RecruiterAccessDeps, "origin">, candidateId: number): string | null {
   return deps.origin === null ? null : `${deps.origin}/recruiter/${candidateId}`;
 }
 
@@ -110,7 +118,11 @@ async function sendInvite(deps: RecruiterAccessDeps, notice: InviteNotice, token
   if (!delivered) await deps.store.markDeliveryFailed(notice.inviteId, new Date(deps.now()).toISOString());
 }
 
-async function sendEnded(deps: RecruiterAccessDeps, notice: EndedNotice, actorUserId: number | null): Promise<void> {
+async function sendEnded(
+  deps: Pick<RecruiterAccessDeps, "mailer" | "audit">,
+  notice: EndedNotice,
+  actorUserId: number | null,
+): Promise<void> {
   const mail = accessEndedEmail({
     locale: localeOf(notice.recruiterLocale),
     candidateName: notice.candidateName,
@@ -151,7 +163,6 @@ export async function grantAccess(
     tokenHash: hash,
     inviteExpiresAt: inviteExpiry(deps),
     nowIso: new Date(deps.now()).toISOString(),
-    invites: deps.invitesEnabled,
   });
   for (const ended of result.ended) await sendEnded(deps, ended, null);
   if (!result.ok) return { ok: false, error: result.error, ...(result.retryAt ? { retryAt: result.retryAt } : {}) };
@@ -232,7 +243,6 @@ export async function resendInvite(
   input: { inviteId: number; candidateId: number; actorUserId: number },
   deps: RecruiterAccessDeps,
 ): Promise<SimpleResult> {
-  if (!deps.invitesEnabled) return { ok: false, error: "invites_unavailable" };
   const { token, hash } = deps.newToken();
   const result = await deps.store.resendInvite({
     ...input,
@@ -281,8 +291,6 @@ export type CandidateAccessView = {
   grants: GrantRow[];
   invites: InviteRow[];
   history: HistoryPage;
-  /** O formulário só promete convite a quem não tem conta quando ele está ligado. */
-  invitesEnabled: boolean;
 };
 
 /** Página do histórico a partir do parâmetro da URL: inteiro de 1 em diante, e o resto cai em 1. */
@@ -294,7 +302,7 @@ export function historyPageOf(raw: string | undefined): number {
 /** A seção "Acesso de recrutadores" de `/account`: quem acessa, convites e histórico paginado. */
 export async function candidateAccessView(
   input: { candidateId: number; historyPage: number },
-  deps: Pick<RecruiterAccessDeps, "store" | "now" | "invitesEnabled">,
+  deps: Pick<RecruiterAccessDeps, "store" | "now">,
 ): Promise<CandidateAccessView> {
   const nowIso = new Date(deps.now()).toISOString();
   const [grants, invites, history] = await Promise.all([
@@ -307,6 +315,97 @@ export async function candidateAccessView(
     grants,
     invites,
     history: { rows: history.rows, page: input.historyPage, pages, total: history.total },
-    invitesEnabled: deps.invitesEnabled,
   };
+}
+
+/* -------------------------- Chegada pelo convite --------------------------- */
+
+/**
+ * O convite de um token, já procurado pelo hash. Token sem forma de token não
+ * vai ao banco. O token cru não sai daqui: nem log, nem banco (G18, regra 16).
+ */
+async function lookupInvite(
+  raw: string | null,
+  deps: Pick<RecruiterAccessDeps, "store" | "hashToken">,
+): Promise<InviteLookup | null> {
+  const token = inviteTokenOf(raw);
+  return token === null ? null : deps.store.findInvite(deps.hashToken(token));
+}
+
+/** O que `/signup/invite` mostra para este token e esta sessão (ADR-018). Só lê. */
+export async function invitePage(
+  input: { token: string | null; session: { userId: number; email: string; roles: readonly string[] } | null },
+  deps: Pick<RecruiterAccessDeps, "store" | "hashToken" | "now">,
+): Promise<InvitePageState> {
+  return invitePageState({ invite: await lookupInvite(input.token, deps), session: input.session, now: deps.now() });
+}
+
+/**
+ * Validade do cookie `jho_invite` para um token, em segundos: o que falta do
+ * link. Nulo para link que não serve — quem chama mostra a página neutra e
+ * não grava cookie nenhum.
+ */
+export async function inviteCookieFor(
+  token: string | null,
+  deps: Pick<RecruiterAccessDeps, "store" | "hashToken" | "now">,
+): Promise<{ maxAge: number } | null> {
+  const invite = await lookupInvite(token, deps);
+  const now = deps.now();
+  if (invite === null || !inviteLinkLive(invite, now)) return null;
+  const maxAge = inviteCookieMaxAge(invite.expiresAt, now);
+  return maxAge > 0 ? { maxAge } : null;
+}
+
+/** A linha "Convidado por" da tela de cadastro (US-003.AC-1): nome do candidato e endereço mascarado. */
+export async function invitedSignupBanner(
+  token: string | null,
+  deps: Pick<RecruiterAccessDeps, "store" | "hashToken" | "now">,
+): Promise<{ candidateName: string; maskedEmail: string } | null> {
+  const invite = await lookupInvite(token, deps);
+  if (invite === null || !inviteLinkLive(invite, deps.now())) return null;
+  return { candidateName: invite.candidateName, maskedEmail: maskEmail(invite.email) };
+}
+
+export type InviteArrival = { outcome: InviteOutcome | null; candidateId: number | null };
+
+/**
+ * `completeInvitesForAccount` (ADR-018): no fim do cadastro de recrutador,
+ * depois de todo login de conta com o papel e no "Aceitar e abrir".
+ *
+ * Conclui o convite do token, se veio, e todo convite pendente ao e-mail da
+ * conta. Exige papel de recrutador, conta habilitada e e-mail provado — a
+ * regra é de `inviteCompletion`, e a transação é do store. Depois do commit,
+ * um e-mail de acesso concedido por concessão nova; o descompasso de endereço
+ * vira `auth_event(invite_mismatch)` sem nada do candidato.
+ */
+export async function completeInvitesForAccount(
+  input: { userId: number; token: string | null; proveMailbox?: boolean },
+  deps: Pick<RecruiterAccessDeps, "store" | "hashToken" | "now" | "mailer" | "audit" | "origin">,
+): Promise<InviteArrival> {
+  const result = await deps.store.completeInvites({
+    userId: input.userId,
+    // Cookie com lixo é um token que não existe: o desfecho é `invalid`.
+    tokenHash: input.token === null ? null : deps.hashToken(input.token.trim()),
+    proveMailbox: input.proveMailbox ?? false,
+    nowIso: new Date(deps.now()).toISOString(),
+  });
+  for (const ended of result.ended) await sendEnded(deps, ended, null);
+  for (const notice of result.completed) {
+    const url = recruiterPage(deps, notice.candidateId);
+    const mail =
+      url === null
+        ? null
+        : accessGrantedEmail({
+            locale: localeOf(notice.recruiterLocale),
+            candidateName: notice.candidateName,
+            url,
+            expiresAt: notice.expiresAt,
+            expiryTz: notice.expiryTz,
+          });
+    await deliver(deps, notice.recruiterEmail, mail, { kind: "access_granted", userId: input.userId });
+  }
+  if (result.cookie?.outcome === "mismatch") {
+    await deps.audit.record({ kind: "invite_mismatch", userId: input.userId });
+  }
+  return result.cookie ?? { outcome: null, candidateId: null };
 }

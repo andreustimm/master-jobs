@@ -295,6 +295,7 @@ function harness(options: { registered?: string[] } = {}) {
       },
     }),
     afterCandidateCreated: async () => {},
+    afterRecruiterCreated: async () => ({ outcome: null, candidateId: null }),
     now: () => T,
   };
   const config: SignupConfig = {

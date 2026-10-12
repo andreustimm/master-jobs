@@ -23,7 +23,12 @@ import {
   normalizeEmail,
   parseEndDate,
   readEndDateEventDetail,
-  recruiterInvitesEnabled,
+  inviteCookieMaxAge,
+  inviteLanding,
+  inviteNoticeOf,
+  invitePageState,
+  inviteTokenOf,
+  type InviteLookup,
   type InviteStatus,
 } from "../src/contexts/auth/domain/recruiter-access.ts";
 import { formatDate } from "../src/core/i18n/index.ts";
@@ -31,20 +36,81 @@ import { formatDate } from "../src/core/i18n/index.ts";
 const T0 = Date.parse("2026-10-06T12:00:00Z");
 const SP = "America/Sao_Paulo";
 
-describe("recruiterInvitesEnabled", () => {
-  it("desligado por omissão e em qualquer deployment, mesmo com a variável cadastrada", () => {
-    expect(recruiterInvitesEnabled({})).toBe(false);
-    expect(recruiterInvitesEnabled({ JHO_ENV: "e2e" })).toBe(false);
-    expect(recruiterInvitesEnabled({ JHO_RECRUITER_INVITES: "on" })).toBe(false);
-    expect(recruiterInvitesEnabled({ JHO_RECRUITER_INVITES: "on", JHO_ENV: "production" })).toBe(false);
-    expect(recruiterInvitesEnabled({ JHO_RECRUITER_INVITES: "on", JHO_ENV: "e2e", VERCEL: "1" })).toBe(false);
-    expect(recruiterInvitesEnabled({ JHO_RECRUITER_INVITES: "on", JHO_ENV: "local", VERCEL_ENV: "production" })).toBe(false);
-    expect(recruiterInvitesEnabled({ JHO_RECRUITER_INVITES: "1", JHO_ENV: "e2e" })).toBe(false);
+describe("chegada pelo convite (task_03, ADR-018)", () => {
+  const live: InviteLookup = {
+    id: 1,
+    candidateId: 7,
+    candidateName: "Ana",
+    email: "bia@y.com",
+    status: "pending",
+    expiresAt: "2026-10-13T12:00:00.000Z",
+    accessExpiresAt: null,
+    acceptedUserId: null,
+    candidateEnabled: true,
+  };
+  const bia = { userId: 30, email: "bia@y.com", roles: ["recruiter"] };
+
+  it("token: só texto de 1 a 128 caracteres vai ao banco", () => {
+    expect(inviteTokenOf(" abc ")).toBe("abc");
+    expect(inviteTokenOf("")).toBeNull();
+    expect(inviteTokenOf("x".repeat(129))).toBeNull();
+    expect(inviteTokenOf(["a"])).toBeNull();
+    expect(inviteTokenOf(undefined)).toBeNull();
   });
 
-  it("ligado só com `on` num processo `local` ou `e2e` fora da Vercel", () => {
-    expect(recruiterInvitesEnabled({ JHO_RECRUITER_INVITES: "on", JHO_ENV: "e2e" })).toBe(true);
-    expect(recruiterInvitesEnabled({ JHO_RECRUITER_INVITES: " ON ", JHO_ENV: "local" })).toBe(true);
+  it("o cookie vive o que falta do link, nunca mais; link vencido dá zero", () => {
+    expect(inviteCookieMaxAge("2026-10-13T12:00:00.000Z", T0)).toBe(7 * 86_400);
+    expect(inviteCookieMaxAge("2026-10-06T12:00:00.500Z", T0)).toBe(0);
+    expect(inviteCookieMaxAge("2026-10-06T11:00:00.000Z", T0)).toBe(0);
+    expect(inviteCookieMaxAge("ontem", T0)).toBe(0);
+  });
+
+  it.each([
+    ["desconhecido", null, null, "neutral"],
+    ["aceito", { ...live, status: "accepted" as InviteStatus }, null, "neutral"],
+    ["substituído", { ...live, status: "superseded" as InviteStatus }, null, "neutral"],
+    ["cancelado", { ...live, status: "cancelled" as InviteStatus }, null, "neutral"],
+    ["vencido", { ...live, expiresAt: "2026-10-06T12:00:00.000Z" }, null, "neutral"],
+    ["de candidato desabilitado", { ...live, candidateEnabled: false }, null, "neutral"],
+    ["válido sem sessão", live, null, "anonymous"],
+    ["válido com o e-mail e o papel", live, bia, "accept"],
+    ["válido com outro e-mail", live, { ...bia, email: "carla@z.com" }, "other_email"],
+    ["válido com o e-mail sem o papel", live, { ...bia, roles: ["candidate"] }, "needs_recruiter"],
+    ["aceito por esta conta", { ...live, status: "accepted" as InviteStatus, acceptedUserId: 30 }, bia, "open"],
+    ["aceito por outra conta", { ...live, status: "accepted" as InviteStatus, acceptedUserId: 31 }, bia, "neutral"],
+  ])("página do convite %s → %s", (_label, invite, session, kind) => {
+    expect(invitePageState({ invite, session, now: T0 }).kind).toBe(kind);
+  });
+
+  it("a página mascara o endereço; com outro e-mail, nada do candidato", () => {
+    expect(invitePageState({ invite: live, session: null, now: T0 })).toEqual({
+      kind: "anonymous",
+      candidateName: "Ana",
+      maskedEmail: "b•••@y.com",
+    });
+    expect(invitePageState({ invite: live, session: { ...bia, email: "carla@z.com" }, now: T0 })).toEqual({
+      kind: "other_email",
+      maskedEmail: "b•••@y.com",
+    });
+    expect(invitePageState({ invite: live, session: { ...bia, email: " Bia@Y.com " }, now: T0 }).kind).toBe("accept");
+  });
+
+  it("destino: candidato quando concluiu, aviso nos outros desfechos, o de sempre sem cookie", () => {
+    expect(inviteLanding("completed", 7, "/recruiter")).toBe("/recruiter/7");
+    expect(inviteLanding("mismatch", null, "/recruiter")).toBe("/recruiter?invite=mismatch");
+    expect(inviteLanding("not_recruiter", null, "/jobs")).toBe("/recruiter?invite=not_recruiter");
+    expect(inviteLanding("period_over", null, "/")).toBe("/recruiter?invite=period_over");
+    expect(inviteLanding("invalid", null, "/")).toBe("/recruiter?invite=invalid");
+    expect(inviteLanding("completed", null, "/")).toBe("/recruiter?invite=invalid");
+    expect(inviteLanding(null, null, "/jobs/3")).toBe("/jobs/3");
+  });
+
+  it("o aviso da URL só vale da lista", () => {
+    expect(inviteNoticeOf("mismatch")).toBe("mismatch");
+    expect(inviteNoticeOf("period_over")).toBe("period_over");
+    expect(inviteNoticeOf("completed")).toBeNull();
+    expect(inviteNoticeOf(["mismatch"])).toBeNull();
+    expect(inviteNoticeOf(undefined)).toBeNull();
   });
 });
 

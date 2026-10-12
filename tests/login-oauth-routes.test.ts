@@ -138,6 +138,8 @@ describe("IT-104 retorno responde 303 como o callback do link mágico", () => {
       location: "/jobs/12",
       token: "sessao-de-teste",
       expiresAt: "2026-11-01T00:00:00.000Z",
+      // Conta sem papel de recrutador: o gancho do convite (#465) devolve o destino do serviço.
+      session: { userId: 1, roles: ["candidate"], impersonatedBy: null },
     });
     const session = await callback.GET(
       new NextRequest("http://127.0.0.1:3210/login/oauth/google/callback?state=s&code=c"),

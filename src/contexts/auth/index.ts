@@ -81,7 +81,7 @@ import {
   type OidcProviderId,
 } from "./domain/oidc-config.ts";
 import type { AuthEnvironment } from "./domain/open-mode.ts";
-import { recruiterInvitesEnabled } from "./domain/recruiter-access.ts";
+import { inviteLanding, type InvitePageState } from "./domain/recruiter-access.ts";
 import { resolvePublicOrigin, type RequestOrigin } from "./domain/public-origin.ts";
 import {
   accountContact,
@@ -147,9 +147,13 @@ import {
   candidateAccessView,
   cancelInvite,
   changeEndDate,
+  completeInvitesForAccount,
   dismissInvite,
   expireRecruiterAccess,
   grantAccess,
+  inviteCookieFor,
+  invitedSignupBanner,
+  invitePage,
   resendInvite,
   revokeAccess,
   type CandidateAccessView,
@@ -276,10 +280,15 @@ export { readEndDateEventDetail } from "./domain/recruiter-access.ts";
 export type { CandidateAccessView, GrantResult, SimpleResult as AccessResultSimple } from "./app/recruiter-access.ts";
 export type { AdminCandidateAccess, GrantRow, HistoryRow, InviteRow } from "./ports-recruiter-access.ts";
 
-function accessDeps(origin: string | null = null): RecruiterAccessDeps {
+/**
+ * `env` decide o mailer: o cadastro passa o mesmo ambiente que decidiu se ele
+ * está disponível, para o e-mail de acesso concedido sair por onde saiu o
+ * código (`signupDepsFor`).
+ */
+function accessDeps(origin: string | null = null, env: AuthEnvironment = process.env): RecruiterAccessDeps {
   return {
     store: drizzleRecruiterAccess,
-    mailer: () => configuredMailer(),
+    mailer: () => configuredMailer(env),
     audit: drizzleAuthRepository,
     now: () => clock().now(),
     origin,
@@ -287,7 +296,7 @@ function accessDeps(origin: string | null = null): RecruiterAccessDeps {
       const token = randomBytes(32).toString("base64url");
       return { token, hash: hashToken(token) };
     },
-    invitesEnabled: recruiterInvitesEnabled(process.env),
+    hashToken,
   };
 }
 
@@ -381,6 +390,79 @@ export function adminRecruiterAccess(session: Session | null, candidateIds: read
 /** O trabalho horário da varredura: expira concessões e convites vencidos (ADR-016). */
 export function runRecruiterAccessMaintenance(): Promise<{ expired: number; invitesExpired: number }> {
   return expireRecruiterAccess(accessDeps());
+}
+
+/* -------------------------- Convite de recrutador -------------------------- */
+
+export { INVITE_COOKIE, inviteNoticeOf, type ArrivalNotice, type InvitePageState } from "./domain/recruiter-access.ts";
+
+/**
+ * O que `/signup/invite` mostra (ADR-018). A sessão emprestada conta como
+ * nenhuma conta de recrutador: o admin que assume alguém não aceita convite
+ * em nome dele.
+ */
+export function recruiterInvitePage(token: string | null, session: Session | null): Promise<InvitePageState> {
+  const viewer =
+    session === null
+      ? null
+      : { userId: session.userId, email: session.email, roles: session.impersonatedBy === null ? session.roles : [] };
+  return invitePage({ token, session: viewer }, accessDeps());
+}
+
+/** Validade em segundos do cookie `jho_invite` para este token, ou nulo quando o link não serve. */
+export function recruiterInviteCookie(token: string | null): Promise<{ maxAge: number } | null> {
+  return inviteCookieFor(token, accessDeps());
+}
+
+/** A linha "Convidado por" de `/signup` para o cookie desta visita. */
+export function recruiterInviteBanner(token: string | null): Promise<{ candidateName: string; maskedEmail: string } | null> {
+  return invitedSignupBanner(token, accessDeps());
+}
+
+/**
+ * O destino de quem acabou de entrar (senha, link mágico ou provedor), depois
+ * de concluir os convites ao e-mail da conta e o do cookie (ADR-018). Só conta
+ * com papel de recrutador e sessão própria conclui; as outras seguem para
+ * `fallback`.
+ */
+export async function recruiterLandingAfterSignIn(
+  session: Session,
+  inviteToken: string | null,
+  fallback: string,
+  request: RequestOrigin,
+  env: AuthEnvironment = process.env,
+): Promise<string> {
+  if (!session.roles.includes("recruiter") || session.impersonatedBy !== null) return fallback;
+  const arrival = await completeInvitesForAccount(
+    { userId: session.userId, token: inviteToken },
+    accessDeps(resolvePublicOrigin(env, request), env),
+  );
+  return inviteLanding(arrival.outcome, arrival.candidateId, fallback);
+}
+
+/**
+ * "Aceitar e abrir" (US-003.AC-5): a conta DA SESSÃO, com o papel de
+ * recrutador, conclui o convite do token. O token válido ao mesmo e-mail
+ * prova a caixa e grava `email_verified_at` (ADR-018). Sessão emprestada e
+ * conta sem o papel são recusadas antes de qualquer efeito.
+ */
+export async function acceptRecruiterInvite(
+  session: Session | null,
+  token: string | null,
+  request: RequestOrigin,
+  env: AuthEnvironment = process.env,
+): Promise<string> {
+  authorize(session, "account:read");
+  const own = session as Session;
+  if (own.impersonatedBy !== null) {
+    throw new AuthorizationError("account:read", "sessão emprestada não aceita convite em nome do alvo");
+  }
+  if (!own.roles.includes("recruiter")) throw new AuthorizationError("account:read", "requer papel recruiter");
+  const arrival = await completeInvitesForAccount(
+    { userId: own.userId, token, proveMailbox: true },
+    accessDeps(resolvePublicOrigin(env, request), env),
+  );
+  return inviteLanding(arrival.outcome ?? "invalid", arrival.candidateId, "/recruiter");
 }
 
 /**
@@ -651,6 +733,8 @@ const signupDeps: SignupDeps = {
   mailer: () => configuredMailer(),
   // Na hora do uso, como o extrator: a composição não carrega a fila de score.
   afterCandidateCreated: async (candidateId) => (await import("../../core/candidate.ts")).requestCvRescore(candidateId),
+  afterRecruiterCreated: ({ userId, inviteToken, origin }) =>
+    completeInvitesForAccount({ userId, token: inviteToken }, accessDeps(origin)),
   now: () => new Date(clock().now()),
 };
 
@@ -660,7 +744,12 @@ const signupDeps: SignupDeps = {
  * aceitaria um cadastro cujo código não chega.
  */
 function signupDepsFor(env: AuthEnvironment): SignupDeps {
-  return { ...signupDeps, mailer: () => configuredMailer(env) };
+  return {
+    ...signupDeps,
+    mailer: () => configuredMailer(env),
+    afterRecruiterCreated: ({ userId, inviteToken, origin }) =>
+      completeInvitesForAccount({ userId, token: inviteToken }, accessDeps(origin, env)),
+  };
 }
 
 /** O cadastro manual funciona neste ambiente? No Preview, não (ADR-011). */
@@ -684,7 +773,7 @@ export function resendManualSignupCode(token: string | null, request: RequestOri
 
 /** O código digitado: cria a conta e abre a sessão (US-017). */
 export function confirmManualSignupCode(
-  input: { token: string | null; code: string; clientIp: string },
+  input: { token: string | null; code: string; clientIp: string; inviteToken?: string | null },
   request: RequestOrigin,
   env: AuthEnvironment = process.env,
 ) {

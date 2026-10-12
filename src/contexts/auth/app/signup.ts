@@ -24,6 +24,7 @@ import { DEFAULT_LOCALE, isLocale, type LocaleId } from "../../../core/i18n/inde
 import type { CvPdf } from "../../../core/pdf.ts";
 import { landingAfterSignup } from "../domain/landing.ts";
 import type { OidcProviderId } from "../domain/oidc-config.ts";
+import { inviteLanding, type InviteOutcome } from "../domain/recruiter-access.ts";
 import {
   CODE_MAX_ATTEMPTS,
   CODE_MINUTES,
@@ -99,6 +100,15 @@ export type SignupDeps = {
   mailer(): Mailer;
   /** Depois do commit: pede a repontuação do currículo novo. */
   afterCandidateCreated(candidateId: number): Promise<void>;
+  /**
+   * Depois do commit de uma conta de recrutador: conclui o convite do cookie
+   * e todo convite pendente ao e-mail dela (#465, ADR-018). Devolve o desfecho
+   * do convite do cookie, que decide o destino.
+   */
+  afterRecruiterCreated(input: { userId: number; inviteToken: string | null; origin: string | null }): Promise<{
+    outcome: InviteOutcome | null;
+    candidateId: number | null;
+  }>;
   now(): Date;
 };
 
@@ -268,9 +278,12 @@ export async function resendCode(
 
 /* --------------------------------- Código --------------------------------- */
 
-/** Confere o código e, certo, cria a conta e abre a sessão (US-017). */
+/**
+ * Confere o código e, certo, cria a conta e abre a sessão (US-017).
+ * `inviteToken` é o do cookie `jho_invite`, quando o cadastro veio do convite.
+ */
 export async function confirmCode(
-  input: { token: string | null; code: string; clientIp: string },
+  input: { token: string | null; code: string; clientIp: string; inviteToken?: string | null },
   config: SignupConfig,
   deps: SignupDeps,
 ): Promise<SignupResult<SignedIn>> {
@@ -286,12 +299,18 @@ export async function confirmCode(
     maxPerIpHour: config.maxPerIpHour,
     now,
   });
-  return signIn(outcome, "manual", config, deps);
+  return signIn(outcome, "manual", input.inviteToken ?? null, config, deps);
 }
 
 /* --------------------------------- Social --------------------------------- */
 
-export type SocialForm = ProfileForm & { token: string | null; locale: LocaleId; clientIp: string };
+export type SocialForm = ProfileForm & {
+  token: string | null;
+  locale: LocaleId;
+  clientIp: string;
+  /** O do cookie `jho_invite`, quando o cadastro veio do convite (ADR-018). */
+  inviteToken?: string | null;
+};
 
 /** O envio da tela no modo social: cria conta, identidade e perfil (US-004, US-005). */
 export async function completeSocial(
@@ -323,7 +342,7 @@ export async function completeSocial(
     maxPerIpHour: config.maxPerIpHour,
     now,
   });
-  return signIn(outcome, pending.provider ?? "google", config, deps);
+  return signIn(outcome, pending.provider ?? "google", form.inviteToken ?? null, config, deps);
 }
 
 /* -------------------------------- Conclusão ------------------------------- */
@@ -331,6 +350,7 @@ export async function completeSocial(
 async function signIn(
   outcome: CompletionOutcome,
   path: "manual" | OidcProviderId,
+  inviteToken: string | null,
   config: SignupConfig,
   deps: SignupDeps,
 ): Promise<SignupResult<SignedIn>> {
@@ -350,9 +370,17 @@ async function signIn(
   const { token, session } = await openSession(identity, deps, { kind: "login", detail: `cadastro ${path}` });
   if (outcome.candidateId !== null) await deps.afterCandidateCreated(outcome.candidateId);
   await sendWelcome(outcome, config, deps);
+  let location = landingAfterSignup(outcome.role);
+  if (outcome.role === "recruiter") {
+    // Depois do commit da conta (ADR-018): o convite queima e a concessão nasce
+    // numa transação própria, e a conta vale mesmo se o convite já morreu
+    // (US-003.EC-5).
+    const arrival = await deps.afterRecruiterCreated({ userId: outcome.userId, inviteToken, origin: config.origin });
+    location = inviteLanding(arrival.outcome, arrival.candidateId, location);
+  }
   return {
     ok: true,
-    value: { token, expiresAt: session.expiresAt, location: landingAfterSignup(outcome.role), candidateId: outcome.candidateId },
+    value: { token, expiresAt: session.expiresAt, location, candidateId: outcome.candidateId },
   };
 }
 
