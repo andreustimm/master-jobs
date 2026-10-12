@@ -91,21 +91,55 @@ describe("design tokens", () => {
     }
   });
 
-  it("keeps primary-foreground on primary at WCAG AA in every theme and mode", () => {
+  /** As variáveis efetivas de um tema nos três estados: claro, escuro escolhido e escuro herdado do sistema. */
+  function modesOf(id: string): Record<"light" | "dark" | "system", Record<string, string>> {
     const themes = stripComments(read("app/themes.css"));
     const media = themes.slice(themes.indexOf("@media (prefers-color-scheme: dark)"));
+    const light = themeBlock(themes, `[data-theme="${id}"]`);
+    return {
+      light,
+      dark: { ...light, ...themeBlock(themes, `[data-theme="${id}"][data-mode="dark"]`) },
+      system: { ...light, ...themeBlock(media, `[data-theme="${id}"]:not([data-mode="light"])`) },
+    };
+  }
+
+  it("keeps primary-foreground on primary at WCAG AA in every theme and mode", () => {
     for (const id of ["hp", "huly", "graphy"]) {
-      const light = themeBlock(themes, `[data-theme="${id}"]`);
-      const blocks = {
-        light,
-        dark: { ...light, ...themeBlock(themes, `[data-theme="${id}"][data-mode="dark"]`) },
-        system: { ...light, ...themeBlock(media, `[data-theme="${id}"]:not([data-mode="light"])`) },
-      };
-      for (const [mode, vars] of Object.entries(blocks)) {
+      for (const [mode, vars] of Object.entries(modesOf(id))) {
         const ratio = contrast(vars["--primary"], vars["--primary-foreground"]);
         expect(ratio, `${id} ${mode}: ${vars["--primary-foreground"]} sobre ${vars["--primary"]}`).toBeGreaterThanOrEqual(4.5);
       }
     }
+  });
+
+  it("keeps primary-foreground on primary-hover at WCAG AA, and never below the resting button (#501)", () => {
+    // `hover:bg-primary/80` compunha o azul com o que houvesse atrás e caía
+    // para 3,50–4,44:1 em cinco dos seis ambientes (só o HP claro passava,
+    // com 4,71:1). O fundo do hover é um token opaco, medido aqui nos três
+    // estados de cada tema.
+    for (const id of ["hp", "huly", "graphy"]) {
+      for (const [mode, vars] of Object.entries(modesOf(id))) {
+        const where = `${id} ${mode}: ${vars["--primary-foreground"]} sobre ${vars["--primary-hover"]}`;
+        const hover = contrast(vars["--primary-hover"], vars["--primary-foreground"]);
+        expect(hover, where).toBeGreaterThanOrEqual(4.5);
+        expect(hover, `${where} não pode contrastar menos que o repouso`).toBeGreaterThanOrEqual(
+          contrast(vars["--primary"], vars["--primary-foreground"]),
+        );
+        expect(vars["--primary-hover"], `${id} ${mode}: o hover precisa se distinguir do repouso`).not.toBe(vars["--primary"]);
+      }
+    }
+  });
+
+  it("paints the primary hover from the theme token, not from a translucent primary (#501)", () => {
+    // A opacidade volta a deixar o contraste depender do que está atrás do
+    // botão; o token é o único jeito de o teste acima valer para a tela.
+    const offenders: string[] = [];
+    for (const file of COMPONENTS) {
+      for (const match of read(file).matchAll(/hover:bg-primary\/\d+/g)) offenders.push(`${file}: ${match[0]}`);
+    }
+    expect(offenders).toEqual([]);
+    expect(read("components/ui/button.tsx")).toContain("hover:bg-primary-hover");
+    expect(read("app/globals.css")).toContain("--color-primary-hover: var(--primary-hover);");
   });
 
   it("lets an explicit light choice beat a dark operating system", () => {
