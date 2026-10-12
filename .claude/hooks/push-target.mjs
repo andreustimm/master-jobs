@@ -11,7 +11,8 @@
 //
 // Falha fecha: comando fora da forma simples (`plainGitCommand`), erro do git
 // ou estouro do tempo devolvem `null`, e o git volta a ser julgado só pelo
-// texto — o push sem refspec, o forçado e o que descarta trabalho perguntam.
+// texto — o push sem refspec nega, com a instrução de explicitar o destino
+// (o push nunca pergunta), e o que descarta trabalho pergunta.
 import { spawnSync } from "node:child_process";
 import { readdirSync, realpathSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
@@ -89,11 +90,19 @@ function symbolicBranches(git) {
 /**
  * O que o push leva, pela configuração: `safe` só quando o push sem refspec
  * leva o branch atual e nada mais (`push.default` de um branch, sem
- * `remote.*.push`, `remote.*.mirror`, `push.followTags` nem remoto legado em
+ * `remote.*.push`, `remote.*.mirror`, `push.followTags`, `remote.pushDefault`,
+ * `branch.*.pushRemote`, `url.*.pushInsteadOf` nem remoto legado em
  * `remotes/`/`branches/`) e o ref de acompanhamento do remoto tem o nome do
  * branch remoto (`fetch` padrão). `pushDefault` é o efetivo (`simple` sem
  * configuração): com `upstream`/`tracking`, o refspec sem `:` que nomeia um
- * branch vai para o upstream dele. `symrefs`: branches que são ref simbólica.
+ * branch vai para o upstream dele (o `branch.<b>.merge` que o aponta é lido
+ * pelo `@{push}`). `symrefs`: branches que são ref simbólica.
+ *
+ * A leitura é o `git config` de todas as origens (sistema, usuário, repositório,
+ * worktree e arquivos incluídos): a chave gravada fora da guarda, por `git
+ * remote`, edição do arquivo ou outra ferramenta, também conta (#505).
+ * `branch.<b>.merge`/`.remote` e `url.*.insteadOf` são lidos e não reprovam:
+ * são o que `push -u` e a reescrita de URL do dia a dia gravam.
  * @param {(args: string[], ok?: number[]) => string} git
  * @param {string[]} gitDirs diretório comum e o da worktree
  * @returns {import("./shell-policy.mjs").PushInfo}
@@ -105,7 +114,7 @@ function pushInfo(git, gitDirs) {
   } catch {
     pushRef = null;
   }
-  const config = parseConfig(git(["config", "-z", "--get-regexp", "^(push|remote)\\."], [0, 1]));
+  const config = parseConfig(git(["config", "-z", "--get-regexp", "^(push|remote|branch|url)\\."], [0, 1]));
   let safe = true;
   let pushDefault = null;
   const remotes = new Set();
@@ -114,6 +123,10 @@ function pushInfo(git, gitDirs) {
     const lower = key.toLowerCase();
     if (lower === "push.default") pushDefault = (value ?? "").toLowerCase();
     else if (lower === "push.followtags" && truthy(value)) safe = false;
+    // O remoto de push trocado por configuração (`remote.pushDefault`,
+    // `branch.<b>.pushRemote`) ou a URL de push reescrita (`url.*.pushInsteadOf`):
+    // o destino não é o que o refspec nem o `@{push}` do remoto escrito dizem.
+    else if (lower === "remote.pushdefault" || /^branch\..+\.pushremote$/.test(lower) || /^url\..+\.pushinsteadof$/.test(lower)) safe = false;
     else if (lower.startsWith("remote.")) {
       const last = key.lastIndexOf(".");
       const name = key.slice("remote.".length, last);

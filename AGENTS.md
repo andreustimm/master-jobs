@@ -17,12 +17,21 @@ exceções e prova de cada regra estão em
 ## Como trabalhar
 
 - Leve a tarefa até a entrega exigida na issue; decisões rotineiras são suas.
-  Pergunte ao dono só antes de ação irreversível fora do fluxo (force-push ou
-  apagar branch em `main`/`staging`/`dev`, `reset --hard`/`clean`/descarte
-  na checkout principal, apagar dado), escrita no banco de produção, afrouxar
-  uma regra ou aceitar `FIX_BEFORE_SHIP` remanescente. Em worktree de
-  trabalho, todo `git` é rotina, inclusive o destrutivo (decisão do dono,
-  07/10/2026). [[G85](docs/engineering/rules/delivery.md#g85)]
+  Pergunte ao dono só antes de ação irreversível fora do fluxo (apagar branch
+  em `main`/`staging`/`dev`, `reset --hard`/`clean`/descarte na checkout
+  principal, apagar dado), escrita no banco de produção, afrouxar uma regra
+  ou aceitar `FIX_BEFORE_SHIP` remanescente. Em worktree de trabalho, todo
+  `git` é rotina, inclusive o destrutivo (decisão do dono, 07/10/2026).
+  [[G85](docs/engineering/rules/delivery.md#g85)]
+- A rotina nunca pede autorização ao dono: criar e editar arquivo (`.mjs`
+  inclusive), qualquer `git` (push e force-push em branch de trabalho própria
+  inclusive) e qualquer `gh` passam sem pergunta; só destino
+  `main`/`staging`/`dev`, escrita no banco de produção, segredo e afrouxar
+  regra continuam com o dono. O `git` passa ou nega, nunca pergunta: o que
+  nega (destino protegido, descarte na checkout principal) traz a instrução
+  do que fazer, e o agente corrige sozinho. O que ainda perguntar é defeito de
+  configuração, a corrigir na política (`shell-policy.mjs`), não na lista
+  `allow` (decisão do dono, 11/10/2026). [[G85](docs/engineering/rules/delivery.md#g85)]
 - Entregue o pedido, no escopo pedido; melhoria fora dele vira uma frase na PR
   ou uma issue.
 - Relate só o que um comando desta sessão mostrou; o resto é "não verificado".
@@ -254,7 +263,9 @@ commit. [[G62](docs/engineering/rules/delivery.md#g62)]
   por uma lista do que é proibido (o que ela não reconhece passa): `gh` não
   pergunta; produção, perda de trabalho, apagamento, escrita fora do projeto,
   sistema e ambiente impresso perguntam; arquivo de segredo, Keychain, `sudo`
-  e push protegido são negados (no Codex e no OpenCode, pergunta vira
+  e push protegido são negados, e o push nunca pergunta: passa para branch de
+  trabalho (forçado inclusive) ou nega, com a instrução de explicitar o
+  destino quando o texto não o resolve (no Codex e no OpenCode, pergunta vira
   bloqueio; o OpenCode depende do plugin carregado). Famílias cobertas e
   limites conhecidos: G85. Heredoc e `$(...)` são recusados mesmo em mensagem de commit:
   escreva a mensagem com a ferramenta de arquivo e rode `git commit -F

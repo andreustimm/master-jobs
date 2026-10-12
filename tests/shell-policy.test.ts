@@ -30,6 +30,14 @@ const decision = (command: string) => classifyRisk(command)?.decision ?? null;
 /** Comandos `git` dos achados: valem também com `git -C dir` e `git -c k=v`. */
 const GIT: readonly [string, Expected][] = [
   ["git push origin main", "deny"],
+  // Alias de `-c` sem `!` vale como o subcomando que ele expande (e o interno de mesmo nome também).
+  ["git -c alias.p=push p origin main", "deny"],
+  ["git -c alias.p=push p origin fix/x:dev", "deny"],
+  ["git -c alias.a=b -c alias.b=push a origin staging", "deny"],
+  ["git -c alias.push=status push origin main", "deny"],
+  ["git -c alias.p=push p", "deny"],
+  ["git -c alias.r=reset r --hard", "deny"],
+  ["git -c alias.a=a a", "deny"],
   ["git push origin staging", "deny"],
   ["git push origin dev", "deny"],
   ["git push origin HEAD:main", "deny"],
@@ -37,104 +45,97 @@ const GIT: readonly [string, Expected][] = [
   ["git push origin refs/heads/staging", "deny"],
   ["git push origin :dev", "deny"],
   ["git push origin fix/x:main", "deny"],
-  ["git push --force", "ask"],
-  ["git push -f origin fix/x", "ask"],
-  ["git push -uf origin fix/x", "ask"],
-  ["git push --force-with-lease origin fix/x", "ask"],
-  ["git push origin +fix/x", "ask"],
-  ["git push --mirror", "ask"],
-  ["git push --all", "ask"],
-  ["git push --prune origin", "ask"],
-  ["git push --no-verify origin fix/x", "ask"],
-  ["git push", "ask"],
-  ["git push origin", "ask"],
-  ["git push origin HEAD", "ask"],
-  ["git push origin $BRANCH", "ask"],
-  ["git reset --hard", "ask"],
-  ["git reset --merge HEAD~1", "ask"],
-  ["git clean -fd", "ask"],
-  ["git checkout -- src/a.ts", "ask"],
-  ["git checkout .", "ask"],
-  ["git checkout -f fix/x", "ask"],
-  ["git checkout HEAD~1 -- src/a.ts", "ask"],
-  ["git checkout HEAD src/a.ts", "ask"],
-  ["git checkout src/a.ts", "ask"],
-  ["git checkout -B fix/x origin/dev", "ask"],
-  ["git switch -f fix/x", "ask"],
-  ["git switch --discard-changes fix/x", "ask"],
-  ["git switch -C fix/x", "ask"],
-  ["git restore src/a.ts", "ask"],
-  ["git restore --staged --worktree src/a.ts", "ask"],
-  ["git stash drop", "ask"],
-  ["git stash clear", "ask"],
-  ["git worktree remove --force x", "ask"],
-  ["git worktree remove -f x", "ask"],
-  ["git worktree remove --force ../fora", "ask"],
-  ["git worktree remove --force .claude/worktrees/../../x", "ask"],
-  ["git worktree remove --force /tmp/wt", "ask"],
-  ["git worktree remove --force .claude/worktrees/x/sub", "ask"],
-  ["git worktree remove --force .claude/worktreesX/y", "ask"],
-  ["git worktree remove --force /tmp/.codex/worktrees/x/y", "ask"],
-  ["git worktree remove --force ~/.codex/worktrees/${X:-..}/${X:-..}/proj/wt", "ask"],
-  ["git worktree remove --force ~root/.codex/worktrees/x/y", "ask"],
-  ["git worktree remove --force .claude/worktrees/*", "ask"],
-  ["git worktree remove -ff .claude/worktrees/x", "ask"],
-  ["git worktree remove -f -f .claude/worktrees/x", "ask"],
-  ["git worktree remove --force -- -x", "ask"],
-  ["git worktree remove --force", "ask"],
-  ["xargs -I@ git worktree remove --force .claude/worktrees/@ < /tmp/lista", "ask"],
-  ["xargs -J % git worktree remove --force .claude/worktrees/%", "ask"],
-  ["find .claude/worktrees -maxdepth 1 -exec git worktree remove --force {} \\;", "ask"],
-  ["git filter-branch --tree-filter x", "ask"],
-  ["git filter-repo --path x", "ask"],
-  ["git update-ref -d refs/heads/x", "ask"],
-  ["git reflog expire --all", "ask"],
-  ["git gc --prune=now", "ask"],
-  ["git rm -r src", "ask"],
-  ["git rm -f src/a.ts", "ask"],
+  ["git push --force", "deny"],
+  ["git push --mirror", "deny"],
+  ["git push --all", "deny"],
+  ["git push --prune origin", "deny"],
+  ["git push", "deny"],
+  ["git push origin", "deny"],
+  ["git push origin HEAD", "deny"],
+  ["git push origin $BRANCH", "deny"],
+  ["git reset --hard", "deny"],
+  ["git reset --merge HEAD~1", "deny"],
+  ["git clean -fd", "deny"],
+  ["git checkout -- src/a.ts", "deny"],
+  ["git checkout .", "deny"],
+  ["git checkout -f fix/x", "deny"],
+  ["git checkout HEAD~1 -- src/a.ts", "deny"],
+  ["git checkout HEAD src/a.ts", "deny"],
+  ["git checkout src/a.ts", "deny"],
+  ["git checkout -B fix/x origin/dev", "deny"],
+  ["git switch -f fix/x", "deny"],
+  ["git switch --discard-changes fix/x", "deny"],
+  ["git switch -C fix/x", "deny"],
+  ["git restore src/a.ts", "deny"],
+  ["git restore --staged --worktree src/a.ts", "deny"],
+  ["git worktree remove --force x", "deny"],
+  ["git worktree remove -f x", "deny"],
+  ["git worktree remove --force ../fora", "deny"],
+  ["git worktree remove --force .claude/worktrees/../../x", "deny"],
+  ["git worktree remove --force /tmp/wt", "deny"],
+  ["git worktree remove --force .claude/worktrees/x/sub", "deny"],
+  ["git worktree remove --force .claude/worktreesX/y", "deny"],
+  ["git worktree remove --force /tmp/.codex/worktrees/x/y", "deny"],
+  ["git worktree remove --force ~/.codex/worktrees/${X:-..}/${X:-..}/proj/wt", "deny"],
+  ["git worktree remove --force ~root/.codex/worktrees/x/y", "deny"],
+  ["git worktree remove --force .claude/worktrees/*", "deny"],
+  ["git worktree remove -ff .claude/worktrees/x", "deny"],
+  ["git worktree remove -f -f .claude/worktrees/x", "deny"],
+  ["git worktree remove --force -- -x", "deny"],
+  ["git worktree remove --force", "deny"],
+  ["xargs -I@ git worktree remove --force .claude/worktrees/@ < /tmp/lista", "deny"],
+  ["xargs -J % git worktree remove --force .claude/worktrees/%", "deny"],
+  ["find .claude/worktrees -maxdepth 1 -exec git worktree remove --force {} \\;", "deny"],
+  ["git filter-branch --tree-filter x", "deny"],
+  ["git filter-repo --path x", "deny"],
+  ["git update-ref -d refs/heads/x", "deny"],
+  ["git reflog expire --all", "deny"],
+  ["git gc --prune=now", "deny"],
+  ["git rm -r src", "deny"],
+  ["git rm -f src/a.ts", "deny"],
   // Revisão da #462: destino do refspec normalizado (`@`, `heads/`).
-  ["git push origin @", "ask"],
-  ["git push origin @:@", "ask"],
+  ["git push origin @", "deny"],
+  ["git push origin @:@", "deny"],
   ["git push origin HEAD:heads/main", "deny"],
   ["git push origin heads/dev", "deny"],
   ["git push origin refs/heads/staging:heads/staging", "deny"],
-  // Tag remota apagada pergunta (regra 22).
-  ["git push origin :refs/tags/v1", "ask"],
-  ["git push --delete origin v1.0.0", "ask"],
-  ["git push origin -d v1.0.0", "ask"],
+  // Tag remota apagada é negada (regra 22).
+  ["git push origin :refs/tags/v1", "deny"],
+  ["git push --delete origin v1.0.0", "deny"],
+  ["git push origin -d v1.0.0", "deny"],
   ["git push origin --delete main", "deny"],
   // Chave que executa programa, por `-c` ou gravada; hooks pulados.
-  ["git -c core.pager=less log", "ask"],
-  ["git -c core.sshCommand=ssh fetch", "ask"],
-  ["git -c core.editor=vim commit", "ask"],
-  ["git -c diff.external=x diff", "ask"],
-  ["git -c core.fsmonitor=x status", "ask"],
-  ["git -c diff.x.textconv=sh diff", "ask"],
-  ["git -c sequence.editor=x rebase -i HEAD~2", "ask"],
-  ["git -c credential.helper=x fetch", "ask"],
-  ["git -c gpg.program=x commit -S -m x", "ask"],
-  ["git config core.hooksPath /dev/null", "ask"],
-  ["git config --global core.pager less", "ask"],
-  ["git config --local core.editor vim", "ask"],
-  ["git config --unset core.hooksPath", "ask"],
-  ["git config set core.fsmonitor x", "ask"],
-  ["git config --global alias.p x", "ask"],
+  ["git -c core.pager=less log", "deny"],
+  ["git -c core.sshCommand=ssh fetch", "deny"],
+  ["git -c core.editor=vim commit", "deny"],
+  ["git -c diff.external=x diff", "deny"],
+  ["git -c core.fsmonitor=x status", "deny"],
+  ["git -c diff.x.textconv=sh diff", "deny"],
+  ["git -c sequence.editor=x rebase -i HEAD~2", "deny"],
+  ["git -c credential.helper=x fetch", "deny"],
+  ["git -c gpg.program=x commit -S -m x", "deny"],
+  ["git config core.hooksPath /dev/null", "deny"],
+  ["git config --global core.pager less", "deny"],
+  ["git config --local core.editor vim", "deny"],
+  ["git config --unset core.hooksPath", "deny"],
+  ["git config set core.fsmonitor x", "deny"],
+  ["git config --global alias.p x", "deny"],
   // Revisão da #462 (quinta rodada): gravar configuração pessoal ou global pergunta.
-  ["git config --global user.name x", "ask"],
-  ["git config --system core.autocrlf false", "ask"],
-  ["git config --global --add safe.directory /x", "ask"],
-  ["git config --global --unset user.name", "ask"],
-  ["git config --global --unset-all user.name", "ask"],
-  ["git config --global --replace-all user.name x", "ask"],
-  ["git config --global --rename-section a b", "ask"],
-  ["git config --global --remove-section a", "ask"],
-  ["git config --global set user.name x", "ask"],
-  ["git config --global --edit", "ask"],
-  ["git config --file ~/.gitconfig user.name x", "ask"],
-  ["git config --file=~/.gitconfig user.name x", "ask"],
-  ["git config -f ~/.gitconfig user.name x", "ask"],
-  ["git config -f /etc/gitconfig --unset user.name", "ask"],
-  ["git config -f ../fora.cfg user.name x", "ask"],
+  ["git config --global user.name x", "deny"],
+  ["git config --system core.autocrlf false", "deny"],
+  ["git config --global --add safe.directory /x", "deny"],
+  ["git config --global --unset user.name", "deny"],
+  ["git config --global --unset-all user.name", "deny"],
+  ["git config --global --replace-all user.name x", "deny"],
+  ["git config --global --rename-section a b", "deny"],
+  ["git config --global --remove-section a", "deny"],
+  ["git config --global set user.name x", "deny"],
+  ["git config --global --edit", "deny"],
+  ["git config --file ~/.gitconfig user.name x", "deny"],
+  ["git config --file=~/.gitconfig user.name x", "deny"],
+  ["git config -f ~/.gitconfig user.name x", "deny"],
+  ["git config -f /etc/gitconfig --unset user.name", "deny"],
+  ["git config -f ../fora.cfg user.name x", "deny"],
   ["npm config set registry https://r.test --location=user", "ask"],
   ["npm config set registry https://r.test --location user", "ask"],
   ["npm config set registry https://r.test --location=global", "ask"],
@@ -160,73 +161,277 @@ const GIT: readonly [string, Expected][] = [
   ["pnpm config delete store-dir", "ask"],
   ["pnpm set store-dir x", "ask"],
   ["yarn config set npmRegistryServer https://r.test", "ask"],
-  ["git commit --no-verify -m x", "ask"],
-  ["git commit -n -m x", "ask"],
-  ["git commit -anm x", "ask"],
+  ["git commit --no-verify -m x", "deny"],
+  ["git commit -n -m x", "deny"],
+  ["git commit -anm x", "deny"],
   // Nome que não pode ser ref é caminho.
-  ["git checkout src/", "ask"],
-  ["git checkout ./Makefile", "ask"],
-  ["git checkout ..", "ask"],
+  ["git checkout src/", "deny"],
+  ["git checkout ./Makefile", "deny"],
+  ["git checkout ..", "deny"],
   // Revisão da #462 (terceira rodada): encanamento do push com a mesma proteção.
   ["git send-pack --force git@github.com:o/r.git HEAD:refs/heads/dev", "deny"],
   ["git send-pack origin main", "deny"],
-  ["git send-pack --force origin fix/x", "ask"],
-  ["git send-pack --all origin", "ask"],
-  ["git send-pack --mirror origin", "ask"],
-  ["git send-pack --stdin origin", "ask"],
+  ["git send-pack --all origin", "deny"],
+  ["git send-pack --mirror origin", "deny"],
+  ["git send-pack --stdin origin", "deny"],
   ["git http-push https://x.test/r.git main", "deny"],
-  ["git http-push --force https://x.test/r.git fix/x", "ask"],
-  ["git receive-pack /tmp/r.git", "ask"],
+  ["git receive-pack /tmp/r.git", "deny"],
   // Branch protegida local reescrita ou apagada.
-  ["git branch -f dev HEAD~1", "ask"],
-  ["git branch -M main", "ask"],
-  ["git branch -m main velha", "ask"],
-  ["git branch -D staging", "ask"],
-  ["git branch --force main x", "ask"],
-  ["git branch --delete refs/heads/dev", "ask"],
-  ["git update-ref refs/heads/main HEAD~1", "ask"],
-  ["git update-ref HEAD HEAD~1", "ask"],
-  ["git symbolic-ref HEAD refs/heads/main", "ask"],
+  ["git branch -f dev HEAD~1", "deny"],
+  ["git branch -M main", "deny"],
+  ["git branch -m main velha", "deny"],
+  ["git branch -D staging", "deny"],
+  ["git branch --force main x", "deny"],
+  ["git branch --delete refs/heads/dev", "deny"],
+  ["git update-ref refs/heads/main HEAD~1", "deny"],
+  ["git update-ref HEAD HEAD~1", "deny"],
+  ["git symbolic-ref HEAD refs/heads/main", "deny"],
   // Revisão da #462 (quarta rodada): toda escrita de ref local passa pela
   // mesma checagem — branch protegida, tag, `HEAD` e curinga perguntam.
-  ["git fetch --update-head-ok -f origin x:dev", "ask"],
-  ["git fetch -f origin x:dev", "ask"],
-  ["git fetch origin +x:refs/heads/main", "ask"],
-  ["git fetch origin x:heads/staging", "ask"],
-  ["git fetch origin x:refs/tags/v1.2.3", "ask"],
-  ["git fetch origin 'refs/heads/*:refs/heads/*'", "ask"],
-  ["git fetch --refmap=x:dev origin", "ask"],
-  ["git fetch --prune-tags origin", "ask"],
-  ["git fetch -P origin", "ask"],
-  ["git fetch -f --tags origin", "ask"],
-  ["git pull origin x:staging", "ask"],
-  ["git worktree add --force -B main /tmp/wt HEAD~1", "ask"],
-  ["git worktree add -B feat/x /tmp/wt", "ask"],
-  ["git worktree add -b main /tmp/wt", "ask"],
-  ["git worktree add -fB dev /tmp/wt", "ask"],
-  ["git tag -f v1.2.3 HEAD~1", "ask"],
-  ["git tag -fa v1.2.3 -m x", "ask"],
-  ["git tag -d v1.2.3", "ask"],
-  ["git tag --delete v1.2.3", "ask"],
-  ["git tag --force v1.2.3", "ask"],
-  ["git checkout -Bmain", "ask"],
-  ["git checkout -b dev", "ask"],
-  ["git checkout --orphan staging", "ask"],
-  ["git switch -c staging", "ask"],
-  ["git switch --create=main", "ask"],
-  ["git switch --force-create=feat/x", "ask"],
-  ["git switch -Cdev", "ask"],
-  ["git update-ref refs/tags/v1 HEAD", "ask"],
-  ["git update-ref refs/heads/$B HEAD", "ask"],
-  ["git replace HEAD HEAD~1", "ask"],
-  ["git replace -d abc123", "ask"],
+  ["git fetch --update-head-ok -f origin x:dev", "deny"],
+  ["git fetch -f origin x:dev", "deny"],
+  ["git fetch origin +x:refs/heads/main", "deny"],
+  ["git fetch origin x:heads/staging", "deny"],
+  ["git fetch origin x:refs/tags/v1.2.3", "deny"],
+  ["git fetch origin 'refs/heads/*:refs/heads/*'", "deny"],
+  ["git fetch --refmap=x:dev origin", "deny"],
+  ["git fetch --prune-tags origin", "deny"],
+  ["git fetch -P origin", "deny"],
+  ["git fetch -f --tags origin", "deny"],
+  ["git pull origin x:staging", "deny"],
+  ["git worktree add --force -B main /tmp/wt HEAD~1", "deny"],
+  ["git worktree add -B feat/x /tmp/wt", "deny"],
+  ["git worktree add -b main /tmp/wt", "deny"],
+  ["git worktree add -fB dev /tmp/wt", "deny"],
+  ["git tag -f v1.2.3 HEAD~1", "deny"],
+  ["git tag -fa v1.2.3 -m x", "deny"],
+  ["git tag -d v1.2.3", "deny"],
+  ["git tag --delete v1.2.3", "deny"],
+  ["git tag --force v1.2.3", "deny"],
+  ["git checkout -Bmain", "deny"],
+  ["git checkout -b dev", "deny"],
+  ["git checkout --orphan staging", "deny"],
+  ["git switch -c staging", "deny"],
+  ["git switch --create=main", "deny"],
+  ["git switch --force-create=feat/x", "deny"],
+  ["git switch -Cdev", "deny"],
+  ["git update-ref refs/tags/v1 HEAD", "deny"],
+  ["git update-ref refs/heads/$B HEAD", "deny"],
+  ["git replace HEAD HEAD~1", "deny"],
+  ["git replace -d abc123", "deny"],
   // Arquivo de saída fora do projeto, pelo próprio git.
-  ["git diff --output=/etc/x", "ask"],
-  ["git log --output ~/x.txt", "ask"],
-  ["git format-patch -o ~/patches HEAD~1", "ask"],
-  ["git format-patch --output-directory=/etc/p HEAD~1", "ask"],
-  ["git archive -o ~/x.tgz HEAD", "ask"],
-  ["git diff --output=.claude/settings.json", "ask"],
+  ["git diff --output=/etc/x", "deny"],
+  ["git log --output ~/x.txt", "deny"],
+  ["git format-patch -o ~/patches HEAD~1", "deny"],
+  ["git format-patch --output-directory=/etc/p HEAD~1", "deny"],
+  ["git archive -o ~/x.tgz HEAD", "deny"],
+  ["git diff --output=.claude/settings.json", "deny"],
+  // #475: o git aceita o prefixo único de uma opção longa; a abreviada vale
+  // como a completa (conferido com git real: `reset --har` zera o working tree).
+  ["git push --delet origin v1.0.0", "deny"],
+  ["git push --mirro origin fix/x", "deny"],
+  ["git push --al origin fix/x", "deny"],
+  ["git push --branche origin fix/x", "deny"],
+  ["git send-pack --al origin fix/x", "deny"],
+  ["git send-pack --mirro origin fix/x", "deny"],
+  ["git send-pack --std origin fix/x", "deny"],
+  ["git worktree remove --forc /tmp/wt", "deny"],
+  ["git worktree remove --forc .claude/worktrees/../../x", "deny"],
+  ["git worktree remove --forc", "deny"],
+  ["git reset --har", "deny"],
+  ["git reset --har HEAD~1", "deny"],
+  ["git reset --mer", "deny"],
+  ["git checkout --forc main", "deny"],
+  ["git checkout --pathspec-from=lista.txt", "deny"],
+  ["git checkout --orph staging", "deny"],
+  ["git checkout --ignore-other dev", "deny"],
+  ["git switch --discard main", "deny"],
+  ["git switch --discard-c main", "deny"],
+  ["git switch --forc main", "deny"],
+  ["git switch --creat main", "deny"],
+  ["git switch --force-cr feat/x", "deny"],
+  ["git switch --orph staging", "deny"],
+  ["git switch --ignore-other dev", "deny"],
+  ["git restore --staged --work a.txt", "deny"],
+  ["git restore --stag --work a.txt", "deny"],
+  ["git rm --forc a.txt", "deny"],
+  ["git tag --dele v1.2.3", "deny"],
+  ["git tag --forc v1.2.3", "deny"],
+  ["git branch --forc main x", "deny"],
+  ["git branch --dele dev", "deny"],
+  ["git branch --mov main velha", "deny"],
+  ["git fetch --prune-t origin", "deny"],
+  ["git fetch --forc --tag origin", "deny"],
+  ["git fetch --refm=x:dev origin", "deny"],
+  ["git pull --prune-t origin", "deny"],
+  ["git gc --prun=now", "deny"],
+  ["git commit --no-veri -m x", "deny"],
+  ["git symbolic-ref --dele HEAD", "deny"],
+  ["git update-ref --std", "deny"],
+  ["git rebase --exe sudo HEAD~3", "deny"],
+  ["git rebase --exe=sudo HEAD~3", "deny"],
+  ["git difftool --extc=sudo HEAD", "deny"],
+  ["git config --glo user.name x", "deny"],
+  ["git config --sys core.autocrlf false", "deny"],
+  ["git config --fil ~/.gitconfig user.name x", "deny"],
+  ["git config --fil=~/.gitconfig user.name x", "deny"],
+  ["git config --edi", "deny"],
+  ["git config --unset-a core.hooksPath", "deny"],
+  ["git config --unse core.hooksPath", "deny"],
+  ["git config --rename-sec a b --glo", "deny"],
+  ["git config --remove-sec a --glo", "deny"],
+  // #505: gravar a configuração que desvia o destino do push pergunta; sem
+  // isso, `git config remote.origin.push …:dev` e depois `git push origin
+  // feat/x` levava a branch protegida sem uma pergunta no caminho.
+  ["git config alias.p push", "deny"],
+  // #505 (juiz da #521): gravar a chave que desvia o destino do push nega, com a instrução; o que o git
+  // grava sozinho (`push -u`, `branch -u`, `remote add`) e o resto de `branch.*` passam.
+  ["git config remote.origin.push refs/heads/feat/x:refs/heads/dev", "deny"],
+  ["git config --add remote.origin.push refs/heads/feat/x:refs/heads/dev", "deny"],
+  ["git config --local remote.origin.push HEAD:main", "deny"],
+  ["git config remote.origin.mirror true", "deny"],
+  ["git config remote.pushDefault fork", "deny"],
+  ["git config push.default upstream", "deny"],
+  ["git config push.default matching", "deny"],
+  ["git config --local push.default upstream", "deny"],
+  ["git config push.followTags true", "deny"],
+  ["git config set push.default upstream", "deny"],
+  ["git config branch.feat/x.pushRemote fork", "deny"],
+  ["git config url.https://x.test/.pushInsteadOf https://y.test/", "deny"],
+  ["git config --unset remote.origin.push", "deny"],
+  ["git config --unset-all push.default", "deny"],
+  ["git config include.path ../x.cfg", "deny"],
+  ["git config includeIf.gitdir:/x/.path ../x.cfg", "deny"],
+  ["git config remote.origin.push +refs/heads/feat/x:refs/heads/dev", "deny"],
+  ["git config --file .git/config remote.origin.push HEAD:main", "deny"],
+  ["git config -f .git/config push.default upstream", "deny"],
+  ["git -c color.ui=false config remote.origin.push HEAD:dev", "deny"],
+  ["git --git-dir=.git config remote.origin.push HEAD:dev", "deny"],
+  ['git -C "$PWD" config remote.origin.push HEAD:dev', "deny"],
+  ["git -c alias.c=config c remote.origin.push HEAD:dev", "deny"],
+  // Minor do juiz da #521: destino em refs/remotes ou em outro namespace de ref (fora de heads e tags) nega.
+  ["git push origin feat/x:refs/remotes/origin/dev", "deny"],
+  ["git push origin feat/x:remotes/origin/dev", "deny"],
+  ["git push origin fix/x:refs/notes/x", "deny"],
+  ["git push origin fix/x:refs/stash", "deny"],
+  ["git push origin refs/remotes/origin/dev", "deny"],
+  ["git push origin :refs/remotes/origin/dev", "deny"],
+  ["git push --delete origin refs/remotes/origin/dev", "deny"],
+  // M1 (juiz da #521): a opção que nomeia um programa que o git roda no repositório local nega.
+  ["git push --receive-pack=/tmp/evil /tmp/r fix/x", "deny"],
+  ["git push --receive-pack /tmp/evil /tmp/r fix/x", "deny"],
+  ["git push --receive-p=/tmp/evil /tmp/r fix/x", "deny"],
+  ["git push --exec=/tmp/evil origin fix/x", "deny"],
+  ["git send-pack --receive-pack=/tmp/evil /tmp/r fix/x", "deny"],
+  ["git fetch --upload-pack=/tmp/evil /tmp/r", "deny"],
+  ["git pull --upload-pack /tmp/evil /tmp/r", "deny"],
+  ["git ls-remote --upload-pack=/tmp/evil /tmp/r", "deny"],
+  ["git clone --upload-pack=/tmp/evil /tmp/r x", "deny"],
+  ["git archive --exec=/tmp/evil --remote=/tmp/r HEAD", "deny"],
+  ["git config -f ~/.gitconfig remote.origin.push HEAD:main", "deny"],
+];
+
+/**
+ * Push que passa sem pergunta (decisão do dono, 11/10/2026): destino de
+ * trabalho `<tipo>/<slug>`, também forçado (`-f`, `--force-with-lease`, `+ref`),
+ * `--no-verify`, `--prune`, apagar branch de trabalho e tag nova. A opção
+ * abreviada (#475) vale como a completa.
+ */
+const PUSH_ALLOWED: readonly string[] = [
+  "git push -u origin fix/x",
+  "git push origin fix/x",
+  "git push -f origin fix/x",
+  "git push -uf origin fix/x",
+  "git push --force origin fix/x",
+  "git push --force-with-lease origin fix/x",
+  "git push --force-with-lease=fix/x:abc123 origin fix/x",
+  "git push --force-if-includes origin fix/x",
+  "git push origin +fix/x",
+  "git push origin +fix/x:fix/y",
+  "git push --no-verify origin fix/x",
+  "git push --prune origin fix/x",
+  "git push origin HEAD:fix/x",
+  "git push -f origin HEAD:refs/heads/fix/x",
+  "git push origin fix/x:fix/x",
+  "git push origin fix/x:refs/heads/fix/x",
+  "git push origin fix/x:refs/tags/v1.2.3",
+  "git push origin --delete fix/x",
+  "git push origin :fix/x",
+  "git push -d origin fix/x",
+  "git push --tags",
+  "git push --tags origin",
+  "git push origin v1.2.3",
+  "git push --repo=git@github.com:o/r.git fix/x",
+  "git send-pack --force origin fix/x",
+  "git http-push --force https://x.test/r.git fix/x",
+  "git push --force-with origin fix/x",
+  "git push --force-i origin fix/x",
+  "git push --forc origin fix/x",
+  "git push --f origin fix/x",
+  "git push --prun origin fix/x",
+  "git push --no-veri origin fix/x",
+  "git send-pack --forc origin fix/x",
+  "git http-push --forc https://x.test/r.git fix/x",
+];
+
+/**
+ * O git que perguntava e passa (decisão do dono, 11/10/2026: o git passa ou nega):
+ * gravar chave que decide o destino do push (o push que a usar nega se o destino
+ * for protegido), `stash drop/clear`, `-c` de chave do push fora do push e git em
+ * repositório fora do projeto que não descarta trabalho.
+ */
+const GIT_PASSES: readonly string[] = [
+  "git stash drop",
+  "git stash clear",
+  "git config remote.origin.url https://x.test/r.git",
+  "git config branch.feat/x.merge refs/heads/dev",
+  "git config branch.feat/x.remote fork",
+  "git config branch.v1.2.merge refs/heads/main",
+  "git config url.git@github.com:.insteadOf https://github.com/",
+  "git config --replace-all branch.feat/x.merge refs/heads/dev",
+  "git -c push.default=upstream fetch",
+  "git branch -u origin/fix/x",
+  "git branch --set-upstream-to=origin/fix/x",
+  "git remote add fork /tmp/x",
+  "git push --set-upstream origin fix/x",
+  "git archive -o /tmp/x.tgz HEAD",
+  "git clone https://x.test/r.git /tmp/x",
+  "git ls-remote origin",
+  "git -c remote.origin.push=HEAD:fix/x fetch",
+  "git -C ~ commit -m x",
+  "git -C /etc/outro add a.txt",
+  "git -C /wt commit -m chore-restore-foo",
+  "git -C / -C etc checkout x",
+  "git --git-dir=/elsewhere/.git commit -m x",
+  "git --work-tree ~ add .",
+  "GIT_DIR=~/x/.git git commit -m x",
+  "env GIT_WORK_TREE=/etc git stash",
+  "git -C ~ merge x",
+];
+
+/** Push que nega, e nunca pergunta, em qualquer forma: destino protegido, ou que o texto não resolve. */
+const PUSH_DENIED_FORMS: readonly string[] = [
+  "git push origin main",
+  "git push -f origin dev",
+  "git push origin +staging",
+  "git push origin :",
+  "git push origin +:",
+  "git push -f origin v1.0.0",
+  "git push -f origin tag v1.0.0",
+  "git push -f origin refs/tags/v1.0.0",
+  "git push -f origin HEAD:v1.0.0",
+  "git push -f --tags",
+  "git push --follow-tags --delete origin fix/x",
+  "git push origin feat/*",
+  "git push origin $BRANCH",
+  "git push --force",
+  "git push origin HEAD",
+  "git push --repo=git@github.com:o/r.git dev",
+  "git -c remote.origin.push=refs/heads/fix/x:refs/heads/dev push origin fix/x",
+  "git -c push.default=upstream push origin fix/x",
+  "git -c include.path=../x.cfg push origin fix/x",
+  "git --config-env=push.default=PD push origin fix/x",
+  "git send-pack --stdin origin",
 ];
 
 /** O resto dos achados, sem `git` à frente. */
@@ -291,10 +496,18 @@ const OTHER: readonly [string, Expected][] = [
   ["npm run perf:producao", "ask"],
   ["node --no-warnings scripts/migration/production.ts --apply", "ask"],
   ["echo x > .claude/settings.json", "ask"],
-  ["tee .claude/hooks/x.mjs", "ask"],
-  ["cp /tmp/x opencode.json", "ask"],
-  ["sed -i s/a/b/ scripts/harness/sync.ts", "ask"],
-  ["rm .opencode/plugins/shell-guard.js", "ask"],
+  ["tee .claude/settings.json", "ask"],
+  ["cp /tmp/x .claude/settings.json", "ask"],
+  ["sed -i s/a/b/ .claude/settings.json", "ask"],
+  // A configuração do git por fora do `git config` nega: contornaria a negação da chave que desvia o push.
+  ["echo '[remote \"origin\"]' >> .git/config", "deny"],
+  ["tee -a .git/config", "deny"],
+  ["tee .git/worktrees/wt/config.worktree", "deny"],
+  ["sed -i s/a/b/ .git/config", "deny"],
+  ["cp /tmp/x .git/config", "deny"],
+  ["mv /tmp/x .git/config", "deny"],
+  ["echo x > .git/config.worktree", "deny"],
+  ["rm .claude/settings.json", "ask"],
   // Revisão da #462: `node --run` e `node node_modules/…` como o pacote.
   ["node --run db:import-production", "ask"],
   ["node --run=perf:producao", "ask"],
@@ -388,15 +601,7 @@ const OTHER: readonly [string, Expected][] = [
   ["tar -xzf a.tgz -C ~/.config", "ask"],
   ["tar -x -f a.tgz --directory=/etc", "ask"],
   // O repositório do git fora do projeto: o que não só lê pergunta.
-  ["git -C ~ commit -m x", "ask"],
-  ['git -C /wt commit -m "chore: restore foo"', "ask"],
-  ["git -C / -C etc checkout x", "ask"],
-  ["git --git-dir=/elsewhere/.git commit -m x", "ask"],
-  ["git --work-tree ~ add .", "ask"],
-  ["GIT_DIR=~/x/.git git commit -m x", "ask"],
-  ["env GIT_WORK_TREE=/etc git stash", "ask"],
-  ["git -C ~ merge x", "ask"],
-  ["git worktree add /elsewhere/wt -b feat/x", "ask"],
+  ["git worktree add /elsewhere/wt -b feat/x", "deny"],
   // `>|` é redirecionamento: fora do projeto pergunta.
   ["echo x >| ~/.zshrc", "ask"],
 ];
@@ -444,6 +649,74 @@ describe("classifyRisk: a mesma operação, a mesma decisão, em qualquer forma"
     });
   }
 
+  // Decisão do dono (11/10/2026): "git push não precisa de autorização". Push
+  // para branch de trabalho passa em qualquer forma, forçado ou não; o que
+  // nega, nega com a instrução de explicitar o destino.
+  for (const command of PUSH_ALLOWED) {
+    // `find -execdir … {} +` acrescenta o `{}` ao push: um refspec que só existe na execução, e nega.
+    it.each(forms(command).filter((form) => !form.includes("-execdir")))("push passa: %s", (form) => {
+      expect(classifyRisk(form)).toBeNull();
+    });
+  }
+
+  it.each(PUSH_DENIED_FORMS.flatMap((command) => forms(command)))("push nunca pergunta: %s", (form) => {
+    expect(decision(form)).not.toBe("ask");
+  });
+
+  it.each([
+    ["GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.push GIT_CONFIG_VALUE_0=HEAD:main git push origin fix/x", "deny"],
+    ["GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=push.default GIT_CONFIG_VALUE_0=upstream git push origin fix/x", "deny"],
+    ["GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=include.path GIT_CONFIG_VALUE_0=../x.cfg git -C /wt push origin fix/x", "deny"],
+    // C1 (juiz da #521): alias por variável, com ou sem `!`, nega; e o alias de `-c` conta como push na detecção.
+    ["GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0='push -f origin HEAD:main' git p", "deny"],
+    ["GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=status git p", "deny"],
+    ["GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.push GIT_CONFIG_VALUE_0=HEAD:main git -c alias.p=push p origin fix/x", "deny"],
+    ["GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.push GIT_CONFIG_VALUE_0=HEAD:main git -calias.p=push p origin fix/x", "deny"],
+    ["git -c alias.p=push -c remote.origin.push=refs/heads/fix/x:refs/heads/dev p origin fix/x", "deny"],
+    ['GIT_CONFIG_PARAMETERS="\'push.default=upstream\'" git push origin fix/x', "deny"],
+    // Fora do push a chave não decide destino nenhum e passa; o texto de GIT_CONFIG_PARAMETERS não é lido e nega.
+    ["GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=push.default GIT_CONFIG_VALUE_0=upstream git fetch", null],
+    ['GIT_CONFIG_PARAMETERS="\'push.default=upstream\'" git fetch', "deny"],
+  ] as const)("config do push por variável ou -c: %s -> %s", (command, expected) => {
+    expect(decision(command)).toBe(expected);
+  });
+
+  // Invariante (11/10/2026): o git passa ou nega, em qualquer forma. Todo comando
+  // `git` das tabelas — o que nega e o que passa — não devolve `ask`.
+  it.each(
+    [...GIT.map(([command]) => command).filter((command) => /(?:^|\s)git\s/.test(command)), ...GIT_PASSES, ...PUSH_ALLOWED, ...PUSH_DENIED_FORMS].flatMap((command) =>
+      forms(command),
+    ),
+  )(
+    "o git nunca pergunta: %s",
+    (form) => {
+      expect(decision(form)).not.toBe("ask");
+    },
+  );
+
+  // O git não pergunta (11/10/2026): o que perguntava e agora passa.
+  for (const command of GIT_PASSES) {
+    it.each(forms(command).filter((form) => !form.includes("-execdir")))("git passa: %s", (form) => {
+      expect(classifyRisk(form)).toBeNull();
+    });
+  }
+
+  it("a mensagem do que nega manda explicitar o destino", () => {
+    for (const command of ["git push", "git push --force", "git push origin HEAD", "git push origin $BRANCH", "git -c push.default=upstream push origin fix/x"]) {
+      expect(classifyRisk(command), command).toMatchObject({ decision: "deny", reason: expect.stringContaining("explicite o destino") });
+    }
+    expect(classifyRisk("git push origin main")?.reason).toContain("push direto para main");
+  });
+
+  it("o git em repositório fora do projeto não pergunta: o que não descarta passa, o que descarta nega", () => {
+    const env = { root: "/repo", cwd: "/repo", home: "/home/eu" };
+    expect(classifyRisk("git -C /etc/outro push origin fix/x", env)).toBeNull();
+    expect(classifyRisk("git --git-dir=/etc/outro/.git push -f origin fix/x", env)).toBeNull();
+    expect(classifyRisk("git -C /etc/outro push origin main", env)?.decision).toBe("deny");
+    expect(classifyRisk("git -C /etc/outro commit -m x", env)).toBeNull();
+    expect(classifyRisk("git -C /etc/outro reset --hard", env)).toMatchObject({ decision: "deny", reason: expect.stringContaining("rode isso numa worktree") });
+  });
+
   // Produção pede confirmação por qualquer lançador.
   for (const command of [
     "vercel --prod",
@@ -477,7 +750,7 @@ describe("classifyRisk: a mesma operação, a mesma decisão, em qualquer forma"
 
   it.each([
     ["find . -exec git push -f origin main \\;", "deny"],
-    ["xargs git push --force", "ask"],
+    ["xargs git push --force", "deny"],
     ["find -exec /bin/rm -f {} +", "ask"],
     ["find . -ok rm {} \\;", "ask"],
     ["find . -okdir rm {} \\;", "ask"],
@@ -485,19 +758,19 @@ describe("classifyRisk: a mesma operação, a mesma decisão, em qualquer forma"
     ["xargs -I {} rm -f {}", "ask"],
     ["xargs -0 /bin/rm -f", "ask"],
     ["echo $(git push origin main)", "deny"],
-    ["echo `git reset --hard`", "ask"],
+    ["echo `git reset --hard`", "deny"],
     ['git commit -m "$(rm -rf src)"', "ask"],
-    ["diff <(git push --force) x", "ask"],
+    ["diff <(git push --force) x", "deny"],
     ["bash <<<'rm -rf src'", "ask"],
     ["bash <<EOF\nrm -rf src\nEOF", "ask"],
-    ["watch -n 1 'git push --force'", "ask"],
+    ["watch -n 1 'git push --force'", "deny"],
     ["eval 'git push origin main'", "deny"],
     ["exec -a x sudo ls", "deny"],
     ["command -p rm -rf src", "ask"],
-    ["git -c core.hooksPath=/dev/null push origin fix/x", "ask"],
-    ["git -c alias.x='!rm -rf src' x", "ask"],
+    ["git -c core.hooksPath=/dev/null push origin fix/x", "deny"],
+    ["git -c alias.x='!rm -rf src' x", "deny"],
     ["case $x in a|b) git push origin main;; esac", "deny"],
-    ["for b in main; do git push origin $b; done", "ask"],
+    ["for b in main; do git push origin $b; done", "deny"],
     ["for f in .env; do cat $f; done", "deny"],
     // Revisão da #462: `$'…'` decodificado como o bash (`\x`, `\NNN`).
     ["git push origin $'\\x6dain'", "deny"],
@@ -508,15 +781,15 @@ describe("classifyRisk: a mesma operação, a mesma decisão, em qualquer forma"
     ['git rebase -x "rm -rf ~" HEAD~1', "deny"],
     ['git rebase --exec="git push origin main" HEAD~1', "deny"],
     ['git rebase --exec "git push origin main" HEAD~1', "deny"],
-    ['git rebase -ix "git push --force" HEAD~3', "ask"],
-    ["git rebase -x 'rm -f x' HEAD~1", "ask"],
+    ['git rebase -ix "git push --force" HEAD~3', "deny"],
+    ["git rebase -x 'rm -f x' HEAD~1", "deny"],
     ['git submodule foreach "rm -rf ~"', "deny"],
     ['git submodule --quiet foreach --recursive "git push origin main"', "deny"],
     ['git bisect run sh -c "git push origin main"', "deny"],
-    ["git bisect run rm -rf x", "ask"],
+    ["git bisect run rm -rf x", "deny"],
     ['git difftool -x "rm -rf /" HEAD', "deny"],
     ['git difftool --extcmd="rm -rf ~" HEAD', "deny"],
-    ["git difftool --extcmd 'git reset --hard' HEAD", "ask"],
+    ["git difftool --extcmd 'git reset --hard' HEAD", "deny"],
     // Invólucros e shell lendo da entrada.
     ['sh -s -- x <<< "git push origin main"', "deny"],
     ['bash -s arg <<< "git push origin main"', "deny"],
@@ -576,6 +849,8 @@ describe("classifyRisk: a mesma operação, a mesma decisão, em qualquer forma"
     'git commit -m "git push origin main --force"',
     "git commit -m 'limpa o .env de exemplo'",
     "git push -u origin fix/x",
+    "git -c alias.p=push p origin fix/x",
+    "git -c alias.f=fetch f origin",
     "git push origin fix/dev-tools",
     "git push origin --delete fix/x",
     "git checkout -b fix/x-foo origin/dev",
@@ -610,6 +885,14 @@ describe("classifyRisk: a mesma operação, a mesma decisão, em qualquer forma"
     "pnpm remove -r x",
     "pnpm test",
     "node scripts/harness/sync.ts",
+    // 11/10/2026: o dono autorizou editar hook, guarda e espelho; só a lista de permissões pergunta.
+    "tee .claude/hooks/x.mjs",
+    "cp /tmp/x opencode.json",
+    "sed -i s/a/b/ scripts/harness/sync.ts",
+    "sed -i s/a/b/ .claude/hooks/shell-policy.mjs",
+    "rm .opencode/plugins/shell-guard.js",
+    "echo x > .codex/hooks.json",
+    "echo x > .opencode/plugins/shell-guard.js",
     "find . -name '*.ts' -exec grep -l x {} +",
     "xargs wc -l",
     "command -v rm",
@@ -677,6 +960,40 @@ describe("classifyRisk: a mesma operação, a mesma decisão, em qualquer forma"
     "git symbolic-ref HEAD",
     "git update-ref refs/heads/feat/x HEAD",
     "git send-pack origin feat/x",
+    // #475: a abreviação também vale para o que libera (a opção exata do git
+    // que prefixa outra da tabela — `fetch --prune` e `--prune-tags` — fica
+    // como está) e a rotina continua sem pergunta.
+    "git push --set-upstream origin fix/x",
+    "git push --follow-tags origin fix/x",
+    "git push --dry-run origin fix/x",
+    "git push --verbose origin fix/x",
+    "git fetch --prune origin",
+    "git fetch --prune --tags origin",
+    "git pull --rebase origin dev",
+    "git clean --dry-run",
+    "git clean --dr -fd",
+    "git restore --stag src/a.ts",
+    "git rm --cac -r src",
+    "git worktree remove --forc .claude/worktrees/x",
+    "git commit --amend --no-edit",
+    "git switch --create feat/x",
+    "git branch --show-cur",
+    // Depois de `--` é caminho, não opção; subcomando fora da tabela e nome de
+    // propriedade do objeto não são abreviados.
+    "git reset -- --har",
+    "git constructor --forc",
+    "git __proto__ --har",
+    "git push --porcelain origin fix/x",
+    "git push --atomic origin fix/x",
+    // #505: ler a configuração do push, e gravar a que não o desvia, é rotina.
+    "git config --get remote.origin.push",
+    "git config --get push.default",
+    "git config --get-regexp ^remote\\.",
+    "git config --list --show-origin",
+    "git config remote.origin.url",
+    "git config --glo --lis",
+    "git config branch.feat/x.description x",
+    "git config branch.feat/x.rebase true",
     "pnpm node scripts/migration/rehearse-production.ts",
     "pnpm node scripts/harness/sync.ts",
     "echo x > /tmp/y",
@@ -726,6 +1043,12 @@ describe("findCompound: pipe só de leitura e laço com corpo julgado", () => {
     ["git branch -a --list 'fix/*' | head", null],
     ["git branch -D x | head", "| (pipe) com estágio fora da leitura"],
     ["git branch novo | head", "| (pipe) com estágio fora da leitura"],
+    // #475: a opção abreviada que escreve também desqualifica o estágio.
+    ["git branch --set-upstream-t=origin/dev | head", "| (pipe) com estágio fora da leitura"],
+    ["git branch --unset-u | head", "| (pipe) com estágio fora da leitura"],
+    ["git branch --edit-d | head", "| (pipe) com estágio fora da leitura"],
+    ["git branch --show-cur | head", null],
+    ["git branch --lis 'fix/*' | head", null],
     ["rtk proxy git log | head", null],
     ["git log 2>/dev/null | head", null],
     ["git log > f | head", "| (pipe) com estágio fora da leitura"],
@@ -835,7 +1158,7 @@ describe("uma fonte de verdade para o risco de shell", () => {
     // #488: apagar contêiner pergunta, também no corpo.
     expect(judgeShell("for f in a; do docker rm $f; done", REAL_BASH)).toMatchObject({ decision: "ask", kind: "risk" });
     expect(judgeShell("for f in a; do rm -rf $f; done", REAL_BASH)).toMatchObject({ decision: "ask", kind: "risk" });
-    expect(judgeShell("for f in a; do git push --force origin $f; done", REAL_BASH)).toMatchObject({ decision: "ask" });
+    expect(judgeShell("for f in a; do git push --force origin $f; done", REAL_BASH)).toMatchObject({ decision: "deny" });
     expect(judgeShell("for f in a; do sudo ls; done", REAL_BASH)).toMatchObject({ decision: "deny" });
     expect(judgeShell("for f in a; do cat .env; done", REAL_BASH)).toMatchObject({ decision: "deny" });
   });
@@ -896,16 +1219,30 @@ describe("escrita fora da árvore do projeto, com a raiz informada pelo chamador
     ]) {
       expect(classifyRisk(command, fromWorktree), command).toBeNull();
     }
-    for (const command of ["git -C /home/eu/outro commit -m x", "sort -o /home/eu/x in", "git -C /repo2 commit -m x"]) {
-      expect(classifyRisk(command, fromWorktree)?.decision, command).toBe("ask");
+    // O git de fora do projeto não pergunta (11/10/2026); a escrita de `sort -o` fora, sim.
+    for (const command of ["git -C /home/eu/outro commit -m x", "git -C /repo2 commit -m x"]) expect(classifyRisk(command, fromWorktree), command).toBeNull();
+    expect(classifyRisk("sort -o /home/eu/x in", fromWorktree)?.decision).toBe("ask");
+  });
+
+  it("a saída redirecionada de um comando que só lê vai para a home, fora da configuração pessoal (juiz da #521)", () => {
+    const casa = { root: "/repo", cwd: "/repo", home: "/home/eu" };
+    for (const command of ["git log > ~/x.txt", "git diff > $HOME/out.diff", "git status --short > ~/Documents/status.txt", "cat a > ~/b.txt", "git log 2> ~/erro.txt"]) {
+      expect(classifyRisk(command, casa), command).toBeNull();
+    }
+    // Configuração pessoal, fora da home e comando que escreve continuam perguntando.
+    for (const command of ["git log > ~/.zshrc", "git log > ~/.ssh/config", "git log > ~/.claude/x", "git log > /etc/x", "git log > /usr/local/bin/x", "echo x > ~/y.txt", "git commit > ~/z.txt"]) {
+      expect(classifyRisk(command, casa)?.decision, command).toBe("ask");
     }
   });
 
   it("caminho relativo do git vale a partir do `-C`", () => {
-    expect(classifyRisk("git -C /repo diff --output=../x.diff", env)?.decision).toBe("ask");
+    expect(classifyRisk("git -C /repo diff --output=../x.diff", env)?.decision).toBe("deny");
     expect(classifyRisk("git -C /repo diff --output=x.diff", env)).toBeNull();
-    expect(classifyRisk("git -C /repo worktree add ../fora -b feat/x", env)?.decision).toBe("ask");
+    expect(classifyRisk("git -C /repo worktree add ../fora -b feat/x", env)?.decision).toBe("deny");
     expect(classifyRisk("git -C /repo worktree add .claude/worktrees/x -b feat/x", env)).toBeNull();
+    // A configuração que desvia o push grava em arquivo do projeto sem perguntar, relativo ao `-C`.
+    expect(classifyRisk("git config --file .git/config user.name x")).toBeNull();
+    expect(classifyRisk("git config -f .git/config remote.origin.push HEAD:main")?.decision).toBe("deny");
   });
 
   // Limites conhecidos (G85): criar ou remover entrada vazia não perde dado
@@ -928,17 +1265,17 @@ describe("#485: invólucro desconhecido, ferramenta fora do catálogo e segredo"
 
   it.each<[string, Expected]>([
     // Busca de sufixo: executável conhecido em qualquer posição do argv.
-    ["foo --bar git push --force origin x", "ask"],
+    ["foo --bar git push --force origin main", "deny"],
     ["/opt/x/bin/wrap -q /bin/rm -rf src", "ask"],
     ["nice arch -arm64 xcrun git push origin main", "deny"],
     ["docker run -v /:/host alpine rm -rf /host/etc", "ask"],
     ["python3 x.py sudo ls", "deny"],
     // Texto novo dentro de um sufixo (`env -S`) também é buscado.
-    ['wrap env -S "foo git push --force origin x"', "ask"],
+    ['wrap env -S "foo git push --force origin main"', "deny"],
     // Invólucros nomeados, inclusive texto de shell entre aspas.
-    ['hyperfine --prepare "git reset --hard" "ls"', "ask"],
+    ['hyperfine --prepare "git reset --hard" "ls"', "deny"],
     ['parallel "rm -rf {}" ::: a b', "ask"],
-    ['flock /tmp/l -c "git push --force origin x"', "ask"],
+    ['flock /tmp/l -c "git push --force origin main"', "deny"],
     ["mise x node@20 -- vercel --prod", "ask"],
     // Postgres: remoto por host, URL, conninfo, variável ou atribuição.
     ["psql -h db.supabase.co -c 'delete from job'", "ask"],
@@ -982,42 +1319,42 @@ describe("#485: invólucro desconhecido, ferramenta fora do catálogo e segredo"
     ["unzip -o x.zip -d /etc/x", "ask"],
     ["patch -o ~/.zshrc a x.diff", "ask"],
     // Programa apontado por variável: o valor é julgado como comando.
-    ['GIT_SSH_COMMAND="rm -rf src" git fetch', "ask"],
+    ['GIT_SSH_COMMAND="rm -rf src" git fetch', "deny"],
     ['GIT_SSH_COMMAND="git push --force origin main" git fetch', "deny"],
-    ['GIT_SSH_COMMAND="ssh -i k; rm -rf src" git fetch', "ask"],
-    ['GIT_SSH_COMMAND="ssh -o ProxyCommand=x" git fetch', "ask"],
-    ['GIT_SSH="rm -rf src" git fetch', "ask"],
-    ['GIT_EXTERNAL_DIFF="rm -rf src" git diff', "ask"],
+    ['GIT_SSH_COMMAND="ssh -i k; rm -rf src" git fetch', "deny"],
+    ['GIT_SSH_COMMAND="ssh -o ProxyCommand=x" git fetch', "deny"],
+    ['GIT_SSH="rm -rf src" git fetch', "deny"],
+    ['GIT_EXTERNAL_DIFF="rm -rf src" git diff', "deny"],
     ['GIT_EDITOR="git push --force origin main" git commit', "deny"],
-    ['GIT_SEQUENCE_EDITOR="rm -rf src" git rebase -i HEAD~2', "ask"],
-    ['GIT_ASKPASS="rm -rf src" git fetch', "ask"],
-    ['SSH_ASKPASS="rm -rf src" git fetch', "ask"],
-    ['GIT_PAGER="rm -rf src" git log', "ask"],
-    ['PAGER="rm -rf src" git log', "ask"],
+    ['GIT_SEQUENCE_EDITOR="rm -rf src" git rebase -i HEAD~2', "deny"],
+    ['GIT_ASKPASS="rm -rf src" git fetch', "deny"],
+    ['SSH_ASKPASS="rm -rf src" git fetch', "deny"],
+    ['GIT_PAGER="rm -rf src" git log', "deny"],
+    ['PAGER="rm -rf src" git log', "deny"],
     ['MANPAGER="rm -rf src" man ls', "ask"],
     ['GH_PAGER="git push --force origin main" gh pr view 1', "deny"],
-    ['EDITOR="rm -rf src" git commit', "ask"],
+    ['EDITOR="rm -rf src" git commit', "deny"],
     ['VISUAL="sudo ls" git commit', "deny"],
     ['GH_EDITOR="rm -rf src" gh pr create', "ask"],
     ['BROWSER="rm -rf src" gh pr view 1 --web', "ask"],
     ['GH_BROWSER="rm -rf src" gh pr view 1 --web', "ask"],
-    ['env GIT_SSH_COMMAND="rm -rf src" git fetch', "ask"],
-    ['rtk GIT_PAGER="rm -rf src" git log', "ask"],
+    ['env GIT_SSH_COMMAND="rm -rf src" git fetch', "deny"],
+    ['rtk GIT_PAGER="rm -rf src" git log', "deny"],
     ['EDITOR="cat .env" git commit', "deny"],
-    ['GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0="rm -rf src" git log', "ask"],
+    ['GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0="rm -rf src" git log', "deny"],
     ['GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.sshCommand GIT_CONFIG_VALUE_0="sudo ls" git fetch', "deny"],
-    ['GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.x GIT_CONFIG_VALUE_0="!rm -rf src" git x', "ask"],
-    ["GIT_CONFIG_PARAMETERS=\"'core.pager'='rm -rf src'\" git log", "ask"],
+    ['GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.x GIT_CONFIG_VALUE_0="!rm -rf src" git x', "deny"],
+    ["GIT_CONFIG_PARAMETERS=\"'core.pager'='rm -rf src'\" git log", "deny"],
     // `NOME+=valor` também atribui: o valor acrescentado é julgado.
     ['GIT_EDITOR+="git push --force origin main" git commit', "deny"],
-    ['GIT_EXTERNAL_DIFF+="rm -rf src" git diff', "ask"],
+    ['GIT_EXTERNAL_DIFF+="rm -rf src" git diff', "deny"],
     ['EDITOR+="sudo ls" git commit', "deny"],
-    ['GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0+=core.pager GIT_CONFIG_VALUE_0="rm -rf src" git log', "ask"],
-    ["GIT_CONFIG_PARAMETERS+=\"'core.pager'='rm -rf src'\" git log", "ask"],
+    ['GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0+=core.pager GIT_CONFIG_VALUE_0="rm -rf src" git log', "deny"],
+    ["GIT_CONFIG_PARAMETERS+=\"'core.pager'='rm -rf src'\" git log", "deny"],
     ['PGHOST+=db.prod psql -c "delete from job"', "ask"],
     ["PATH+=:/x sudo ls", "deny"],
     // `export`/`declare -x`/`typeset -x` no mesmo comando (laço, `if`) valem como a atribuição.
-    ['for i in 1; do export GIT_EXTERNAL_DIFF="rm -rf src"; git diff; done', "ask"],
+    ['for i in 1; do export GIT_EXTERNAL_DIFF="rm -rf src"; git diff; done', "deny"],
     ['for i in 1; do export GIT_EDITOR="git push --force origin main"; git commit; done', "deny"],
     ['if true; then export GIT_SSH_COMMAND="rm -rf src"; git fetch; fi', "ask"],
     ['for i in 1; do declare -x PAGER="rm -rf src"; man ls; done', "ask"],
@@ -1025,30 +1362,30 @@ describe("#485: invólucro desconhecido, ferramenta fora do catálogo e segredo"
     ['for i in 1; do export GIT_EDITOR+="sudo ls"; git commit; done', "deny"],
     ['readonly PAGER="sudo ls"', "deny"],
     // O programa recebe o arquivo do git: `rm` apaga; `GIT_EXTERNAL_DIFF` pergunta como `diff.external`.
-    ["GIT_EXTERNAL_DIFF=rm git diff", "ask"],
-    ['GIT_EXTERNAL_DIFF="rm -f" git diff', "ask"],
-    ["GIT_EXTERNAL_DIFF=trash git diff", "ask"],
-    ["GIT_EXTERNAL_DIFF=difft git diff", "ask"],
-    ["EDITOR=rm git commit", "ask"],
-    ["GIT_EDITOR=rm git commit", "ask"],
-    ["GIT_SEQUENCE_EDITOR=rm git rebase -i HEAD~2", "ask"],
-    ['VISUAL="rm -f" git commit', "ask"],
+    ["GIT_EXTERNAL_DIFF=rm git diff", "deny"],
+    ['GIT_EXTERNAL_DIFF="rm -f" git diff', "deny"],
+    ["GIT_EXTERNAL_DIFF=trash git diff", "deny"],
+    ["GIT_EXTERNAL_DIFF=difft git diff", "deny"],
+    ["EDITOR=rm git commit", "deny"],
+    ["GIT_EDITOR=rm git commit", "deny"],
+    ["GIT_SEQUENCE_EDITOR=rm git rebase -i HEAD~2", "deny"],
+    ['VISUAL="rm -f" git commit', "deny"],
     // `env -S` respeita aspas; grupo de opções (`-vS`) também; `\` do `env` pergunta.
     ["env -S 'sh -c \"git push --force origin main\"'", "deny"],
     ["env -S 'GIT_EDITOR=\"git push --force origin main\" git commit'", "deny"],
-    ["env -S 'GIT_EXTERNAL_DIFF=\"rm -rf src\" git diff'", "ask"],
+    ["env -S 'GIT_EXTERNAL_DIFF=\"rm -rf src\" git diff'", "deny"],
     ["env --split-string='sh -c \"git push --force origin main\"'", "deny"],
     ["env -S\"sh -c 'rm -rf src'\"", "ask"],
     ["env -vS 'git push --force origin main'", "deny"],
-    ["env -S 'GIT_EXTERNAL_DIFF=rm\\_-rf\\_src git diff'", "ask"],
+    ["env -S 'GIT_EXTERNAL_DIFF=rm\\_-rf\\_src git diff'", "deny"],
     // `ssh` do transporte: `-F`/`-E`/`-I` no grupo e provedor de biblioteca perguntam.
-    ['GIT_SSH_COMMAND="ssh -qF /tmp/c" git fetch', "ask"],
-    ['GIT_SSH_COMMAND="ssh -E /tmp/log" git fetch', "ask"],
-    ['GIT_SSH_COMMAND="ssh -oPKCS11Provider=/tmp/x.so" git fetch', "ask"],
-    ['GIT_SSH_COMMAND="ssh -o SecurityKeyProvider=/tmp/x.so" git fetch', "ask"],
-    ['GIT_PROXY_COMMAND="rm -rf src" git fetch', "ask"],
-    ['git -c core.gitProxy="rm -rf src" fetch', "ask"],
-    ['git config core.gitProxy "rm -rf src"', "ask"],
+    ['GIT_SSH_COMMAND="ssh -qF /tmp/c" git fetch', "deny"],
+    ['GIT_SSH_COMMAND="ssh -E /tmp/log" git fetch', "deny"],
+    ['GIT_SSH_COMMAND="ssh -oPKCS11Provider=/tmp/x.so" git fetch', "deny"],
+    ['GIT_SSH_COMMAND="ssh -o SecurityKeyProvider=/tmp/x.so" git fetch', "deny"],
+    ['GIT_PROXY_COMMAND="rm -rf src" git fetch', "deny"],
+    ['git -c core.gitProxy="rm -rf src" fetch', "deny"],
+    ['git config core.gitProxy "rm -rf src"', "deny"],
     // `fd` com `-x`/`-X`/`--exec` executa o argv.
     ["fd -Hx rm -rf", "ask"],
     ["fd . --exec rm -rf {}", "ask"],
