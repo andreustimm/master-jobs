@@ -1,19 +1,22 @@
 // Área de regressão da aba antiga após logout em outra aba (#399).
-
+//
+// O clique no menu da aba antiga cai no login com o endereço pedido em
+// `next`; desde #465 o login por senha o segue, como o social, e a pessoa
+// chega à tela que tinha pedido, não à do papel.
 const ROLE_SCENARIOS = [
   {
     role: "candidato",
     email: "e2e-candidato@local.test",
     startPath: "/candidate",
     menuTarget: "nav-jobs",
-    landsAfterLogin: "/",
+    landsAfterLogin: "/jobs",
   },
   {
     role: "recrutador",
     email: "e2e-recrutador@local.test",
     startPath: "/jobs",
     menuTarget: "nav-account",
-    landsAfterLogin: "/jobs",
+    landsAfterLogin: "/account",
   },
 ];
 
