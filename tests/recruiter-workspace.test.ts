@@ -71,11 +71,11 @@ const exportRoute = await import("../app/api/export/route.ts");
 const { trackAction } = await import("../app/actions.ts");
 
 /**
- * Meio-dia (UTC) de hoje, e não uma data fixa: a sessão nasce pelo relógio
- * injetado, mas a política confere a validade pelo relógio real, e uma data
- * fixa venceria a sessão de 30 dias com o calendário.
+ * O minuto em que a suíte roda, e não uma data fixa: a sessão nasce pelo
+ * relógio injetado, mas a política confere a validade pelo relógio real, e uma
+ * data fixa venceria a sessão com o calendário.
  */
-const T0 = new Date(Math.floor(Date.now() / 86_400_000) * 86_400_000 + 12 * 3_600_000).toISOString();
+const T0 = new Date(Math.floor(Date.now() / 60_000) * 60_000).toISOString();
 const DAY = 86_400_000;
 const at = (offsetMs: number) => new Date(Date.parse(T0) + offsetMs).toISOString();
 

@@ -111,7 +111,12 @@ const { createRecruiterJobAction } = await import("../app/jobs/new/actions.ts");
 const { acceptSuggestionAction, declineSuggestionAction } = await import("../app/suggestions/actions.ts");
 const { default: SuggestionsPage } = await import("../app/suggestions/page.tsx");
 
-const T0 = new Date(Math.floor(Date.now() / 86_400_000) * 86_400_000 + 12 * 3_600_000).toISOString();
+/**
+ * O minuto em que a suíte roda, e não uma data fixa: a sessão (e a emprestada,
+ * de uma hora) nasce pelo relógio injetado, mas a política confere a validade
+ * pelo relógio real.
+ */
+const T0 = new Date(Math.floor(Date.now() / 60_000) * 60_000).toISOString();
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const ORIGIN = "https://jobs.test";
