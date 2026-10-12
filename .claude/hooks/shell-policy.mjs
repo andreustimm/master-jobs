@@ -816,9 +816,21 @@ function globMayBeSecret(word) {
 const POLICY_PATH = /(?:^|\/)\.claude\/settings\.json$/;
 const POLICY_WRITE = "altera a lista de permissões (.claude/settings.json)";
 
-function isPolicyPath(word) {
-  return POLICY_PATH.test(word.replace(/^\.\//, ""));
+/**
+ * A configuração do git gravada por fora do `git config` (`echo … >> .git/config`,
+ * `sed -i`, `tee`): o `git config` nega a chave que desvia o destino do push, e
+ * escrever o arquivo contornaria isso.
+ */
+const GIT_CONFIG_FILE = /(?:^|\/)\.git\/(?:config|config\.worktree|worktrees\/[^/]+\/config\.worktree)$/;
+
+/** Escrita em `path`: a lista de permissões pergunta; a configuração do git, por fora do `git config`, nega. */
+function policyPathVerdict(path) {
+  const word = path.replace(/^\.\//, "");
+  if (GIT_CONFIG_FILE.test(word)) return deny("escrever em .git/config contorna o `git config`, que nega a chave que desvia o destino do push: use `git config`");
+  return POLICY_PATH.test(word) ? ask(POLICY_WRITE) : null;
 }
+
+const policyPathsVerdict = (paths) => paths.reduce((worst, path) => stronger(worst, policyPathVerdict(path)), null);
 
 /**
  * Onde o comando roda (#461): `root` é a árvore do projeto (o worktree fica
@@ -913,7 +925,7 @@ function joinPath(base, path) {
 
 /** Escrita em `path`: a política de permissões pergunta; fora do projeto também. */
 function writeRisk(path, env) {
-  return stronger(isPolicyPath(path) ? ask(POLICY_WRITE) : null, outsideWrite(path, env));
+  return stronger(policyPathVerdict(path), outsideWrite(path, env));
 }
 
 /**
@@ -1379,7 +1391,7 @@ function judgeRm(args, context) {
   const home = context.env?.home ? normalizePath(context.env.home) : null;
   const rootish = (target) => ROOTISH.test(target) || SYSTEM_DIR.test(target) || (home !== null && target.startsWith("/") && normalizePath(target) === home);
   if (recursive && targets.some(rootish)) return deny("rm recursivo na raiz, num diretório de sistema ou no diretório pessoal");
-  let worst = targets.some(isPolicyPath) ? ask(POLICY_WRITE) : null;
+  let worst = policyPathsVerdict(targets);
   if (context.bulk) worst = stronger(worst, ask("rm em massa (xargs, find -exec ou comando repetido pelo git)"));
   if (recursive) worst = stronger(worst, ask("rm recursivo"));
   return worst;
@@ -1405,6 +1417,27 @@ function judgeChmod(args) {
 const GIT_GLOBAL_VALUE = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--super-prefix", "--list-cmds"]);
 /** O `push` e o encanamento dele: o mesmo julgamento de destino (`judgePush`). */
 const GIT_PUSH_SUBCOMMANDS = new Set(["push", "send-pack", "http-push"]);
+
+/**
+ * O comando é `git push` (ou o encanamento dele), também por alias de `-c`
+ * (`-c alias.p=push p …`): as palavras já sem atribuição, invólucro nem `rtk`.
+ * @param {string[]} command
+ */
+function isGitPush(command) {
+  return (
+    command[0] === "git" &&
+    command.slice(1).some((word) => GIT_PUSH_SUBCOMMANDS.has(word) || /^(?:-c)?alias\.[^=]*=\s*(?:push|send-pack|http-push)(?:\s|$)/i.test(word))
+  );
+}
+
+/** Opção longa que nomeia um programa que o git executa, por subcomando (o push trata as suas em `judgePush`). */
+const GIT_PROGRAM_OPTIONS = Object.assign(Object.create(null), {
+  fetch: ["--upload-pack"],
+  pull: ["--upload-pack"],
+  clone: ["--upload-pack"],
+  "ls-remote": ["--upload-pack"],
+  archive: ["--exec"],
+});
 
 /**
  * O git não pergunta (decisão do dono, 11/10/2026): passa ou nega. O que
@@ -1457,8 +1490,11 @@ const GIT_LONG_OPTIONS = {
     "--force", "--delete", "--move", "--copy", "--set-upstream-to", "--unset-upstream", "--edit-description", "--track", "--no-track",
     "--create-reflog", "--list", "--show-current", "--contains", "--no-contains", "--merged", "--no-merged", "--points-at", "--sort", "--format",
   ],
-  fetch: ["--prune-tags", "--force", "--tags", "--refmap", "--prune"],
-  pull: ["--prune-tags", "--force", "--tags", "--refmap", "--prune"],
+  fetch: ["--prune-tags", "--force", "--tags", "--refmap", "--prune", "--upload-pack"],
+  pull: ["--prune-tags", "--force", "--tags", "--refmap", "--prune", "--upload-pack"],
+  clone: ["--upload-pack"],
+  "ls-remote": ["--upload-pack"],
+  archive: ["--exec"],
   gc: ["--prune"],
   commit: [
     "--no-verify", "--message", "--file", "--reuse-message", "--reedit-message", "--template", "--author", "--date", "--fixup",
@@ -1557,6 +1593,13 @@ function judgeGit(args, context) {
   // abaixo lê a forma completa.
   const rest = expandGitOptions(sub, args.slice(k + 1));
   const env = context.env ?? NO_ENV;
+  // Opção que nomeia um programa que o git roda no repositório local (`--upload-pack`,
+  // `archive --exec`): o programa é do texto, e o git não pergunta, então nega.
+  for (const option of GIT_PROGRAM_OPTIONS[sub] ?? []) {
+    if (rest.some((arg) => arg === option || arg.startsWith(`${option}=`))) {
+      worst = stronger(worst, deny(`git ${sub} ${option} executa o programa indicado no repositório local: tire a opção; ${GIT_NEVER_ASKS}`));
+    }
+  }
   // Arquivo de saída: relativo ao diretório do `-C`. Escrever fora do projeto
   // (ou na lista de permissões) nega: o git não pergunta.
   for (const out of gitOutputs(sub, rest)) {
@@ -1820,19 +1863,30 @@ const CONFIG_WRITE = new Set(["--add", "--replace-all", "--unset", "--unset-all"
  * outro arquivo com qualquer uma delas. Gravada, a chave persiste: o `git push
  * origin feat/x` seguinte vai para onde ela manda, sem que o refspec diga —
  * `remote.origin.push=refs/heads/feat/x:refs/heads/dev` empurra `dev`.
- * Gravá-la passa (decisão do dono, 11/10/2026: o git não pergunta): o push que
- * a usar nega quando o destino é protegido ou o texto não o resolve, e o `-c`
- * dela no `git push` nega. `branch.<b>.description`, `.rebase` e o resto de
- * `branch.*` não desviam nada.
+ * Esta é a lista larga, de quem lê (o `-c` e a variável de chave do push, no
+ * `git push`, negam); `GIT_PUSH_WRITE_KEY` é a de quem grava. `branch.<b>.description`,
+ * `.rebase` e o resto de `branch.*` não desviam nada.
  */
 const GIT_PUSH_KEY = /^(?:push\..+|remote\..+|url\..+\.(?:push)?insteadof|branch\..+\.(?:merge|remote|pushremote)|include\.path|includeif\..+\.path)$/;
+
+/**
+ * As chaves que desviam o destino do push e que o git não grava sozinho (#505):
+ * `remote.<r>.push`/`mirror`, `remote.pushDefault`, `push.*`,
+ * `url.*.pushInsteadOf`, `branch.<b>.pushRemote` e `include.path`/`includeIf`.
+ * `branch.<b>.merge`/`remote` e `remote.<r>.url` ficam de fora: `git push -u`,
+ * `git branch -u` e `git remote add` os gravam pelo próprio git.
+ */
+const GIT_PUSH_WRITE_KEY = /^(?:push\..+|remote\.pushdefault|remote\..+\.(?:push|mirror)|url\..+\.pushinsteadof|branch\..+\.pushremote|include\.path|includeif\..+\.path)$/;
 
 /**
  * `git config` que grava chave que executa programa (`core.pager`,
  * `core.hooksPath`…), qualquer `alias.*`, a configuração pessoal ou do sistema
  * (`--global`, `--system`, `--file` fora do projeto) ou `--edit` nega: o efeito
- * persiste depois da chamada. Gravar chave do push (`GIT_PUSH_KEY`), ler
- * (`--get`, `--list`, `get`, `list`) e o resto da configuração local passam.
+ * persiste depois da chamada. Gravar chave que desvia o destino do push
+ * (`GIT_PUSH_WRITE_KEY`) também nega: o `git push` seguinte só a vê com o
+ * contexto conferido, e as formas fora dele (`-c`, `--git-dir`, `sh -c`,
+ * alias) a ignorariam. Ler (`--get`, `--list`, `get`, `list`) e o resto da
+ * configuração local passam.
  */
 function judgeGitConfig(rest, context) {
   const positional = [];
@@ -1863,6 +1917,11 @@ function judgeGitConfig(rest, context) {
   }
   if (GIT_EXEC_KEY.test(key)) return deny(`git config ${key} executa programa ou desliga os hooks; ${GIT_NEVER_ASKS}`);
   if (key.startsWith("alias.") || key === "alias") return deny("git config alias.* cria comando do git: chame o comando inteiro");
+  if (GIT_PUSH_WRITE_KEY.test(key)) {
+    return deny(
+      `git config ${key} desvia o destino do push de forma persistente, e o push que a usa fora do contexto do git não a vê: não é rotina; passe o destino no comando (\`git push origin <branch>:<branch>\`). \`git push -u\` e \`git branch -u\` gravam o upstream pelo próprio git`,
+    );
+  }
   return null;
 }
 
@@ -1982,6 +2041,9 @@ function judgePush(rest, verified = null) {
         onlyTags = true;
       } else if (flag === "--follow-tags") tags = true;
       else if (flag === "--repo") otherRepo = true;
+      else if (flag === "--receive-pack" || flag === "--exec") {
+        worst = stronger(worst, deny(`git push ${flag} executa o programa indicado no repositório local: tire a opção; ${GIT_NEVER_ASKS}`));
+      }
       if (PUSH_VALUE.has(flag) && !arg.includes("=")) k++;
       continue;
     }
@@ -2775,16 +2837,15 @@ function policyWrite(name, args) {
     case "mv":
     case "ln":
     case "truncate":
-      return operands.some(isPolicyPath) ? ask(POLICY_WRITE) : null;
+      return policyPathsVerdict(operands);
     case "cp":
     case "install":
     case "rsync":
-      return operands.length > 0 && isPolicyPath(operands[operands.length - 1]) ? ask(POLICY_WRITE) : null;
+      return operands.length > 0 ? policyPathVerdict(operands[operands.length - 1]) : null;
     case "sed":
     case "perl":
-      return args.some((arg) => arg === "--in-place" || arg.startsWith("--in-place=") || shortCluster(arg, "i") || /^-i/.test(arg)) &&
-        operands.some(isPolicyPath)
-        ? ask(POLICY_WRITE)
+      return args.some((arg) => arg === "--in-place" || arg.startsWith("--in-place=") || shortCluster(arg, "i") || /^-i/.test(arg))
+        ? policyPathsVerdict(operands)
         : null;
     default:
       return null;
@@ -2833,7 +2894,7 @@ function variableRisk(assignments, context, command = []) {
       if (name === "GIT_EXTERNAL_DIFF") worst = stronger(worst, deny(`GIT_EXTERNAL_DIFF executa programa sobre os arquivos, como diff.external; ${GIT_NEVER_ASKS}`));
     } else if (name === "GIT_CONFIG_PARAMETERS") {
       // O texto não é lido: nega, e no push manda explicitar o destino.
-      const pushing = command[0] === "git" && command.slice(1).some((word) => GIT_PUSH_SUBCOMMANDS.has(word));
+      const pushing = isGitPush(command);
       worst = stronger(
         worst,
         deny(
@@ -2851,11 +2912,11 @@ function variableRisk(assignments, context, command = []) {
         worst = stronger(worst, deny(`${name}=${key} executa programa ou desliga os hooks; ${GIT_NEVER_ASKS}`));
         worst = stronger(worst, riskOf(configured, context.depth + 1, false, context.env));
       }
-      if (key.startsWith("alias.") && configured.trimStart().startsWith("!")) worst = stronger(worst, deny(`alias do git que roda shell; ${GIT_NEVER_ASKS}`));
+      // Alias por variável, com ou sem `!`: `alias.p=push -f origin HEAD:main` roda push sem que o texto o mostre.
+      if (key.startsWith("alias.")) worst = stronger(worst, deny(`${name}=${key} cria comando do git que o texto não mostra: chame o comando inteiro; ${GIT_NEVER_ASKS}`));
       // Como o `-c`: a chave que desvia o destino do push (#505), por variável.
       // No `git push` nega e manda tirar a variável; fora dele não decide destino nenhum e passa.
-      const pushing = command[0] === "git" && command.slice(1).some((word) => GIT_PUSH_SUBCOMMANDS.has(word));
-      if (pushing && (/^(?:push|remote|branch|url)\./.test(key) || GIT_PUSH_KEY.test(key))) {
+      if (isGitPush(command) && (/^(?:push|remote|branch|url)\./.test(key) || GIT_PUSH_KEY.test(key))) {
         worst = stronger(worst, deny(`${name}=${key} troca o destino do push e o texto não o resolve: tire a variável e explicite o destino (\`git push origin <branch>\`)`));
       }
     }
@@ -3023,7 +3084,7 @@ function riskOf(text, depth, bulk = false, env = NO_ENV) {
       // `>& arquivo` também grava; `>&2` e `>&-` só duplicam descritor.
       const writes = WRITE_REDIRECT.has(redirect.op) || (redirect.op === ">&" && !/^(?:\d+|-)$/.test(redirect.target));
       if (!writes) continue;
-      if (isPolicyPath(redirect.target)) worst = stronger(worst, ask(POLICY_WRITE));
+      worst = stronger(worst, policyPathVerdict(redirect.target));
       worst = stronger(worst, outsideWrite(redirect.target, env));
     }
     for (const inner of command.subs) worst = stronger(worst, riskOf(inner, depth + 1, false, env));

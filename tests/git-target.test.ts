@@ -283,16 +283,16 @@ describe("os três chamadores dão a mesma decisão", () => {
     ["push --set-upstream de rotina", () => "git push --set-upstream origin feat/up", () => wtUp, "pass"],
     ["leitura da configuração do push", () => "git config --get remote.origin.push", () => wt, "pass"],
     ["leitura de push.default", () => "git config --get push.default", () => wt, "pass"],
-    // #505: gravar a configuração que desvia o destino do push passa (o push
+    // #505: gravar a configuração que desvia o destino do push nega, com a instrução (o push
     // seguinte é provado com o git de verdade no bloco abaixo).
-    ["config remote.origin.push com destino dev", () => "git config remote.origin.push refs/heads/feat/up:refs/heads/dev", () => wtUp, "pass"],
-    ["config push.default upstream", () => "git config push.default upstream", () => wtUp, "pass"],
+    ["config remote.origin.push com destino dev", () => "git config remote.origin.push refs/heads/feat/up:refs/heads/dev", () => wtUp, "deny"],
+    ["config push.default upstream", () => "git config push.default upstream", () => wtUp, "deny"],
     ["config branch.<b>.merge", () => "git config branch.feat/x.merge refs/heads/dev", () => wt, "pass"],
-    ["config branch.<b>.pushRemote", () => "git config branch.feat/x.pushRemote fork", () => wt, "pass"],
-    ["config remote.pushDefault", () => "git config remote.pushDefault fork", () => wt, "pass"],
-    ["config url.*.pushInsteadOf", () => "git config url.https://x.test/.pushInsteadOf https://y.test/", () => wt, "pass"],
-    ["config --unset de remote.origin.push", () => "git config --unset remote.origin.push", () => wt, "pass"],
-    ["config --file do projeto com remote.origin.push", () => `git config --file ${root}/.git/config remote.origin.push HEAD:main`, () => wt, "pass"],
+    ["config branch.<b>.pushRemote", () => "git config branch.feat/x.pushRemote fork", () => wt, "deny"],
+    ["config remote.pushDefault", () => "git config remote.pushDefault fork", () => wt, "deny"],
+    ["config url.*.pushInsteadOf", () => "git config url.https://x.test/.pushInsteadOf https://y.test/", () => wt, "deny"],
+    ["config --unset de remote.origin.push", () => "git config --unset remote.origin.push", () => wt, "deny"],
+    ["config --file do projeto com remote.origin.push", () => `git config --file ${root}/.git/config remote.origin.push HEAD:main`, () => wt, "deny"],
     // Refspec sem `:` que não é o branch atual: o git o resolve localmente
     // (ref simbólica, upstream), então o destino forçado não é conhecido.
     ["push forçado de outro branch a partir da principal", () => "git push --force origin feat/x", () => root, "pass"],
@@ -436,7 +436,7 @@ describe("configuração persistida que desvia o push (#505)", () => {
   });
 
   /**
-   * Os dois passos do achado: gravar a configuração (passa) e, com ela
+   * Os dois passos do achado: gravar a configuração (nega, com a instrução) e, com ela
    * persistida, empurrar (nega, porque o push não pergunta). O git de verdade,
    * em `--dry-run`, diz para onde o push iria — nos três primeiros, `dev`.
    */
@@ -521,15 +521,22 @@ describe("configuração persistida que desvia o push (#505)", () => {
 
   it.each(persisted.map((entry) => [entry.name, entry] as const))("%s", async (_name, entry) => {
     const cwd = entry.cwd();
-    // Passo 1: gravar a chave passa nos três harnesses.
+    // Passo 1: gravar a chave que desvia o push nega nos três harnesses, com a instrução; o upstream
+    // (`branch.<b>.merge`), que o `push -u` grava pelo próprio git, passa.
     for (const [key, value] of entry.settings()) {
       const write = `git config ${key} ${value}`;
-      expect(await decisions(write, cwd), write).toEqual(["pass", "pass", "pass"]);
+      if (/\.merge$/.test(key)) {
+        expect(await decisions(write, cwd), write).toEqual(["pass", "pass", "pass"]);
+        continue;
+      }
+      expect(await decisions(write, cwd), write).toEqual(["deny", "deny", "deny"]);
+      const reason = JSON.parse(hookOutcome(write, CLAUDE_RULES, { root, cwd, home }).stdout!).hookSpecificOutput.permissionDecisionReason as string;
+      expect(reason, write).toContain("git push origin <branch>:<branch>");
     }
     // Sem a configuração, o push da rotina passa.
     expect(await decisions(entry.push, cwd), entry.push).toEqual(["pass", "pass", "pass"]);
     expect(dryRun(cwd, entry.dryRun)).not.toContain(entry.reaches());
-    // Passo 2: com ela persistida (gravada direto, fora da guarda), o push nega
+    // Passo 2: com ela persistida (gravada direto, o que a guarda já negou), o push nega
     // — não pergunta — e a mensagem manda explicitar o destino com `:`.
     const restores = entry.settings().map(([key, value]) => persist(key, value));
     try {
@@ -549,6 +556,40 @@ describe("configuração persistida que desvia o push (#505)", () => {
       for (const restore of restores.reverse()) restore();
     }
     expect(await decisions(entry.push, cwd), entry.push).toEqual(["pass", "pass", "pass"]);
+  });
+
+  it("juiz da #521: gravar a chave nega em toda forma, e é essa gravação que leva dev, por qualquer forma de push (--dry-run)", async () => {
+    const chave = "+refs/heads/feat/up:refs/heads/dev";
+    const escrita = `git config remote.origin.push ${chave}`;
+    const formas = [
+      escrita,
+      `git -c color.ui=false config remote.origin.push ${chave}`,
+      `git --git-dir=${root}/.git config remote.origin.push ${chave}`,
+      `sh -c "git config remote.origin.push ${chave}"`,
+      `git -C "$PWD" config remote.origin.push ${chave}`,
+      `git -c alias.c=config c remote.origin.push ${chave}`,
+      `env FOO=1 ${escrita}`,
+      `rtk ${escrita}`,
+    ];
+    for (const forma of formas) expect(await decisions(forma, wtUp), forma).toEqual(["deny", "deny", "deny"]);
+    // O arquivo por fora do `git config` também nega.
+    for (const forma of [`echo '[remote "origin"] push = ${chave}' >> .git/config`, `sed -i s/a/b/ ${root}/.git/config`, `tee -a ${root}/.git/config`]) {
+      expect(await decisions(forma, wtUp), forma).toEqual(["deny", "deny", "deny"]);
+    }
+    // O que a negação impede: com a chave gravada, o git de verdade leva feat/up para dev por todas as formas de push do juiz.
+    const restaurar = persist("remote.origin.push", chave);
+    try {
+      for (const args of [
+        ["-c", "color.ui=false", "push", "--dry-run", "--porcelain", "origin", "feat/up"],
+        ["--git-dir", `${root}/.git/worktrees/feat-up`, "push", "--dry-run", "--porcelain", "origin", "feat/up"],
+        ["-c", "alias.p=push", "p", "--dry-run", "--porcelain", "origin", "feat/up"],
+        ["push", "--dry-run", "--porcelain", "origin", "feat/up"],
+      ]) {
+        expect(dryRun(wtUp, args), args.join(" ")).toContain("refs/heads/feat/up:refs/heads/dev");
+      }
+    } finally {
+      restaurar();
+    }
   });
 
   it("a rotina continua passando com a configuração do dia a dia", async () => {

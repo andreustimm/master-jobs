@@ -284,6 +284,42 @@ const GIT: readonly [string, Expected][] = [
   // isso, `git config remote.origin.push …:dev` e depois `git push origin
   // feat/x` levava a branch protegida sem uma pergunta no caminho.
   ["git config alias.p push", "deny"],
+  // #505 (juiz da #521): gravar a chave que desvia o destino do push nega, com a instrução; o que o git
+  // grava sozinho (`push -u`, `branch -u`, `remote add`) e o resto de `branch.*` passam.
+  ["git config remote.origin.push refs/heads/feat/x:refs/heads/dev", "deny"],
+  ["git config --add remote.origin.push refs/heads/feat/x:refs/heads/dev", "deny"],
+  ["git config --local remote.origin.push HEAD:main", "deny"],
+  ["git config remote.origin.mirror true", "deny"],
+  ["git config remote.pushDefault fork", "deny"],
+  ["git config push.default upstream", "deny"],
+  ["git config push.default matching", "deny"],
+  ["git config --local push.default upstream", "deny"],
+  ["git config push.followTags true", "deny"],
+  ["git config set push.default upstream", "deny"],
+  ["git config branch.feat/x.pushRemote fork", "deny"],
+  ["git config url.https://x.test/.pushInsteadOf https://y.test/", "deny"],
+  ["git config --unset remote.origin.push", "deny"],
+  ["git config --unset-all push.default", "deny"],
+  ["git config include.path ../x.cfg", "deny"],
+  ["git config includeIf.gitdir:/x/.path ../x.cfg", "deny"],
+  ["git config remote.origin.push +refs/heads/feat/x:refs/heads/dev", "deny"],
+  ["git config --file .git/config remote.origin.push HEAD:main", "deny"],
+  ["git config -f .git/config push.default upstream", "deny"],
+  ["git -c color.ui=false config remote.origin.push HEAD:dev", "deny"],
+  ["git --git-dir=.git config remote.origin.push HEAD:dev", "deny"],
+  ['git -C "$PWD" config remote.origin.push HEAD:dev', "deny"],
+  ["git -c alias.c=config c remote.origin.push HEAD:dev", "deny"],
+  // M1 (juiz da #521): a opção que nomeia um programa que o git roda no repositório local nega.
+  ["git push --receive-pack=/tmp/evil /tmp/r fix/x", "deny"],
+  ["git push --receive-pack /tmp/evil /tmp/r fix/x", "deny"],
+  ["git push --receive-p=/tmp/evil /tmp/r fix/x", "deny"],
+  ["git push --exec=/tmp/evil origin fix/x", "deny"],
+  ["git send-pack --receive-pack=/tmp/evil /tmp/r fix/x", "deny"],
+  ["git fetch --upload-pack=/tmp/evil /tmp/r", "deny"],
+  ["git pull --upload-pack /tmp/evil /tmp/r", "deny"],
+  ["git ls-remote --upload-pack=/tmp/evil /tmp/r", "deny"],
+  ["git clone --upload-pack=/tmp/evil /tmp/r x", "deny"],
+  ["git archive --exec=/tmp/evil --remote=/tmp/r HEAD", "deny"],
   ["git config -f ~/.gitconfig remote.origin.push HEAD:main", "deny"],
 ];
 
@@ -337,29 +373,20 @@ const PUSH_ALLOWED: readonly string[] = [
 const GIT_PASSES: readonly string[] = [
   "git stash drop",
   "git stash clear",
-  "git config remote.origin.push refs/heads/feat/x:refs/heads/dev",
-  "git config --add remote.origin.push refs/heads/feat/x:refs/heads/dev",
-  "git config --local remote.origin.push HEAD:main",
   "git config remote.origin.url https://x.test/r.git",
-  "git config remote.origin.mirror true",
-  "git config remote.pushDefault fork",
-  "git config push.default upstream",
-  "git config push.default matching",
-  "git config --local push.default upstream",
-  "git config push.followTags true",
-  "git config set push.default upstream",
   "git config branch.feat/x.merge refs/heads/dev",
-  "git config branch.feat/x.pushRemote fork",
   "git config branch.feat/x.remote fork",
   "git config branch.v1.2.merge refs/heads/main",
-  "git config url.https://x.test/.pushInsteadOf https://y.test/",
   "git config url.git@github.com:.insteadOf https://github.com/",
-  "git config --unset remote.origin.push",
-  "git config --unset-all push.default",
   "git config --replace-all branch.feat/x.merge refs/heads/dev",
-  "git config include.path ../x.cfg",
-  "git config includeIf.gitdir:/x/.path ../x.cfg",
   "git -c push.default=upstream fetch",
+  "git branch -u origin/fix/x",
+  "git branch --set-upstream-to=origin/fix/x",
+  "git remote add fork /tmp/x",
+  "git push --set-upstream origin fix/x",
+  "git archive -o /tmp/x.tgz HEAD",
+  "git clone https://x.test/r.git /tmp/x",
+  "git ls-remote origin",
   "git -c remote.origin.push=HEAD:fix/x fetch",
   "git -C ~ commit -m x",
   "git -C /etc/outro add a.txt",
@@ -462,6 +489,14 @@ const OTHER: readonly [string, Expected][] = [
   ["tee .claude/settings.json", "ask"],
   ["cp /tmp/x .claude/settings.json", "ask"],
   ["sed -i s/a/b/ .claude/settings.json", "ask"],
+  // A configuração do git por fora do `git config` nega: contornaria a negação da chave que desvia o push.
+  ["echo '[remote \"origin\"]' >> .git/config", "deny"],
+  ["tee -a .git/config", "deny"],
+  ["tee .git/worktrees/wt/config.worktree", "deny"],
+  ["sed -i s/a/b/ .git/config", "deny"],
+  ["cp /tmp/x .git/config", "deny"],
+  ["mv /tmp/x .git/config", "deny"],
+  ["echo x > .git/config.worktree", "deny"],
   ["rm .claude/settings.json", "ask"],
   // Revisão da #462: `node --run` e `node node_modules/…` como o pacote.
   ["node --run db:import-production", "ask"],
@@ -622,6 +657,12 @@ describe("classifyRisk: a mesma operação, a mesma decisão, em qualquer forma"
     ["GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.push GIT_CONFIG_VALUE_0=HEAD:main git push origin fix/x", "deny"],
     ["GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=push.default GIT_CONFIG_VALUE_0=upstream git push origin fix/x", "deny"],
     ["GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=include.path GIT_CONFIG_VALUE_0=../x.cfg git -C /wt push origin fix/x", "deny"],
+    // C1 (juiz da #521): alias por variável, com ou sem `!`, nega; e o alias de `-c` conta como push na detecção.
+    ["GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0='push -f origin HEAD:main' git p", "deny"],
+    ["GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=status git p", "deny"],
+    ["GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.push GIT_CONFIG_VALUE_0=HEAD:main git -c alias.p=push p origin fix/x", "deny"],
+    ["GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.push GIT_CONFIG_VALUE_0=HEAD:main git -calias.p=push p origin fix/x", "deny"],
+    ["git -c alias.p=push -c remote.origin.push=refs/heads/fix/x:refs/heads/dev p origin fix/x", "deny"],
     ['GIT_CONFIG_PARAMETERS="\'push.default=upstream\'" git push origin fix/x', "deny"],
     // Fora do push a chave não decide destino nenhum e passa; o texto de GIT_CONFIG_PARAMETERS não é lido e nega.
     ["GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=push.default GIT_CONFIG_VALUE_0=upstream git fetch", null],
@@ -1179,8 +1220,8 @@ describe("escrita fora da árvore do projeto, com a raiz informada pelo chamador
     expect(classifyRisk("git -C /repo worktree add ../fora -b feat/x", env)?.decision).toBe("deny");
     expect(classifyRisk("git -C /repo worktree add .claude/worktrees/x -b feat/x", env)).toBeNull();
     // A configuração que desvia o push grava em arquivo do projeto sem perguntar, relativo ao `-C`.
-    expect(classifyRisk("git config --file .git/config remote.origin.push HEAD:main")).toBeNull();
-    expect(classifyRisk("git config -f .git/config push.default upstream")).toBeNull();
+    expect(classifyRisk("git config --file .git/config user.name x")).toBeNull();
+    expect(classifyRisk("git config -f .git/config remote.origin.push HEAD:main")?.decision).toBe("deny");
   });
 
   // Limites conhecidos (G85): criar ou remover entrada vazia não perde dado

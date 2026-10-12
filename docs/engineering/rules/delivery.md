@@ -804,28 +804,33 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     fora da vista (limite abaixo). Provado com git de verdade e `--dry-run`
     (`tests/git-target.test.ts`).
   - **Configuração persistida do push (#505).** A mesma troca de destino
-    vale gravada: `git config` (também `--add`, `--unset`, `--replace-all`,
-    `set`/`unset`, `--file` do projeto) de `push.*`, `remote.*` (`<r>.push`,
-    `<r>.url`, `<r>.mirror`, `pushDefault`…), `url.*.insteadOf` e
-    `.pushInsteadOf`, `branch.<b>.merge`/`.remote`/`.pushRemote` e
-    `include.path`/`includeIf.*.path` (que carrega outro arquivo com elas)
-    passa nos três harnesses, em qualquer contexto (o git não pergunta; o push
-    que a usar é quem nega, como abaixo). Ler (`--get`, `--list`) e gravar o
-    resto de `branch.*` (`description`, `rebase`) passam também. Com a configuração já gravada, seja qual for o meio (`git
-    config` fora da guarda, edição do `.git/config`, `git remote`), o
-    contexto conferido a lê (`git config --get-regexp` de `push`, `remote`,
-    `branch` e `url`, todas as origens e arquivos incluídos): `remote.*.push`,
-    `push.default` de mais de um branch, `remote.pushDefault`,
-    `branch.<b>.pushRemote` e `url.*.pushInsteadOf` fazem o refspec sem `:` e
-    o push sem refspec negarem, e `push.default=upstream` leva o destino ao
-    `@{push}`. `git push -u origin <tipo>/<slug>` e `git push` numa branch de
-    trabalho, com `branch.<b>.merge`/`.remote` do `push -u` e
-    `url.*.insteadOf` de leitura, seguem passando. Limite: fora do contexto
-    conferido (forma que `plainGitCommand` recusa, tempo estourado, erro do
-    git), o refspec sem `:` volta a valer como "mesmo nome" — negar sempre
-    faria o `push -u` da rotina negar —, e a configuração gravada por meio que
-    o classificador não lê (edição direta do `.git/config`) só é vista com o
-    contexto.
+    vale gravada, e o texto do `git push` não a vê fora do contexto conferido
+    (`-c`, `--git-dir`, `sh -c`, `-C "$PWD"`, alias): por isso **gravar a
+    chave nega**, em qualquer forma e nos três harnesses — `git config`
+    (também `--add`, `--unset`, `--replace-all`, `set`/`unset`, `--file` do
+    projeto, `alias` de `-c`) de `remote.<r>.push`, `remote.<r>.mirror`,
+    `remote.pushDefault`, `push.*`, `url.*.pushInsteadOf`,
+    `branch.<b>.pushRemote` e `include.path`/`includeIf.*.path` (que carrega
+    outro arquivo com elas) —, com a instrução de passar o destino no comando
+    (`git push origin <branch>:<branch>`). Escrever o arquivo por fora do `git
+    config` (`echo … >> .git/config`, `sed -i`, `tee`, `cp`, `mv`, `rm` em
+    `.git/config`, `config.worktree`) também nega. Passam: ler (`--get`,
+    `--list`), o que o git grava sozinho (`git push -u`, `git branch -u`, `git
+    remote add`) e o que não desvia nada (`branch.<b>.merge`/`.remote`,
+    `remote.<r>.url`, `url.*.insteadOf`, `branch.<b>.description`/`rebase`).
+    Com a configuração já gravada por outro meio (a ferramenta de edição,
+    outra ferramenta, o dono), o contexto conferido a lê (`git config
+    --get-regexp` de `push`, `remote`, `branch` e `url`, todas as origens e
+    arquivos incluídos): `remote.*.push`, `push.default` de mais de um branch,
+    `remote.pushDefault`, `branch.<b>.pushRemote` e `url.*.pushInsteadOf`
+    fazem o refspec sem `:` e o push sem refspec negarem, e
+    `push.default=upstream` leva o destino ao `@{push}`. `git push -u origin
+    <tipo>/<slug>` e `git push` numa branch de trabalho seguem passando.
+    Limite que sobra, só para a configuração que não passou pela guarda:
+    fora do contexto conferido (forma que `plainGitCommand` recusa, tempo
+    estourado, erro do git) o refspec sem `:` vale como "mesmo nome" — negar
+    sempre faria o `push -u` da rotina negar. Provado com git de verdade e
+    `--dry-run` (`tests/git-target.test.ts`, "juiz da #521").
   - **Opção longa abreviada (#475).** O git aceita o prefixo único de uma
     opção longa: `reset --har`, `switch --discard`, `checkout --forc`,
     `worktree remove --forc`, `tag --dele`, `gc --prun`, `rebase --exe`,
@@ -851,9 +856,8 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     venha de dentro do comando `git`, como o programa de `rebase -x`,
     `submodule foreach`, `bisect run` ou `GIT_EDITOR`). **Passa:** o que é
     rotina, inclusive em repositório fora do projeto (`-C`, `--git-dir`,
-    `--work-tree`, `GIT_DIR=`), `stash drop/clear`, gravar chave do push
-    (o push que a usar nega se o destino for protegido) e `-c` de chave do
-    push fora do push. **Nega**, com a razão e o que fazer em vez disso:
+    `--work-tree`, `GIT_DIR=`), `stash drop/clear` e `-c` de chave do push
+    fora do push. **Nega**, com a razão e o que fazer em vez disso:
     descarte fora de worktree de trabalho conferida (G44) — `reset
     --hard/--merge`, `clean`, `checkout -- <caminho>`/`.`/`<ref> <caminho>`/
     `-f`/`-B`, `switch -f/--discard-changes/-C`, `restore` fora de
@@ -883,9 +887,13 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     `core.sshCommand`, `core.fsmonitor`, `core.hooksPath`, `diff.external`,
     `*.textconv`, `sequence.editor`, `credential.helper`, `gpg.program`;
     alias `!`; `GIT_EXTERNAL_DIFF`; `GIT_SSH_COMMAND` com `ssh` que roda
-    comando local; `GIT_CONFIG_PARAMETERS`, que o texto não lê); `git config`
+    comando local; `GIT_CONFIG_PARAMETERS`, que o texto não lê; `GIT_CONFIG_KEY_n=alias.*`, com
+    ou sem `!`; `push --receive-pack`/`--exec`, `fetch|pull|clone|ls-remote
+    --upload-pack` e `archive --exec`, que rodam o programa indicado no
+    repositório local); `git config`
     que grava a configuração pessoal ou do sistema (`--global`, `--system`,
-    `--file` fora do projeto), `--edit` e `alias.*`; escrita de arquivo fora do
+    `--file` fora do projeto), `--edit`, `alias.*` e a chave que desvia o destino
+    do push (#505, acima); escrita de arquivo fora do
     projeto ou na lista de permissões pelas opções do git (`diff|log|show
     --output`, `format-patch -o/--output-directory`, `archive -o`); e alias de
     `-c` encadeado demais. Fica de fora do git, e ainda pergunta, o que a
@@ -1120,8 +1128,10 @@ real que as formas dos quatro Critical da primeira versão empurrariam
 `dev` ou `main`, que elas negam nos três chamadores (o push não pergunta), que o git
 destrutivo passa na worktree de trabalho e nega na checkout principal (com a
 instrução de rodar numa worktree), que o push forçado de branch de trabalho
-passa, que a configuração persistida (#505) passa ao ser gravada e nega o
-push seguinte, com a forma explícita que a mensagem manda usar passando, e que o
+passa, que gravar a configuração que desvia o push (#505) nega em toda forma
+(`-c`, `--git-dir`, `sh -c`, `-C "$PWD"`, alias) e que, gravada de outro modo,
+ela leva `dev` e o push seguinte nega, com a forma explícita que a mensagem
+manda usar passando, e que o
 `git -C <wt> push` liberado atualiza só o branch de trabalho no remoto. O plugin foi carregado no runtime do
 OpenCode (Bun 1.3.14) e `opencode debug config` o lista entre os plugins do
 projeto.

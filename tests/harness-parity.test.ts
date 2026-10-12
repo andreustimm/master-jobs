@@ -433,6 +433,15 @@ const RISKY: readonly [string, Decision][] = [
   ["git tag --dele v1.2.3", "deny"],
   ["git gc --prun=now", "deny"],
   ["git config --glo user.name x", "deny"],
+  ["git config remote.origin.push refs/heads/feat/x:refs/heads/dev", "deny"],
+  ["git config push.default upstream", "deny"],
+  ["git config remote.pushDefault fork", "deny"],
+  ["git config url.https://x.test/.pushInsteadOf https://y.test/", "deny"],
+  ["git config branch.feat/x.pushRemote fork", "deny"],
+  ["echo x >> .git/config", "deny"],
+  ["git push --receive-pack=/tmp/evil /tmp/r fix/x", "deny"],
+  ["git fetch --upload-pack=/tmp/evil /tmp/r", "deny"],
+  ["GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=push git p", "deny"],
   ['git rebase --exe "git push origin main" HEAD~3', "deny"],
   // #505: gravar a configuração que desvia o destino do push pergunta.
 ];
@@ -494,10 +503,9 @@ const ROUTINE: readonly string[] = [
   "git config --get push.default",
   // 11/10/2026: o git passa ou nega, não pergunta — gravar a chave do push, `stash drop` e git em
   // repositório de fora que não descarta passam nos três (o push que usar a chave nega se for protegido).
-  "git config remote.origin.push refs/heads/feat/x:refs/heads/dev",
-  "git config push.default upstream",
-  "git config remote.pushDefault fork",
-  "git config url.https://x.test/.pushInsteadOf https://y.test/",
+  "git config remote.origin.url https://x.test/r.git",
+  "git config branch.feat/x.merge refs/heads/fix/x",
+  "git branch -u origin/fix/x",
   "git stash drop",
   "git -C ~ commit -m x",
   'git -C /wt commit -m "chore: restore x"',
