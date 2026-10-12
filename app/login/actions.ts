@@ -1,9 +1,11 @@
 "use server";
 
+import type { Route } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { candidateScope, passwordSignIn } from "../../src/contexts/auth/index.ts";
+import { landingForSession, passwordSignIn } from "../../src/contexts/auth/index.ts";
 import { SESSION_COOKIE } from "../auth";
+import { landingAfterSignIn } from "../invite-arrival";
 
 /**
  * Password sign-in.
@@ -40,12 +42,14 @@ export async function passwordLoginAction(formData: FormData) {
     expires: new Date(result.session.expiresAt),
   });
 
-  // Para onde cada papel vai.
+  // Para onde cada papel vai, ou o `next` seguro que trouxe a pessoa ao login
+  // (o mesmo `landingForSession` do login social): o link "Já tenho conta" do
+  // convite volta a `/signup/invite` (#465). O cockpit é só de quem tem o
+  // próprio candidato — mandar todo mundo para `/` era o que fazia um
+  // recrutador cair em 403 logo depois de acertar a senha.
   //
-  // O cockpit é a tela do candidato: funil, lacunas do currículo, nota de
-  // aderência. Quem não é candidato não tem nada lá — e mandar todo mundo para
-  // `/` era o que fazia um recrutador cair em 403 logo depois de acertar a
-  // senha.
-  if (candidateScope(result.session) !== null) redirect("/");
-  redirect("/jobs");
+  // Conta de recrutador conclui aqui os convites ao e-mail dela (ADR-018).
+  const next = formData.get("next");
+  const fallback = landingForSession(result.session, typeof next === "string" ? next : null);
+  redirect((await landingAfterSignIn(result.session, fallback)) as Route);
 }

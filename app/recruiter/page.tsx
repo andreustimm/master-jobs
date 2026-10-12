@@ -1,12 +1,21 @@
 import { TransitionLink } from "../transition-link";
 import { Card } from "@/components/ui/card";
 import { recruiterCandidateSummaries } from "../../src/contexts/pursuit/index.ts";
-import { showsRecruiterEmptyState } from "../../src/contexts/auth/index.ts";
+import { inviteNoticeOf, showsRecruiterEmptyState, type ArrivalNotice } from "../../src/contexts/auth/index.ts";
+import type { TranslationKey } from "../../src/core/i18n/index.ts";
 import { applicationStatusOptions } from "../status.ts";
 import { requirePage } from "../auth";
 import { getTranslator } from "../i18n";
 
 export const dynamic = "force-dynamic";
+
+/** O aviso de chegada pelo convite (#465, ADR-018), por desfecho. Nenhum cita o candidato. */
+const INVITE_NOTICE: Record<ArrivalNotice, TranslationKey> = {
+  mismatch: "recruiterInvite.noticeMismatch",
+  not_recruiter: "recruiterInvite.noticeNotRecruiter",
+  period_over: "recruiterInvite.noticePeriodOver",
+  invalid: "recruiterInvite.noticeInvalid",
+};
 
 /**
  * O que o recrutador acompanha — e nada além disso.
@@ -15,10 +24,11 @@ export const dynamic = "force-dynamic";
  * segue para o SQL como lista. A página nunca aceita um id de candidato vindo
  * da URL para montar esta lista: id em parâmetro é pedido, não prova.
  */
-export default async function RecruiterHistory() {
+export default async function RecruiterHistory({ searchParams }: { searchParams: Promise<{ invite?: string | string[] }> }) {
   const { t } = await getTranslator();
   const session = await requirePage("job:read");
   const summaries = await recruiterCandidateSummaries(session.linkedCandidateIds);
+  const notice = inviteNoticeOf((await searchParams).invite);
 
   return (
     <main className="pt-10" data-testid="route-recruiter">
@@ -26,6 +36,14 @@ export default async function RecruiterHistory() {
       <p className="type-body-md mb-xxl max-w-[62ch] text-muted-foreground">
         {t("recruiter.lead")}
       </p>
+
+      {notice !== null && (
+        // Chegada pelo convite que não virou acesso: o porquê, sem nada do
+        // candidato (US-004.AC-2). Valor da URL fora da lista não mostra nada.
+        <Card className="mb-6 p-4" role="status" data-testid="recruiter-invite-notice" data-notice={notice}>
+          <p className="type-body-md">{t(INVITE_NOTICE[notice])}</p>
+        </Card>
+      )}
 
       {showsRecruiterEmptyState(session) ? (
         // Recrutador sem ninguém que lhe tenha dado acesso (US-015): explica

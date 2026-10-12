@@ -172,7 +172,8 @@ export async function beginSocial(
 export type SocialCallbackOutcome =
   | { kind: "not_found" }
   | { kind: "redirect"; location: string }
-  | { kind: "session"; location: string; token: string; expiresAt: string }
+  /** `session` é a que acabou de abrir: o retorno a usa para concluir convites de recrutador (ADR-018). */
+  | { kind: "session"; location: string; token: string; expiresAt: string; session: Session }
   | { kind: "signup"; location: string; token: string; expiresAt: string };
 
 const FAILURE_ERROR: Readonly<Record<OidcFailure, SocialError>> = {
@@ -348,7 +349,7 @@ async function enter(
     kind: "oidc_signin",
     detail: how === "automatic" ? `${id} (vínculo automático)` : id,
   });
-  return { kind: "session", location: landingForSession(session, flow.next), token, expiresAt: session.expiresAt };
+  return { kind: "session", location: landingForSession(session, flow.next), token, expiresAt: session.expiresAt, session };
 }
 
 async function startSignup(email: string, identity: VerifiedIdentity, context: CallbackContext): Promise<SocialCallbackOutcome> {

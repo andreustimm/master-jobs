@@ -9,6 +9,7 @@ import {
 import { clientKey } from "../../../../../src/core/rate-limit.ts";
 import { SESSION_COOKIE, currentSession } from "../../../../auth";
 import { getLocale } from "../../../../i18n";
+import { landingAfterSignIn } from "../../../../invite-arrival";
 import { redirect303 } from "../../../redirect303";
 
 /**
@@ -53,6 +54,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pro
       path: "/",
       expires: new Date(outcome.expiresAt),
     });
+    // Conta de recrutador conclui os convites ao e-mail dela (#465, ADR-018).
+    return redirect303(request, await landingAfterSignIn(outcome.session, outcome.location));
   } else if (outcome.kind === "signup") {
     jar.set(SIGNUP_COOKIE, outcome.token, {
       httpOnly: true,

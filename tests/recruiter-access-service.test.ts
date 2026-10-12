@@ -95,7 +95,7 @@ function deps(over: Partial<RecruiterAccessDeps> = {}): RecruiterAccessDeps {
       tokens.push(token);
       return { token, hash: hashToken(token) };
     },
-    invitesEnabled: true,
+    hashToken,
     ...over,
   };
 }
@@ -411,46 +411,6 @@ describe("convidar", () => {
     expect(results).toEqual(expect.arrayContaining([{ ok: true, kind: "invite" }, { ok: false, error: "already_invited" }]));
     expect(await invitesOf()).toHaveLength(1);
     expect(sent).toHaveLength(1);
-  });
-});
-
-describe("convite desligado (até `/signup/invite` existir)", () => {
-  const off = () => deps({ invitesEnabled: false });
-  const grantOff = (email: string) =>
-    grantAccess({ candidateId: seven, actorUserId: ana, email, endDate: "", tz: "" }, off());
-
-  it("quem viraria convite é recusado com invites_unavailable: nada gravado, nada contado, nenhum e-mail", async () => {
-    expect(await grantOff("bia@y.com")).toEqual({ ok: false, error: "invites_unavailable" });
-    // Conta sem o papel de recrutador também viraria convite.
-    await makeUser("cora@y.com", ["candidate"], { emailVerifiedAt: T0 });
-    expect(await grantOff("cora@y.com")).toEqual({ ok: false, error: "invites_unavailable" });
-    expect(await invitesOf()).toEqual([]);
-    expect(await eventsOf()).toEqual([]);
-    expect(sent).toEqual([]);
-  });
-
-  it("recrutador com conta confirmada continua recebendo acesso direto", async () => {
-    expect(await grantOff("rui@x.com")).toEqual({ ok: true, kind: "grant" });
-    expect(await grantsOf()).toHaveLength(1);
-    expect(sent).toHaveLength(1);
-  });
-
-  it("reenviar convite antigo é recusado antes do banco: o link não é trocado nem enviado", async () => {
-    const inviteId = await rawInvite("bia@y.com");
-    const before = await invitesOf();
-    expect(await resendInvite({ inviteId, candidateId: seven, actorUserId: ana }, off())).toEqual({
-      ok: false,
-      error: "invites_unavailable",
-    });
-    expect(await invitesOf()).toEqual(before);
-    expect(await eventsOf()).toEqual([]);
-    expect(sent).toEqual([]);
-  });
-
-  it("a tela recebe o estado do portão para não prometer convite", async () => {
-    const view = await candidateAccessView({ candidateId: seven, historyPage: 1 }, off());
-    expect(view.invitesEnabled).toBe(false);
-    expect((await candidateAccessView({ candidateId: seven, historyPage: 1 }, deps())).invitesEnabled).toBe(true);
   });
 });
 

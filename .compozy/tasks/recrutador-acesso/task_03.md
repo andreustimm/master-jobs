@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: "Convite: página sob /signup e conclusão no cadastro e no login"
 type: backend
 complexity: high
@@ -38,13 +38,13 @@ chegada (ADR-018). O acesso alcança só o endereço que o candidato digitou.
 </requirements>
 
 ## Subtasks
-- [ ] 3.1 Página `/signup/invite` com estados sem sessão, com sessão e neutro.
-- [ ] 3.2 `startInvitedSignup` e o cookie; integração com a tela `/signup` (Recrutador pré-selecionado, "Convidado por").
-- [ ] 3.3 `completeInvitesForAccount` com queima antes da concessão e cópia da data de fim.
-- [ ] 3.4 Ganchos no fim do cadastro e no login; `acceptInviteAction`.
-- [ ] 3.5 Mensagens de chegada em `/recruiter` e evento de descompasso.
-- [ ] 3.6 Inventário de rota pública e spec E2E `tests/e2e/ui/recruiter-invite.mjs`.
-- [ ] 3.7 Docs de QA (persona e jornada do convite).
+- [x] 3.1 Página `/signup/invite` com estados sem sessão, com sessão e neutro.
+- [x] 3.2 `startInvitedSignup` e o cookie; integração com a tela `/signup` (Recrutador pré-selecionado, "Convidado por").
+- [x] 3.3 `completeInvitesForAccount` com queima antes da concessão e cópia da data de fim.
+- [x] 3.4 Ganchos no fim do cadastro e no login; `acceptInviteAction`.
+- [x] 3.5 Mensagens de chegada em `/recruiter` e evento de descompasso.
+- [x] 3.6 Inventário de rota pública e spec E2E `tests/e2e/ui/recruiter-invite.mjs`.
+- [x] 3.7 Docs de QA (persona e jornada do convite).
 
 ## Implementation Details
 
@@ -77,14 +77,14 @@ conclusão usam a loja da task_02.
 
 Cases assigned from `_tests.md`, the test contract — read each ID's full definition there before writing tests.
 
-- [ ] IT-079, IT-080, IT-081, IT-082 — página e cookie
-- [ ] IT-083, IT-084, IT-085, IT-086, IT-087, IT-088 — conclusão no cadastro e e-mail
-- [ ] IT-089, IT-090, IT-091, IT-092 — convite morto, período encerrado, data copiada, duas abas
-- [ ] IT-093, IT-094, IT-095, IT-096, IT-097 — conta existente e estados com sessão
-- [ ] IT-098, IT-099, IT-100, IT-101, IT-102 — token fora do log, limites da #464, reativação, e-mail não verificado, inventário
-- [ ] E2E-010, E2E-011 — convite por cadastro social e manual
-- [ ] E2E-012, E2E-013, E2E-014 — outro e-mail, link inválido, sessão de outra conta
-- [ ] E2E-015 — 375 px e axe
+- [x] IT-079, IT-080, IT-081, IT-082 — página e cookie
+- [x] IT-083, IT-084, IT-085, IT-086, IT-087, IT-088 — conclusão no cadastro e e-mail
+- [x] IT-089, IT-090, IT-091, IT-092 — convite morto, período encerrado, data copiada, duas abas
+- [x] IT-093, IT-094, IT-095, IT-096, IT-097 — conta existente e estados com sessão
+- [x] IT-098, IT-099, IT-100, IT-101, IT-102 — token fora do log, limites da #464, reativação, e-mail não verificado, inventário
+- [x] E2E-010, E2E-011 — convite por cadastro social e manual
+- [x] E2E-012, E2E-013, E2E-014 — outro e-mail, link inválido, sessão de outra conta
+- [x] E2E-015 — 375 px e axe
 
 ## Success Criteria
 - Every assigned test case implemented and passing

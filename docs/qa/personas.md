@@ -38,7 +38,7 @@ persona:
 persona:
   name: Recrutadora convidada
   base: Casual User
-  goal: acessar somente os candidatos vinculados e encontrar evidências relevantes sem ver dados privados indevidos
+  goal: seguir o link do convite do e-mail, criar a conta de recrutador com o endereço convidado (Google, LinkedIn ou código) e cair direto no candidato que convidou; depois, acessar somente os candidatos que deram acesso, sem ver dados privados indevidos
   device: laptop
   network: wifi-fast
   modality: mouse-keyboard

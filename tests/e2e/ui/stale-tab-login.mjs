@@ -1,19 +1,22 @@
 // Área de regressão da aba antiga após logout em outra aba (#399).
-
+//
+// O clique no menu da aba antiga cai em `/login?next=<destino>` (o proxy leva
+// o endereço pedido), e o login por senha segue esse `next` seguro, como o
+// social (#465): o novo acesso volta ao destino do clique, não à tela do papel.
 const ROLE_SCENARIOS = [
   {
     role: "candidato",
     email: "e2e-candidato@local.test",
     startPath: "/candidate",
     menuTarget: "nav-jobs",
-    landsAfterLogin: "/",
+    landsAfterLogin: "/jobs",
   },
   {
     role: "recrutador",
     email: "e2e-recrutador@local.test",
     startPath: "/jobs",
     menuTarget: "nav-account",
-    landsAfterLogin: "/jobs",
+    landsAfterLogin: "/account",
   },
 ];
 

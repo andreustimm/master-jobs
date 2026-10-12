@@ -5,6 +5,7 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { Route } from "next";
 import {
+  INVITE_COOKIE,
   SIGNUP_COOKIE,
   beginManualSignup,
   confirmManualSignupCode,
@@ -15,6 +16,7 @@ import {
 import { clientKey, createRateLimiter } from "../../src/core/rate-limit.ts";
 import { SESSION_COOKIE } from "../auth";
 import { getLocale } from "../i18n";
+import { INVITE_COOKIE_PATH, inviteCookieToken } from "../invite-arrival";
 import { scoreAfterResponse } from "../score-queue-drain";
 
 /**
@@ -89,6 +91,8 @@ async function enter(signedIn: {
     expires: new Date(signedIn.expiresAt),
   });
   jar.delete({ name: SIGNUP_COOKIE, path: SIGNUP_COOKIE_PATH });
+  // O convite já foi concluído (ou não serve mais): vale uma conclusão só (ADR-018).
+  jar.delete({ name: INVITE_COOKIE, path: INVITE_COOKIE_PATH });
   // Currículo novo, nota nova: a fatia roda depois da resposta (#280).
   if (signedIn.candidateId !== null) scoreAfterResponse(signedIn.candidateId);
   revalidatePath("/", "layout");
@@ -131,6 +135,7 @@ export async function completeSocialSignup(formData: FormData): Promise<SignupAc
     {
       ...profileFields(formData),
       token: (await cookies()).get(SIGNUP_COOKIE)?.value ?? null,
+      inviteToken: await inviteCookieToken(),
       locale: context.locale,
       clientIp: context.clientIp,
     },
@@ -148,6 +153,7 @@ export async function confirmSignupCode(formData: FormData): Promise<SignupActio
       token: (await cookies()).get(SIGNUP_COOKIE)?.value ?? null,
       code: text(formData, "code"),
       clientIp: context.clientIp,
+      inviteToken: await inviteCookieToken(),
     },
     context.request,
   );

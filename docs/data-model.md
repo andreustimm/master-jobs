@@ -1426,10 +1426,20 @@ recrutadores" de `/account` (`app/recruiter-access.ts` + o store
 contar: no máximo 10 eventos `grant_created`/`invite_sent`/`invite_resent` de
 ator `candidate` em 24 h móveis e 20 convites pendentes com link válido
 (ADR-017). Revogação, cancelamento, recusa e ato do admin não contam.
-Enquanto `/signup/invite` não existe (task_03), convidar e reenviar ficam
-desligados (`recruiterInvitesEnabled`): quem viraria convite recebe
-`invites_unavailable` antes de qualquer gravação; só `JHO_RECRUITER_INVITES=on`
-num processo `local` ou `e2e` fora da Vercel os liga. O `detail` de
+O link do convite abre `/signup/invite?token=…`, que procura o convite pelo
+hash; o token cru vive só no e-mail e no cookie `httpOnly` `jho_invite`.
+**Conclusão** (`completeInvitesForAccount`, ADR-018): no fim do cadastro de
+recrutador e depois de todo login de conta com o papel, uma transação toma a
+mesma trava de cada candidato envolvido e, para a conta habilitada de
+recrutador com `email_verified_at`, marca `accepted` (com `accepted_user_id`)
+cada convite `pending` de link no prazo ao e-mail normalizado dela, de
+candidato com conta habilitada, **antes** de gravar a concessão — que copia
+`access_expires_at`/`expiry_tz` e leva `invite_id` —, com `invite_accepted`
+(ator `recruiter`) e `grant_created` (ator `system`, fora do limite). Convite
+com o prazo de acesso já vencido vira `expired` sem concessão. "Aceitar e
+abrir" com sessão prova a caixa com o token e grava `email_verified_at` quando
+falta. Link aberto com outro e-mail deixa o convite `pending` e grava
+`auth_event(invite_mismatch)` sem dado do candidato. O `detail` de
 `end_date_changed` guarda o instante e o fuso da escolha separados por espaço
 (`endDateEventDetail`), para o histórico mostrar o dia escolhido, e não o dia
 em UTC. O admin

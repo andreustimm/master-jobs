@@ -62,6 +62,7 @@ export function SignupForm({
   messages,
   verifiedEmail,
   limits,
+  initialRole = "candidate",
 }: {
   mode: "social" | "manual";
   action: (formData: FormData) => Promise<SignupActionResult>;
@@ -70,8 +71,10 @@ export function SignupForm({
   messages: Record<string, string>;
   verifiedEmail: string | null;
   limits: { nameMax: number; headlineMax: number; passwordMin: number };
+  /** Quem chega pelo convite de recrutador começa com Recrutador marcado (US-003.AC-1); pode trocar. */
+  initialRole?: "candidate" | "recruiter";
 }) {
-  const [role, setRole] = useState<"candidate" | "recruiter">("candidate");
+  const [role, setRole] = useState<"candidate" | "recruiter">(initialRole);
   const [state, formAction, pending] = useActionState(
     async (_previous: State, formData: FormData): Promise<State> => {
       try {

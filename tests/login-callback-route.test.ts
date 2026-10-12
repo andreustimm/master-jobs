@@ -4,11 +4,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const auth = vi.hoisted(() => ({
   finishLogin: vi.fn(),
   isOpenMode: vi.fn(),
+  INVITE_COOKIE: "jho_invite",
+  // O gancho do convite de recrutador (#465): devolve o destino depois de
+  // concluir os convites da conta. Aqui, o destino de sempre.
+  recruiterLandingAfterSignIn: vi.fn(async (_session: unknown, _token: unknown, fallback: string) => fallback),
 }));
-const cookieJar = vi.hoisted(() => ({ set: vi.fn() }));
+const cookieJar = vi.hoisted(() => ({
+  set: vi.fn(),
+  get: vi.fn((_name: string) => undefined as { value: string } | undefined),
+  delete: vi.fn(),
+}));
 
 vi.mock("../src/contexts/auth/index.ts", () => auth);
-vi.mock("next/headers", () => ({ cookies: vi.fn(async () => cookieJar) }));
+vi.mock("next/headers", () => ({
+  cookies: vi.fn(async () => cookieJar),
+  headers: vi.fn(async () => new Headers({ host: "127.0.0.1:3210" })),
+}));
 vi.mock("../app/auth.ts", () => ({ SESSION_COOKIE: "jho_session" }));
 
 const { GET } = await import("../app/login/callback/route.ts");
@@ -17,7 +28,10 @@ beforeEach(() => {
   auth.finishLogin.mockReset();
   auth.isOpenMode.mockReset();
   auth.isOpenMode.mockReturnValue(false);
+  auth.recruiterLandingAfterSignIn.mockClear();
   cookieJar.set.mockReset();
+  cookieJar.get.mockReset();
+  cookieJar.delete.mockReset();
 });
 
 describe("callback do login", () => {
@@ -63,5 +77,25 @@ describe("callback do login", () => {
       "sessao-de-teste",
       expect.objectContaining({ httpOnly: true, sameSite: "lax", path: "/" }),
     );
+    // Sem cookie de convite: o gancho roda com token nulo e não apaga nada.
+    expect(auth.recruiterLandingAfterSignIn).toHaveBeenCalledWith(
+      { expiresAt: "2026-10-01T12:00:00.000Z" },
+      null,
+      "/",
+      { host: "127.0.0.1:3210", proto: "http" },
+    );
+    expect(cookieJar.delete).not.toHaveBeenCalled();
+  });
+
+  it("conta de recrutador com o cookie do convite: o gancho decide o destino e o cookie sai (#465)", async () => {
+    auth.finishLogin.mockResolvedValue({ token: "sessao", session: { expiresAt: "2026-10-01T12:00:00.000Z" } });
+    cookieJar.get.mockImplementation((name: string) => (name === "jho_invite" ? { value: "token-do-convite" } : undefined));
+    auth.recruiterLandingAfterSignIn.mockResolvedValueOnce("/recruiter/7");
+
+    const response = await GET(new NextRequest("http://127.0.0.1:3210/login/callback?token=token-valido"));
+
+    expect(response.headers.get("location")).toBe("/recruiter/7");
+    expect(auth.recruiterLandingAfterSignIn.mock.calls[0]![1]).toBe("token-do-convite");
+    expect(cookieJar.delete).toHaveBeenCalledWith({ name: "jho_invite", path: "/" });
   });
 });

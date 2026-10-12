@@ -9,6 +9,7 @@ import {
   isOpenMode,
   landingForSession,
   manualSignupOpen,
+  recruiterInviteBanner,
   signupScreenFor,
   socialProviders,
   type OidcProviderId,
@@ -16,6 +17,7 @@ import {
 import { CV_PDF_MAX_MB, HEADLINE_MAX, NAME_MAX } from "../../src/core/candidate-identity.ts";
 import { renderSession } from "../auth";
 import { getTranslator } from "../i18n";
+import { inviteCookieToken } from "../invite-arrival";
 import { TransitionLink } from "../transition-link";
 import { completeSocialSignup, startManualSignup } from "./actions";
 import { signupLimits, signupMessages } from "./messages";
@@ -31,13 +33,18 @@ export const dynamic = "force-dynamic";
  * provedor confirmou (US-004.AC-1); sem ela, o formulário manual (E2E-012).
  * Quem já entrou vai para a própria tela, como em `/login`.
  */
-export default async function SignupPage() {
+export default async function SignupPage({ searchParams }: { searchParams: Promise<{ role?: string }> }) {
   const { t } = await getTranslator();
   const session = isOpenMode() ? null : await renderSession();
   if (session !== null) redirect(landingForSession(session, null) as Route);
 
   const token = (await cookies()).get(SIGNUP_COOKIE)?.value ?? null;
   const screen = await signupScreenFor(token);
+  // Quem chega pelo convite de recrutador (#465, ADR-018): o cookie do convite
+  // sobrevive à ida ao provedor, e a volta (`/signup`, sem `role`) ainda sabe
+  // quem convidou. O endereço aparece mascarado, como na página do convite.
+  const invited = await recruiterInviteBanner(await inviteCookieToken());
+  const initialRole = invited !== null || (await searchParams).role === "recruiter" ? "recruiter" : "candidate";
   const social = screen.mode === "manual" ? socialProviders() : [];
   const manualOpen = manualSignupOpen();
   const providerName = (id: OidcProviderId) => (id === "google" ? t("email.providerGoogle") : t("email.providerLinkedin"));
@@ -79,6 +86,16 @@ export default async function SignupPage() {
         <p className="type-body-md mb-6 max-w-[62ch] text-muted-foreground">
           {screen.mode === "social" ? t("signup.socialLead") : t("signup.lead")}
         </p>
+
+        {invited !== null && (
+          <p
+            className="type-body-sm mb-4 min-w-0 break-words rounded-[var(--radius-action)] bg-[var(--muted)] p-3"
+            data-testid="signup-invited"
+          >
+            {t("recruiterInvite.invitedBy")} <strong data-user-content>{invited.candidateName}</strong>.{" "}
+            {t("recruiterInvite.expectedEmail")} <strong data-user-content>{invited.maskedEmail}</strong>
+          </p>
+        )}
 
         {screen.mode === "manual" && screen.socialExpired && (
           <p className="type-body-sm mb-4 text-[var(--color-alert)]" role="alert" data-testid="signup-social-expired">
@@ -130,6 +147,7 @@ export default async function SignupPage() {
                 messages={messages}
                 verifiedEmail={screen.email}
                 limits={limits}
+                initialRole={initialRole}
               />
             ) : manualOpen ? (
               <SignupForm
@@ -139,6 +157,7 @@ export default async function SignupPage() {
                 messages={messages}
                 verifiedEmail={null}
                 limits={limits}
+                initialRole={initialRole}
               />
             ) : (
               <p className="type-body-md" data-testid="signup-unavailable">
