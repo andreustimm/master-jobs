@@ -1,7 +1,7 @@
 import type { Route } from "next";
 import { Fragment, type ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { CandidateAccessView, GrantRow, HistoryRow, InviteRow } from "../../src/contexts/auth/index.ts";
+import { readEndDateEventDetail, type CandidateAccessView, type GrantRow, type HistoryRow, type InviteRow } from "../../src/contexts/auth/index.ts";
 import { formatDate, type LocaleId, type TranslationKey, type Translator } from "../../src/core/i18n/index.ts";
 import { TransitionLink } from "../transition-link";
 import {
@@ -42,6 +42,7 @@ const ERROR_CODES = [
   "date_too_far",
   "already_ended",
   "not_found",
+  "invites_unavailable",
   "unexpected",
 ] as const;
 
@@ -135,7 +136,7 @@ export function RecruiterAccessSection({
             errors={errors}
             labels={{
               email: t("recruiterAccess.email"),
-              emailHint: t("recruiterAccess.emailHint"),
+              emailHint: t(view.invitesEnabled ? "recruiterAccess.emailHint" : "recruiterAccess.emailHintNoInvite"),
               endDate: t("recruiterAccess.endDate"),
               endDateHint: t("recruiterAccess.endDateHint"),
               timezone: t("recruiterAccess.timezone"),
@@ -348,8 +349,10 @@ function historyText(row: HistoryRow, t: T, locale: LocaleId): { what: ReactNode
   let key = row.kind;
   let date = "";
   if (row.kind === "end_date_changed") {
-    if (row.detail === null || row.detail === "none") key = "end_date_cleared";
-    else date = formatDate(row.detail, locale);
+    // O dia no fuso em que foi escolhido, como `endLabel` na lista acima.
+    const end = readEndDateEventDetail(row.detail);
+    if (end === null) key = "end_date_cleared";
+    else date = formatDate(end.expiresAt, locale, end.tz);
   }
   const what = fill(t(`recruiterAccessEvent.${key}` as TranslationKey), { email: userValue(row.recruiterEmail), date });
   if (row.actor !== "admin") return { what, who: t(`recruiterAccessActor.${row.actor}` as TranslationKey) };

@@ -1092,6 +1092,7 @@ export const en: Dictionary = {
     scopeNever: "Never sees: your notes, your salary floor, your profile contacts or your private analyses.",
     email: "Recruiter's email",
     emailHint: "Without a recruiter account, the person gets an invitation valid for 7 days and must use this same email.",
+    emailHintNoInvite: "For now, only someone who already has a recruiter account with this email confirmed gets access.",
     endDate: "End date (optional)",
     endDateHint: "Access lasts until 23:59 on the chosen day. Leave blank for no end.",
     timezone: "Time zone: {tz}",
@@ -1176,6 +1177,7 @@ export const en: Dictionary = {
     date_too_far: "Choose a date within 5 years.",
     already_ended: "This access has already ended.",
     not_found: "We could not find this item. Refresh the page.",
+    invites_unavailable: "Invitations are not available yet: this email needs a recruiter account with the address confirmed.",
     unexpected: "Could not complete. Refresh the page and try again.",
   },
   visibility: {

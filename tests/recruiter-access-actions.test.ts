@@ -30,7 +30,7 @@ import {
 import { ensureCandidate } from "../src/core/candidate.ts";
 import type { DB } from "../src/core/db/client.ts";
 import { authSession, authUser, recruiterAccessEvent, recruiterGrant, recruiterInvite } from "../src/core/db/schema.ts";
-import { translator } from "../src/core/i18n/index.ts";
+import { formatDate, translator } from "../src/core/i18n/index.ts";
 import { discoverEntries, exportedBindings, guardComesFirst, stripComments } from "./support/entry-inventory.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 
@@ -131,10 +131,14 @@ async function rows() {
 beforeAll(() => {
   sink = mkdtempSync(join(tmpdir(), "jho-recruiter-access-"));
   process.env.JHO_MAIL_SINK = sink;
+  // O convite é desligado por omissão até `/signup/invite` existir; estas
+  // actions o exercitam ligado, como o harness do E2E (`recruiterInvitesEnabled`).
+  process.env.JHO_RECRUITER_INVITES = "on";
 });
 
 afterAll(() => {
   delete process.env.JHO_MAIL_SINK;
+  delete process.env.JHO_RECRUITER_INVITES;
   rmSync(sink, { recursive: true, force: true });
 });
 
@@ -245,6 +249,33 @@ describe("quem pode conceder", () => {
   });
 });
 
+describe("convite desligado no ambiente", () => {
+  afterEach(() => {
+    process.env.JHO_RECRUITER_INVITES = "on";
+  });
+
+  it("sem JHO_RECRUITER_INVITES, convidar e reenviar recusam com invites_unavailable; conceder a recrutador segue", async () => {
+    delete process.env.JHO_RECRUITER_INVITES;
+    const owner = await login("ana@x.com", ["candidate"], seven);
+    boundary.token = owner.token;
+    const [old] = await db
+      .insert(recruiterInvite)
+      .values({ candidateId: seven, email: "velho@y.com", tokenHash: "hash-velho", expiresAt: "2999-01-01T00:00:00.000Z" })
+      .returning();
+    const before = await rows();
+
+    expect(await grantRecruiterAccessAction(form({ email: "bia@y.com", endDate: "", tz: "" }))).toEqual({
+      ok: false,
+      error: "invites_unavailable",
+    });
+    expect(await resendInviteAction(form({ inviteId: old!.id }))).toEqual({ ok: false, error: "invites_unavailable" });
+    expect(await rows()).toEqual(before);
+    expect(readdirSync(sink).filter((file) => readFileSync(join(sink, file), "utf8").includes("velho@y.com"))).toEqual([]);
+
+    expect(await grantRecruiterAccessAction(form({ email: "rui@x.com", endDate: "", tz: "" }))).toEqual({ ok: true, kind: "grant" });
+  });
+});
+
 describe("a seção em Minha conta", () => {
   const view: CandidateAccessView = {
     grants: [
@@ -275,11 +306,14 @@ describe("a seção em Minha conta", () => {
       rows: [
         { id: 9, kind: "access_revoked", actor: "admin", actorName: "Dona Admin", recruiterEmail: "x@x.com", detail: null, at: "2026-10-06T12:00:00.000Z" },
         { id: 8, kind: "end_date_changed", actor: "candidate", actorName: null, recruiterEmail: "rui@x.com", detail: "none", at: "2026-10-06T11:00:00.000Z" },
+        // Fim de 20/11 em São Paulo: 02:59Z do dia 21.
+        { id: 7, kind: "end_date_changed", actor: "candidate", actorName: null, recruiterEmail: "rui@x.com", detail: "2026-11-21T02:59:59.999Z America/Sao_Paulo", at: "2026-10-06T10:00:00.000Z" },
       ],
       page: 1,
       pages: 2,
       total: 21,
     },
+    invitesEnabled: true,
   };
   const ACTIONS = [
     "recruiter-access-form",
@@ -303,6 +337,23 @@ describe("a seção em Minha conta", () => {
     expect(html).toContain("não termina mais em uma data");
     expect(html).toContain('data-testid="recruiter-access-history-older"');
     expect(html).not.toContain('data-testid="recruiter-access-history-newer"');
+    expect(html).toContain(t("recruiterAccess.emailHint"));
+  });
+
+  it("histórico mostra a nova data de fim no dia escolhido no fuso do candidato, não no do servidor", () => {
+    const html = renderToStaticMarkup(createElement(RecruiterAccessSection, { view, borrowed: false, t, locale: "pt-BR" }));
+    const chosen = formatDate("2026-11-20T12:00:00Z", "pt-BR", "UTC");
+    const nextDay = formatDate("2026-11-21T12:00:00Z", "pt-BR", "UTC");
+    expect(html).toContain(`mudou para ${chosen}`);
+    expect(html).not.toContain(`mudou para ${nextDay}`);
+  });
+
+  it("convite desligado: o formulário não promete convite a quem não tem conta", () => {
+    const html = renderToStaticMarkup(
+      createElement(RecruiterAccessSection, { view: { ...view, invitesEnabled: false }, borrowed: false, t, locale: "pt-BR" }),
+    );
+    expect(html).toContain(t("recruiterAccess.emailHintNoInvite"));
+    expect(html).not.toContain(t("recruiterAccess.emailHint"));
   });
 
   it("IT-075 sessão emprestada: lista e histórico sem nenhum formulário nem botão", () => {
@@ -316,7 +367,12 @@ describe("a seção em Minha conta", () => {
   });
 
   it("IT-075 vazio: sem ninguém com acesso e nada no histórico", () => {
-    const empty: CandidateAccessView = { grants: [], invites: [], history: { rows: [], page: 1, pages: 1, total: 0 } };
+    const empty: CandidateAccessView = {
+      grants: [],
+      invites: [],
+      history: { rows: [], page: 1, pages: 1, total: 0 },
+      invitesEnabled: true,
+    };
     const html = renderToStaticMarkup(createElement(RecruiterAccessSection, { view: empty, borrowed: false, t, locale: "pt-BR" }));
     expect(html).toContain(t("recruiterAccess.empty"));
     expect(html).toContain(t("recruiterAccess.historyEmpty"));

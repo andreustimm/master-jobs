@@ -20,6 +20,7 @@ import {
   CAP_WINDOW_MS,
   PENDING_INVITE_CAP,
   capDecision,
+  endDateEventDetail,
   grantDisplay,
   grantTarget,
   type AccessActor,
@@ -589,6 +590,7 @@ export const drizzleRecruiterAccess: RecruiterAccessStore = {
         };
       }
 
+      if (!input.invites) return { ok: false as const, error: "invites_unavailable" as const, ended: stale.ended };
       if ((await livePendingInvites(tx, input.candidateId, input.nowIso)) >= PENDING_INVITE_CAP) {
         return { ok: false as const, error: "too_many_pending" as const, ended: stale.ended };
       }
@@ -675,7 +677,7 @@ export const drizzleRecruiterAccess: RecruiterAccessStore = {
           kind: "end_date_changed",
           actor: "candidate",
           actorUserId: input.actorUserId,
-          detail: input.expiresAt ?? "none",
+          detail: endDateEventDetail(input.expiresAt, input.expiryTz),
           at: input.nowIso,
         },
       ]);

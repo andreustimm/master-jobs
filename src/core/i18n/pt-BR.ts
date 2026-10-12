@@ -1123,6 +1123,7 @@ export const ptBR = {
     scopeNever: "Nunca vê: suas notas, seu piso salarial, os contatos do perfil nem as análises privadas.",
     email: "E-mail do recrutador",
     emailHint: "Sem conta de recrutador, a pessoa recebe um convite válido por 7 dias e precisa usar este mesmo e-mail.",
+    emailHintNoInvite: "Por enquanto, só quem já tem conta de recrutador com este e-mail confirmado recebe acesso.",
     endDate: "Data de fim (opcional)",
     endDateHint: "O acesso vale até 23:59 do dia escolhido. Em branco, não termina.",
     timezone: "Fuso horário: {tz}",
@@ -1210,6 +1211,7 @@ export const ptBR = {
     date_too_far: "Escolha uma data dentro de 5 anos.",
     already_ended: "Este acesso já terminou.",
     not_found: "Não encontramos este item. Atualize a página.",
+    invites_unavailable: "Ainda não dá para convidar: este e-mail precisa de uma conta de recrutador com o endereço confirmado.",
     unexpected: "Não foi possível concluir. Atualize a página e tente de novo.",
   },
   /** Visibilidade do perfil (AUTH-03). */

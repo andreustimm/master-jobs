@@ -49,6 +49,12 @@ export type RecruiterAccessDeps = {
   origin: string | null;
   /** Token cru do convite e o SHA-256 dele; só o hash vai para o banco. */
   newToken(): { token: string; hash: string };
+  /**
+   * Convidar quem não tem conta de recrutador (`recruiterInvitesEnabled`).
+   * Falso, o convite e o reenvio são recusados com `invites_unavailable` antes
+   * de gravar: o link levaria a uma página que ainda não existe.
+   */
+  invitesEnabled: boolean;
 };
 
 function localeOf(value: string | null): LocaleId {
@@ -145,6 +151,7 @@ export async function grantAccess(
     tokenHash: hash,
     inviteExpiresAt: inviteExpiry(deps),
     nowIso: new Date(deps.now()).toISOString(),
+    invites: deps.invitesEnabled,
   });
   for (const ended of result.ended) await sendEnded(deps, ended, null);
   if (!result.ok) return { ok: false, error: result.error, ...(result.retryAt ? { retryAt: result.retryAt } : {}) };
@@ -225,6 +232,7 @@ export async function resendInvite(
   input: { inviteId: number; candidateId: number; actorUserId: number },
   deps: RecruiterAccessDeps,
 ): Promise<SimpleResult> {
+  if (!deps.invitesEnabled) return { ok: false, error: "invites_unavailable" };
   const { token, hash } = deps.newToken();
   const result = await deps.store.resendInvite({
     ...input,
@@ -273,6 +281,8 @@ export type CandidateAccessView = {
   grants: GrantRow[];
   invites: InviteRow[];
   history: HistoryPage;
+  /** O formulário só promete convite a quem não tem conta quando ele está ligado. */
+  invitesEnabled: boolean;
 };
 
 /** Página do histórico a partir do parâmetro da URL: inteiro de 1 em diante, e o resto cai em 1. */
@@ -284,7 +294,7 @@ export function historyPageOf(raw: string | undefined): number {
 /** A seção "Acesso de recrutadores" de `/account`: quem acessa, convites e histórico paginado. */
 export async function candidateAccessView(
   input: { candidateId: number; historyPage: number },
-  deps: Pick<RecruiterAccessDeps, "store" | "now">,
+  deps: Pick<RecruiterAccessDeps, "store" | "now" | "invitesEnabled">,
 ): Promise<CandidateAccessView> {
   const nowIso = new Date(deps.now()).toISOString();
   const [grants, invites, history] = await Promise.all([
@@ -293,5 +303,10 @@ export async function candidateAccessView(
     deps.store.history(input.candidateId, input.historyPage, HISTORY_PAGE_SIZE),
   ]);
   const pages = Math.max(1, Math.ceil(history.total / HISTORY_PAGE_SIZE));
-  return { grants, invites, history: { rows: history.rows, page: input.historyPage, pages, total: history.total } };
+  return {
+    grants,
+    invites,
+    history: { rows: history.rows, page: input.historyPage, pages, total: history.total },
+    invitesEnabled: deps.invitesEnabled,
+  };
 }
