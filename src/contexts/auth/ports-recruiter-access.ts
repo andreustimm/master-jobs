@@ -8,7 +8,7 @@
  * próprios (regra 4). Mora fora de `app/` e de `infra/` para nenhum dos dois
  * importar o outro.
  */
-import type { AccessError, GrantDisplay } from "./domain/recruiter-access.ts";
+import type { AccessError, GrantDisplay, InviteLookup, InviteOutcome } from "./domain/recruiter-access.ts";
 
 /** Por que o acesso acabou, como o e-mail ao recrutador conta (`accessEndedEmail`). */
 export type AccessEndCause = "candidate" | "admin" | "expired";
@@ -98,6 +98,16 @@ export type HistoryRow = {
 
 export type HistoryPage = { rows: HistoryRow[]; page: number; pages: number; total: number };
 
+/** O que a conclusão do convite devolve (ADR-018). */
+export type InviteCompletionResult = {
+  /** O desfecho do convite do cookie (ou do formulário); nulo quando não veio token. */
+  cookie: { outcome: InviteOutcome; candidateId: number | null } | null;
+  /** As concessões que a conclusão criou, uma por candidato, para o e-mail de acesso concedido. */
+  completed: (RecruiterNotice & { expiresAt: string | null; expiryTz: string | null })[];
+  /** Concessões vencidas do par que a mesma transação fechou antes de gravar a nova. */
+  ended: EndedNotice[];
+};
+
 export type AdminCandidateAccess = {
   grants: { id: number; recruiterEmail: string; recruiterName: string | null; createdAt: string; expiresAt: string | null; expiryTz: string | null }[];
   invites: { id: number; email: string; createdAt: string; expiresAt: string }[];
@@ -114,8 +124,6 @@ export type RecruiterAccessStore = {
     tokenHash: string;
     inviteExpiresAt: string;
     nowIso: string;
-    /** Falso: quem viraria convite é recusado com `invites_unavailable`, sem gravar nada (`recruiterInvitesEnabled`). */
-    invites: boolean;
   }): Promise<GrantStoreResult>;
   endGrant(input: {
     grantId: number;
@@ -156,4 +164,19 @@ export type RecruiterAccessStore = {
   invitesOf(candidateId: number, nowIso: string): Promise<InviteRow[]>;
   history(candidateId: number, page: number, pageSize: number): Promise<{ rows: HistoryRow[]; total: number }>;
   adminOverview(candidateIds: readonly number[], nowIso: string): Promise<Map<number, AdminCandidateAccess>>;
+  /** O convite de um hash de token, com o nome do candidato; nulo se não existe. Só lê. */
+  findInvite(tokenHash: string): Promise<InviteLookup | null>;
+  /**
+   * Conclui os convites de uma conta (ADR-018): o do token, se veio, e todo
+   * convite pendente ao e-mail dela. Uma transação, sob a trava de cada
+   * candidato envolvido; queima o convite antes de gravar a concessão.
+   * `proveMailbox`: o token válido ao mesmo e-mail prova a caixa e grava
+   * `email_verified_at` quando ainda é nulo (`acceptInviteAction`).
+   */
+  completeInvites(input: {
+    userId: number;
+    tokenHash: string | null;
+    proveMailbox: boolean;
+    nowIso: string;
+  }): Promise<InviteCompletionResult>;
 };

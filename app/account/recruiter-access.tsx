@@ -42,7 +42,6 @@ const ERROR_CODES = [
   "date_too_far",
   "already_ended",
   "not_found",
-  "invites_unavailable",
   "unexpected",
 ] as const;
 
@@ -136,7 +135,7 @@ export function RecruiterAccessSection({
             errors={errors}
             labels={{
               email: t("recruiterAccess.email"),
-              emailHint: t(view.invitesEnabled ? "recruiterAccess.emailHint" : "recruiterAccess.emailHintNoInvite"),
+              emailHint: t("recruiterAccess.emailHint"),
               endDate: t("recruiterAccess.endDate"),
               endDateHint: t("recruiterAccess.endDateHint"),
               timezone: t("recruiterAccess.timezone"),

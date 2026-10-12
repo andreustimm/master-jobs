@@ -168,9 +168,9 @@ pnpm jho auth set-password ${"seu@email.com"}`}
           )}
 
           <form action={passwordLoginAction} className="grid gap-4">
-            {/* O endereço pedido antes do login segue com a senha também, não
-                só com o login social; a action o confere com `safeNext`. */}
-            {next ? <input type="hidden" name="next" value={next} /> : null}
+            {/* O `next` viaja com a senha como viaja com o provedor; a ação o
+                confere de novo com `safeNext` antes de seguir. */}
+            {next && <input type="hidden" name="next" value={next} />}
             <div className="grid gap-1.5">
               <Label htmlFor="email">{t("login.email")}</Label>
               <Input

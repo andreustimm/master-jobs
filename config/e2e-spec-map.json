@@ -451,6 +451,41 @@
       ]
     },
     {
+      "id": "recruiter-invite",
+      "modules": [
+        "tests/e2e/ui/recruiter-invite.mjs",
+        "tests/e2e/recruiter-invite-fixtures.mjs",
+        "tests/e2e/recruiter-access-fixtures.mjs",
+        "tests/e2e/fake-oidc.mjs",
+        "tests/e2e/mail-sink.mjs"
+      ],
+      "patterns": [
+        "app/signup/**",
+        "app/invite-arrival.ts",
+        "app/login/actions.ts",
+        "app/login/callback/**",
+        "app/login/oauth/**",
+        "app/recruiter/page.tsx",
+        "src/contexts/auth/app/recruiter-access.ts",
+        "src/contexts/auth/app/signup.ts",
+        "src/contexts/auth/domain/recruiter-access.ts",
+        "src/contexts/auth/infra/drizzle-recruiter-access.ts",
+        "src/contexts/auth/ports-recruiter-access.ts"
+      ],
+      "routes": [
+        "/",
+        "/account",
+        "/login",
+        "/login/oauth/[provider]",
+        "/login/oauth/[provider]/callback",
+        "/recruiter",
+        "/recruiter/[id]",
+        "/signup",
+        "/signup/invite",
+        "/signup/verify"
+      ]
+    },
+    {
       "id": "jobs-new",
       "modules": [
         "tests/e2e/ui/jobs-new.mjs"
@@ -594,6 +629,7 @@
         "/privacy",
         "/referrals",
         "/signup",
+        "/signup/invite",
         "/signup/verify",
         "/suggestions",
         "/terms"

@@ -3,8 +3,9 @@
 import type { Route } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { landingForSession, passwordSignIn, safeNext } from "../../src/contexts/auth/index.ts";
+import { landingForSession, passwordSignIn } from "../../src/contexts/auth/index.ts";
 import { SESSION_COOKIE } from "../auth";
+import { landingAfterSignIn } from "../invite-arrival";
 
 /**
  * Password sign-in.
@@ -19,14 +20,9 @@ import { SESSION_COOKIE } from "../auth";
 export async function passwordLoginAction(formData: FormData) {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
-  // O endereço que a pessoa abriu antes de entrar (o link de um e-mail, por
-  // exemplo — US-005.EC-1). Só caminho deste site: `safeNext` recusa o resto,
-  // e a página de destino confere a permissão como sempre.
-  const next = safeNext(String(formData.get("next") ?? ""));
-  const keepNext = next === null ? "" : `&next=${encodeURIComponent(next)}`;
 
   if (!email || !password) {
-    redirect(`/login?error=missing${keepNext}`);
+    redirect("/login?error=missing");
   }
 
   const result = await passwordSignIn(email, password);
@@ -34,7 +30,7 @@ export async function passwordLoginAction(formData: FormData) {
   if (!result.ok) {
     // One message for every failure. Distinguishing them would turn this form
     // into an account-enumeration oracle.
-    redirect(`/login?error=${result.reason}${keepNext}`);
+    redirect(`/login?error=${result.reason}`);
   }
 
   const jar = await cookies();
@@ -46,11 +42,14 @@ export async function passwordLoginAction(formData: FormData) {
     expires: new Date(result.session.expiresAt),
   });
 
-  // Para onde cada papel vai, sem `next`.
+  // Para onde cada papel vai, ou o `next` seguro que trouxe a pessoa ao login
+  // (o mesmo `landingForSession` do login social): o link "Já tenho conta" do
+  // convite volta a `/signup/invite` (#465). O cockpit é só de quem tem o
+  // próprio candidato — mandar todo mundo para `/` era o que fazia um
+  // recrutador cair em 403 logo depois de acertar a senha.
   //
-  // O cockpit é a tela do candidato: funil, lacunas do currículo, nota de
-  // aderência. Quem não é candidato não tem nada lá — e mandar todo mundo para
-  // `/` era o que fazia um recrutador cair em 403 logo depois de acertar a
-  // senha. `landingForSession` é a mesma regra do login social.
-  redirect(landingForSession(result.session, next) as Route);
+  // Conta de recrutador conclui aqui os convites ao e-mail dela (ADR-018).
+  const next = formData.get("next");
+  const fallback = landingForSession(result.session, typeof next === "string" ? next : null);
+  redirect((await landingAfterSignIn(result.session, fallback)) as Route);
 }

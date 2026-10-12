@@ -65,6 +65,9 @@ export const ENGLISH_ANONYMOUS_SWEEP = [
   // declara `lang`, e a varredura confere título, versão e navegação.
   "/signup",
   "/signup/verify",
+  // Convite de recrutador (#465): token que nunca existiu dá a página neutra.
+  // Os estados com convite válido são medidos em `recruiter-invite.mjs`.
+  "/signup/invite?token=nunca-existiu-varredura",
   "/terms",
   "/privacy",
 ];

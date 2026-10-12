@@ -49,6 +49,7 @@ import * as pwa from "./pwa.mjs";
 import * as rateLimit from "./rate-limit.mjs";
 import * as recheck from "./recheck.mjs";
 import * as recruiterAccess from "./recruiter-access.mjs";
+import * as recruiterInvite from "./recruiter-invite.mjs";
 import * as roles from "./roles.mjs";
 import * as searchRelevance from "./search-relevance.mjs";
 import * as searchSynonyms from "./search-synonyms.mjs";
@@ -107,6 +108,9 @@ export const AREAS = [
   // Acesso de recrutador (#465, task_02): contas próprias de `setup.mjs`
   // (`recruiter-access-fixtures.mjs`), sem nada compartilhado a cada execução.
   { id: "recruiter-access", run: recruiterAccess.run, requires: [] },
+  // Convite de recrutador (#465, task_03): candidata e recrutador próprios
+  // (`recruiter-invite-fixtures.mjs`); cadastro pelo emissor falso e pelo sink.
+  { id: "recruiter-invite", run: recruiterInvite.run, requires: [] },
   { id: "jobs-new", run: jobsNew.run, requires: [] },
   { id: "public-profile", run: publicProfile.run, requires: [] },
   // Diretório de recrutadores (#465): contas e perfis próprios de `setup.mjs`

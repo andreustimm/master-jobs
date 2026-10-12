@@ -12,7 +12,7 @@
  */
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { closeDb, getDb } from "../../src/core/db/client.ts";
-import { application, applicationEvent, authEvent, authIdentity, authLoginToken, authUser, candidate, candidateDocument, candidateSkill, fxRate, job, jobScore, recruiterAccessEvent, recruiterDirectoryQuery, recruiterGrant, recruiterInvite, recruiterSuggestion, savedTerm, scoreTask, skill, targetAccount, termAttribution } from "../../src/core/db/schema.ts";
+import { application, applicationEvent, authEvent, authIdentity, authLoginToken, authSignup, authUser, candidate, candidateDocument, candidateSkill, fxRate, job, jobScore, recruiterAccessEvent, recruiterDirectoryQuery, recruiterGrant, recruiterInvite, recruiterSuggestion, savedTerm, scoreTask, skill, targetAccount, termAttribution } from "../../src/core/db/schema.ts";
 import { linkRecruiterToCandidate } from "../../src/contexts/auth/index.ts";
 import { seedOwner } from "../../src/contexts/auth/app/seed.ts";
 import { hashToken } from "../../src/contexts/auth/infra/drizzle-store.ts";
@@ -51,6 +51,7 @@ import { METHODS_FIXTURES } from "./account-methods-fixtures.mjs";
 import { DIRECTORY_FIXTURES } from "./recruiter-directory-fixtures.mjs";
 import { ACCESS_FIXTURES } from "./recruiter-access-fixtures.mjs";
 import { SUGGESTION_FIXTURES } from "./recruiter-suggestions-fixtures.mjs";
+import { INVITE_FIXTURES, INVITE_SIGNUP_EMAILS } from "./recruiter-invite-fixtures.mjs";
 import { PUBLIC_CV_FIXTURE, PUBLIC_FACTS_OFF_FIXTURE, factColumns } from "./public-cv-format.mjs";
 import { isolationRefusal } from "./database-guard.mjs";
 
@@ -128,6 +129,8 @@ export const E2E_ROLES = {
   suggestionsCandidate: { email: SUGGESTION_FIXTURES.candidate.email, roles: SUGGESTION_FIXTURES.candidate.roles },
   suggestionsOther: { email: SUGGESTION_FIXTURES.other.email, roles: SUGGESTION_FIXTURES.other.roles },
   suggestionsRecruiter: { email: SUGGESTION_FIXTURES.recruiter.email, roles: SUGGESTION_FIXTURES.recruiter.roles },
+  // Convite de recrutador (#465, task_03): ver `recruiter-invite-fixtures.mjs`.
+  inviteCandidate: { email: INVITE_FIXTURES.inviter.email, roles: INVITE_FIXTURES.inviter.roles },
   // Formas de entrar (#464, task_04): ver `account-methods-fixtures.mjs`.
   ...Object.fromEntries(
     Object.entries(METHODS_FIXTURES).map(([key, fixture]) => [
@@ -779,6 +782,22 @@ try {
     await getDb().delete(scoreTask).where(inArray(scoreTask.candidateId, ids));
     for (const candidateId of ids) await linkRecruiterToCandidate(recruiterUser.id, candidateId, recruiterUser.id);
   }
+
+  // Convite de recrutador (#465, task_03). A jornada convida e se cadastra
+  // pelo link: a cada execução a candidata volta a não ter nada compartilhado,
+  // e as contas que o cadastro criou (com identidades e pendências) somem —
+  // senão o cadastro de agora encontraria o e-mail com conta.
+  const [inviter] = await getDb()
+    .select({ candidateId: authUser.candidateId })
+    .from(authUser)
+    .where(eq(authUser.email, INVITE_FIXTURES.inviter.email));
+  if (inviter?.candidateId == null) throw new Error(`candidata do convite não criada: ${INVITE_FIXTURES.inviter.email}`);
+  await getDb().update(candidate).set({ name: INVITE_FIXTURES.inviter.name }).where(eq(candidate.id, inviter.candidateId));
+  await getDb().delete(recruiterAccessEvent).where(eq(recruiterAccessEvent.candidateId, inviter.candidateId));
+  await getDb().delete(recruiterGrant).where(eq(recruiterGrant.candidateId, inviter.candidateId));
+  await getDb().delete(recruiterInvite).where(eq(recruiterInvite.candidateId, inviter.candidateId));
+  await getDb().delete(authSignup).where(inArray(authSignup.email, INVITE_SIGNUP_EMAILS));
+  await getDb().delete(authUser).where(inArray(authUser.email, INVITE_SIGNUP_EMAILS));
 
   // #325: candidato sem conta, público e com o CV publicado, cujo texto veio
   // de PDF. `saveDocument` não regrava conteúdo igual, então rodar de novo

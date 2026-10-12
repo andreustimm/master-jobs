@@ -31,6 +31,8 @@ const PUBLIC = [
   // Cadastro aberto (#464, ADR-012): a tela, a etapa do código e as Server
   // Actions delas, que respondem no mesmo caminho. O que protege é o cookie do
   // cadastro, o código de uso único e os limites por e-mail e por IP.
+  // Inclui `/signup/invite` (#465, ADR-018), o link do convite de recrutador:
+  // o token de uso único é a autorização, e "Aceitar e abrir" chama `guard`.
   "/signup",
   // Termos e Política: quem decide se aceita ainda não tem conta (US-021).
   "/terms",

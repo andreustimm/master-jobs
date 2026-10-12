@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 import { finishLogin, isOpenMode } from "../../../src/contexts/auth/index.ts";
 import { SESSION_COOKIE } from "../../auth";
+import { landingAfterSignIn } from "../../invite-arrival";
 import { redirect303 } from "../redirect303";
 
 /**
@@ -41,5 +42,6 @@ export async function GET(request: NextRequest) {
     expires: new Date(result.session.expiresAt),
   });
 
-  return redirect303(request, "/");
+  // Conta de recrutador conclui os convites ao e-mail dela (#465, ADR-018).
+  return redirect303(request, await landingAfterSignIn(result.session, "/"));
 }

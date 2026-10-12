@@ -61,7 +61,9 @@ import {
   signupTokenHash,
   startManualSignup,
 } from "../src/contexts/auth/infra/drizzle-signups.ts";
-import { drizzleAuthRepository, drizzleSessions, magicLink } from "../src/contexts/auth/infra/drizzle-store.ts";
+import { drizzleAuthRepository, drizzleSessions, hashToken, magicLink } from "../src/contexts/auth/infra/drizzle-store.ts";
+import { drizzleRecruiterAccess } from "../src/contexts/auth/infra/drizzle-recruiter-access.ts";
+import { completeInvitesForAccount } from "../src/contexts/auth/app/recruiter-access.ts";
 import { checkCallbackState, flowKey, openFlow, sealFlow } from "../src/contexts/auth/infra/flow-cookie.ts";
 import { googleProvider } from "../src/contexts/auth/infra/oidc/google.ts";
 import { drizzlePasswords, MAX_ATTEMPTS, recentFailures } from "../src/contexts/auth/infra/password-login.ts";
@@ -115,6 +117,19 @@ function deps(): SignupDeps {
     identityOfUser: identities.identityOfUser,
     mailer: () => mailerOverride ?? fileMailer(sink),
     afterCandidateCreated: async () => {},
+    // A conclusão de verdade (#465): sem convite ao e-mail, não grava nada.
+    afterRecruiterCreated: ({ userId, inviteToken, origin }) =>
+      completeInvitesForAccount(
+        { userId, token: inviteToken },
+        {
+          store: drizzleRecruiterAccess,
+          hashToken,
+          now: () => now().getTime(),
+          mailer: () => mailerOverride ?? fileMailer(sink),
+          audit: drizzleAuthRepository,
+          origin,
+        },
+      ),
     now,
   };
 }

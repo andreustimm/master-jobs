@@ -1123,7 +1123,6 @@ export const ptBR = {
     scopeNever: "Nunca vê: suas notas, seu piso salarial, os contatos do perfil nem as análises privadas.",
     email: "E-mail do recrutador",
     emailHint: "Sem conta de recrutador, a pessoa recebe um convite válido por 7 dias e precisa usar este mesmo e-mail.",
-    emailHintNoInvite: "Por enquanto, só quem já tem conta de recrutador com este e-mail confirmado recebe acesso.",
     endDate: "Data de fim (opcional)",
     endDateHint: "O acesso vale até 23:59 do dia escolhido. Em branco, não termina.",
     timezone: "Fuso horário: {tz}",
@@ -1211,8 +1210,28 @@ export const ptBR = {
     date_too_far: "Escolha uma data dentro de 5 anos.",
     already_ended: "Este acesso já terminou.",
     not_found: "Não encontramos este item. Atualize a página.",
-    invites_unavailable: "Ainda não dá para convidar: este e-mail precisa de uma conta de recrutador com o endereço confirmado.",
     unexpected: "Não foi possível concluir. Atualize a página e tente de novo.",
+  },
+  /** A chegada pelo convite de recrutador: `/signup/invite`, a linha de `/signup` e o aviso de `/recruiter` (#465, ADR-018). */
+  recruiterInvite: {
+    title: "Convite para acompanhar uma busca",
+    invitedBy: "Convidado por",
+    expectedEmail: "Endereço esperado:",
+    anonymousLead:
+      "Crie a sua conta de recrutador com este mesmo e-mail para ver o funil e o currículo, só para leitura. Outro endereço não recebe acesso.",
+    createAccount: "Criar conta de recrutador",
+    haveAccount: "Já tenho conta",
+    acceptLead: "Esta conta tem o e-mail convidado. Aceite para ver o funil e o currículo, só para leitura.",
+    accept: "Aceitar e abrir",
+    otherEmail: "Este convite é para",
+    signOutToContinue: "Saia para continuar.",
+    needsRecruiter: "Este convite precisa de uma conta de recrutador.",
+    neutralTitle: "Este convite não vale mais",
+    neutralBody: "Peça ao candidato que mande um novo.",
+    noticeMismatch: "Este convite foi enviado a outro e-mail. Peça ao candidato que convide este endereço.",
+    noticeNotRecruiter: "Este convite precisa de uma conta de recrutador.",
+    noticePeriodOver: "O prazo de acesso escolhido no convite já terminou. Peça ao candidato um novo convite.",
+    noticeInvalid: "Este convite não vale mais. Peça ao candidato que mande um novo.",
   },
   /** Visibilidade do perfil (AUTH-03). */
   visibility: {

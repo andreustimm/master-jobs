@@ -251,6 +251,14 @@ export const UNGUARDED_BY_DESIGN = new Map<string, { file: string; why: string }
     },
   ],
   [
+    // Convite de recrutador (#465, ADR-018): quem o recebeu ainda não tem conta.
+    "startInvitedSignup",
+    {
+      file: "app/signup/invite/actions.ts",
+      why: "pré-conta: token de uso único por hash (32 bytes, 7 dias, conferido antes de gravar); só grava o cookie httpOnly do convite, que não concede nada sem a conta de recrutador com o e-mail convidado provado",
+    },
+  ],
+  [
     "setLocaleAction",
     {
       file: "app/locale-action.ts",

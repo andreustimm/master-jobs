@@ -23,15 +23,20 @@ import {
   endDateEventDetail,
   grantDisplay,
   grantTarget,
+  inviteCompletion,
   type AccessActor,
   type AccessEventKind,
   type GrantStatus,
+  type InviteLookup,
+  type InviteOutcome,
+  type InviteStatus,
 } from "../domain/recruiter-access.ts";
 import type { Role } from "../domain/types.ts";
 import type {
   AdminCandidateAccess,
   EndedNotice,
   GrantRow,
+  InviteCompletionResult,
   InviteNotice,
   InviteRow,
   RecruiterAccessStore,
@@ -606,6 +611,240 @@ async function insertInvite(
   return inviteId;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Conclusão do convite (task_03, ADR-018)                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Candidatos com ao menos uma conta habilitada. Sem conta, ou só com conta
+ * desabilitada, o convite dele morre (US-003.EC-10): quem concedeu já não
+ * responde pelo acesso.
+ */
+async function enabledCandidates(db: Executor, candidateIds: readonly number[]): Promise<Set<number>> {
+  if (candidateIds.length === 0) return new Set();
+  const rows = await db
+    .select({ candidateId: authUser.candidateId })
+    .from(authUser)
+    .where(and(inArray(authUser.candidateId, [...candidateIds]), isNull(authUser.disabledAt)));
+  return new Set(rows.map((row) => row.candidateId).filter((id): id is number => id !== null));
+}
+
+type InviteForCompletion = {
+  id: number;
+  candidateId: number;
+  email: string;
+  status: string;
+  expiresAt: string;
+  accessExpiresAt: string | null;
+  expiryTz: string | null;
+  createdBy: number | null;
+};
+
+/**
+ * Queima o convite e grava a concessão, nesta ordem (G18): o UPDATE
+ * condicional em `pending` é o que decide quem ganha de duas conclusões, e a
+ * concessão só nasce depois de o link ter deixado de valer. Nulo quando outro
+ * já o queimou.
+ */
+async function acceptInvite(
+  tx: DbTransaction,
+  invite: InviteForCompletion,
+  account: { id: number; email: string },
+  at: string,
+): Promise<{ granted: boolean; ended: EndedRow[] } | null> {
+  const [burned] = await tx
+    .update(recruiterInvite)
+    .set({ status: "accepted", acceptedUserId: account.id, decidedAt: at })
+    .where(and(eq(recruiterInvite.id, invite.id), eq(recruiterInvite.status, "pending")))
+    .returning({ id: recruiterInvite.id });
+  if (!burned) return null;
+  await appendHistory(tx, [
+    {
+      candidateId: invite.candidateId,
+      inviteId: invite.id,
+      recruiterEmail: account.email,
+      kind: "invite_accepted",
+      actor: "recruiter",
+      actorUserId: account.id,
+      at,
+    },
+  ]);
+  // A concessão vencida do par que a varredura ainda não marcou ocupa o
+  // índice único parcial como `active`: fecha antes de gravar a nova.
+  const stale = await expireWhere(tx, at, {
+    grants: and(eq(recruiterGrant.candidateId, invite.candidateId), eq(recruiterGrant.recruiterUserId, account.id)),
+    invites: sql`false`,
+  });
+  // O consentimento foi dado no convite, e o evento não conta no limite do
+  // candidato (só `actor = 'candidate'` conta): quem transforma o convite
+  // aceito em acesso é o sistema.
+  const grantId = await insertActiveGrant(tx, {
+    candidateId: invite.candidateId,
+    recruiterUserId: account.id,
+    recruiterEmail: account.email,
+    createdBy: invite.createdBy,
+    actor: "system",
+    at,
+    inviteId: invite.id,
+    expiresAt: invite.accessExpiresAt,
+    expiryTz: invite.accessExpiresAt === null ? null : invite.expiryTz,
+  });
+  return { granted: grantId !== null, ended: stale.ended };
+}
+
+/** O prazo do acesso escolhido no convite já passou (US-006.EC-5): o convite expira, sem concessão. */
+async function expireInviteOnArrival(tx: DbTransaction, invite: InviteForCompletion, at: string): Promise<void> {
+  const [expired] = await tx
+    .update(recruiterInvite)
+    .set({ status: "expired", decidedAt: at })
+    .where(and(eq(recruiterInvite.id, invite.id), eq(recruiterInvite.status, "pending")))
+    .returning({ id: recruiterInvite.id });
+  if (!expired) return;
+  await appendHistory(tx, [
+    {
+      candidateId: invite.candidateId,
+      inviteId: invite.id,
+      recruiterEmail: invite.email,
+      kind: "invite_expired",
+      actor: "system",
+      at,
+    },
+  ]);
+}
+
+type CompletionDraft = Omit<InviteCompletionResult, "ended"> & { ended: EndedRow[] };
+
+async function completeInvitesIn(
+  tx: DbTransaction,
+  input: { userId: number; tokenHash: string | null; proveMailbox: boolean; nowIso: string },
+): Promise<CompletionDraft> {
+  const noToken = input.tokenHash === null ? null : { outcome: "invalid" as InviteOutcome, candidateId: null };
+  const [account] = await tx
+    .select({
+      id: authUser.id,
+      email: authUser.email,
+      roles: authUser.roles,
+      disabledAt: authUser.disabledAt,
+      emailVerifiedAt: authUser.emailVerifiedAt,
+      locale: authUser.locale,
+    })
+    .from(authUser)
+    .where(eq(authUser.id, input.userId))
+    .limit(1);
+  if (!account) return { cookie: noToken, completed: [], ended: [] };
+  const email = account.email.trim().toLowerCase();
+
+  // Quem está em jogo, antes da trava: o convite do token e os pendentes ao
+  // endereço da conta, de qualquer candidato (US-002.EC-6).
+  const [byToken] =
+    input.tokenHash === null
+      ? []
+      : await tx
+          .select({ id: recruiterInvite.id, candidateId: recruiterInvite.candidateId })
+          .from(recruiterInvite)
+          .where(eq(recruiterInvite.tokenHash, input.tokenHash))
+          .limit(1);
+  const addressed = await tx
+    .select({ candidateId: recruiterInvite.candidateId })
+    .from(recruiterInvite)
+    .where(and(eq(recruiterInvite.email, email), eq(recruiterInvite.status, "pending")));
+  const candidateIds = [...new Set([...addressed.map((row) => row.candidateId), ...(byToken ? [byToken.candidateId] : [])])].sort(
+    (a, b) => a - b,
+  );
+  if (candidateIds.length === 0) return { cookie: noToken, completed: [], ended: [] };
+  // Em ordem crescente: duas conclusões que tocam os mesmos candidatos tomam
+  // as travas na mesma ordem e não se prendem uma na outra.
+  for (const id of candidateIds) await lockCandidateAccess(tx, id);
+
+  // Relidos depois da trava: a outra aba, o cancelamento e o reenvio que
+  // terminaram enquanto esta esperava já valem aqui (US-003.EC-8, EC-9).
+  const invites: InviteForCompletion[] = await tx
+    .select({
+      id: recruiterInvite.id,
+      candidateId: recruiterInvite.candidateId,
+      email: recruiterInvite.email,
+      status: recruiterInvite.status,
+      expiresAt: recruiterInvite.expiresAt,
+      accessExpiresAt: recruiterInvite.accessExpiresAt,
+      expiryTz: recruiterInvite.expiryTz,
+      createdBy: recruiterInvite.createdBy,
+    })
+    .from(recruiterInvite)
+    .where(
+      and(
+        inArray(recruiterInvite.candidateId, candidateIds),
+        or(
+          and(eq(recruiterInvite.email, email), eq(recruiterInvite.status, "pending")),
+          byToken ? eq(recruiterInvite.id, byToken.id) : undefined,
+        ),
+      ),
+    )
+    .orderBy(recruiterInvite.id)
+    .for("update");
+  const enabled = await enabledCandidates(tx, candidateIds);
+  const now = Date.parse(input.nowIso);
+  const roles = rolesOf(account.roles);
+  const disabled = account.disabledAt !== null;
+  const decide = (invite: InviteForCompletion, emailVerified: boolean): InviteOutcome =>
+    inviteCompletion({
+      invite: {
+        status: invite.status as InviteStatus,
+        email: invite.email,
+        expiresAt: invite.expiresAt,
+        accessExpiresAt: invite.accessExpiresAt,
+      },
+      candidateEnabled: enabled.has(invite.candidateId),
+      account: { email, roles, disabled, emailVerified },
+      now,
+    });
+
+  // O link válido ao mesmo endereço prova a caixa de e-mail: quem o abriu o
+  // recebeu ali (ADR-018). Vale só para quem pediu a prova — o clique em
+  // "Aceitar e abrir" —, e só grava a data quando ela ainda falta.
+  let verified = account.emailVerifiedAt !== null;
+  const tokenInvite = byToken ? invites.find((invite) => invite.id === byToken.id) : undefined;
+  if (input.proveMailbox && !verified && tokenInvite !== undefined) {
+    const proof = decide(tokenInvite, true);
+    if (proof === "completed" || proof === "period_over") {
+      await tx
+        .update(authUser)
+        .set({ emailVerifiedAt: input.nowIso })
+        .where(and(eq(authUser.id, account.id), isNull(authUser.emailVerifiedAt)));
+      verified = true;
+    }
+  }
+
+  const draft: CompletionDraft = { cookie: noToken, completed: [], ended: [] };
+  for (const invite of invites) {
+    let outcome = decide(invite, verified);
+    if (outcome === "completed") {
+      const accepted = await acceptInvite(tx, invite, { id: account.id, email }, input.nowIso);
+      if (accepted === null) {
+        outcome = "invalid";
+      } else {
+        draft.ended.push(...accepted.ended);
+        if (accepted.granted) {
+          draft.completed.push({
+            recruiterEmail: email,
+            recruiterUserId: account.id,
+            recruiterLocale: account.locale,
+            candidateId: invite.candidateId,
+            candidateName: (await candidateFacts(tx, invite.candidateId)).name,
+            expiresAt: invite.accessExpiresAt,
+            expiryTz: invite.accessExpiresAt === null ? null : invite.expiryTz,
+          });
+        }
+      }
+    } else if (outcome === "period_over") {
+      await expireInviteOnArrival(tx, invite, input.nowIso);
+    }
+    if (byToken !== undefined && invite.id === byToken.id) {
+      draft.cookie = { outcome, candidateId: outcome === "completed" ? invite.candidateId : null };
+    }
+  }
+  return draft;
+}
+
 export const drizzleRecruiterAccess: RecruiterAccessStore = {
   async grantOrInvite(input) {
     const db = getDb();
@@ -682,7 +921,6 @@ export const drizzleRecruiterAccess: RecruiterAccessStore = {
         };
       }
 
-      if (!input.invites) return { ok: false as const, error: "invites_unavailable" as const, ended: stale.ended };
       if ((await livePendingInvites(tx, input.candidateId, input.nowIso)) >= PENDING_INVITE_CAP) {
         return { ok: false as const, error: "too_many_pending" as const, ended: stale.ended };
       }
@@ -1058,5 +1296,38 @@ export const drizzleRecruiterAccess: RecruiterAccessStore = {
     for (const { candidateId, ...grant } of grants) entry(candidateId).grants.push(grant);
     for (const { candidateId, ...invite } of invites) entry(candidateId).invites.push(invite);
     return out;
+  },
+
+  async findInvite(tokenHash) {
+    const db = getDb();
+    const [row] = await db
+      .select({
+        id: recruiterInvite.id,
+        candidateId: recruiterInvite.candidateId,
+        email: recruiterInvite.email,
+        status: recruiterInvite.status,
+        expiresAt: recruiterInvite.expiresAt,
+        accessExpiresAt: recruiterInvite.accessExpiresAt,
+        acceptedUserId: recruiterInvite.acceptedUserId,
+      })
+      .from(recruiterInvite)
+      .where(eq(recruiterInvite.tokenHash, tokenHash))
+      .limit(1);
+    if (!row) return null;
+    const facts = await candidateFacts(db, row.candidateId);
+    const enabled = await enabledCandidates(db, [row.candidateId]);
+    const lookup: InviteLookup = {
+      ...row,
+      status: row.status as InviteStatus,
+      candidateName: facts.name,
+      candidateEnabled: enabled.has(row.candidateId),
+    };
+    return lookup;
+  },
+
+  async completeInvites(input) {
+    const db = getDb();
+    const draft = await db.transaction((tx) => completeInvitesIn(tx, input));
+    return { ...draft, ended: await endedNotices(db, draft.ended, "expired") };
   },
 };

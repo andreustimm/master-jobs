@@ -283,10 +283,6 @@ try {
     // A lista de sinônimos é opt-in (#370); só o ambiente do harness a liga,
     // para a área `search-synonyms` provar o caminho ligado sem tocar o padrão.
     SEARCH_SYNONYMS_ENABLED: "1",
-    // O convite de recrutador fica desligado até `/signup/invite` existir
-    // (task_03 do #465); só o harness o liga, e só vale em `local`/`e2e`
-    // (`recruiterInvitesEnabled`), para a área `recruiter-access` provar o fluxo.
-    JHO_RECRUITER_INVITES: "on",
     E2E_BASE: base,
     E2E_RESET_EXPIRED_TOKEN: TASK04_FIXTURES.resetExpiredToken,
     E2E_RESET_CONSUMED_TOKEN: TASK04_FIXTURES.resetConsumedToken,
