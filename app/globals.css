@@ -110,8 +110,8 @@
    passaram a seguir o tema sem precisar ser reescritos um a um.
 
    Regra daqui para frente: componente lê `--background`, `--foreground`,
-   `--card`, `--primary`, `--border`, `--muted`, `--hairline`, `--good`,
-   `--warn`, `--bad`. Os apelidos existem para o código que já estava escrito.
+   `--card`, `--primary`, `--primary-hover`, `--border`, `--muted`,
+   `--hairline`, `--good`, `--warn`, `--bad`. Os apelidos existem para o código que já estava escrito.
    =========================================================================== */
 
 :root {
@@ -202,6 +202,7 @@ body {
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);

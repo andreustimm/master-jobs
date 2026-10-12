@@ -45,6 +45,14 @@
 
   --primary: #024ad8;
   --primary-foreground: #ffffff;
+  /* Preenchimento do botão primário sob o ponteiro (#501). Opaco e fixo por
+     tema/modo: `bg-primary/80` deixava o fundo REAL depender do que há atrás e
+     caía abaixo de 4,5:1 com o texto em cinco dos seis ambientes (huly 3,66–
+     4,16:1, graphy 3,50–4,16:1, hp escuro 4,25–4,44:1, medido). Aqui é o
+     `--primary` 12% em direção ao preto (claro) ou ao branco (escuro) — afasta
+     o fundo do texto, então o hover nunca contrasta menos que o repouso
+     (7,06:1 → 8,39:1 aqui). `tests/design.test.ts` mede os seis. */
+  --primary-hover: #0241be;
   --secondary: #f7f7f7;
   --secondary-foreground: #1a1a1a;
 
@@ -119,6 +127,8 @@
   /* Texto escuro sobre azul claro: 6.1:1. Branco sobre o mesmo azul dá
      4.48:1, abaixo do mínimo — medido, não estimado. */
   --primary-foreground: #0b0d10;
+  /* `--primary` 12% em direção ao branco: 6,97:1 com o texto (repouso 5,98:1). */
+  --primary-hover: #6299ff;
   --secondary: #1f232a;
   --secondary-foreground: #c8cbd2;
 
@@ -175,6 +185,8 @@
 
   --primary: #3a5fa8;
   --primary-foreground: #ffffff;
+  /* `--primary` 12% em direção ao preto: 7,40:1 com o texto (repouso 6,21:1). */
+  --primary-hover: #335494;
   --secondary: #f1f2f4;
   --secondary-foreground: #2a2d34;
 
@@ -226,6 +238,8 @@
   --primary: #5683da;
   /* 5.09:1 com o fundo escuro; branco daria 3.71:1. */
   --primary-foreground: #0f1114;
+  /* `--primary` 12% em direção ao branco: 6,10:1 com o texto (repouso 5,09:1). */
+  --primary-hover: #6a92de;
   --secondary: #1e2126;
   --secondary-foreground: #c9ccd3;
 
@@ -273,6 +287,8 @@
 
   --primary: #2e62ff;
   --primary-foreground: #ffffff;
+  /* `--primary` 12% em direção ao preto: 6,00:1 com o texto (repouso 4,88:1). */
+  --primary-hover: #2856e0;
   --secondary: #e2e9f6;
   --secondary-foreground: #20295a;
 
@@ -336,6 +352,8 @@
   --primary: #5b83ff;
   /* 5.52:1; branco daria 3.42:1. */
   --primary-foreground: #0d1020;
+  /* `--primary` 12% em direção ao branco: 6,50:1 com o texto (repouso 5,52:1). */
+  --primary-hover: #6f92ff;
   --secondary: #1d2238;
   --secondary-foreground: #c3c9dd;
 
@@ -387,6 +405,7 @@
     /* Igual à escolha explícita: o #296ef9 dava 4,34:1 com o texto (#494). */
     --primary: #4d8bff;
     --primary-foreground: #0b0d10;
+    --primary-hover: #6299ff;
     --secondary: #1f232a;
     --secondary-foreground: #c8cbd2;
     --muted: #1f232a;
@@ -419,6 +438,7 @@
     --popover-foreground: #f2f3f5;
     --primary: #5683da;
     --primary-foreground: #0f1114;
+    --primary-hover: #6a92de;
     --secondary: #1e2126;
     --secondary-foreground: #c9ccd3;
     --muted: #1e2126;
@@ -451,6 +471,7 @@
     --popover-foreground: #e8ebf5;
     --primary: #5b83ff;
     --primary-foreground: #0d1020;
+    --primary-hover: #6f92ff;
     --secondary: #1d2238;
     --secondary-foreground: #c3c9dd;
     --muted: #1d2238;

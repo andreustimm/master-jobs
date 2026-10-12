@@ -6,8 +6,8 @@ persona: Andreus em triagem
 journey: J-trust-the-filtered-board
 expected: A página da vaga mostra disponível com a data da última checagem quando a verificação respondeu; disponibilidade desconhecida quando nunca foi conferida; vencida quando a checagem tem mais de 14 dias; encerrada na origem depois de um 404/410, com o histórico da candidatura ainda visível; o estado sobrevive a recarga e cabe em 375 px
 entry_points: /jobs/<id>
-qa_status: pass
-bug_ids:
+qa_status: untested
+bug_ids: BUG-20261007-job-history-day-in-utc
 fix_status:
 retest_status:
 fix_commits:
@@ -44,6 +44,15 @@ e "encerrada — saiu da listagem da fonte" para fechamento pelo sync
   (`data-availability="stale"`), sobrevive a `reload`, enquanto `/jobs/19`
   continua "disponível".
 - Os dois estados cabem em 375 px (sem rolagem horizontal).
+
+**Reset 2026-10-11 (#500):** o "conferido em" passou a sair pela ilha
+`LocalDate`, no fuso de quem lê e com o dia por extenso do idioma da tela
+("conferido em 11 de out. de 2026" em vez de `2026-10-11`). Conferir de novo,
+com refresh: a mesma checagem mostra o mesmo dia que o histórico e o "visto em"
+da vaga, e, com o navegador em `America/Sao_Paulo`, uma checagem às 00:00 UTC de
+1/1 aparece como 31/12. Prova automática (não substitui a jornada): E2E-004 e
+E2E-500 da área `job-availability`. As observações acima ficam como histórico
+da rodada de 01/10, com o formato antigo da data.
 
 **Fora desta rodada, continua com o dono:** reabrir `/jobs/42` autenticado
 como `andreus@zorbit.com.br` para confirmar o histórico de candidatura visível

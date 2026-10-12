@@ -11,8 +11,11 @@ export const PIPELINE_FILTER_FIXTURE = Object.freeze({
   email: "e2e-funil-filtros@local.test",
   companies: Object.freeze({ alpha: "Funnel Filter Alpha", beta: "Funnel Filter Beta" }),
   jobs: Object.freeze([
-    // Aplicada às 23:45 de 6/10 em São Paulo, que em UTC já é 7/10 (#494).
-    { id: 908000000, title: "Backend Engineer Funnel Fixture", company: "alpha", fit: 85, status: "applied", channel: "referral", appliedAt: "2026-10-07T02:45:00.000Z" },
+    // Aplicada às 23:45 de 6/10 em São Paulo, que em UTC já é 7/10 (#494). O
+    // histórico do detalhe (#500) usa o mesmo instante, e a vaga foi vista às
+    // 22:30 de 5/10 em São Paulo, que em UTC já é 6/10: as duas datas de
+    // `/jobs/<id>` só saem certas no fuso de quem lê.
+    { id: 908000000, title: "Backend Engineer Funnel Fixture", company: "alpha", fit: 85, status: "applied", channel: "referral", appliedAt: "2026-10-07T02:45:00.000Z", firstSeenAt: "2026-10-06T01:30:00.000Z" },
     { id: 908000001, title: "Engenheiro Funnel Fixture", company: "alpha", fit: 40, status: "shortlisted", channel: "direct" },
     { id: 908000002, title: "Platform Funnel Fixture", company: "beta", fit: 70, status: "applied", channel: "direct" },
   ]),

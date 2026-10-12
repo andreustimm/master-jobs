@@ -273,6 +273,7 @@
       "routes": [
         "/login",
         "/jobs",
+        "/jobs/[id]",
         "/pipeline"
       ]
     },
