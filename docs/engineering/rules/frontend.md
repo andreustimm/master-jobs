@@ -72,7 +72,10 @@ Origem: regra 9. Critério de revisão.
 ## G32 — Componente lê só token semântico (regra 10)
 
 **Obrigação.** Componente usa token semântico: `--background`,
-`--foreground`, `--card`, `--primary` (superfície de botão), `--primary-text`
+`--foreground`, `--card`, `--primary` (superfície de botão), `--primary-hover`
+(a mesma superfície sob o ponteiro: opaca, por tema e modo, medida contra
+`--primary-foreground` em `tests/design.test.ts` — nunca `bg-primary/80`, que
+depende do que há atrás e caiu abaixo de 4,5:1, #501), `--primary-text`
 (link e texto de acento — contrasta com o FUNDO, não com o botão), `--border`,
 `--muted`, `--hairline`, `--good`, `--warn`, `--warn-text` (texto de aviso —
 mesma lógica do `--primary-text`: `--warn` sozinho não chega em 4.5:1 em todo
