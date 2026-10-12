@@ -855,6 +855,7 @@
       ],
       "routes": [
         "/",
+        "/account",
         "/candidate",
         "/jobs",
         "/login"
