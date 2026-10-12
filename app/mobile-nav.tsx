@@ -100,7 +100,7 @@ export function MobileNav({
   canCreateProfile: boolean;
   isAdmin: boolean;
   isRecruiter: boolean;
-  pendingSuggestions: number;
+  pendingSuggestions: number | null;
   rotulo: string;
   locale: LocaleId;
 }) {

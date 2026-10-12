@@ -10,8 +10,9 @@
  *               da revogação da Ana (E2E-021);
  *   recruiter — "Rui E2E", com acesso aos dois.
  *
- * As vagas têm ids fixos fora das faixas das outras fixtures. "Backend" é o
- * texto que a busca da tela de sugerir usa (E2E-018).
+ * As vagas têm ids fixos na faixa 909000000, que nenhuma outra fixture usa
+ * (`pipeline-filters` ocupa a 908000000). "Backend" é o texto que a busca da
+ * tela de sugerir usa (E2E-018).
  */
 export const SUGGESTION_FIXTURES = {
   candidate: { email: "e2e-ana-sugestoes@local.test", roles: ["candidate"], name: "Ana E2E" },
@@ -19,8 +20,8 @@ export const SUGGESTION_FIXTURES = {
   recruiter: { email: "e2e-rui-sugestoes@local.test", roles: ["recruiter"], fullName: "Rui E2E" },
   cv: "# Ana E2E\n\nEngenheira de backend com TypeScript, PostgreSQL e sistemas distribuídos.\n\n## Experiência\n\n- Plataforma de pagamentos, 2021–2026.",
   jobs: {
-    suggested: { id: 908000001, title: "Backend Suggestion Fixture", companyName: "Suggestion Lab" },
-    pending: { id: 908000002, title: "Backend Pending Fixture", companyName: "Suggestion Lab" },
-    funnel: { id: 908000003, title: "Funnel Suggestion Fixture", companyName: "Funnel Lab" },
+    suggested: { id: 909000001, title: "Backend Suggestion Fixture", companyName: "Suggestion Lab" },
+    pending: { id: 909000002, title: "Backend Pending Fixture", companyName: "Suggestion Lab" },
+    funnel: { id: 909000003, title: "Funnel Suggestion Fixture", companyName: "Funnel Lab" },
   },
 };

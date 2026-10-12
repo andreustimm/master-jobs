@@ -223,10 +223,16 @@ export async function candidateSuggestionsFor(session: Session, rawPage: string 
   );
 }
 
-/** Quantas sugestões esperam o candidato desta sessão; sem candidato, zero (US-020.AC-3). */
-export async function pendingSuggestionCount(session: Session | null): Promise<number> {
+/**
+ * O que a navegação mostra (US-020.AC-3): `null` para quem não tem sugestão
+ * nenhuma — sem candidato ou sem recrutador que tenha sugerido —, e então o
+ * link fica fora da barra; senão, quantas esperam o candidato desta sessão.
+ */
+export async function pendingSuggestionCount(session: Session | null): Promise<number | null> {
   const candidateId = candidateScope(session);
-  return candidateId === null ? 0 : drizzleRecruiterSuggestions.pendingCount(candidateId);
+  if (candidateId === null) return null;
+  const counts = await drizzleRecruiterSuggestions.counts(candidateId);
+  return counts.total === 0 ? null : counts.pending;
 }
 
 /* ------------------------------- Varredura -------------------------------- */

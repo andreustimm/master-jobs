@@ -30,8 +30,11 @@ export function NavLinks({
   canCreateProfile: boolean;
   isAdmin: boolean;
   isRecruiter: boolean;
-  /** Sugestões de recrutador esperando a decisão do candidato (US-020.AC-3). */
-  pendingSuggestions: number;
+  /**
+   * Sugestões de recrutador esperando a decisão do candidato (US-020.AC-3);
+   * `null` para quem nunca recebeu sugestão, e o link não aparece.
+   */
+  pendingSuggestions: number | null;
   linkClass: string;
   t: Translator["t"];
 }) {
@@ -55,7 +58,7 @@ export function NavLinks({
           {t("nav.pipeline")}
         </TransitionLink>
       )}
-      {hasCandidateScope && (
+      {hasCandidateScope && pendingSuggestions !== null && (
         <TransitionLink href="/suggestions" className={linkClass} data-testid="nav-suggestions">
           {t("suggestions.nav")}
           {pendingSuggestions > 0 && (

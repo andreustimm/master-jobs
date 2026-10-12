@@ -485,13 +485,16 @@ export const drizzleRecruiterSuggestions = {
     };
   },
 
-  /** Quantas sugestões esperam a decisão do candidato (a contagem da navegação). */
-  async pendingCount(candidateId: number): Promise<number> {
+  /** Quantas sugestões o candidato tem e quantas esperam a decisão dele (a navegação). */
+  async counts(candidateId: number): Promise<{ pending: number; total: number }> {
     const [row] = await getDb()
-      .select({ n: count() })
+      .select({
+        pending: sql<number>`count(*) filter (where ${recruiterSuggestion.status} = 'pending')`.mapWith(Number),
+        total: count(),
+      })
       .from(recruiterSuggestion)
-      .where(and(eq(recruiterSuggestion.candidateId, candidateId), eq(recruiterSuggestion.status, "pending")));
-    return Number(row!.n);
+      .where(eq(recruiterSuggestion.candidateId, candidateId));
+    return { pending: row!.pending, total: Number(row!.total) };
   },
 
   /**

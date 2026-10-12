@@ -664,8 +664,15 @@ describe("a tela do candidato", () => {
     }
     await seedSuggestion({ recruiter: rui, grantId: null, jobId: await seedJob(), candidateId: bruno });
     expect(await pendingSuggestionCount(await session(anaUser.token))).toBe(3);
-    expect(await pendingSuggestionCount(await session(rui.token))).toBe(0);
-    expect(await pendingSuggestionCount(null)).toBe(0);
+    // Sem sugestão nenhuma, ou sem candidato, o link não entra na navegação.
+    expect(await pendingSuggestionCount(await session(rui.token))).toBeNull();
+    expect(await pendingSuggestionCount(null)).toBeNull();
+    const carla = await ensureCandidate({ slug: "carla", name: "Carla" });
+    const carlaUser = await login("carla@x.com", ["candidate"], carla);
+    expect(await pendingSuggestionCount(await session(carlaUser.token))).toBeNull();
+    // Decididas todas, o link fica, com zero pendentes.
+    await db.update(recruiterSuggestion).set({ status: "declined", decidedAt: T0 }).where(eq(recruiterSuggestion.candidateId, ana));
+    expect(await pendingSuggestionCount(await session(anaUser.token))).toBe(0);
   });
 });
 
