@@ -182,6 +182,10 @@ describe("resolveGitTarget: o contexto vem do próprio git", () => {
       ["remote.origin.mirror", "true"],
       ["push.followTags", "true"],
       ["remote.origin.fetch", "+refs/heads/dev:refs/remotes/origin/feat/x"],
+      // #505: o remoto de push trocado por configuração, e a URL de push reescrita.
+      ["remote.pushDefault", "fork"],
+      ["branch.feat/x.pushRemote", "fork"],
+      ["url.https://x.test/.pushInsteadOf", "https://y.test/"],
     ];
     for (const [key, value] of settings) {
       git(root, "config", "--add", key, value);
@@ -235,6 +239,45 @@ describe("os três chamadores dão a mesma decisão", () => {
     ["commit --no-verify", () => "git commit --no-verify -m x", () => wt, "pass"],
     ["rebase", () => "git rebase origin/dev", () => wt, "pass"],
     ["branch -D de trabalho", () => "git branch -D feat/velha", () => wt, "pass"],
+    // #475: o prefixo único de opção longa vale como a opção completa, com o
+    // contexto real do git: passa onde a forma completa passa, pergunta onde ela pergunta.
+    ["push --force-with abreviado com refspec de trabalho", () => "git push --force-with origin feat/x", () => wt, "pass"],
+    ["push --no-veri abreviado", () => "git push --no-veri", () => wt, "pass"],
+    ["push --delet abreviado de branch de trabalho", () => "git push origin --delet feat/velha", () => wt, "pass"],
+    ["reset --har abreviado", () => `git -C ${wt} reset --har origin/dev`, () => root, "pass"],
+    ["checkout --forc abreviado", () => "git checkout --forc", () => wt, "pass"],
+    ["switch --discard abreviado", () => "git switch --discard feat/x", () => wt, "pass"],
+    ["push --force-with abreviado de outro branch a partir da principal", () => "git push --force-with origin feat/x", () => root, "ask"],
+    ["push --follow abreviado forçado", () => "git push --follow --force-with origin feat/x", () => wt, "ask"],
+    ["push --mirro abreviado", () => "git push --mirro", () => wt, "ask"],
+    ["push --al abreviado", () => "git push --al", () => wt, "ask"],
+    ["push --prun abreviado", () => "git push --prun origin feat/x", () => wt, "ask"],
+    ["reset --har abreviado na principal", () => "git reset --har", () => root, "ask"],
+    ["reset --har abreviado por -C na principal", () => `git -C ${root} reset --har`, () => wt, "ask"],
+    ["clean --dr -fd (dry-run abreviado) na principal", () => "git clean --dr -fd", () => root, "pass"],
+    ["clean -fd na principal", () => "git clean -fd", () => root, "ask"],
+    ["checkout --forc abreviado na principal", () => "git checkout --forc", () => root, "ask"],
+    ["switch --discard abreviado na principal", () => "git switch --discard feat/x", () => root, "ask"],
+    ["restore --staged --work abreviado na principal", () => "git restore --staged --work a.txt", () => root, "ask"],
+    ["rm --forc abreviado na principal", () => "git rm --forc a.txt", () => root, "ask"],
+    ["worktree remove --forc abreviado de fora", () => `git worktree remove --forc ${base}/fora`, () => root, "ask"],
+    ["worktree remove --forc abreviado de worktree de trabalho", () => "git worktree remove --forc .claude/worktrees/feat-x", () => root, "pass"],
+    // #505: o `git push -u origin <tipo>/<slug>` da rotina continua passando.
+    ["push -u de rotina com upstream origin/dev", () => "git push -u origin feat/up", () => wtUp, "pass"],
+    ["push -u de rotina com upstream próprio", () => "git push -u origin feat/x", () => wt, "pass"],
+    ["push --set-upstream de rotina", () => "git push --set-upstream origin feat/up", () => wtUp, "pass"],
+    ["leitura da configuração do push", () => "git config --get remote.origin.push", () => wt, "pass"],
+    ["leitura de push.default", () => "git config --get push.default", () => wt, "pass"],
+    // #505: gravar a configuração que desvia o destino do push pergunta (o push
+    // seguinte é provado com o git de verdade no bloco abaixo).
+    ["config remote.origin.push com destino dev", () => "git config remote.origin.push refs/heads/feat/up:refs/heads/dev", () => wtUp, "ask"],
+    ["config push.default upstream", () => "git config push.default upstream", () => wtUp, "ask"],
+    ["config branch.<b>.merge", () => "git config branch.feat/x.merge refs/heads/dev", () => wt, "ask"],
+    ["config branch.<b>.pushRemote", () => "git config branch.feat/x.pushRemote fork", () => wt, "ask"],
+    ["config remote.pushDefault", () => "git config remote.pushDefault fork", () => wt, "ask"],
+    ["config url.*.pushInsteadOf", () => "git config url.https://x.test/.pushInsteadOf https://y.test/", () => wt, "ask"],
+    ["config --unset de remote.origin.push", () => "git config --unset remote.origin.push", () => wt, "ask"],
+    ["config --file do projeto com remote.origin.push", () => `git config --file ${root}/.git/config remote.origin.push HEAD:main`, () => wt, "ask"],
     // Refspec sem `:` que não é o branch atual: o git o resolve localmente
     // (ref simbólica, upstream), então o destino forçado não é conhecido.
     ["push forçado de outro branch a partir da principal", () => "git push --force origin feat/x", () => root, "ask"],
@@ -352,5 +395,135 @@ describe("o push liberado vai mesmo para o branch de trabalho", () => {
     git(root, "-C", wt, "push");
     expect(remoteRef("feat/x")).toBe(git(wt, "rev-parse", "HEAD"));
     expect({ dev: remoteRef("dev"), staging: remoteRef("staging"), main: remoteRef("main") }).toEqual(before);
+  });
+});
+
+describe("configuração persistida que desvia o push (#505)", () => {
+  let fork = "";
+
+  beforeAll(() => {
+    // Outro remoto, para o `remote.pushDefault` e o `pushRemote` terem para onde ir.
+    fork = join(base, "fork.git");
+    git(base, "init", "--bare", "-b", "main", fork);
+    git(root, "remote", "add", "fork", fork);
+  });
+
+  afterAll(() => {
+    git(root, "remote", "remove", "fork");
+  });
+
+  /**
+   * Os dois passos do achado: gravar a configuração (pergunta) e, com ela
+   * persistida, empurrar (pergunta). O git de verdade, em `--dry-run`, diz
+   * para onde o push iria — nos dois primeiros, `dev`.
+   */
+  const persisted: Array<{
+    name: string;
+    settings: () => Array<[key: string, value: string]>;
+    cwd: () => string;
+    push: string;
+    dryRun: string[];
+    reaches: () => string;
+  }> = [
+    {
+      name: "remote.<r>.push leva feat/up para dev",
+      settings: () => [["remote.origin.push", "refs/heads/feat/up:refs/heads/dev"]],
+      cwd: () => wtUp,
+      push: "git push origin feat/up",
+      dryRun: ["push", "--dry-run", "--porcelain", "origin", "feat/up"],
+      reaches: () => "refs/heads/feat/up:refs/heads/dev",
+    },
+    {
+      name: "push.default=upstream com upstream origin/dev",
+      settings: () => [["push.default", "upstream"]],
+      cwd: () => wtUp,
+      push: "git push origin feat/up",
+      dryRun: ["push", "--dry-run", "--porcelain", "origin", "feat/up"],
+      reaches: () => "refs/heads/feat/up:refs/heads/dev",
+    },
+    {
+      name: "branch.<b>.merge para dev e push.default=upstream",
+      settings: () => [
+        ["branch.feat/x.merge", "refs/heads/dev"],
+        ["push.default", "upstream"],
+      ],
+      cwd: () => wt,
+      push: "git push origin feat/x",
+      dryRun: ["push", "--dry-run", "--porcelain", "origin", "feat/x"],
+      reaches: () => "refs/heads/feat/x:refs/heads/dev",
+    },
+    {
+      name: "remote.pushDefault leva o push sem remoto para outro repositório",
+      settings: () => [["remote.pushDefault", "fork"]],
+      cwd: () => wt,
+      push: "git push",
+      dryRun: ["push", "--dry-run", "--porcelain"],
+      reaches: () => fork,
+    },
+    {
+      name: "branch.<b>.pushRemote leva o push sem remoto para outro repositório",
+      settings: () => [["branch.feat/x.pushRemote", "fork"]],
+      cwd: () => wt,
+      push: "git push",
+      dryRun: ["push", "--dry-run", "--porcelain"],
+      reaches: () => fork,
+    },
+    {
+      name: "url.*.pushInsteadOf leva o remoto escrito para outro repositório",
+      settings: () => [[`url.${fork}.pushInsteadOf`, remote]],
+      cwd: () => wt,
+      push: "git push origin feat/x",
+      dryRun: ["push", "--dry-run", "--porcelain", "origin", "feat/x"],
+      reaches: () => fork,
+    },
+  ];
+
+  /** Grava a chave como o git a gravaria e devolve quem a restaura (o valor anterior, se havia). */
+  function persist(key: string, value: string): () => void {
+    const before = spawnSync("git", ["-C", root, "config", "--get-all", key], { encoding: "utf8" });
+    const previous = before.status === 0 ? before.stdout.split("\n").filter((line) => line !== "") : [];
+    git(root, "config", "--replace-all", key, value);
+    return () => {
+      git(root, "config", "--unset-all", key);
+      for (const old of previous) git(root, "config", "--add", key, old);
+    };
+  }
+
+  it.each(persisted.map((entry) => [entry.name, entry] as const))("%s", async (_name, entry) => {
+    const cwd = entry.cwd();
+    // Passo 1: gravar a chave pergunta nos três harnesses.
+    for (const [key, value] of entry.settings()) {
+      const write = `git config ${key} ${value}`;
+      expect(await decisions(write, cwd), write).toEqual(["ask", "ask", "ask"]);
+    }
+    // Sem a configuração, o push da rotina passa.
+    expect(await decisions(entry.push, cwd), entry.push).toEqual(["pass", "pass", "pass"]);
+    expect(dryRun(cwd, entry.dryRun)).not.toContain(entry.reaches());
+    // Passo 2: com ela persistida (gravada direto, fora da guarda), o push pergunta.
+    const restores = entry.settings().map(([key, value]) => persist(key, value));
+    try {
+      expect(dryRun(cwd, entry.dryRun), `o git de verdade leva o push para ${entry.reaches()}`).toContain(entry.reaches());
+      expect(await decisions(entry.push, cwd), entry.push).toEqual(["ask", "ask", "ask"]);
+    } finally {
+      for (const restore of restores.reverse()) restore();
+    }
+    expect(await decisions(entry.push, cwd), entry.push).toEqual(["pass", "pass", "pass"]);
+  });
+
+  it("a rotina continua passando com a configuração do dia a dia", async () => {
+    // Descrição e `rebase` do branch e `insteadOf` (reescreve fetch e push do mesmo jeito) não desviam o destino.
+    const restores = [
+      persist("branch.feat/x.description", "trabalho"),
+      persist("branch.feat/x.rebase", "true"),
+      persist(`url.${fork}.insteadOf`, "https://exemplo.invalid/"),
+    ];
+    try {
+      expect(await decisions("git push -u origin feat/x", wt)).toEqual(["pass", "pass", "pass"]);
+      expect(await decisions("git push", wt)).toEqual(["pass", "pass", "pass"]);
+      expect(await decisions(`git -C ${wt} push`, root)).toEqual(["pass", "pass", "pass"]);
+      expect(resolveGitTarget("git push", { cwd: wt })?.push?.safe).toBe(true);
+    } finally {
+      for (const restore of restores.reverse()) restore();
+    }
   });
 });

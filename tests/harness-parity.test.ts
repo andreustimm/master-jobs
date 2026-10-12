@@ -424,6 +424,25 @@ const RISKY: readonly [string, Decision][] = [
   ["git checkout src/", "ask"],
   ["git push origin :refs/tags/v1", "ask"],
   ["git push --delete origin v1.0.0", "ask"],
+  // #475: o git aceita o prefixo único de opção longa; a abreviada pergunta
+  // como a completa, nos três harnesses.
+  ["git reset --har", "ask"],
+  ["git push --force-with origin fix/x", "ask"],
+  ["git push --delet origin v1.0.0", "ask"],
+  ["git worktree remove --forc /tmp/wt", "ask"],
+  ["git switch --discard main", "ask"],
+  ["git checkout --forc main", "ask"],
+  ["git restore --staged --work a.txt", "ask"],
+  ["git tag --dele v1.2.3", "ask"],
+  ["git gc --prun=now", "ask"],
+  ["git config --glo user.name x", "ask"],
+  ['git rebase --exe "git push origin main" HEAD~3', "deny"],
+  // #505: gravar a configuração que desvia o destino do push pergunta.
+  ["git config remote.origin.push refs/heads/feat/x:refs/heads/dev", "ask"],
+  ["git config push.default upstream", "ask"],
+  ["git config branch.feat/x.pushRemote fork", "ask"],
+  ["git config remote.pushDefault fork", "ask"],
+  ["git config url.https://x.test/.pushInsteadOf https://y.test/", "ask"],
 ];
 
 /** A rotina que precisa passar sem pergunta nos três. */
@@ -471,6 +490,11 @@ const ROUTINE: readonly string[] = [
   "for f in a; do echo $f; done | grep a",
   "git push origin --delete feat/x",
   "git config user.name x",
+  "git config --get remote.origin.push",
+  "git config --get push.default",
+  "git fetch --prune origin",
+  "git clean --dr -fd",
+  "git worktree remove --forc .claude/worktrees/x",
   "node --run build",
   // Revisão da #462 (terceira rodada): reescrever commit local é rotina (G85),
   // escrita no temporário e no projeto passa, e todo `gh` passa (dono).

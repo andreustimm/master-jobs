@@ -617,7 +617,8 @@ function readOnlyGit(args) {
     case "worktree":
       return rest[0] === "list";
     case "branch":
-      return readOnlyBranch(rest);
+      // `--set-upstream-t=…`, `--unset-u`, `--edit-d` escrevem como a forma completa (#475).
+      return readOnlyBranch(expandGitOptions("branch", rest));
     default:
       return false;
   }
@@ -1398,6 +1399,95 @@ function judgeChmod(args) {
 
 const GIT_GLOBAL_VALUE = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--super-prefix", "--list-cmds"]);
 
+// ---------------------------------------------------------------------------
+// Opção longa abreviada do git (#475)
+
+/**
+ * O git aceita o prefixo único de uma opção longa (`reset --har`, `switch
+ * --discard`, `tag --dele`, `worktree remove --forc`, `config --glo`): a forma
+ * abreviada age como a completa, e o classificador só reconhecia a completa —
+ * a abreviada passava sem pergunta. Por subcomando, as opções longas que o
+ * classificador lê, nas duas direções (as que escrevem e as que liberam, como
+ * `clean --dry-run`, `rm --cached`, `restore --staged`), na ordem do mais
+ * perigoso ao menos: o prefixo que casa mais de uma (`--f` em `push`) o git
+ * recusa como ambíguo, e aqui vale a primeira.
+ *
+ * Opção exata do git que prefixa outra da tabela entra também, como
+ * `fetch --prune`, que prefixa `--prune-tags`: a forma exata vence a
+ * abreviação, e sem ela a rotina perguntaria. Opção que o git lê pelo analisador
+ * de diff (`--output`, `--ext-diff`, `--textconv`) e as opções globais
+ * (`--git-dir`, `--no-pager`) não aceitam abreviação e ficam de fora.
+ */
+const PUSH_OPTIONS = [
+  "--force", "--force-with-lease", "--force-if-includes", "--delete", "--mirror", "--all", "--branches", "--prune",
+  "--no-verify", "--tags", "--follow-tags", "--repo", "--receive-pack", "--exec", "--push-option", "--stdin",
+];
+
+const GIT_LONG_OPTIONS = {
+  push: PUSH_OPTIONS,
+  "send-pack": PUSH_OPTIONS,
+  "http-push": PUSH_OPTIONS,
+  worktree: ["--force", "--orphan", "--reason"],
+  reset: ["--hard", "--merge"],
+  clean: ["--dry-run"],
+  checkout: ["--force", "--pathspec-from-file", "--orphan", "--ignore-other-worktrees"],
+  switch: ["--force", "--discard-changes", "--ignore-other-worktrees", "--force-create", "--create", "--orphan"],
+  restore: ["--worktree", "--staged"],
+  rm: ["--force", "--cached"],
+  tag: ["--force", "--delete", "--message", "--file", "--local-user"],
+  branch: [
+    "--force", "--delete", "--move", "--copy", "--set-upstream-to", "--unset-upstream", "--edit-description", "--track", "--no-track",
+    "--create-reflog", "--list", "--show-current", "--contains", "--no-contains", "--merged", "--no-merged", "--points-at", "--sort", "--format",
+  ],
+  fetch: ["--prune-tags", "--force", "--tags", "--refmap", "--prune"],
+  pull: ["--prune-tags", "--force", "--tags", "--refmap", "--prune"],
+  gc: ["--prune"],
+  commit: [
+    "--no-verify", "--message", "--file", "--reuse-message", "--reedit-message", "--template", "--author", "--date", "--fixup",
+    "--squash", "--trailer", "--cleanup",
+  ],
+  rebase: ["--exec"],
+  difftool: ["--extcmd"],
+  "symbolic-ref": ["--delete"],
+  "update-ref": ["--stdin"],
+  config: [
+    "--global", "--system", "--file", "--edit", "--add", "--replace-all", "--unset-all", "--unset", "--rename-section", "--remove-section",
+    "--get-all", "--get-regexp", "--get-urlmatch", "--get-color", "--get-colorbool", "--get", "--list", "--show-origin", "--show-scope",
+    "--name-only", "--blob", "--type", "--default", "--comment", "--value",
+  ],
+};
+
+/**
+ * Troca cada opção longa abreviada pela completa do subcomando (`--har` →
+ * `--hard`, `--forc=x` → `--force=x`), antes de o git ser julgado; o valor
+ * depois de `=` e tudo depois de `--` ficam como estão. A forma exata vence a
+ * abreviação; a que não prefixa nenhuma opção da tabela passa intacta.
+ * @param {string | undefined} sub
+ * @param {string[]} args
+ * @returns {string[]}
+ */
+function expandGitOptions(sub, args) {
+  if (typeof sub !== "string" || !Object.hasOwn(GIT_LONG_OPTIONS, sub)) return args;
+  const known = GIT_LONG_OPTIONS[/** @type {keyof typeof GIT_LONG_OPTIONS} */ (sub)];
+  const out = [];
+  for (let k = 0; k < args.length; k++) {
+    const arg = args[k];
+    if (arg === "--") {
+      out.push(...args.slice(k));
+      break;
+    }
+    if (!arg.startsWith("--")) {
+      out.push(arg);
+      continue;
+    }
+    const eq = arg.indexOf("=");
+    const name = eq === -1 ? arg : arg.slice(0, eq);
+    const full = name.length > 2 && !known.includes(name) ? known.find((option) => option.startsWith(name)) : undefined;
+    out.push(full === undefined ? arg : `${full}${eq === -1 ? "" : arg.slice(eq)}`);
+  }
+  return out;
+}
+
 /**
  * `git`: tira as opções globais (`-C dir`, `-c k=v`, `--git-dir`,
  * `--no-pager`…) antes de olhar o subcomando — `git -c x=y push origin main`
@@ -1437,11 +1527,14 @@ function judgeGit(args, context) {
     if (GIT_EXEC_KEY.test(key)) worst = stronger(worst, ask(`git -c ${key} executa programa ou desliga os hooks`));
     if (key.startsWith("alias.") && value.trimStart().startsWith("!")) worst = stronger(worst, ask("alias do git que roda shell"));
     // `remote.<r>.push`, `push.default=upstream`, `branch.<b>.merge`, `url.*.pushInsteadOf`:
-    // trocam o destino do push por fora do refspec que se lê (#476).
-    if (/^(?:push|remote|branch|url)\./.test(key)) worst = stronger(worst, ask(`git -c ${key} pode trocar o destino do push`));
+    // trocam o destino do push por fora do refspec que se lê (#476). Também
+    // `include.path`, que carrega um arquivo com qualquer uma delas (#505).
+    if (/^(?:push|remote|branch|url)\./.test(key) || GIT_PUSH_KEY.test(key)) worst = stronger(worst, ask(`git -c ${key} pode trocar o destino do push`));
   }
   const sub = args[k];
-  const rest = args.slice(k + 1);
+  // A opção longa abreviada vale como a completa (#475): todo julgamento
+  // abaixo lê a forma completa.
+  const rest = expandGitOptions(sub, args.slice(k + 1));
   const env = context.env ?? NO_ENV;
   // O repositório fora do projeto (e fora do temporário): o que não só lê pergunta.
   if (sub !== undefined && !GIT_READ_SUBCOMMANDS.has(sub)) {
@@ -1685,9 +1778,24 @@ const CONFIG_VALUE = new Set(["-f", "--file", "--blob", "--type", "--default", "
 const CONFIG_WRITE = new Set(["--add", "--replace-all", "--unset", "--unset-all", "--rename-section", "--remove-section"]);
 
 /**
+ * Chaves de configuração do git que decidem para onde o push vai (#505), em
+ * minúsculas: `push.*` (`default`, `followTags`…), `remote.*` (`<r>.push`,
+ * `<r>.url`, `<r>.mirror`, `pushDefault`…), `url.<base>.insteadOf` e
+ * `.pushInsteadOf`, e `branch.<b>.merge`/`.remote`/`.pushRemote` (o upstream e
+ * o remoto de push), além de `include.path`/`includeIf.*.path`, que carregam
+ * outro arquivo com qualquer uma delas. Gravada, a chave persiste: o `git push
+ * origin feat/x` seguinte vai para onde ela manda, sem que o refspec diga —
+ * `remote.origin.push=refs/heads/feat/x:refs/heads/dev` empurra `dev`. O `-c`
+ * dessas chaves já perguntava (#476); `branch.<b>.description`, `.rebase` e o
+ * resto de `branch.*` não desviam nada e passam.
+ */
+const GIT_PUSH_KEY = /^(?:push\..+|remote\..+|url\..+\.(?:push)?insteadof|branch\..+\.(?:merge|remote|pushremote)|include\.path|includeif\..+\.path)$/;
+
+/**
  * `git config` que grava chave que executa programa (`core.pager`,
- * `core.hooksPath`…) ou qualquer `alias.*`: o efeito persiste depois da
- * chamada. Leitura (`--get`, `--list`, `get`, `list`) não pergunta.
+ * `core.hooksPath`…), qualquer `alias.*` ou chave que desvia o destino do
+ * push (`GIT_PUSH_KEY`): o efeito persiste depois da chamada. Leitura
+ * (`--get`, `--list`, `get`, `list`) não pergunta.
  */
 function judgeGitConfig(rest, context) {
   const positional = [];
@@ -1718,6 +1826,7 @@ function judgeGitConfig(rest, context) {
   }
   if (GIT_EXEC_KEY.test(key)) return ask(`git config ${key} executa programa ou desliga os hooks`);
   if (key.startsWith("alias.") || key === "alias") return ask("git config alias.* cria comando do git");
+  if (GIT_PUSH_KEY.test(key)) return ask(`git config ${key} pode trocar o destino do push`);
   return null;
 }
 

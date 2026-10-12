@@ -741,7 +741,8 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     três chamadores, roda `git rev-parse` (raiz, diretório comum, branch),
     `git worktree list` e, no push, `rev-parse @{push}` e a configuração
     (`push.default` de um branch só, sem `remote.*.push`, `remote.*.mirror`,
-    `push.followTags` nem `remote.<r>.fetch` fora do padrão), com teto de
+    `push.followTags`, `remote.pushDefault`, `branch.<b>.pushRemote`,
+    `url.*.pushInsteadOf` nem `remote.<r>.fetch` fora do padrão), com teto de
     1,5 s; erro ou estouro devolvem `null`. A política (`shell-policy.mjs`)
     só usa o resultado quando o comando é um `git` simples
     (`plainGitCommand`: um comando, sem laço, pipe, substituição, curinga,
@@ -771,6 +772,48 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
     OpenCode o informa. Em qualquer contexto, `-c`/`--config-env` de
     `push.*`, `remote.*`, `branch.*` ou `url.*` pergunta: troca o destino do
     push por fora do refspec que se lê.
+  - **Configuração persistida do push (#505).** A mesma troca de destino
+    vale gravada: `git config` (também `--add`, `--unset`, `--replace-all`,
+    `set`/`unset`, `--file` do projeto) de `push.*`, `remote.*` (`<r>.push`,
+    `<r>.url`, `<r>.mirror`, `pushDefault`…), `url.*.insteadOf` e
+    `.pushInsteadOf`, `branch.<b>.merge`/`.remote`/`.pushRemote` e
+    `include.path`/`includeIf.*.path` (que carrega outro arquivo com elas)
+    pergunta nos três harnesses, em qualquer contexto; `-c include.path`,
+    igual. Ler (`--get`, `--list`) e gravar o resto de `branch.*`
+    (`description`, `rebase`) não pergunta. Com a configuração já gravada,
+    seja qual for o meio (`git config` fora da guarda, edição do
+    `.git/config`, `git remote`), o contexto conferido a lê (`git config
+    --get-regexp` de `push`, `remote`, `branch` e `url`, todas as origens e
+    arquivos incluídos): `remote.*.push`, `push.default` de mais de um branch,
+    `remote.pushDefault`, `branch.<b>.pushRemote` e `url.*.pushInsteadOf`
+    fazem o refspec sem `:` e o push sem refspec perguntarem, e
+    `push.default=upstream` leva o destino ao `@{push}`. `git push -u origin
+    <tipo>/<slug>` e `git push` numa branch de trabalho, com
+    `branch.<b>.merge`/`.remote` do `push -u` e `url.*.insteadOf` de leitura,
+    seguem passando. Limite: fora do contexto conferido (forma que
+    `plainGitCommand` recusa, tempo estourado, erro do git), o refspec sem
+    `:` volta a valer como "mesmo nome" — perguntar sempre faria o `push -u`
+    da rotina perguntar —, e a configuração gravada por meio que o
+    classificador não lê (edição direta do `.git/config`) só é vista com o
+    contexto.
+  - **Opção longa abreviada (#475).** O git aceita o prefixo único de uma
+    opção longa: `reset --har`, `switch --discard`, `checkout --forc`,
+    `worktree remove --forc`, `tag --dele`, `gc --prun`, `rebase --exe`,
+    `restore --work`, `config --glo` agem como a forma completa. O
+    classificador troca a abreviada pela completa, por subcomando, antes de
+    julgar (`expandGitOptions`, tabela `GIT_LONG_OPTIONS` de `push`,
+    `send-pack`, `http-push`, `worktree`, `reset`, `clean`, `checkout`,
+    `switch`, `restore`, `rm`, `tag`, `branch`, `fetch`, `pull`, `gc`,
+    `commit`, `rebase`, `difftool`, `symbolic-ref`, `update-ref`, `config`),
+    nas duas direções: o que escreve (`--har` → `--hard`) e o que libera
+    (`clean --dr`, `rm --cac`, `restore --stag`). A forma exata vence a
+    abreviação (`fetch --prune` continua `--prune`), o valor depois de `=` e
+    tudo depois de `--` ficam como estão, e prefixo que casa mais de uma
+    opção (o git o recusa como ambíguo) vale como a mais perigosa. Não se
+    abreviam as opções globais (`--git-dir`, `--no-pager`) nem as do analisador
+    de diff (`--output`, `--ext-diff`, `--textconv`), que o git não aceita
+    abreviadas. Opção nova de um subcomando que o classificador passe a ler
+    entra na tabela no mesmo commit.
   - **Pergunta (`ask`):** perda de trabalho fora do contexto conferido
     acima (push forçado ou `+ref`, `--no-verify`, push sem refspec, `HEAD`
     sem destino; `reset --hard/--merge`; `clean`; `checkout -- <caminho>`,
