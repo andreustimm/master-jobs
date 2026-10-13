@@ -635,6 +635,7 @@ no push das três branches. Os gates correm em jobs paralelos:
 
 | Job | O que prova |
 |---|---|
+| `escopo` | o recorte do PR: só documentação (lista de permissão em `scripts/github/pr-scope.ts`) ou suíte completa; fora de `pull_request`, sempre completa |
 | `contratos` | changelogs prontos, versões explícitas ([política de versões](versions.md)), tracker de QA, tipos, contratos das skills de QA |
 | `testes` (4 fatias) | a suíte Vitest, cada fatia num runner com o próprio PostgreSQL em Docker |
 | `cobertura` | mescla os blobs das fatias e aplica o piso de `vitest.config.ts` sobre o total |
@@ -651,6 +652,16 @@ anterior vermelho faria `qualidade` ser pulado, e a PR ficaria mesclável. Job
 novo no CI entra em `qualidade.needs`; `tests/ci-pipeline.test.ts` reprova quem
 esquecer. A fatia de teste zera os limiares de cobertura porque a cobertura de
 um quarto da suíte não mede nada; o piso vale sobre a soma, em `cobertura`.
+
+**PR só de documentação (#528).** Quando todo arquivo do PR é Markdown na lista
+de permissão — `docs/` (menos `docs/prompts/`), `changelog.d/`, `.compozy/`,
+`.claude/`, `.github/` e a raiz, menos `CHANGELOG.md` e `USER_CHANGELOG*` —,
+`build`, `pwa-browser` e `banco-nas-majors` ficam pulados, e `qualidade` e
+`schema-e-migracao` aceitam esse pulo **só** com `escopo` verde dizendo
+`completo=false`. `contratos` e o Vitest com cobertura continuam, porque leem
+documentos. Push em `dev`, a chamada da promoção e o dispatch rodam sempre a
+suíte completa. `e2e-navegador` não é recortado: a trava de #202/#303 o mantém
+sem `needs` e fora do agregador.
 
 O job `e2e-navegador` roda ao lado a suíte `pnpm test:e2e` inteira, sem
 segredo e com PostgreSQL descartável no loopback do runner. Ele é a única

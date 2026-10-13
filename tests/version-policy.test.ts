@@ -316,15 +316,20 @@ describe("majors do PostgreSQL testadas", () => {
     // roda sempre e reprova sozinho quando alguma fatia não passou.
     const gate = ci.jobs["schema-e-migracao"]!;
     expect(gate.if).toBe("${{ always() }}");
-    expect(gate.needs).toEqual(["banco-nas-majors"]);
+    // `escopo` entra só para o recorte de PR só de documentação (#528).
+    expect(gate.needs).toEqual(["escopo", "banco-nas-majors"]);
     const step = gate.steps.find((candidate) => candidate.env?.RESULTADOS === "${{ toJSON(needs) }}")!;
-    const run = (needs: Record<string, { result: string }>) =>
+    const run = (needs: Record<string, unknown>) =>
       spawnSync("bash", ["-e", "-c", step.run!], { encoding: "utf8", env: { ...process.env, RESULTADOS: JSON.stringify(needs) } }).status;
     expect(run({ "banco-nas-majors": { result: "success" } })).toBe(0);
     for (const result of ["failure", "skipped", "cancelled"]) {
       expect(run({ "banco-nas-majors": { result } }), result).not.toBe(0);
     }
     expect(run({})).not.toBe(0);
+    // Pulado só passa no recorte declarado por um `escopo` verde.
+    const documentacao = { result: "success", outputs: { completo: "false" } };
+    expect(run({ escopo: documentacao, "banco-nas-majors": { result: "skipped" } })).toBe(0);
+    expect(run({ escopo: { result: "failure" }, "banco-nas-majors": { result: "skipped" } })).not.toBe(0);
   });
 
   it("workflow e docs citam as chaves; os números moram só em config/postgres-majors.json", () => {
