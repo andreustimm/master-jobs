@@ -40,6 +40,20 @@ ou o run vermelho tem outro job bloqueante reprovado (o vermelho já está no
 CI de `dev`). O dispatch nunca termina em skip. Nenhum evento autoriza escrita
 por si só.
 
+Duas recusas dos eventos automáticos também terminam em `skip=true`, mas como
+**aviso**, não como silêncio: migração não aditiva que nenhum evento automático
+pode confirmar, e ponta de `dev` do agendamento sem run de push do CI (por
+exemplo, o `chore(release)` empurrado com `GITHUB_TOKEN` não dispara CI). O run
+fica verde, com `::warning::` na lista de anotações e o motivo no resumo do
+run — na migração, o dispatch a fazer, com a ponta de `dev` e
+`confirmar-migracao=true`. Um vermelho que se repetia a cada push em `dev`
+escondia o vermelho que importa. É a mesma
+recusa de antes, só sem a cor: sem `validar`, sem escrita, e a
+[G51](rules/delivery.md#g51) intacta, porque `staging` só anda por confirmação
+humana. Seguem vermelhos o dispatch (uma pessoa pediu aquele SHA), o evento de
+CI cujo próprio run a API não encontra (anomalia), o agendado com CI em
+andamento ou reprovado e o erro de API.
+
 ### O ciclo do commit de release
 
 A promoção empurra R (`chore(release)`) em `dev`. Com `GITHUB_TOKEN`, o push
@@ -111,7 +125,9 @@ aditiva (com seu snapshot e journal em `meta/`) promove sem confirmação,
 inclusive no agendamento. Migração não aditiva, `.sql` publicado alterado ou
 removido (renome conta como remoção) e arquivo fora de `drizzle/postgres/`
 param a promoção: apenas dispatch com `confirmar-migracao=true` autoriza
-prosseguir, depois de revisão humana, e o erro lista arquivo, motivo e comando.
+prosseguir, depois de revisão humana, e a mensagem lista arquivo, motivo e
+comando — como aviso no agendamento e no evento de CI (skip), como erro no
+dispatch.
 A confirmação nunca dispensa CI. `schema.ts` não entra na guarda: o SQL é o que
 chega ao banco, e o job `schema-e-migracao` do CI prova que os dois andam
 juntos.
@@ -207,8 +223,9 @@ de um hotfix. O fechamento manual está em
 real e API local: corrida A/B, checks adversos, intervalo de migração, validação
 de R, recuperação por B/R2 após reprovação, repetição após avanço,
 atualização da PR preservando revisão humana, ancestralidade, entrada agendada,
-consumo de fragmentos, entrada pelo evento de CI e o skip do ciclo do
-`chore(release)`. `tests/changelog-fragments.test.ts` cobre formato,
+consumo de fragmentos, entrada pelo evento de CI, o skip do ciclo do
+`chore(release)` e os dois skips em aviso (migração não aditiva e CI de push
+ausente, com o dispatch que segue vermelho). `tests/changelog-fragments.test.ts` cobre formato,
 ordem, idempotência e o merge de dois fragmentos sem conflito. As suítes de release preservam
 changelogs, tags, releases existentes e o retorno. O contrato YAML comprova a
 ligação dos dois jobs aos SHAs e permissões; testes locais não executam o

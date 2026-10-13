@@ -95,6 +95,8 @@ describe("suíte fatiada", () => {
     expect(upload.with?.["if-no-files-found"]).toBe("error");
     // Refazer só a fatia vermelha reenvia o mesmo nome no mesmo run.
     expect(upload.with?.overwrite).toBe(true);
+    // Só o re-run próximo consome o blob; mais que isso é cota parada.
+    expect(upload.with?.["retention-days"]).toBe(2);
   });
 
   it("aplica o piso de vitest.config.ts sobre o total mesclado, não sobre a fatia", () => {
