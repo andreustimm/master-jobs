@@ -12,8 +12,14 @@ on:
   pull_request_target:
     branches: [dev]
     types: [opened, reopened, synchronize, ready_for_review, closed, edited]
-  schedule:
-    - cron: '*/10 * * * *'
+  # Sem `schedule` enquanto `TASKS_WRITER_ENABLED` não existir: a condição do
+  # job já o pulava, mas cada agendamento ainda criava um run `skipped` (1.255 em
+  # 14 dias) que enchia a lista de runs e deixou dois `queued` desde 07/10. Para
+  # religar, na mesma PR que cria a variável, devolva o bloco abaixo e inverta a
+  # asserção de `tests/tasks-workflows.test.ts` que hoje exige a ausência dele.
+  #
+  #   schedule:
+  #     - cron: '*/10 * * * *'
   workflow_dispatch:
     inputs:
       mode:

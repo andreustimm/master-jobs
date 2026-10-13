@@ -229,9 +229,11 @@ jobs:
           overwrite: true
           # Os blobs das fatias verdes precisam sobreviver até esse re-run: se
           # expirarem antes, `cobertura` mescla só a fatia refeita e reprova o
-          # piso num commit cujos testes passaram todos. Sete dias cobrem um
-          # re-run tardio sem guardar artefato indefinidamente.
-          retention-days: 7
+          # piso num commit cujos testes passaram todos. Dois dias cobrem o
+          # re-run do mesmo dia ou do dia seguinte e guardam menos de um terço
+          # do que sete guardavam na cota de artefatos. Um re-run depois disso
+          # refaz todas as fatias, não só a vermelha.
+          retention-days: 2
 
   cobertura:
     # Junta as quatro fatias e aplica os limiares de `vitest.config.ts` sobre o
