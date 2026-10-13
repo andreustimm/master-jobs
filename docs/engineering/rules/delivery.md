@@ -259,6 +259,46 @@ reprova o passo sem atribuição da PR criada **e** da reaproveitada, ou com bas
 fora das exceções nomeadas (`staging → main`, `main → dev`); a execução com `gh`
 falso está em `tests/promotion-provenance.test.ts`.
 
+<a id="g88"></a>
+### G88 — Puxar, não empurrar: a vazão é a do merge
+
+Obrigação posterior à auditoria ([#526](https://github.com/andreustimm/master-jobs/issues/526)),
+aplicação da regra global de fluxo de entrega do dono (`~/.claude/ENTREGA.md`).
+
+**Por quê.** A vazão do projeto é a vazão de **merge** — CI, revisão e
+conflitos —, não a de agentes. Trabalho começado sem vaga na CI só alonga a
+fila e o tempo de cada entrega. No diagnóstico de 2026-10-12 (60 PRs em `dev`,
+API REST): lead time mediano de 1,53 h e p90 de 49 h; 24 % dos runs de CI
+cancelados pela `concurrency` (17 % dos runner-min); 57 % dos PRs acima de 400
+linhas; 168 runner-min por PR mesclado.
+
+**Obrigação.**
+
+1. **Antes de começar trabalho novo**, conte os PRs abertos para `dev` e os runs
+   de CI em fila (REST: `repos/<repo>/pulls?state=open&base=dev`,
+   `repos/<repo>/actions/runs?status=queued`). Com **mais de 8 PRs abertos**, ou
+   fila maior que 2 runs por runner, não comece nada: use o tempo para terminar.
+2. **WIP:** no máximo 5 implementações simultâneas, e 2 de alto risco (nível L2
+   de G53, mais regras, CI e workflows). Alvo de PR: até ~400 linhas.
+3. **Prioridade fixa:** primeiro o que alivia a CI ou o merge; depois
+   desbloquear PR existente; depois mesclar o que está verde; por último,
+   começar trabalho novo.
+4. **Mesclar na hora:** PR verde, sem conflito e com a revisão do seu nível
+   (G53) é mesclada assim que fica pronta, com o head fixado
+   (`gh pr merge <n> --merge --match-head-commit <sha>`), para que um push
+   atrasado não entre sem CI. `main` e produção seguem G46.
+5. **Lote quando acumular:** muitos PRs aprovados em conflito no mesmo arquivo
+   viram **um** branch de integração com os heads exatos, conflitos resolvidos
+   uma vez, validação completa local e **uma** rodada de CI.
+6. **Um vigia só:** um único observador de merge, por REST, a cada 5 min ou
+   mais. Agente não faz polling do GitHub — muitos consultando GraphQL estouram
+   o limite secundário.
+7. **Push acumulado:** cada push num PR cancela a CI anterior; junte os commits
+   da rodada antes de enviar.
+
+Ao relatar ao dono, diga PRs abertos, fila e lead time, não só o que foi feito.
+O alarme é "muita coisa feita e nada mesclado": pare de começar.
+
 ---
 
 ## Revisão, QA e documentação antes da PR
