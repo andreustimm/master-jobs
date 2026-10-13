@@ -8,6 +8,7 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:net";
+import { rmSync } from "node:fs";
 import { access, cp, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,6 +17,7 @@ import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
 import { copiedToHarness } from "./database-guard.mjs";
 import { FAKE_CLIENTS, startFakeOidc } from "./fake-oidc.mjs";
 import { SMOKE, selectAreas } from "./ui/index.mjs";
+import { claim, removeOrphans } from "./orphans.mjs";
 import setupPostgres from "../support/postgres-global.ts";
 import { startMinio } from "../support/minio.ts";
 import { provisionTestDatabase } from "../support/db.ts";
@@ -44,9 +46,14 @@ const runA11y = fullSuite || requested.includes("a11y");
 const uiAreaList = fullSuite ? "" : (uiAreas.length > 0 ? uiAreas : SMOKE).join(",");
 if (!fullSuite) console.log(`E2E seletivo: ${selectAreas(uiAreaList).map((area) => area.id).join(", ")}${runA11y ? ", a11y" : ""}`);
 
+/** Filhos vivos de `run`: o sinal os encerra antes de apagar a cópia em que escrevem. */
+const children = new Set();
+
 function run(command, args, options) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { ...options, stdio: "inherit" });
+    children.add(child);
+    child.once("exit", () => children.delete(child));
     child.once("error", reject);
     child.once("exit", (code, signal) => {
       if (code === 0) resolve();
@@ -197,7 +204,11 @@ const TECHNICAL_CHANGELOG_FIXTURE = `# Changelog
 `;
 
 const tracingRoot = dirname(ROOT);
+// Cópias de execuções interrompidas, cujo dono não vive mais (#527).
+const removedOrphans = await removeOrphans(tracingRoot);
+if (removedOrphans.length > 0) console.log(`E2E: ${removedOrphans.length} cópia(s) órfã(s) removida(s) de ${tracingRoot}`);
 const temporaryRoot = await mkdtemp(join(tracingRoot, ".jho-e2e-"));
+await claim(temporaryRoot);
 const appRoot = join(temporaryRoot, "app");
 const nextCli = join(ROOT, "node_modules", "next", "dist", "bin", "next");
 let server;
@@ -206,6 +217,37 @@ let stopMinio;
 let testDatabase;
 let runtimeLogin;
 let fakeOidc;
+
+/**
+ * Desfaz tudo o que esta execução criou. Roda no `finally` e também no sinal:
+ * Ctrl+C ou `kill` encerram o processo sem passar pelo `finally`, e era assim
+ * que a cópia, o banco e os contêineres ficavam para trás (#527).
+ */
+let cleaning;
+function cleanup() {
+  cleaning ??= (async () => {
+    // O build e o setup escrevem dentro da cópia: param antes de ela ser apagada.
+    await Promise.all([...children].map((child) => stop(child)));
+    await stop(server);
+    await fakeOidc?.close();
+    try { await runtimeLogin?.drop(); await testDatabase?.drop(); }
+    finally {
+      stopMinio?.();
+      stopPostgres?.();
+      await rm(temporaryRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    }
+  })();
+  return cleaning;
+}
+// Última rede: no `exit` nada assíncrono escreve mais — uma cópia de arquivos
+// ainda em andamento no sinal não recria a pasta depois de apagada.
+process.once("exit", () => rmSync(temporaryRoot, { recursive: true, force: true }));
+for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) {
+  process.once(signal, () => {
+    console.error(`E2E: ${signal}, limpando a execução isolada…`);
+    cleanup().finally(() => process.exit(code));
+  });
+}
 
 try {
   stopPostgres = await setupPostgres();
@@ -349,12 +391,5 @@ try {
     if (runA11y) await run(process.execPath, ["tests/e2e/a11y.mjs"], { cwd: appRoot, env });
   }
 } finally {
-  await stop(server);
-  await fakeOidc?.close();
-  try { await runtimeLogin?.drop(); await testDatabase?.drop(); }
-  finally {
-    stopMinio?.();
-    stopPostgres?.();
-    await rm(temporaryRoot, { recursive: true, force: true });
-  }
+  await cleanup();
 }
