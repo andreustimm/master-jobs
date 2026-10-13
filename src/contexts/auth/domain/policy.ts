@@ -161,7 +161,12 @@ export function can(
     case "suggestion:create":
       // Só para quem a sessão diz que tem concessão ativa: o id do candidato é
       // seletor dentro de `linkedCandidateIds`, nunca prova de acesso (G40).
+      //
+      // Sessão emprestada vê, não sugere: a sugestão chega ao candidato com o
+      // nome do recrutador, e o admin que assume a identidade falaria por ele
+      // (G24). O diretório (`candidate:discover`) segue aberto, porque só lê.
       if (!isRecruiter) return deny("requer papel recruiter");
+      if (borrowed) return deny("sessão emprestada não sugere em nome do recrutador");
       if (resource.kind !== "candidate") return deny("requer escopo de candidato");
       if (!followsCandidate) return deny("candidato sem acesso concedido");
       return ALLOW;

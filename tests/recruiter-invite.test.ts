@@ -44,6 +44,7 @@ import {
   type RecruiterAccessDeps,
 } from "../src/contexts/auth/app/recruiter-access.ts";
 import { beginSocial, finishSocial, type SocialConfig, type SocialDeps } from "../src/contexts/auth/app/oidc-login.ts";
+import { drizzleUserDirectory } from "../src/contexts/auth/infra/drizzle-directory.ts";
 import * as identities from "../src/contexts/auth/infra/drizzle-identities.ts";
 import { drizzleRecruiterAccess } from "../src/contexts/auth/infra/drizzle-recruiter-access.ts";
 import { createSocialSignup, signupIpHmac } from "../src/contexts/auth/infra/drizzle-signups.ts";
@@ -713,6 +714,30 @@ describe("ramos da conclusão (ADR-018)", () => {
     });
     expect((await userByEmail("bia@y.com"))!.emailVerifiedAt).toBeNull();
     expect((await inviteRow("carla@z.com")).status).toBe("pending");
+  });
+
+  it("trocar o e-mail da conta pelo diretório zera a prova da caixa: o convite ao endereço novo dá descompasso até alguém provar", async () => {
+    const bia = await account("bia@y.com", ["recruiter"]);
+    const token = await invite("nova@y.com");
+
+    await drizzleUserDirectory.update(bia, { email: " Nova@Y.com " });
+
+    expect((await userByEmail("nova@y.com"))!.emailVerifiedAt).toBeNull();
+    expect(await completeInvitesForAccount({ userId: bia, token }, accessDeps())).toEqual({
+      outcome: "mismatch",
+      candidateId: null,
+    });
+    expect((await inviteRow("nova@y.com")).status).toBe("pending");
+    expect(await grants()).toEqual([]);
+  });
+
+  it("repetir o mesmo e-mail, em outra caixa de letras, ou mudar só o nome não tira a prova da caixa", async () => {
+    const bia = await account("bia@y.com", ["recruiter"]);
+
+    await drizzleUserDirectory.update(bia, { email: "BIA@y.com", fullName: "Bia" });
+    await drizzleUserDirectory.update(bia, { fullName: "Bia Souza" });
+
+    expect((await userByEmail("bia@y.com"))!.emailVerifiedAt).toBe("2026-01-01T00:00:00.000Z");
   });
 });
 
