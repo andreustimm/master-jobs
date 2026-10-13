@@ -474,10 +474,19 @@ A validação estrutural de Markdown e metadados usa os validadores únicos que 
 existem, sem cópia: `pnpm check:instructions` (symlinks, links, âncoras e IDs de
 regra), `pnpm check:release-ready` (changelogs e fragmentos) e
 `pnpm check:qa-tracker` (esquema dos cenários). A proporcionalidade é de quem
-valida antes da PR; o CI roda o portão inteiro em toda PR de propósito, porque
-`qualidade` é check obrigatório, e check obrigatório filtrado por caminho fica
-pendente ou pulado — e pulado conta como aprovado. A seleção por caminho que
-existe é a do deploy (`scripts/vercel-ignore-build.sh`, provada por
+valida antes da PR, e o CI roda o portão inteiro em toda PR, com **uma exceção
+por decisão do dono, de 13/10/2026** ([#535](https://github.com/andreustimm/master-jobs/issues/535)):
+em `pull_request` com base `dev`, o job `e2e-navegador` só roda quando a tabela
+de impacto (`config/validation-impact.json`) pede o gate `e2e` para o diff. O
+job `plano` do `ci.yml` decide (`scripts/github/ci-plan.ts`, provado por
+`tests/ci-plan.test.ts`) e falha fechado: push em `dev`, `staging` e `main`,
+`workflow_dispatch`, a chamada da promoção (`validar`), a PR de produção, diff
+vazio ou ilegível e a PR que muda o próprio plano rodam o E2E, como antes. Pular
+o E2E não toca o check obrigatório, porque ele já está fora do portão
+(`NON_BLOCKING_CI_JOBS`). O workflow continua sem `paths:`, porque check
+obrigatório filtrado por caminho fica pendente ou pulado — e pulado conta como
+aprovado —, e o que a PR deixa de rodar o push em `dev` roda. A seleção por
+caminho que existe é a do deploy (`scripts/vercel-ignore-build.sh`, provada por
 `tests/vercel-ignore-build.test.ts`): só documentação, testes e automação não
 publicam versão nova.
 
