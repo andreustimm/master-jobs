@@ -466,7 +466,13 @@ export async function recordEmailSendFailure(userId: number | null, detail: stri
 
 /* -------------------------- Convite de recrutador -------------------------- */
 
-export { INVITE_COOKIE, inviteNoticeOf, type ArrivalNotice, type InvitePageState } from "./domain/recruiter-access.ts";
+export {
+  candidateDisplayName,
+  INVITE_COOKIE,
+  inviteNoticeOf,
+  type ArrivalNotice,
+  type InvitePageState,
+} from "./domain/recruiter-access.ts";
 
 /**
  * O que `/signup/invite` mostra (ADR-018). A sessão emprestada conta como

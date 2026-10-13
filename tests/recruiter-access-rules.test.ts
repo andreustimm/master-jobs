@@ -13,6 +13,7 @@ import {
   ACCESS_EVENT_KINDS,
   CAP_WINDOW_MS,
   GRANT_STATUSES,
+  candidateDisplayName,
   INVITE_STATUSES,
   capDecision,
   endDateEventDetail,
@@ -366,6 +367,13 @@ describe("exibição e máscara", () => {
     expect(maskEmail("ana@x.com")).toBe("a•••@x.com");
     expect(maskEmail("a@x.com")).toBe("a•••@x.com");
     expect(maskEmail("sem-arroba")).toBe("•••");
+  });
+
+  it("candidateDisplayName: nome escolhido ou, vazio, o rótulo neutro de quem chama (M-1, G22)", () => {
+    expect(candidateDisplayName("Ana", "Candidato")).toBe("Ana");
+    expect(candidateDisplayName("  Ana  ", "Candidato")).toBe("Ana");
+    expect(candidateDisplayName("", "Candidato")).toBe("Candidato");
+    expect(candidateDisplayName("   ", "Candidate")).toBe("Candidate");
   });
 });
 

@@ -34,11 +34,14 @@ import {
   expireRecruiterAccess,
   grantAccess,
   historyPageOf,
+  invitedSignupBanner,
+  invitePage,
   resendInvite,
   revokeAccess,
   type RecruiterAccessDeps,
 } from "../src/contexts/auth/app/recruiter-access.ts";
 import {
+  candidateDisplayName,
   inviteCompletion,
   readEndDateEventDetail,
   type InviteStatus,
@@ -411,6 +414,64 @@ describe("convidar", () => {
     expect(results).toEqual(expect.arrayContaining([{ ok: true, kind: "invite" }, { ok: false, error: "already_invited" }]));
     expect(await invitesOf()).toHaveLength(1);
     expect(sent).toHaveLength(1);
+  });
+});
+
+describe("candidato sem nome (M-1 da revisão L2)", () => {
+  const OWN_EMAIL = "sem.nome@x.com";
+  const unnamed = pt("recruiter.unnamed");
+  let nameless: number;
+  let namelessUser: number;
+  let asNameless: { candidateId: number; actorUserId: number };
+
+  beforeEach(async () => {
+    const [row] = await db.insert(candidate).values({ slug: "sem-nome", name: "" }).returning({ id: candidate.id });
+    nameless = row!.id;
+    namelessUser = await makeUser(OWN_EMAIL, ["candidate"], { candidateId: nameless });
+    asNameless = { candidateId: nameless, actorUserId: namelessUser };
+  });
+
+  it("a concessão avisa o recrutador com o rótulo neutro, nunca com o e-mail da conta do candidato", async () => {
+    expect(await grant("rui@x.com", asNameless)).toEqual({ ok: true, kind: "grant" });
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.subject).toBe(pt("email.recruiterGrantedSubject", { candidate: unnamed }));
+    expect(`${sent[0]!.subject}\n${sent[0]!.text}`).not.toContain(OWN_EMAIL);
+  });
+
+  it("o convite e o aviso de encerramento também; o banner e a página do convite devolvem nome vazio, e a tela o troca pelo rótulo", async () => {
+    expect(await grant("bia@y.com", asNameless)).toEqual({ ok: true, kind: "invite" });
+    expect(sent[0]!.subject).toBe(pt("email.recruiterInviteSubject", { candidate: unnamed }));
+    expect(`${sent[0]!.subject}\n${sent[0]!.text}`).not.toContain(OWN_EMAIL);
+
+    const lookup = { store: drizzleRecruiterAccess, hashToken, now: () => clock().now() };
+    const banner = await invitedSignupBanner(tokens[0]!, lookup);
+    expect(banner).not.toBeNull();
+    expect(banner!.candidateName).toBe("");
+    expect(candidateDisplayName(banner!.candidateName, unnamed)).toBe(unnamed);
+
+    const page = await invitePage({ token: tokens[0]!, session: null }, lookup);
+    expect(page).toMatchObject({ kind: "anonymous", candidateName: "" });
+    expect(JSON.stringify(page)).not.toContain(OWN_EMAIL);
+
+    sent = [];
+    expect(await grant("rui@x.com", asNameless)).toEqual({ ok: true, kind: "grant" });
+    const [row] = await grantsOf(nameless);
+    sent = [];
+    expect(
+      await revokeAccess({ grantId: row!.id, candidateId: nameless, actor: "candidate", actorUserId: namelessUser }, deps()),
+    ).toEqual({ ok: true });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.text).toContain(pt("email.recruiterEndedByCandidate", { candidate: unnamed }));
+    expect(`${sent[0]!.subject}\n${sent[0]!.text}`).not.toContain(OWN_EMAIL);
+  });
+
+  it("o nome de exibição da conta, quando existe, continua valendo antes do rótulo", async () => {
+    await db.update(authUser).set({ fullName: "Nina Sem Perfil" }).where(eq(authUser.id, namelessUser));
+
+    expect(await grant("rui@x.com", asNameless)).toEqual({ ok: true, kind: "grant" });
+
+    expect(sent[0]!.subject).toBe(pt("email.recruiterGrantedSubject", { candidate: "Nina Sem Perfil" }));
   });
 });
 
