@@ -105,6 +105,20 @@ describe("mapa de impacto — cada classe resolve os gates que declara", () => {
     }
   });
 
+  it("Markdown que o app ou o build lê não é só validador estrutural (#535)", () => {
+    // `content/legal/*.md` o servidor lê a cada cadastro, `docs/prompts/` é o
+    // prompt do LLM, e os changelogs o build compila: mudar um deles muda o
+    // produto. O CI de PR só pula a suíte para o que esta tabela chama de L0.
+    for (const path of ["content/legal/terms.pt-BR.md", "docs/prompts/system/job-analysis.md", "CHANGELOG.md", "USER_CHANGELOG.en.md"]) {
+      expect(classifyPath(MAP, path), path).toContain("runtime-markdown");
+      expect(gateIds([path]), path).toEqual(expect.arrayContaining(["typecheck", "tests", "build"]));
+    }
+    // E a documentação de verdade continua só nos estruturais.
+    for (const path of ["docs/engineering/deploy.md", "docs/product/personas.md", "changelog.d/x.md"]) {
+      expect(classifyPath(MAP, path), path).not.toContain("runtime-markdown");
+    }
+  });
+
   it("tela pede E2E; código de domínio pede tipos e testes relacionados", () => {
     expect(gateIds(["app/jobs/page.tsx"])).toEqual(["typecheck", "related-tests", "e2e"]);
     expect(gateIds(["src/contexts/matching/domain/rank.ts"])).toEqual(["typecheck", "related-tests"]);

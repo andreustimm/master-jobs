@@ -474,18 +474,31 @@ A validação estrutural de Markdown e metadados usa os validadores únicos que 
 existem, sem cópia: `pnpm check:instructions` (symlinks, links, âncoras e IDs de
 regra), `pnpm check:release-ready` (changelogs e fragmentos) e
 `pnpm check:qa-tracker` (esquema dos cenários). A proporcionalidade é de quem
-valida antes da PR, e o CI roda o portão inteiro em toda PR, com **uma exceção
-por decisão do dono, de 13/10/2026** ([#535](https://github.com/andreustimm/master-jobs/issues/535)):
-em `pull_request` com base `dev`, o job `e2e-navegador` só roda quando a tabela
-de impacto (`config/validation-impact.json`) pede o gate `e2e` para o diff. O
-job `plano` do `ci.yml` decide (`scripts/github/ci-plan.ts`, provado por
+valida antes da PR, e o CI roda o portão inteiro em toda PR, com **exceções por
+decisão do dono, de 13/10/2026** ([#535](https://github.com/andreustimm/master-jobs/issues/535)),
+só em `pull_request` com base `dev`:
+
+- **E2E:** `e2e-navegador` só roda quando a tabela de impacto
+  (`config/validation-impact.json`) pede o gate `e2e` para o diff.
+- **L0 (só documentação):** a PR cuja tabela pede só os validadores estruturais
+  não roda `testes`, `cobertura`, `build`, `pwa-browser`, `banco-nas-majors` nem
+  o E2E; `contratos` roda sempre. Markdown que o app ou o build lê
+  (`content/legal/`, `docs/prompts/`, os changelogs compilados) **não é L0**:
+  a classe `runtime-markdown` da tabela pede testes e build para ele.
+- **Banco:** `banco-nas-majors` só roda quando o diff toca `drizzle/**`,
+  `src/core/db/**`, `supabase/**`, `tests/support/**` ou
+  `config/postgres-majors.json`; L0 nunca o roda.
+
+O job `plano` do `ci.yml` decide (`scripts/github/ci-plan.ts`, provado por
 `tests/ci-plan.test.ts`) e falha fechado: push em `dev`, `staging` e `main`,
-`workflow_dispatch`, a chamada da promoção (`validar`), a PR de produção, diff
-vazio ou ilegível e a PR que muda o próprio plano rodam o E2E, como antes. Pular
-o E2E não toca o check obrigatório, porque ele já está fora do portão
-(`NON_BLOCKING_CI_JOBS`). O workflow continua sem `paths:`, porque check
-obrigatório filtrado por caminho fica pendente ou pulado — e pulado conta como
-aprovado —, e o que a PR deixa de rodar o push em `dev` roda. A seleção por
+`workflow_dispatch`, a chamada da promoção (`validar`), a PR de produção (base
+`main`), diff vazio ou ilegível e a PR que muda o próprio plano rodam tudo, como
+antes. O workflow continua sem `paths:`, e os checks obrigatórios `qualidade` e
+`schema-e-migracao` rodam sempre: só aceitam `skipped` do job que o `plano`
+verde declarou pulado, e pulado sem plano reprova (`tests/ci-pipeline.test.ts`).
+Isso importa porque check obrigatório filtrado por caminho fica pendente ou
+pulado — e pulado conta como aprovado. O que a PR deixa de rodar, o push em
+`dev` roda; é lá que um desvio aparece, e não antes da mescla. A seleção por
 caminho que existe é a do deploy (`scripts/vercel-ignore-build.sh`, provada por
 `tests/vercel-ignore-build.test.ts`): só documentação, testes e automação não
 publicam versão nova.

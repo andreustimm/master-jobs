@@ -226,8 +226,11 @@ para outros repositórios:
 `rtk pnpm gates` executa essa tabela: lê o diff contra a base de mesclagem com
 `origin/dev` (commits, índice, árvore e arquivos novos), classifica cada
 caminho pelas classes de `config/validation-impact.json` — `docs`,
-`docs-assets`, `tooling`, `qa-skills`, `backend`, `ui`, `scorer`, `db`,
-`auth-security`, `deploy` e `transversal` — e roda a união dos gates, dos mais
+`docs-assets`, `runtime-markdown` (o Markdown que o app ou o build lê: textos
+legais de `content/legal/`, prompts de `docs/prompts/` e os changelogs
+compilados, que pedem testes e build mesmo sendo `.md`), `tooling`,
+`qa-skills`, `backend`, `ui`, `scorer`, `db`, `auth-security`, `deploy` e
+`transversal` — e roda a união dos gates, dos mais
 baratos aos mais caros, parando no primeiro vermelho. `--plan` só imprime o
 plano; `--paths <caminho>…` classifica uma lista em vez do diff; `--base <ref>`
 troca a base. Caminho que nenhuma classe reconhece recebe o **pacote

@@ -635,15 +635,15 @@ no push das três branches. Os gates correm em jobs paralelos:
 
 | Job | O que prova |
 |---|---|
-| `plano` | o recorte do E2E em PR para `dev` pela tabela de impacto (abaixo); em qualquer outro evento, o plano completo |
-| `contratos` | changelogs prontos, versões explícitas ([política de versões](versions.md)), tracker de QA, tipos, contratos das skills de QA |
-| `testes` (4 fatias) | a suíte Vitest, cada fatia num runner com o próprio PostgreSQL em Docker |
-| `cobertura` | mescla os blobs das fatias e aplica o piso de `vitest.config.ts` sobre o total |
-| `pwa-browser` | a fronteira de privacidade do service worker num Chromium real |
-| `build` | `next build`, com `.next/cache` reaproveitado entre execuções |
-| `banco-nas-majors` (major × 2 fatias) | todo teste que usa PostgreSQL real, nas majors `production` e `latest` de `config/postgres-majors.json` ([política de versões](versions.md)) |
-| `schema-e-migracao` | `schema.ts` e `drizzle/` em sincronia, e `banco-nas-majors` aprovado (depende dele, com `if: always()`) |
-| `qualidade` | agregador: só passa quando todos os anteriores passaram |
+| `plano` | o recorte do CI em PR para `dev` pela tabela de impacto (abaixo); em qualquer outro evento, o plano completo |
+| `contratos` | changelogs prontos, versões explícitas ([política de versões](versions.md)), tracker de QA, tipos, contratos das skills de QA. Roda sempre |
+| `testes` (4 fatias) | a suíte Vitest, cada fatia num runner com o próprio PostgreSQL em Docker. Pulado em PR L0 |
+| `cobertura` | mescla os blobs das fatias e aplica o piso de `vitest.config.ts` sobre o total. Pulado em PR L0 |
+| `pwa-browser` | a fronteira de privacidade do service worker num Chromium real. Pulado em PR L0 |
+| `build` | `next build`, com `.next/cache` reaproveitado entre execuções. Pulado em PR L0 |
+| `banco-nas-majors` (major × 2 fatias) | todo teste que usa PostgreSQL real, nas majors `production` e `latest` de `config/postgres-majors.json` ([política de versões](versions.md)). Em PR, só quando o diff toca o banco |
+| `schema-e-migracao` | `schema.ts` e `drizzle/` em sincronia, e `banco-nas-majors` aprovado ou pulado pelo plano (depende dele, com `if: always()`). Roda sempre |
+| `qualidade` | agregador: só passa quando todos os anteriores passaram, ou foram pulados pelo plano |
 
 `qualidade` e `schema-e-migracao` são os nomes que a promoção e a proteção de
 branch exigem. O agregador usa `if: always()` porque check obrigatório
@@ -672,27 +672,49 @@ Não bloqueante vale nas três portas, e não só no agregador:
   produção: o job também não roda. Ali só contam os checks que o ruleset de
   `main` exige, e `staging` recebe o SHA cujo push em `dev` já rodou o E2E.
 
-**O plano do E2E em PR** (decisão do dono, 13/10/2026, G57;
+**O plano do CI em PR** (decisão do dono, 13/10/2026, G57;
 [#535](https://github.com/andreustimm/master-jobs/issues/535)). Medido em
-14 dias, o E2E era 41,6% dos minutos do `ci.yml`, a 15,3 min por execução, e
-18 de 50 PRs não tocavam nada que a tabela mande testar em navegador. O job
-`plano` lê o diff do commit de merge da PR contra a base e roda `planGates`
-(`scripts/gates/impact.ts`) sobre ele; `e2e-navegador` só espera o `plano` e só
-roda quando o gate `e2e` está no plano. A decisão vale só em `pull_request` com
-base `dev`. Falha fechada para o resto: push (em `dev`, `staging` e `main`),
-dispatch, chamada da promoção, PR de produção (base `main`), diff vazio ou
-ilegível e PR que edita `ci.yml`, `ci-plan.ts`, `impact.ts` ou
-`validation-impact.json` — o plano não relaxa a si mesmo — recebem o plano
-completo. O recorte só existe em PR: o push em `dev` roda tudo, e é ele que a
-promoção lê. `plano` entra em `qualidade.needs`; plano vermelho reprova o
-portão. O E2E não escolhe áreas no CI: quando roda, é a suíte inteira.
+14 dias, o E2E era 41,6% dos minutos do `ci.yml` (15,3 min por execução),
+`banco-nas-majors` 13%, e 11 de 50 PRs mudavam só Markdown e pagavam a suíte
+inteira. O job `plano` lê o diff do commit de merge da PR contra a base, roda
+`planGates` (`scripts/gates/impact.ts`) sobre ele e publica três saídas:
 
-Ainda não há atalho para o resto de uma PR só de documentação: cerca de
-quarenta arquivos de teste leem `docs/`, os changelogs e `.claude/skills/`, e o
-build compila os changelogs. Pular a suíte nesses casos deixaria passar
-exatamente a quebra de contrato documental que ela existe para pegar. O ganho
-para essas PRs vem do paralelismo, que já vale para todas, e de não pagar o
-E2E.
+| Saída | Jobs que a leem | `false` quando |
+|---|---|---|
+| `e2e` | `e2e-navegador` | a tabela de impacto não pede o gate `e2e` |
+| `suite` | `testes`, `cobertura`, `build`, `pwa-browser` | PR L0: a tabela pede só os validadores estruturais (`release-ready`, `instructions`, `harness`, `qa-tracker`) |
+| `banco` | `banco-nas-majors` | o diff não toca `drizzle/**`, `src/core/db/**`, `supabase/**`, `tests/support/**` nem `config/postgres-majors.json`, ou a PR é L0 |
+
+A decisão vale só em `pull_request` com base `dev`. Falha fechada para o resto:
+push (em `dev`, `staging` e `main`), dispatch, chamada da promoção, PR de
+produção (base `main`), diff vazio ou ilegível e PR que edita `ci.yml`,
+`ci-plan.ts`, `impact.ts` ou `validation-impact.json` — o plano não relaxa a si
+mesmo — recebem o plano completo. O recorte só existe em PR: o push em `dev`
+roda tudo, e é ele que a promoção lê.
+
+**O pulo não enfraquece o portão.** `qualidade` e `schema-e-migracao` rodam
+sempre e só aceitam `skipped` do job que o `plano`, **verde**, declarou pulado
+(`suite == 'false'` ou `banco == 'false'`). Pulado sem plano, com plano vermelho
+ou cancelado, de outro job (`contratos`, o próprio `plano`) ou contra o que o
+plano declarou reprova; `tests/ci-pipeline.test.ts` executa o `jq` dos dois com
+cada combinação e reprova job novo guardado pelo plano que o agregador não
+conhece. `plano` entra em `qualidade.needs`; plano vermelho reprova o portão.
+
+**O que é L0.** Documentação que nada executa: a classe `docs`/`docs-assets` da
+tabela. Markdown que o app ou o build lê **não é L0**: `content/legal/*.md` (o
+servidor o lê a cada cadastro), `docs/prompts/` (o prompt do LLM),
+`CHANGELOG.md` e `USER_CHANGELOG*.md` (o build os compila) têm a classe
+`runtime-markdown`, que pede testes e build. O que continua passando é o risco
+que o dono aceitou: cerca de quarenta arquivos de teste leem `docs/`, os
+changelogs e `.claude/skills/`, e uma PR L0 que quebre um deles só aparece no
+push em `dev`, depois da mescla. `contratos` (instruções, harnesses, changelogs,
+tracker de QA, tipos) cobre a maior parte, e roda sempre.
+
+**O que o recorte do banco deixa passar.** Só vale a lista do dono: mudança em
+dependência (`package.json`, `pnpm-lock.yaml`, o driver do PostgreSQL),
+`drizzle.config.ts` ou `scripts/versions/postgres-majors.ts` não roda
+`banco-nas-majors` em PR, e uma regressão numa major só aparece no push em
+`dev`. O E2E não escolhe áreas no CI: quando roda, é a suíte inteira.
 
 Medido em 23/09/2026: o job único levava 6 min 53 s (run 35803388420, em `dev`);
 os jobs paralelos, 2 min 41 s do disparo ao `qualidade` (run 35850357880, PR

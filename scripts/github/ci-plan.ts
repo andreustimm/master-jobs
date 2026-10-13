@@ -1,11 +1,23 @@
 /**
  * O plano do CI de PR (issue #535): quais jobs pesados uma PR para `dev` paga.
  *
- * Decisão do dono, 13/10/2026, que afrouxou a G57 só em PR: o E2E roda quando
- * a tabela de impacto (`config/validation-impact.json`, `planGates`) pede o
- * gate `e2e` para o diff — não em toda PR. Diagnóstico do mesmo dia: o
- * `e2e-navegador` era 41,6% dos minutos do `ci.yml` (15,3 min por execução), e
- * 18 de 50 PRs não tocavam nada que a tabela mande testar em navegador.
+ * Decisão do dono, 13/10/2026, que afrouxou a G57 só em PR. Diagnóstico do
+ * mesmo dia: o `e2e-navegador` era 41,6% dos minutos do `ci.yml` (15,3 min por
+ * execução), `banco-nas-majors` 13%, e 11 de 50 PRs mudavam só Markdown e
+ * pagavam a suíte inteira. Três saídas, uma por decisão:
+ *
+ * - `e2e`: roda quando a tabela de impacto (`config/validation-impact.json`,
+ *   `planGates`) pede o gate `e2e` para o diff.
+ * - `suite` (`testes`, `cobertura`, `build`, `pwa-browser`): não roda em PR L0,
+ *   isto é, quando a tabela pede só os validadores estruturais
+ *   (`release-ready`, `instructions`, `harness`, `qa-tracker`). Markdown que o
+ *   app ou o build lê (`content/legal`, `docs/prompts`, changelogs) NÃO é L0:
+ *   a classe `runtime-markdown` da tabela pede testes e build para ele.
+ * - `banco` (`banco-nas-majors`): roda quando o diff toca o que a decisão do
+ *   dono lista (`DATABASE_PATTERNS`); L0 nunca roda.
+ *
+ * `contratos` (instruções, harnesses, changelogs, tipos), `schema-e-migracao`
+ * e `qualidade` rodam sempre: só os pulos que o plano declara passam.
  *
  * Falha fechada: tudo o que não for PR para `dev` com diff legível e
  * conhecido recebe o plano completo. Evento que não é `pull_request` (push em
@@ -15,13 +27,13 @@
  * relaxa a si mesmo. O que a PR deixa de rodar, o push em `dev` roda.
  *
  * O script lê o diff do commit de merge que o `pull_request` testa, contra o
- * primeiro pai, que é a base. Escreve `e2e=<true|false>` na saída padrão (o
+ * primeiro pai, que é a base. Escreve `chave=<true|false>` na saída padrão (o
  * passo a redireciona para `$GITHUB_OUTPUT`) e o motivo na saída de erro.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { planGates, validateImpactMap, type ImpactMap } from "../gates/impact.ts";
+import { globToRegex, planGates, validateImpactMap, type ImpactMap } from "../gates/impact.ts";
 
 export const IMPACT_FILE = "config/validation-impact.json";
 
@@ -39,6 +51,25 @@ export const PLAN_SELF_PATHS: readonly string[] = [
 /** A base cujas PRs recebem o plano recortado. As outras (produção) rodam tudo. */
 export const PLANNED_BASE = "dev";
 
+/**
+ * Os gates que o L0 (só Markdown que nada executa) pede: os validadores
+ * estruturais, que o job `contratos` roda sempre. Plano com gate fora desta
+ * lista não é L0.
+ */
+export const STRUCTURAL_GATES: ReadonlySet<string> = new Set(["release-ready", "instructions", "harness", "qa-tracker"]);
+
+/**
+ * Onde uma mudança pode quebrar o banco numa major do PostgreSQL (decisão do
+ * dono, 13/10/2026). Fora disto, `banco-nas-majors` só roda no push em `dev`.
+ */
+export const DATABASE_PATTERNS: readonly string[] = [
+  "drizzle/**",
+  "src/core/db/**",
+  "supabase/**",
+  "tests/support/**",
+  "config/postgres-majors.json",
+];
+
 export type PlanInput = {
   /** `github.event_name` */
   event: string | undefined;
@@ -51,10 +82,14 @@ export type PlanInput = {
 export type CiPlan = {
   /** Roda o job `e2e-navegador`. */
   e2e: boolean;
+  /** Roda `testes`, `cobertura`, `build` e `pwa-browser`. */
+  suite: boolean;
+  /** Roda `banco-nas-majors`. */
+  banco: boolean;
   motivo: string;
 };
 
-const full = (motivo: string): CiPlan => ({ e2e: true, motivo: `${motivo}: plano completo` });
+const full = (motivo: string): CiPlan => ({ e2e: true, suite: true, banco: true, motivo: `${motivo}: plano completo` });
 const firstLine = (error: unknown) => (error instanceof Error ? error.message : String(error)).split("\n")[0];
 
 /**
@@ -95,10 +130,16 @@ export function ciPlan(input: PlanInput, map: ImpactMap, diff: () => string[]): 
     return full(`caminho inválido (${firstLine(error)})`);
   }
   const e2e = gates.includes("e2e");
-  return {
-    e2e,
-    motivo: `${paths.length} arquivo(s); a tabela de impacto ${e2e ? "pede" : "não pede"} o gate e2e`,
-  };
+  // Plano sem gate nenhum não prova L0: só "algum gate fora dos estruturais" recorta.
+  const suite = gates.length === 0 || gates.some((gate) => !STRUCTURAL_GATES.has(gate));
+  const touchesDatabase = paths.some((path) => DATABASE_PATTERNS.some((pattern) => globToRegex(pattern).test(path)));
+  const banco = suite && touchesDatabase;
+  const reasons = [
+    suite ? "a tabela pede mais que os validadores estruturais" : "L0: só validadores estruturais",
+    `${e2e ? "pede" : "não pede"} o gate e2e`,
+    `${banco ? "toca" : "não toca"} o banco`,
+  ];
+  return { e2e, suite, banco, motivo: `${paths.length} arquivo(s); ${reasons.join("; ")}` };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
@@ -110,4 +151,6 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   );
   console.error(`plano: ${plan.motivo}`);
   console.log(`e2e=${plan.e2e}`);
+  console.log(`suite=${plan.suite}`);
+  console.log(`banco=${plan.banco}`);
 }

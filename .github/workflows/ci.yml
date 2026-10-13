@@ -69,21 +69,31 @@ concurrency:
 jobs:
   plano:
     # O recorte do CI de PR (#535). Decisão do dono, 13/10/2026: em `pull_request`
-    # com base `dev`, o `e2e-navegador` só roda quando a tabela de impacto
-    # (`config/validation-impact.json`) pede o gate `e2e` para o diff. Push,
-    # `workflow_dispatch`, chamada da promoção (`target-sha`) e PR de outra base
-    # (a de produção) recebem sempre o plano completo — a lógica e a falha
-    # fechada estão em `scripts/github/ci-plan.ts`, provadas por
+    # com base `dev`, cada job pesado só roda quando o diff pede, e `e2e`,
+    # `suite` e `banco` dizem quais:
+    #   e2e   → `e2e-navegador`: a tabela de impacto
+    #           (`config/validation-impact.json`) pede o gate `e2e`;
+    #   suite → `testes`, `cobertura`, `build`, `pwa-browser`: falso só em PR L0
+    #           (a tabela pede só os validadores estruturais);
+    #   banco → `banco-nas-majors`: o diff toca `drizzle/`, `src/core/db/`,
+    #           `supabase/`, `tests/support/` ou `config/postgres-majors.json`.
+    # Push, `workflow_dispatch`, chamada da promoção (`target-sha`) e PR de
+    # outra base (a de produção) recebem sempre o plano completo — a lógica e a
+    # falha fechada estão em `scripts/github/ci-plan.ts`, provadas por
     # `tests/ci-plan.test.ts`.
     #
-    # É agregado por `qualidade` como qualquer outro job: plano vermelho reprova
-    # o portão. Sem `paths:` no workflow, de propósito (a G57 explica): check
-    # obrigatório filtrado por caminho fica pendente ou pulado, e pulado conta
-    # como aprovado.
+    # Pular um job NÃO enfraquece o portão: `qualidade` e `schema-e-migracao`
+    # rodam sempre e só aceitam `skipped` do job que este plano declarou
+    # pulado (`== 'false'`, com o próprio `plano` verde). Pulado sem plano
+    # reprova. Plano vermelho também. Sem `paths:` no workflow, de propósito (a
+    # G57 explica): check obrigatório filtrado por caminho fica pendente ou
+    # pulado, e pulado conta como aprovado.
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 5
     outputs:
       e2e: ${{ steps.plano.outputs.e2e }}
+      suite: ${{ steps.plano.outputs.suite }}
+      banco: ${{ steps.plano.outputs.banco }}
 
     steps:
       - uses: actions/checkout@v7
@@ -196,6 +206,11 @@ jobs:
     #
     # A cobertura de uma fatia é parcial e não diz nada sozinha: os limiares
     # ficam zerados aqui e são aplicados sobre o total, no job `cobertura`.
+    #
+    # Pulado em PR L0 (`plano.suite == 'false'`, #535): `qualidade` só aceita o
+    # pulo que o plano declarou.
+    needs: plano
+    if: needs.plano.outputs.suite == 'true'
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 15
     strategy:
@@ -283,8 +298,11 @@ jobs:
     # pulado, e o relatório mesclado — que lista as falhas de todas as fatias
     # num lugar só — nunca apareceria justo quando é útil. O veredito não muda:
     # `qualidade` reprova pela fatia vermelha de qualquer jeito.
-    if: ${{ !cancelled() }}
-    needs: testes
+    #
+    # Pulado junto com `testes` em PR L0 (`plano.suite == 'false'`, #535). Sem
+    # essa condição, o `!cancelled()` o rodaria sem nenhum blob para mesclar.
+    if: ${{ !cancelled() && needs.plano.outputs.suite == 'true' }}
+    needs: [plano, testes]
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 10
 
@@ -317,7 +335,10 @@ jobs:
   pwa-browser:
     # O contrato de privacidade abre um Chromium real. Ele fica separado da
     # cobertura para não concorrer com os testes curtos, mas continua sendo
-    # obrigatório no mesmo portão que autoriza a promoção.
+    # obrigatório no mesmo portão que autoriza a promoção. Pulado em PR L0
+    # (`plano.suite == 'false'`, #535).
+    needs: plano
+    if: needs.plano.outputs.suite == 'true'
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 10
 
@@ -371,6 +392,11 @@ jobs:
         run: pnpm test:pwa-browser
 
   build:
+    # Pulado em PR L0 (`plano.suite == 'false'`, #535). Markdown que o build lê
+    # (`CHANGELOG.md`, `USER_CHANGELOG*.md`, `content/legal/`, `docs/prompts/`)
+    # não é L0 na tabela de impacto: a classe `runtime-markdown` o põe aqui.
+    needs: plano
+    if: needs.plano.outputs.suite == 'true'
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 15
 
@@ -411,6 +437,12 @@ jobs:
     # arquivo. Em série num runner só, as duas majors levaram 401 s + 422 s,
     # rente ao teto de 15 min; por isso a matriz major × fatia. O resultado
     # entra no check obrigatório `schema-e-migracao`, que depende deste job.
+    #
+    # Em PR para `dev` só roda quando o diff toca o banco (`plano.banco`, #535,
+    # decisão do dono de 13/10/2026); o push em `dev` roda sempre, e é nele que
+    # uma regressão numa major fora desses caminhos aparece.
+    needs: plano
+    if: needs.plano.outputs.banco == 'true'
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 15
     strategy:
@@ -444,8 +476,13 @@ jobs:
     # `always()` é o mesmo do agregador `qualidade`: sem ele, uma fatia
     # vermelha faria este check obrigatório ser PULADO, e pulado conta como
     # aprovado na proteção de branch.
+    #
+    # A única exceção ao "tudo em sucesso" (#535): `banco-nas-majors` pulado
+    # passa quando o `plano` terminou verde e declarou `banco == 'false'` (PR
+    # para `dev` que não toca o banco, ou L0). Pulado sem esse plano reprova; o
+    # `schema-e-migracao` em si roda sempre.
     if: ${{ always() }}
-    needs: [banco-nas-majors]
+    needs: [plano, banco-nas-majors]
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 15
 
@@ -455,7 +492,12 @@ jobs:
           RESULTADOS: ${{ toJSON(needs) }}
         run: |
           echo "$RESULTADOS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
-          echo "$RESULTADOS" | jq -e 'length > 0 and (to_entries | all(.value.result == "success"))' > /dev/null
+          echo "$RESULTADOS" | jq -e '
+            (.plano.result == "success" and .plano.outputs.banco == "false") as $semBanco
+            | length > 0 and (to_entries | all(
+                .value.result == "success"
+                or (.key == "banco-nas-majors" and .value.result == "skipped" and $semBanco)))
+          ' > /dev/null
 
       - uses: actions/checkout@v7
         with:
@@ -583,6 +625,14 @@ jobs:
     # obrigatório pulado como aprovado. Com ele, o job roda sempre e reprova
     # por conta própria quando qualquer dependência não terminou em sucesso —
     # falha, pulo ou cancelamento.
+    #
+    # Única exceção ao "tudo em sucesso" (#535): um job pulado passa quando o
+    # `plano` terminou verde e declarou o pulo dele — `suite == 'false'` para
+    # `testes`, `cobertura`, `pwa-browser` e `build` (PR L0); `banco == 'false'`
+    # para `banco-nas-majors`. Pulo sem plano, com plano vermelho, de outro job
+    # (`contratos`, `schema-e-migracao`, o próprio `plano`) ou contra o que o
+    # plano declarou reprova. Job novo que o plano passe a recortar entra aqui E
+    # em `tests/ci-pipeline.test.ts`, que reprova quem esquecer um dos dois.
     if: ${{ always() }}
     needs: [plano, contratos, testes, cobertura, pwa-browser, build, banco-nas-majors, schema-e-migracao]
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
@@ -594,7 +644,19 @@ jobs:
           RESULTADOS: ${{ toJSON(needs) }}
         run: |
           echo "$RESULTADOS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
-          echo "$RESULTADOS" | jq -e 'length > 0 and (to_entries | all(.value.result == "success"))' > /dev/null
+          echo "$RESULTADOS" | jq -e '
+            (if .plano.result == "success" then .plano.outputs else {} end) as $plano
+            | {
+                "testes": ($plano.suite == "false"),
+                "cobertura": ($plano.suite == "false"),
+                "pwa-browser": ($plano.suite == "false"),
+                "build": ($plano.suite == "false"),
+                "banco-nas-majors": ($plano.banco == "false")
+              } as $pulavel
+            | length > 0 and (to_entries | all(
+                .value.result == "success"
+                or (.value.result == "skipped" and ($pulavel[.key] // false))))
+          ' > /dev/null
 
   validacao:
     if: inputs.target-sha != ''

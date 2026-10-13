@@ -148,8 +148,8 @@ São perguntas diferentes, e nenhuma das quatro camadas responde a da outra.
 
 | Camada | Onde roda | O que prova | O que não prova |
 |---|---|---|---|
-| `pnpm check` (Vitest, cobertura, inventário de rotas) | jobs `contratos`, `testes` e `cobertura`, obrigatórios via `qualidade` | regra pura, contrato de banco, autorização de toda entrada, que toda página tem varredura ou exceção | que a tela renderiza, cabe ou fala inglês |
-| Fronteira PWA (`pnpm test:pwa-browser`) | job `pwa-browser`, obrigatório via `qualidade` | service worker sem nada autenticado, num Chromium real | o resto da interface |
+| `pnpm check` (Vitest, cobertura, inventário de rotas) | jobs `contratos`, `testes` e `cobertura`, obrigatórios via `qualidade` (`testes` e `cobertura` ficam pulados em PR só de documentação, G57) | regra pura, contrato de banco, autorização de toda entrada, que toda página tem varredura ou exceção | que a tela renderiza, cabe ou fala inglês |
+| Fronteira PWA (`pnpm test:pwa-browser`) | job `pwa-browser`, obrigatório via `qualidade` (pulado em PR só de documentação, G57) | service worker sem nada autenticado, num Chromium real | o resto da interface |
 | `pnpm test:e2e` (`ui.mjs` com as áreas de `ui/`, e `a11y.mjs`) | job `e2e-navegador`, **ainda não obrigatório**, sempre a suíte inteira quando roda — em PR para `dev`, só quando a tabela de impacto pede (G57) | build de produção, PostgreSQL descartável, login real por papel; as varreduras de `routes.mjs`; temas, contraste do editor, WebKit no histórico de novidades | que uma pessoa consegue cumprir o objetivo; texto literal sem acento; telas em `UNMEASURED_PAGES` |
 | QA de jornada (`qa-execution`) | só local, com gente ou agente dirigindo | que a persona chega ao estado final pela interface pública, e que ele sobrevive a refresh e a leitura independente | nada que o CI já reprova — ela não substitui nenhuma das linhas acima |
 

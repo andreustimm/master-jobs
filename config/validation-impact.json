@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "mapVersion": "1.1.0",
+  "mapVersion": "1.2.0",
   "unknownPaths": "full",
   "fullPackage": ["release-ready", "instructions", "harness", "qa-tracker", "typecheck", "coverage", "qa-skills", "pwa-browser", "build", "e2e"],
   "classes": [
@@ -16,6 +16,12 @@
       "patterns": ["docs/**", ".compozy/**", ".audits/**", ".impeccable/**"],
       "exclude": ["**/*.md"],
       "gates": ["release-ready", "instructions", "harness", "qa-tracker"]
+    },
+    {
+      "id": "runtime-markdown",
+      "description": "Markdown que o app ou o build lê em execução: textos legais (content/legal), prompts de LLM e os changelogs que o build compila. Mudar um deles muda o produto, mesmo sendo .md",
+      "patterns": ["content/**", "docs/prompts/**", "CHANGELOG.md", "USER_CHANGELOG*.md"],
+      "gates": ["typecheck", "tests", "build"]
     },
     {
       "id": "tooling",

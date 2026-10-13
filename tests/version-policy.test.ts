@@ -313,10 +313,11 @@ describe("majors do PostgreSQL testadas", () => {
     ]);
 
     // Pulado conta como aprovado na proteção de branch: o check obrigatório
-    // roda sempre e reprova sozinho quando alguma fatia não passou.
+    // roda sempre e reprova sozinho quando alguma fatia não passou. Banco
+    // pulado só passa com o plano que o declarou (#535, tests/ci-pipeline.test.ts).
     const gate = ci.jobs["schema-e-migracao"]!;
     expect(gate.if).toBe("${{ always() }}");
-    expect(gate.needs).toEqual(["banco-nas-majors"]);
+    expect(gate.needs).toEqual(["plano", "banco-nas-majors"]);
     const step = gate.steps.find((candidate) => candidate.env?.RESULTADOS === "${{ toJSON(needs) }}")!;
     const run = (needs: Record<string, { result: string }>) =>
       spawnSync("bash", ["-e", "-c", step.run!], { encoding: "utf8", env: { ...process.env, RESULTADOS: JSON.stringify(needs) } }).status;
