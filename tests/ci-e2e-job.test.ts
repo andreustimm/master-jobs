@@ -15,7 +15,7 @@ import { AGGREGATOR, NON_BLOCKING_JOBS, gatedJobWithStep, needsOf, type CiWorkfl
 type Step = { name?: string; run?: string; uses?: string; if?: string; with?: Record<string, unknown> };
 type Job = {
   if?: string;
-  needs?: string[];
+  needs?: string | string[];
   env?: Record<string, unknown>;
   services?: unknown;
   permissions?: Record<string, string>;
@@ -36,12 +36,14 @@ describe("V08-02 — o CI roda o navegador geral", () => {
     expect(runs.join("\n")).not.toContain("test:e2e:external");
   });
 
-  it("é o único job que roda a suíte, sem esperar outro job, com teto de tempo próprio", () => {
+  it("é o único job que roda a suíte, esperando só o plano, com teto de tempo próprio", () => {
     const owners = Object.entries(workflow.jobs)
       .filter(([, candidate]) => candidate.steps.some((step) => /\btest:e2e\b/.test(step.run ?? "")))
       .map(([name]) => name);
     expect(owners).toEqual(["e2e-navegador"]);
-    expect(job.needs ?? []).toEqual([]);
+    // Só o `plano` (#535): segundos, sem instalar nada. Esperar um gate pesado
+    // atrasaria o E2E por nada, e ele não depende do resultado de nenhum.
+    expect(job.needs).toEqual("plano");
     expect(job["timeout-minutes"]).toBeGreaterThan(0);
     expect(job["timeout-minutes"]).toBeLessThanOrEqual(60);
   });
@@ -80,8 +82,11 @@ describe("V08-02 — o CI roda o navegador geral", () => {
     expect(needsOf(workflow.jobs[AGGREGATOR]!)).not.toContain("e2e-navegador");
     expect(workflow.jobs.validacao!.needs).not.toContain("e2e-navegador");
     // Nem na chamada da promoção (`target-sha`), nem no dispatch que ela faz
-    // em `staging` para a PR de produção (#303).
-    expect(job.if).toBe("github.event_name != 'workflow_dispatch' && inputs.target-sha == ''");
+    // em `staging` para a PR de produção (#303). E em PR para `dev`, só quando
+    // o plano diz que a tabela de impacto pede o E2E (#535).
+    expect(job.if).toBe(
+      "github.event_name != 'workflow_dispatch' && inputs.target-sha == '' && needs.plano.outputs.e2e == 'true'",
+    );
   });
 
   it("a PWA continua no portão obrigatório", () => {

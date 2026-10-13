@@ -270,9 +270,10 @@ Caminho transversal (layout raiz, estilos, navegação, `components/`, o própri
 executor e o mapa) ou sem área pede a **suíte inteira**, com o motivo. O mapa
 é conferido por `tests/e2e-spec-map.test.ts`: toda página servida e toda rota
 de `routes.mjs` têm área, as áreas são exatamente as do executor, e a rota
-que um módulo de área cita está nas rotas dela. O CI não seleciona: o job
-`e2e-navegador` roda sempre a suíte inteira, e continua não obrigatório até a
-medição de instabilidade da #202.
+que um módulo de área cita está nas rotas dela. O CI não seleciona áreas: o job
+`e2e-navegador` roda a suíte inteira quando roda — em PR para `dev`, só quando
+a tabela de impacto pede o gate `e2e` ([G57](rules/delivery.md#g57)) — e
+continua não obrigatório até a medição de instabilidade da #202.
 
 A suíte completa roda no CI da PR, que abre como **draft** logo depois do
 primeiro verde local e vira pronta depois do SHIP e do CI verde

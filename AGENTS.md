@@ -195,9 +195,11 @@ Comandos: [docs/cli.md](docs/cli.md). Índice: [docs/README.md](docs/README.md).
    `git status` e `pnpm worktrees`; preserve WIP antes de reconciliar a raiz.
    [[G44](docs/engineering/rules/delivery.md#g44)]
 2. Valide local e enxuto: `pnpm typecheck` + `vitest related` do diff, E2E
-   afetado se toca navegador; a suíte completa é do CI. Só Markdown:
-   `pnpm check:instructions`, `check:release-ready`, `check:qa-tracker`. Gate
-   estourou o teto (check 10 min, E2E 8, L1 10, L2 30): registre e siga.
+   afetado se toca navegador; a suíte completa é do CI, que em PR para `dev`
+   só roda o E2E quando a tabela de impacto pede (dono, 13/10/2026). Só
+   Markdown: `pnpm check:instructions`, `check:release-ready`,
+   `check:qa-tracker`. Gate estourou o teto (check 10 min, E2E 8, L1 10, L2
+   30): registre e siga.
    [[G57](docs/engineering/rules/delivery.md#g57)]
 3. Abra PR draft para `dev` logo no primeiro verde, com assignee
    `andreustimm`. Um commit leva `Closes #N` (ou `Refs #N`) na mensagem, que é

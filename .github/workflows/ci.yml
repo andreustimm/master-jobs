@@ -67,6 +67,46 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  plano:
+    # O recorte do CI de PR (#535). Decisão do dono, 13/10/2026: em `pull_request`
+    # com base `dev`, o `e2e-navegador` só roda quando a tabela de impacto
+    # (`config/validation-impact.json`) pede o gate `e2e` para o diff. Push,
+    # `workflow_dispatch`, chamada da promoção (`target-sha`) e PR de outra base
+    # (a de produção) recebem sempre o plano completo — a lógica e a falha
+    # fechada estão em `scripts/github/ci-plan.ts`, provadas por
+    # `tests/ci-plan.test.ts`.
+    #
+    # É agregado por `qualidade` como qualquer outro job: plano vermelho reprova
+    # o portão. Sem `paths:` no workflow, de propósito (a G57 explica): check
+    # obrigatório filtrado por caminho fica pendente ou pulado, e pulado conta
+    # como aprovado.
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
+    timeout-minutes: 5
+    outputs:
+      e2e: ${{ steps.plano.outputs.e2e }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target-sha || github.sha }}
+          persist-credentials: false
+          # O commit de merge do PR e o primeiro pai dele, que é a base.
+          fetch-depth: 2
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+
+      - name: Plano do diff
+        id: plano
+        # Entra por `env:`, nunca interpolado no `run:`: `github.base_ref` é
+        # nome de branch, texto de quem abre a PR.
+        env:
+          EVENTO: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          TARGET_SHA: ${{ inputs.target-sha }}
+        run: node --experimental-strip-types --no-warnings scripts/github/ci-plan.ts >> "$GITHUB_OUTPUT"
+
   contratos:
     # Os gates curtos que não dependem de teste: changelogs, tracker de QA,
     # tipos e os contratos das skills de QA. Juntos custam menos que a
@@ -448,9 +488,12 @@ jobs:
     # autenticação real. Até aqui ela só rodava na máquina de quem lembrava, e
     # o CI via apenas o Vitest e a fronteira da PWA.
     #
-    # Job próprio, sem `needs`, e fora de `qualidade.needs`: é a única exceção
-    # registrada ao agregador e à promoção (`NON_BLOCKING_CI_JOBS` em
-    # scripts/release/promotion-ci.ts).
+    # Job próprio, fora de `qualidade.needs`: é a única exceção registrada ao
+    # agregador e à promoção (`NON_BLOCKING_CI_JOBS` em
+    # scripts/release/promotion-ci.ts). Só espera o `plano` (segundos, sem
+    # instalar nada), que decide se ele roda: em PR para `dev`, só quando a
+    # tabela de impacto pede o gate `e2e` (#535). Pular o E2E não toca o
+    # portão, porque ele já está fora dele; push em `dev` continua rodando.
     #
     # Banco: o próprio `run-isolated.mjs` sobe um PostgreSQL descartável, na major
     # `latest` de `config/postgres-majors.json`, pelo
@@ -469,7 +512,8 @@ jobs:
     # promoção dispara em `staging`: ali só interessam os checks que o ruleset
     # de `main` exige, e 15 minutos de navegador só atrasam a PR de produção
     # (#303). `staging` recebe exatamente o SHA cujo push em `dev` já rodou o E2E.
-    if: github.event_name != 'workflow_dispatch' && inputs.target-sha == ''
+    needs: plano
+    if: github.event_name != 'workflow_dispatch' && inputs.target-sha == '' && needs.plano.outputs.e2e == 'true'
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 40
     permissions:
@@ -540,7 +584,7 @@ jobs:
     # por conta própria quando qualquer dependência não terminou em sucesso —
     # falha, pulo ou cancelamento.
     if: ${{ always() }}
-    needs: [contratos, testes, cobertura, pwa-browser, build, banco-nas-majors, schema-e-migracao]
+    needs: [plano, contratos, testes, cobertura, pwa-browser, build, banco-nas-majors, schema-e-migracao]
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 5
 
