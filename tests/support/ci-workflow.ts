@@ -5,6 +5,7 @@ import { NON_BLOCKING_CI_JOBS } from "../../scripts/release/promotion-ci.ts";
 import { evaluateGithubActionsExpression } from "./expr-eval.ts";
 
 export type CiStep = {
+  id?: string;
   name?: string;
   run?: string;
   uses?: string;
@@ -17,6 +18,7 @@ export type CiJob = {
   needs?: string | string[];
   "continue-on-error"?: unknown;
   strategy?: { matrix?: Record<string, unknown> };
+  outputs?: Record<string, string>;
   "runs-on"?: string;
   steps: CiStep[];
 };

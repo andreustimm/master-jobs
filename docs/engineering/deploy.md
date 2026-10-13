@@ -636,6 +636,7 @@ no push das três branches. Os gates correm em jobs paralelos:
 | Job | O que prova |
 |---|---|
 | `escopo` | o recorte do PR: só documentação (lista de permissão em `scripts/github/pr-scope.ts`) ou suíte completa; fora de `pull_request`, sempre completa |
+| `plano` | o recorte do E2E em PR para `dev` pela tabela de impacto (abaixo); em qualquer outro evento, o plano completo |
 | `contratos` | changelogs prontos, versões explícitas ([política de versões](versions.md)), tracker de QA, tipos, contratos das skills de QA |
 | `testes` (4 fatias) | a suíte Vitest, cada fatia num runner com o próprio PostgreSQL em Docker |
 | `cobertura` | mescla os blobs das fatias e aplica o piso de `vitest.config.ts` sobre o total |
@@ -683,11 +684,27 @@ Não bloqueante vale nas três portas, e não só no agregador:
   produção: o job também não roda. Ali só contam os checks que o ruleset de
   `main` exige, e `staging` recebe o SHA cujo push em `dev` já rodou o E2E.
 
-Não há atalho para PR só de documentação: cerca de quarenta arquivos de teste
-leem `docs/`, os changelogs e `.claude/skills/`, e o build compila os
-changelogs. Pular a suíte nesses casos deixaria passar exatamente a quebra de
-contrato documental que ela existe para pegar. O ganho para essas PRs vem do
-paralelismo, que já vale para todas.
+**O plano do E2E em PR** (decisão do dono, 13/10/2026, G57;
+[#535](https://github.com/andreustimm/master-jobs/issues/535)). Medido em
+14 dias, o E2E era 41,6% dos minutos do `ci.yml`, a 15,3 min por execução, e
+18 de 50 PRs não tocavam nada que a tabela mande testar em navegador. O job
+`plano` lê o diff do commit de merge da PR contra a base e roda `planGates`
+(`scripts/gates/impact.ts`) sobre ele; `e2e-navegador` só espera o `plano` e só
+roda quando o gate `e2e` está no plano. A decisão vale só em `pull_request` com
+base `dev`. Falha fechada para o resto: push (em `dev`, `staging` e `main`),
+dispatch, chamada da promoção, PR de produção (base `main`), diff vazio ou
+ilegível e PR que edita `ci.yml`, `ci-plan.ts`, `impact.ts` ou
+`validation-impact.json` — o plano não relaxa a si mesmo — recebem o plano
+completo. O recorte só existe em PR: o push em `dev` roda tudo, e é ele que a
+promoção lê. `plano` entra em `qualidade.needs`; plano vermelho reprova o
+portão. O E2E não escolhe áreas no CI: quando roda, é a suíte inteira.
+
+Ainda não há atalho para o resto de uma PR só de documentação: cerca de
+quarenta arquivos de teste leem `docs/`, os changelogs e `.claude/skills/`, e o
+build compila os changelogs. Pular a suíte nesses casos deixaria passar
+exatamente a quebra de contrato documental que ela existe para pegar. O ganho
+para essas PRs vem do paralelismo, que já vale para todas, e de não pagar o
+E2E.
 
 Medido em 23/09/2026: o job único levava 6 min 53 s (run 35803388420, em `dev`);
 os jobs paralelos, 2 min 41 s do disparo ao `qualidade` (run 35850357880, PR

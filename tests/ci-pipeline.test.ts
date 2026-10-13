@@ -4,6 +4,7 @@
 // Boundary IN: .github/workflows/ci.yml e o script do agregador, executado de verdade
 // Boundary OUT: o scheduler do GitHub Actions e a proteção de branch remota
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import config from "../vitest.config.ts";
 import {
@@ -119,6 +120,78 @@ describe("agregador qualidade", () => {
       expect(run({ escopo: documentacao, "banco-nas-majors": { result: "failure" } })).not.toBe(0);
       expect(run({ escopo: completo, "banco-nas-majors": { result: "success" } })).toBe(0);
     });
+  });
+
+  it("nenhuma dependência, `plano` inclusive, passa sem sucesso", () => {
+    const all = Object.fromEntries(needsOf(aggregator).map((name) => [name, { result: "success" }]));
+    for (const name of needsOf(aggregator)) {
+      for (const result of ["failure", "skipped", "cancelled"]) {
+        expect(runAggregator({ ...all, [name]: { result } }).status, `${name}: ${result}`).not.toBe(0);
+      }
+    }
+  });
+});
+
+describe("plano do CI de PR (#535)", () => {
+  const plan = ci.jobs.plano!;
+  const raw = readFileSync(".github/workflows/ci.yml", "utf8");
+  const step = plan.steps.find((candidate) => candidate.id === "plano")!;
+
+  it("é gate do portão: está em `qualidade.needs` e nenhum passo seu é tolerante a falha", () => {
+    expect(needsOf(aggregator)).toContain("plano");
+    expect(plan.steps.some((candidate) => "continue-on-error" in candidate)).toBe(false);
+    expect(plan["continue-on-error"]).toBeUndefined();
+    expect(plan.needs).toBeUndefined();
+  });
+
+  it("lê o diff do commit de merge do alvo exato, sem credencial e sem instalar nada", () => {
+    expect(checkoutOf(plan)?.with).toEqual({
+      ref: "${{ inputs.target-sha || github.sha }}",
+      "persist-credentials": false,
+      // A PR testada é um commit de merge; a base é o primeiro pai dele.
+      "fetch-depth": 2,
+    });
+    expect(plan.steps.map((candidate) => candidate.run ?? "").join("\n")).not.toMatch(/pnpm|npm|yarn/);
+  });
+
+  it("passa o contexto do GitHub por `env:`, nunca interpolado no `run:`", () => {
+    expect(step.env).toEqual({
+      EVENTO: "${{ github.event_name }}",
+      BASE_REF: "${{ github.base_ref }}",
+      TARGET_SHA: "${{ inputs.target-sha }}",
+    });
+    // `github.base_ref` é nome de branch: texto de quem abre a PR.
+    expect(step.run).not.toContain("${{");
+    expect(step.run).toBe(
+      'node --experimental-strip-types --no-warnings scripts/github/ci-plan.ts >> "$GITHUB_OUTPUT"',
+    );
+  });
+
+  it("as saídas declaradas são as que o script escreve, e todo consumidor lê uma delas", () => {
+    // Saída com nome errado vira "" no Actions, e `== 'true'` falha em silêncio:
+    // o E2E sumiria de todo PR sem nenhum job vermelho.
+    const script = spawnSync(
+      process.execPath,
+      ["--experimental-strip-types", "--no-warnings", "scripts/github/ci-plan.ts"],
+      { encoding: "utf8", env: { ...process.env, EVENTO: "push", BASE_REF: "", TARGET_SHA: "" } },
+    );
+    expect(script.status).toBe(0);
+    const written = script.stdout.trim().split("\n").map((line) => line.split("=")[0]);
+    expect(Object.keys(plan.outputs ?? {}).sort()).toEqual(written.sort());
+    for (const [name, expression] of Object.entries(plan.outputs ?? {})) {
+      expect(expression).toBe(`\${{ steps.plano.outputs.${name} }}`);
+    }
+    const consumed = [...raw.matchAll(/needs\.plano\.outputs\.([\w-]+)/g)].map((match) => match[1]!);
+    expect(consumed.length).toBeGreaterThan(0);
+    for (const name of consumed) expect(written, name).toContain(name);
+  });
+
+  it("só o E2E consome o plano, e fora do portão", () => {
+    const consumers = Object.entries(ci.jobs)
+      .filter(([, job]) => needsOf(job).includes("plano"))
+      .map(([name]) => name);
+    expect(consumers.sort()).toEqual(["e2e-navegador", "qualidade"]);
+    expect(ci.jobs["e2e-navegador"]!.needs).toBe("plano");
   });
 });
 
