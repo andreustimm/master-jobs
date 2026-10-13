@@ -208,6 +208,14 @@ Comandos: [docs/cli.md](docs/cli.md). Índice: [docs/README.md](docs/README.md).
    `deep-review`. [[G84](docs/engineering/rules/delivery.md#g84)]
 5. PR pronta após SHIP (ou validadores, em L0). Mesclada, a branch sai local e
    remota. [[G50](docs/engineering/rules/delivery.md#g50)]
+6. **Puxar, não empurrar.** Antes de começar, conte por REST os PRs abertos
+   para `dev` e a fila de CI: mais de 8 PRs, ou fila acima de 2 runs por
+   runner, congela trabalho novo. No máximo 5 implementações e 2 de alto
+   risco; PR com até ~400 linhas. Prioridade: aliviar CI/merge > desbloquear >
+   mesclar o verde > começar. PR verde e revisada é mesclada na hora com
+   `--match-head-commit`; acumulou, um lote de integração com uma CI só; um
+   vigia de merge via REST, sem polling de GraphQL por agente.
+   [[G88](docs/engineering/rules/delivery.md#g88)]
 
 ## Produção
 
