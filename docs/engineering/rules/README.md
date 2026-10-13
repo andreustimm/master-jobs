@@ -14,7 +14,7 @@ produto fica em `docs/`; razão das decisões, em `docs/adr/`.
 | Dados, ingestão e sourcing | [data-and-sourcing.md](data-and-sourcing.md) | Decisões do usuário, fechamento e retenção, FKs, PostgreSQL, TLS, fontes, cota |
 | Matching e score | [matching-and-evidence.md](matching-and-evidence.md) | Versão do scorer, dado ausente neutro, rubrica determinística |
 | Interface | [frontend.md](frontend.md) | Dicionário i18n, tokens e temas, escala, celular, URL como estado |
-| Entrega e harnesses | [delivery.md](delivery.md) | Project/issue, branches e promoção, revisão, QA, docs e changelogs, skills, RTK |
+| Entrega e harnesses | [delivery.md](delivery.md) | Project/issue, branches e promoção, vazão (WIP, merge, lote), revisão, QA, docs e changelogs, skills, RTK |
 | Papéis e modelos | [orchestration.md](orchestration.md) | Analista, executor, revisor, corretor e juiz; modelo e effort por papel e complexidade; modo de assinatura |
 
 ## Precedência e conflito
@@ -130,6 +130,7 @@ segunda definição. "Regra N" é a numeração mantida na entrada comum.
 | G85 | Paridade dos harnesses | [delivery](delivery.md#g85) | [#317](https://github.com/andreustimm/master-jobs/issues/317) | nova: espelhos gerados de `.claude/` e gate `pnpm check:harness`; #461: classificador de risco de shell único para os três harnesses |
 | G86 | Cinco papéis; juiz ≠ autor | [orchestration](orchestration.md#g86) | [#318](https://github.com/andreustimm/master-jobs/issues/318) | nova |
 | G87 | Modelo/effort explícitos; modo de assinatura falha fechado | [orchestration](orchestration.md#g87) | [#318](https://github.com/andreustimm/master-jobs/issues/318) | nova: `config/model-routing.json` e `pnpm route` |
+| G88 | Vazão é a de merge: limite de WIP, puxar, prioridade fixa, merge com head fixado, lote e vigia único | [delivery](delivery.md#g88) | [#522](https://github.com/andreustimm/master-jobs/issues/522) | nova: aplica o `ENTREGA.md` global do dono; sem gate em código |
 
 **Obrigações posteriores à auditoria**, sem ID `G` (G85 em diante já nasce com
 ID), preservadas no mesmo destino: [R24 — issue e Project 3](delivery.md#r24),

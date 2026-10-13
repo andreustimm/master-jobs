@@ -209,6 +209,26 @@ Comandos: [docs/cli.md](docs/cli.md). Índice: [docs/README.md](docs/README.md).
 5. PR pronta após SHIP (ou validadores, em L0). Mesclada, a branch sai local e
    remota. [[G50](docs/engineering/rules/delivery.md#g50)]
 
+### Vazão
+
+A vazão é a de **merge** (CI, revisão, conflito), não a de agentes; agente a
+mais sem vaga só alonga a fila. [[G88](docs/engineering/rules/delivery.md#g88)]
+
+- **Limite de WIP:** no máximo 8 PRs abertas para `dev`, 5 implementações
+  simultâneas e 2 de risco alto (L2, CI/workflows, política de shell). Acima
+  disso, ou com mais de 2 runs `queued` por runner, não comece nada novo.
+- **Puxar, não empurrar:** trabalho novo só quando há vaga de WIP; sem vaga,
+  termine, revise, resolva conflito e mescle.
+- **Prioridade fixa:** aliviar CI/merge > desbloquear PR existente > mesclar o
+  verde > começar novo.
+- **Mescle na hora** a PR verde, sem conflito e com revisão aprovada, com o
+  head fixado: `gh pr merge <n> --merge --match-head-commit <sha>`.
+- **Lote:** aprovadas acumuladas em conflito de arquivo quente viram um branch
+  de integração com os heads exatos, conflitos resolvidos uma vez, uma CI e o
+  merge commit do lote.
+- **Um único vigia de merge**, por REST, a cada ≥ 5 min; os demais agentes não
+  fazem polling do GitHub nem GraphQL em laço.
+
 ## Produção
 
 `dev → staging` é automático a cada CI de push aprovado em `dev`, por

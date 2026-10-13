@@ -261,6 +261,64 @@ falso está em `tests/promotion-provenance.test.ts`.
 
 ---
 
+## Vazão da entrega
+
+<a id="g88"></a>
+### G88 — A vazão é a de merge: limite de WIP, puxar, prioridade fixa e lote
+
+**Obrigação.** A vazão do projeto é a de **merge** (CI + revisão + conflitos),
+não a de agentes: agente a mais, sem vaga na CI, só aumenta a fila e o tempo de
+cada entrega. A regra aplica ao projeto o `ENTREGA.md` global do dono
+(12–13/10/2026, [#522](https://github.com/andreustimm/master-jobs/issues/522)).
+
+1. **Limite de WIP, antes de lançar qualquer implementação.** Conte as PRs
+   abertas para `dev` e a fila da CI, ambos por REST:
+   `gh api "repos/andreustimm/master-jobs/pulls?base=dev&state=open&per_page=100" --jq length`
+   e
+   `gh api "repos/andreustimm/master-jobs/actions/runs?status=queued&per_page=1" --jq .total_count`.
+   Mais de **8 PRs abertas**, ou fila com mais de 2 runs `queued` por runner:
+   não comece nada novo; use os agentes para terminar (revisar, resolver
+   conflito, mesclar). No máximo **5 implementações simultâneas** e **2 de
+   risco alto**: L2 (G53), CI/workflows e a política de shell dos harnesses.
+   Alvo de tamanho de PR: até ~400 linhas.
+2. **Puxar, não empurrar.** Trabalho novo só começa quando há vaga de WIP; a
+   existência de tarefa na fila não é vaga.
+3. **Prioridade fixa**, da maior para a menor: aliviar a CI ou o merge >
+   desbloquear PR existente > mesclar o que está verde > começar trabalho novo.
+4. **Mescle na hora** a PR verde, sem conflito e com revisão aprovada (SHIP em
+   G54; validadores, em L0), com o head fixado:
+   `gh pr merge <n> --merge --match-head-commit <sha>`. O SHA fixado impede que
+   um push tardio entre sem passar pela CI e pela revisão. `main` e produção
+   seguem G46, não esta regra.
+5. **Lote, quando o acúmulo trava o merge.** Muitas PRs aprovadas e em conflito
+   por arquivo quente: um branch de integração com os heads exatos das PRs, os
+   conflitos resolvidos uma vez, a validação completa local, **uma** rodada de
+   CI e o merge commit do lote. Sincronize uma PR com a base só quando houver
+   conflito real: cada re-sincronização roda a CI inteira de novo, e o
+   changelog por fragmento (regra 21) e o estado de tarefa no Project (R24)
+   existem para tirar o arquivo quente de dentro das PRs.
+6. **Um único vigia de merge**, o orquestrador, consulta o GitHub por REST a
+   cada ≥ 5 min. Os demais agentes não fazem polling do GitHub nem repetem
+   consulta GraphQL em laço: muitos agentes em GraphQL estouram o limite
+   secundário (o REST de G47 é o caminho quando o cliente GraphQL falha).
+   A cada leva de entregas, o vigia reavalia o WIP e relata ao dono PRs
+   abertas, fila e lead time, não só "o que foi feito". "Muita coisa feita e
+   nada mesclado" é o sinal de alarme: pare de começar.
+
+**Exceções nomeadas.** Hotfix decidido pelo dono (G43) e tarefa que o dono
+mandar começar, por escrito na issue ou na PR, passam do limite. PRs abertas
+pelos workflows de promoção e de retorno (G46, G52) contam entre as PRs
+abertas, mas não ocupam vaga de implementação. Nenhuma exceção dispensa CI
+verde nem revisão no nível do diff (G53).
+
+**Prova.** Texto de regra, sem gate em código: `pnpm check:instructions`
+confere a âncora, o rótulo e a linha do inventário. Os dois comandos de
+contagem foram executados na redação da regra e devolveram um número cada.
+Medir a vazão (fila × execução por job, runs por PR) fica fora desta regra:
+ela só fixa o limite que o agente respeita.
+
+---
+
 ## Revisão, QA e documentação antes da PR
 
 A ordem do fluxo, de ponta a ponta:
