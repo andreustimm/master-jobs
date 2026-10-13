@@ -13,8 +13,9 @@
  *   (`release-ready`, `instructions`, `harness`, `qa-tracker`). Markdown que o
  *   app ou o build lê (`content/legal`, `docs/prompts`, changelogs) NÃO é L0:
  *   a classe `runtime-markdown` da tabela pede testes e build para ele.
- * - `banco` (`banco-nas-majors`): roda quando o diff toca o que a decisão do
- *   dono lista (`DATABASE_PATTERNS`); L0 nunca roda.
+ * - `banco` (`banco-nas-majors`): roda quando o diff toca o que
+ *   `DATABASE_PATTERNS` lista (a decisão do dono e o que a revisão somou a
+ *   ela); L0 nunca roda.
  *
  * `contratos` (instruções, harnesses, changelogs, tipos), `schema-e-migracao`
  * e `qualidade` rodam sempre: só os pulos que o plano declara passam.
@@ -59,8 +60,16 @@ export const PLANNED_BASE = "dev";
 export const STRUCTURAL_GATES: ReadonlySet<string> = new Set(["release-ready", "instructions", "harness", "qa-tracker"]);
 
 /**
- * Onde uma mudança pode quebrar o banco numa major do PostgreSQL (decisão do
- * dono, 13/10/2026). Fora disto, `banco-nas-majors` só roda no push em `dev`.
+ * Onde uma mudança pode quebrar o banco numa major do PostgreSQL. Fora disto,
+ * `banco-nas-majors` só roda no push em `dev`.
+ *
+ * As cinco primeiras entradas são a decisão do dono de 13/10/2026. As outras
+ * fecham o que a revisão do orquestrador achou fora dela, no mesmo dia:
+ * dependência (`package.json`, `pnpm-lock.yaml`: um bump do driver do
+ * PostgreSQL muda como as queries chegam ao banco, e é exatamente o PR que o
+ * Renovate abre), a configuração do `drizzle-kit` (`drizzle.config.ts` só
+ * reexporta `drizzle.postgres.config.ts`, que é a que vale) e o runner do
+ * próprio `banco-nas-majors`.
  */
 export const DATABASE_PATTERNS: readonly string[] = [
   "drizzle/**",
@@ -68,6 +77,11 @@ export const DATABASE_PATTERNS: readonly string[] = [
   "supabase/**",
   "tests/support/**",
   "config/postgres-majors.json",
+  "package.json",
+  "pnpm-lock.yaml",
+  "drizzle.config.ts",
+  "drizzle.postgres.config.ts",
+  "scripts/versions/postgres-majors.ts",
 ];
 
 export type PlanInput = {

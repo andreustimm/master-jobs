@@ -683,7 +683,7 @@ inteira. O job `plano` lê o diff do commit de merge da PR contra a base, roda
 |---|---|---|
 | `e2e` | `e2e-navegador` | a tabela de impacto não pede o gate `e2e` |
 | `suite` | `testes`, `cobertura`, `build`, `pwa-browser` | PR L0: a tabela pede só os validadores estruturais (`release-ready`, `instructions`, `harness`, `qa-tracker`) |
-| `banco` | `banco-nas-majors` | o diff não toca `drizzle/**`, `src/core/db/**`, `supabase/**`, `tests/support/**` nem `config/postgres-majors.json`, ou a PR é L0 |
+| `banco` | `banco-nas-majors` | o diff não toca a lista do banco (abaixo), ou a PR é L0 |
 
 A decisão vale só em `pull_request` com base `dev`. Falha fechada para o resto:
 push (em `dev`, `staging` e `main`), dispatch, chamada da promoção, PR de
@@ -710,11 +710,16 @@ changelogs e `.claude/skills/`, e uma PR L0 que quebre um deles só aparece no
 push em `dev`, depois da mescla. `contratos` (instruções, harnesses, changelogs,
 tracker de QA, tipos) cobre a maior parte, e roda sempre.
 
-**O que o recorte do banco deixa passar.** Só vale a lista do dono: mudança em
-dependência (`package.json`, `pnpm-lock.yaml`, o driver do PostgreSQL),
-`drizzle.config.ts` ou `scripts/versions/postgres-majors.ts` não roda
-`banco-nas-majors` em PR, e uma regressão numa major só aparece no push em
-`dev`. O E2E não escolhe áreas no CI: quando roda, é a suíte inteira.
+**A lista do banco** (`DATABASE_PATTERNS` em `scripts/github/ci-plan.ts`). A
+decisão do dono de 13/10/2026: `drizzle/**`, `src/core/db/**`, `supabase/**`,
+`tests/support/**` e `config/postgres-majors.json`. A revisão do mesmo dia somou
+o que a primeira lista deixava passar: `package.json` e `pnpm-lock.yaml` (um
+bump do driver do PostgreSQL, que é o PR que o Renovate abre, muda como as
+queries chegam ao banco), `drizzle.config.ts` e `drizzle.postgres.config.ts` (o
+primeiro só reexporta o segundo) e `scripts/versions/postgres-majors.ts` (o
+runner do próprio job). O que continua fora da lista só roda `banco-nas-majors`
+no push em `dev`: uma regressão numa major por caminho que não está acima só
+aparece lá. O E2E não escolhe áreas no CI: quando roda, é a suíte inteira.
 
 Medido em 23/09/2026: o job único levava 6 min 53 s (run 35803388420, em `dev`);
 os jobs paralelos, 2 min 41 s do disparo ao `qualidade` (run 35850357880, PR

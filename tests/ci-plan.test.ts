@@ -121,14 +121,22 @@ describe("PR L0: só validadores estruturais, nenhum job pesado", () => {
   });
 });
 
-describe("banco-nas-majors em PR: só quando o diff toca a lista do dono", () => {
-  it("a lista é exatamente a decisão de 13/10/2026", () => {
+describe("banco-nas-majors em PR: só quando o diff toca a lista do banco", () => {
+  it("a lista é a decisão do dono de 13/10/2026 mais o que a revisão do orquestrador somou", () => {
     expect([...DATABASE_PATTERNS]).toEqual([
+      // O dono.
       "drizzle/**",
       "src/core/db/**",
       "supabase/**",
       "tests/support/**",
       "config/postgres-majors.json",
+      // Revisão do orquestrador: dependência, configuração do drizzle-kit e o
+      // runner do próprio job.
+      "package.json",
+      "pnpm-lock.yaml",
+      "drizzle.config.ts",
+      "drizzle.postgres.config.ts",
+      "scripts/versions/postgres-majors.ts",
     ]);
   });
 
@@ -142,20 +150,41 @@ describe("banco-nas-majors em PR: só quando o diff toca a lista do dono", () =>
       "supabase/migrations/20260101_x.sql",
       "tests/support/postgres-global.ts",
       "config/postgres-majors.json",
+      "package.json",
+      "pnpm-lock.yaml",
+      "drizzle.config.ts",
+      "drizzle.postgres.config.ts",
+      "scripts/versions/postgres-majors.ts",
     ]) {
       expect(plan([path]), path).toMatchObject({ suite: true, banco: true });
     }
   });
 
+  it("o bump de dependência que o Renovate abre roda o banco, mas não o E2E de uma tela", () => {
+    // `package.json` é `transversal` na tabela e pede o pacote completo; o
+    // banco entra pela lista, e o E2E pelo pacote.
+    expect(plan(["package.json", "pnpm-lock.yaml"])).toMatchObject({ suite: true, banco: true, e2e: true });
+    // O runner do job é ferramenta: não pede E2E, mas pede o banco.
+    expect(plan(["scripts/versions/postgres-majors.ts"])).toMatchObject({ e2e: false, suite: true, banco: true });
+  });
+
   it("um caminho da lista no meio de outros basta; fora da lista, não", () => {
     expect(plan(["app/jobs/page.tsx", "src/core/db/schema.ts"]).banco).toBe(true);
-    for (const path of ["src/core/dbx/x.ts", "src/core/scoring/db.ts", "drizzle.config.ts", "docs/data-model.md"]) {
+    for (const path of [
+      "src/core/dbx/x.ts",
+      "src/core/scoring/db.ts",
+      "scripts/versions/check.ts",
+      "drizzle.sqlite.config.ts",
+      "tests/support-extra/x.ts",
+      "sub/package.json",
+      "docs/data-model.md",
+    ]) {
       expect(plan([path]).banco, path).toBe(false);
     }
   });
 
   it("L0 nunca roda o banco, nem com Markdown dentro de um caminho da lista", () => {
-    for (const path of ["supabase/README.md", "src/core/db/README.md", "drizzle/postgres/NOTES.md"]) {
+    for (const path of ["supabase/README.md", "src/core/db/README.md", "drizzle/postgres/NOTES.md", "tests/support/README.md"]) {
       expect(plan([path]), path).toMatchObject({ suite: false, banco: false });
     }
   });

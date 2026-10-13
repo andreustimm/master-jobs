@@ -75,8 +75,10 @@ jobs:
     #           (`config/validation-impact.json`) pede o gate `e2e`;
     #   suite → `testes`, `cobertura`, `build`, `pwa-browser`: falso só em PR L0
     #           (a tabela pede só os validadores estruturais);
-    #   banco → `banco-nas-majors`: o diff toca `drizzle/`, `src/core/db/`,
-    #           `supabase/`, `tests/support/` ou `config/postgres-majors.json`.
+    #   banco → `banco-nas-majors`: o diff toca a lista do banco
+    #           (`DATABASE_PATTERNS` em `scripts/github/ci-plan.ts`: schema,
+    #           migrações, `src/core/db/`, suporte de teste, majors,
+    #           dependências e a configuração do drizzle-kit).
     # Push, `workflow_dispatch`, chamada da promoção (`target-sha`) e PR de
     # outra base (a de produção) recebem sempre o plano completo — a lógica e a
     # falha fechada estão em `scripts/github/ci-plan.ts`, provadas por

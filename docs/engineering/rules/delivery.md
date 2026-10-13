@@ -487,7 +487,10 @@ só em `pull_request` com base `dev`:
   a classe `runtime-markdown` da tabela pede testes e build para ele.
 - **Banco:** `banco-nas-majors` só roda quando o diff toca `drizzle/**`,
   `src/core/db/**`, `supabase/**`, `tests/support/**` ou
-  `config/postgres-majors.json`; L0 nunca o roda.
+  `config/postgres-majors.json` (a lista do dono), ou o que a revisão do mesmo
+  dia somou: `package.json`, `pnpm-lock.yaml`, `drizzle.config.ts`,
+  `drizzle.postgres.config.ts` e `scripts/versions/postgres-majors.ts`
+  (`DATABASE_PATTERNS`). L0 nunca o roda.
 
 O job `plano` do `ci.yml` decide (`scripts/github/ci-plan.ts`, provado por
 `tests/ci-plan.test.ts`) e falha fechado: push em `dev`, `staging` e `main`,
