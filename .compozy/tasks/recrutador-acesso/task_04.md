@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: "Área do recrutador e sugestões de vaga"
 type: frontend
 complexity: high
@@ -38,14 +38,14 @@ máximo uma vez por hora, e a tela `/suggestions` em que só o candidato aceita
 </requirements>
 
 ## Subtasks
-- [ ] 4.1 Lista `/recruiter` paginada por nome com desde, até e pendentes; título com o nome do candidato.
-- [ ] 4.2 Página do candidato: funil somente leitura, paginação com limite, último acesso.
-- [ ] 4.3 CV atual: página e download.
-- [ ] 4.4 Regras puras, loja e serviço de sugestões, com limite e resumo por e-mail.
-- [ ] 4.5 Sugerir pelo catálogo (`/recruiter/[id]/suggest`) e por `/jobs/new?suggestFor=`.
-- [ ] 4.6 Tela `/suggestions`, aceitar e recusar, marcador no funil e contagem na navegação.
-- [ ] 4.7 Inventário, entry-denial e specs E2E `tests/e2e/ui/recruiter-suggestions.mjs`.
-- [ ] 4.8 Docs de produto e QA.
+- [x] 4.1 Lista `/recruiter` paginada por nome com desde, até e pendentes; título com o nome do candidato.
+- [x] 4.2 Página do candidato: funil somente leitura, paginação com limite, último acesso.
+- [x] 4.3 CV atual: página e download.
+- [x] 4.4 Regras puras, loja e serviço de sugestões, com limite e resumo por e-mail.
+- [x] 4.5 Sugerir pelo catálogo (`/recruiter/[id]/suggest`) e por `/jobs/new?suggestFor=`.
+- [x] 4.6 Tela `/suggestions`, aceitar e recusar, marcador no funil e contagem na navegação.
+- [x] 4.7 Inventário, entry-denial e specs E2E `tests/e2e/ui/recruiter-suggestions.mjs`.
+- [x] 4.8 Docs de produto e QA.
 
 ## Implementation Details
 
@@ -83,20 +83,20 @@ e a ADR-015.
 
 Cases assigned from `_tests.md`, the test contract — read each ID's full definition there before writing tests.
 
-- [ ] UT-050, UT-051, UT-052, UT-053, UT-054, UT-055, UT-056, UT-057, UT-058, UT-059 — regras de sugestão
-- [ ] IT-103, IT-104, IT-105, IT-106 — lista, rótulo, título e último acesso
-- [ ] IT-107, IT-108, IT-109, IT-110 — CV e 404
-- [ ] IT-111, IT-112, IT-113, IT-114 — fronteira de privacidade
-- [ ] IT-115, IT-116, IT-117, IT-118, IT-119, IT-120, IT-121, IT-122, IT-123, IT-124, IT-125, IT-126 — criar sugestão
-- [ ] IT-127, IT-128 — sugestões do recrutador
-- [ ] IT-129, IT-130, IT-131, IT-132, IT-133, IT-134, IT-135, IT-136, IT-137, IT-138 — aceitar e recusar
-- [ ] IT-139, IT-140 — tela e contagem do candidato
-- [ ] IT-141, IT-142, IT-143 — funil vazio, paginação e inventário
-- [ ] E2E-016, E2E-017 — lista, funil, CV
-- [ ] E2E-018, E2E-019, E2E-020 — sugerir, aceitar, recusar
-- [ ] E2E-021 — perda de acesso e link do e-mail
-- [ ] E2E-022 — 375 px e axe
-- [ ] E2E-023 — sessão emprestada sem decisão
+- [x] UT-050, UT-051, UT-052, UT-053, UT-054, UT-055, UT-056, UT-057, UT-058, UT-059 — regras de sugestão
+- [x] IT-103, IT-104, IT-105, IT-106 — lista, rótulo, título e último acesso
+- [x] IT-107, IT-108, IT-109, IT-110 — CV e 404
+- [x] IT-111, IT-112, IT-113, IT-114 — fronteira de privacidade
+- [x] IT-115, IT-116, IT-117, IT-118, IT-119, IT-120, IT-121, IT-122, IT-123, IT-124, IT-125, IT-126 — criar sugestão
+- [x] IT-127, IT-128 — sugestões do recrutador
+- [x] IT-129, IT-130, IT-131, IT-132, IT-133, IT-134, IT-135, IT-136, IT-137, IT-138 — aceitar e recusar
+- [x] IT-139, IT-140 — tela e contagem do candidato
+- [x] IT-141, IT-142, IT-143 — funil vazio, paginação e inventário
+- [x] E2E-016, E2E-017 — lista, funil, CV
+- [x] E2E-018, E2E-019, E2E-020 — sugerir, aceitar, recusar
+- [x] E2E-021 — perda de acesso e link do e-mail
+- [x] E2E-022 — 375 px e axe
+- [x] E2E-023 — sessão emprestada sem decisão
 
 ## Success Criteria
 - Every assigned test case implemented and passing

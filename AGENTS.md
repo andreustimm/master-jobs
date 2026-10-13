@@ -100,8 +100,10 @@ A numeração é estável: código e testes citam "regra N".
     `jho auth set-password <email>`. [[G38](docs/engineering/rules/security.md#g38)]
 15. **Autorização por `can()`, escopo da sessão:** Server Action chama
     `guard(...)` antes de qualquer efeito, página chama `requirePage(...)`, e
-    nenhuma action aceita `candidateId` da entrada. Entrada sem guarda só como
-    exceção registrada no inventário.
+    nenhuma action aceita `candidateId` da entrada. Exceção registrada: na
+    sugestão de vaga do recrutador (#465), o id do candidato é seletor dentro
+    de `session.linkedCandidateIds`, com 404 fora dela antes de gravar.
+    Entrada sem guarda só como exceção registrada no inventário.
     [[G39](docs/engineering/rules/security.md#g39), [G40](docs/engineering/rules/security.md#g40)]
 16. **Chave de API não vai para banco nem log:** grave o nome da variável.
     [[G41](docs/engineering/rules/security.md#g41)]

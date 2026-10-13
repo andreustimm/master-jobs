@@ -213,6 +213,13 @@ export default async function Pipeline({
                       {channelLabel(t, r.channel) ?? <span data-user-content>{r.channel}</span>}
                     </Badge>
                   )}
+                  {r.suggestedByRecruiter && (
+                    // Vem da sugestão aceita, não do canal: a candidatura que já
+                    // existia antes do aceite guarda o canal dela (ADR-015).
+                    <Badge variant="outline" className="font-mono type-micro" data-testid={`pipeline-suggested-${r.jobId}`}>
+                      {t("pipeline.suggestedByRecruiter")}
+                    </Badge>
+                  )}
                 </div>
                 <div className="mt-0.5 text-xs text-muted-foreground">
                   {r.companyName}

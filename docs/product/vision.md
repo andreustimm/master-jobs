@@ -151,7 +151,9 @@ nunca punitivo — senão o sistema rebaixa fontes pela qualidade da API delas e
 vez da qualidade do emprego.
 
 **4. A decisão do usuário é sagrada.** Ingestão jamais escreve em `application`.
-É o único dado que um novo sync não reconstrói.
+É o único dado que um novo sync não reconstrói. Vale também para quem a pessoa
+convida: o recrutador com acesso sugere vagas, e a sugestão só vira linha do
+funil quando a própria candidata a aceita (#465, ADR-015).
 
 **5. Nada que arrisque a conta do LinkedIn.** O perfil é o principal ativo de
 posicionamento. Scraping economiza horas e pode custar a conta — troca ruim em
@@ -176,7 +178,9 @@ Lacuna assumida se sinaliza, não se maquia.
   (sai do cadastro com perfil e currículo) ou como **recrutador** (nasce sem
   candidatos; só o candidato concede acesso, #465). Cada conta vê só o próprio
   dado; admin continua só por convite, e não há times, empresas nem espaços
-  compartilhados.
+  compartilhados. O recrutador é um **usuário convidado pelo candidato**
+  (ADR-009): com acesso, lê o funil e o currículo atual daquela pessoa e
+  sugere vagas, sem nunca escrever no funil dela.
 
 ---
 

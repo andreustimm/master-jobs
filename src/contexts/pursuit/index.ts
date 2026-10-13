@@ -46,3 +46,24 @@ export {
   setApplicationStatus,
   undoApplicationStatus,
 } from "../../core/db/repo.ts";
+
+export { validateNote } from "./domain/recruiter-suggestion.ts";
+export { candidateLabel, parseCandidateSelector } from "./domain/recruiter-view.ts";
+export type {
+  CandidateSuggestionView,
+  DecideResult,
+  RecruiterSuggestionView,
+  SuggestResult,
+} from "./app/recruiter-suggestions.ts";
+export {
+  candidateSuggestionsFor,
+  decideRecruiterSuggestion,
+  followedCandidateName,
+  pendingSuggestionCount,
+  recruiterCandidateCv,
+  recruiterCandidateList,
+  recruiterCandidateWorkspace,
+  searchJobsToSuggest,
+  sendSuggestionDigests,
+  suggestJobToCandidate,
+} from "./recruiter.ts";
