@@ -145,7 +145,7 @@ rtk pnpm jho profile             # valida profile.yaml
 rtk pnpm check                   # changelogs, tracker de QA, typecheck, testes — verde antes de qualquer entrega
 rtk pnpm test:qa-skills          # contratos dos conversores do tracker QA
 rtk pnpm gates                   # só os gates que o diff exige (config/validation-impact.json), com recibo
-rtk pnpm test:e2e                # browser real isolado: build, PostgreSQL e porta temporários
+rtk pnpm test:e2e                # browser real isolado: build, PostgreSQL e porta temporários; Ctrl+C/kill limpa tudo, e cópias .jho-e2e-* de execução morta somem na seguinte
 rtk pnpm test:e2e --areas searches,a11y   # só a fumaça, essas áreas e o que elas exigem
 rtk pnpm db:generate             # gera migration após editar schema.ts
 ```
