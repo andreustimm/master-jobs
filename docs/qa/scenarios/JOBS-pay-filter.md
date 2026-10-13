@@ -6,7 +6,7 @@ persona: Andreus em triagem
 journey: J-trust-the-filtered-board
 expected: A faixa (mínimo e máximo) na moeda e no período escolhidos filtra vagas convertidas; pagamento não informado ou não comparável fica visível e marcado
 entry_points: /jobs?pay=<min>&payMax=<max>&cur=USD&per=month; /jobs?sort=pay
-qa_status: pass
+qa_status: untested
 bug_ids: BUG-20260929-jobs-cockpit-ignores-salary-filter; BUG-20260929-jobs-grouped-pay-banner-off-by-one
 fix_status: fixed
 retest_status: pending
