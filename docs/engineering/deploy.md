@@ -656,10 +656,11 @@ um quarto da suíte não mede nada; o piso vale sobre a soma, em `cobertura`.
 **PR só de documentação (#528).** Quando todo arquivo do PR é Markdown na lista
 de permissão — `docs/` (menos `docs/prompts/`), `changelog.d/`, `.compozy/`,
 `.claude/`, `.github/` e a raiz, menos `CHANGELOG.md` e `USER_CHANGELOG*` —,
-`build`, `pwa-browser` e `banco-nas-majors` ficam pulados, e `qualidade` e
+`pwa-browser` e `banco-nas-majors` ficam pulados, e `qualidade` e
 `schema-e-migracao` aceitam esse pulo **só** com `escopo` verde dizendo
 `completo=false`. `contratos` e o Vitest com cobertura continuam, porque leem
-documentos. Push em `dev`, a chamada da promoção e o dispatch rodam sempre a
+documentos; `build` também, porque o Tailwind varre os `.md` do repositório e
+Markdown pode mudar o CSS. Push em `dev`, a chamada da promoção e o dispatch rodam sempre a
 suíte completa. `e2e-navegador` não é recortado: a trava de #202/#303 o mantém
 sem `needs` e fora do agregador.
 

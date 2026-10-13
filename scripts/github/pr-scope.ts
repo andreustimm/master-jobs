@@ -8,9 +8,10 @@
  * `docs/prompts/` é prompt de LLM, e testes do Vitest leem `DESIGN.md`, regras
  * e skills. Por isso a decisão é uma **lista de permissão** de caminhos (G27):
  * só o que está nela pode pular algo, e o que pula é só o que nenhum desses
- * arquivos alcança — `build`, `pwa-browser` e `banco-nas-majors`. `contratos`
- * (instruções, harnesses, changelogs, tracker de QA) e o Vitest com cobertura
- * continuam rodando.
+ * arquivos alcança — `pwa-browser` e `banco-nas-majors`. `contratos`
+ * (instruções, harnesses, changelogs, tracker de QA), o Vitest com cobertura e
+ * o `build` continuam rodando: o Tailwind v4 varre o repositório inteiro,
+ * inclusive `docs/`, então Markdown pode mudar o CSS compilado.
  *
  * Falha fechada: fora de `pull_request`, sem diff legível ou com qualquer
  * arquivo fora da lista, a resposta é a suíte completa.

@@ -69,7 +69,7 @@ concurrency:
 jobs:
   escopo:
     # O recorte do PR (#528): PR só de documentação — lista de permissão em
-    # `scripts/github/pr-scope.ts` — não paga `build`, `pwa-browser` nem
+    # `scripts/github/pr-scope.ts` — não paga `pwa-browser` nem
     # `banco-nas-majors`, que nenhum desses Markdown alcança. Fora de
     # `pull_request` a resposta é sempre a suíte completa, então push em `dev`,
     # chamada da promoção e dispatch rodam tudo como antes. Falha fechada: se
@@ -364,8 +364,9 @@ jobs:
         run: pnpm test:pwa-browser
 
   build:
-    needs: escopo
-    if: needs.escopo.outputs.completo != 'false'
+    # Não entra no recorte de #528: o Tailwind v4 varre o repositório inteiro,
+    # inclusive os `.md` de `docs/`, então um PR só de documentação pode mudar o
+    # CSS compilado. Custa ~1 min.
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 15
 
@@ -586,7 +587,7 @@ jobs:
     # falha, pulo ou cancelamento.
     #
     # Única exceção ao "tudo em sucesso" (#528): com `escopo` verde dizendo
-    # `completo=false` (PR só de documentação), `build`, `pwa-browser` e
+    # `completo=false` (PR só de documentação), `pwa-browser` e
     # `banco-nas-majors` pulados passam. Qualquer outro pulo, ou pulo sem esse
     # recorte, reprova.
     if: ${{ always() }}
@@ -602,10 +603,10 @@ jobs:
           echo "$RESULTADOS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
           echo "$RESULTADOS" | jq -e '
             (.escopo.result == "success" and .escopo.outputs.completo == "false") as $documentacao
-            | ["build", "pwa-browser", "banco-nas-majors"] as $recortaveis
+            | ["pwa-browser", "banco-nas-majors"] as $recortaveis
             | length > 0 and (to_entries | all(
                 .value.result == "success"
-                or ($documentacao and .value.result == "skipped" and (.key as $job | $recortaveis | index($job) != null))))
+                or ($documentacao and .value.result == "skipped" and (.key | IN($recortaveis[])))))
           ' > /dev/null
 
   validacao:

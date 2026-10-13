@@ -68,7 +68,7 @@ describe("agregador qualidade", () => {
   });
 
   describe("recorte de PR só de documentação (#528)", () => {
-    const recortaveis = ["build", "pwa-browser", "banco-nas-majors"];
+    const recortaveis = ["pwa-browser", "banco-nas-majors"];
     const documentacao = { result: "success", outputs: { completo: "false" } };
     const completo = { result: "success", outputs: { completo: "true" } };
     const verdes = Object.fromEntries(needsOf(aggregator).map((name) => [name, { result: "success" }]));
@@ -79,11 +79,15 @@ describe("agregador qualidade", () => {
         expect(needsOf(ci.jobs[name]!), name).toEqual(["escopo"]);
         expect(ci.jobs[name]!.if, name).toBe("needs.escopo.outputs.completo != 'false'");
       }
-      // O resto da suíte nunca é recortado.
-      for (const name of ["contratos", "testes", "cobertura"]) expect(ci.jobs[name]!.if ?? "", name).not.toContain("escopo");
+      // O resto da suíte nunca é recortado. `build` fica de fora porque o
+      // Tailwind varre os `.md` do repositório: Markdown pode mudar o CSS.
+      for (const name of ["contratos", "testes", "cobertura", "build"]) {
+        expect(ci.jobs[name]!.if ?? "", name).not.toContain("escopo");
+        expect(needsOf(ci.jobs[name]!), name).not.toContain("escopo");
+      }
     });
 
-    it("aprova os três pulados quando escopo verde disse completo=false", () => {
+    it("aprova os recortáveis pulados quando escopo verde disse completo=false", () => {
       expect(runAggregator({ ...verdes, escopo: documentacao, ...pulados }).status).toBe(0);
     });
 
@@ -94,14 +98,14 @@ describe("agregador qualidade", () => {
     });
 
     it("reprova pulo de job que não é recortável, mesmo com o recorte", () => {
-      for (const name of ["contratos", "testes", "cobertura", "schema-e-migracao"]) {
+      for (const name of ["contratos", "testes", "cobertura", "build", "schema-e-migracao"]) {
         const outcome = runAggregator({ ...verdes, escopo: documentacao, ...pulados, [name]: { result: "skipped" } });
         expect(outcome.status, name).not.toBe(0);
       }
     });
 
     it("reprova falha de job recortável, mesmo com o recorte", () => {
-      expect(runAggregator({ ...verdes, escopo: documentacao, build: { result: "failure" } }).status).not.toBe(0);
+      expect(runAggregator({ ...verdes, escopo: documentacao, "pwa-browser": { result: "failure" } }).status).not.toBe(0);
     });
 
     it("schema-e-migracao aceita banco-nas-majors pulado só no recorte", () => {
