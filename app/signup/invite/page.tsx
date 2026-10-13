@@ -2,7 +2,7 @@ import type { Route } from "next";
 import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { isOpenMode, recruiterInvitePage } from "../../../src/contexts/auth/index.ts";
+import { candidateDisplayName, isOpenMode, recruiterInvitePage } from "../../../src/contexts/auth/index.ts";
 import { renderSession } from "../../auth";
 import { getTranslator } from "../../i18n";
 import { TransitionLink } from "../../transition-link";
@@ -56,7 +56,7 @@ export default async function SignupInvitePage({ searchParams }: { searchParams:
               <div className="min-w-0 break-words">
                 <dt className="inline text-muted-foreground">{t("recruiterInvite.invitedBy")} </dt>
                 <dd className="inline font-medium" data-user-content data-testid="invite-candidate">
-                  {state.candidateName}
+                  {candidateDisplayName(state.candidateName, t("recruiter.unnamed"))}
                 </dd>
               </div>
               <div className="min-w-0 break-words">

@@ -192,3 +192,32 @@ describe("nome é dado do usuário", () => {
     expect(`${mail.subject}\n${mail.text}`).not.toMatch(/30\.000|currículo inteiro/);
   });
 });
+
+describe("candidato sem nome (M-1 da revisão L2)", () => {
+  const blanks = ["", "   ", "\r\n"];
+  const expected = { "pt-BR": "Candidato", en: "Candidate" } as const;
+
+  for (const locale of ["pt-BR", "en"] as const) {
+    it(`${locale}: nome vazio vira o rótulo neutro em todos os e-mails que nomeiam o candidato`, () => {
+      for (const candidateName of blanks) {
+        const mails = [
+          inviteEmail({ locale, candidateName, url, validUntil: "2026-10-13T12:00:00Z" }),
+          accessGrantedEmail({ locale, candidateName, url: recruiterUrl, expiresAt: null, expiryTz: null }),
+          endDateChangedEmail({ locale, candidateName, url: recruiterUrl, expiresAt: null, expiryTz: null }),
+          accessEndedEmail({ locale, candidateName, cause: "candidate" }),
+        ];
+        for (const mail of mails) {
+          expect(mail.subject).toContain(expected[locale]);
+          expect(mail.text).toContain(expected[locale]);
+          expect(mail.subject).not.toMatch(/\s{2,}|^\s|\s$/);
+        }
+      }
+    });
+  }
+
+  it("nome escolhido continua valendo e não leva o rótulo", () => {
+    const mail = inviteEmail({ locale: "pt-BR", candidateName: "Ana", url, validUntil: "2026-10-13T12:00:00Z" });
+    expect(mail.subject).toContain("Ana");
+    expect(mail.subject).not.toContain("Candidato");
+  });
+});

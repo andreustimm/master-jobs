@@ -324,6 +324,16 @@ export function inviteCookieMaxAge(expiresAt: string, now: number): number {
   return Number.isNaN(left) || left <= 0 ? 0 : Math.floor(left / 1000);
 }
 
+/**
+ * O nome do candidato como aparece num e-mail ou na página do convite: o que a
+ * pessoa escolheu ou, vazio, o rótulo neutro do idioma de quem lê (`unnamed`).
+ * Nunca o e-mail da conta — a identidade pública não o usa (G22).
+ */
+export function candidateDisplayName(name: string, unnamed: string): string {
+  const chosen = name.trim();
+  return chosen === "" ? unnamed : chosen;
+}
+
 /** O que a página do convite sabe de um token, já procurado pelo hash. */
 export type InviteLookup = {
   id: number;

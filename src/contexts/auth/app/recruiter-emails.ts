@@ -16,6 +16,7 @@
  * como foi digitada e nada a interpreta.
  */
 import { translator, type LocaleId } from "../../../core/i18n/index.ts";
+import { candidateDisplayName } from "../domain/recruiter-access.ts";
 import type { AccessEndCause } from "../ports-recruiter-access.ts";
 
 export type RecruiterEmail = { subject: string; text: string };
@@ -23,6 +24,14 @@ export type RecruiterEmail = { subject: string; text: string };
 /** Uma linha só: controle, quebra e separador viram espaço. */
 function oneLine(value: string): string {
   return value.replace(/[\p{Cc}\p{Zl}\p{Zp}]+/gu, " ").replace(/\s{2,}/g, " ").trim();
+}
+
+/**
+ * O candidato numa linha só; sem nome, o rótulo neutro do idioma — nunca o
+ * e-mail da conta (G22).
+ */
+function candidateOneLine(name: string, locale: LocaleId): string {
+  return candidateDisplayName(oneLine(name), translator(locale).t("recruiter.unnamed"));
 }
 
 function compose(locale: LocaleId, subject: string, paragraphs: string[]): RecruiterEmail {
@@ -75,7 +84,7 @@ export function inviteEmail(input: {
   needsRecruiterAccount?: boolean;
 }): RecruiterEmail {
   const { t } = translator(input.locale);
-  const candidate = oneLine(input.candidateName);
+  const candidate = candidateOneLine(input.candidateName, input.locale);
   return compose(input.locale, t("email.recruiterInviteSubject", { candidate }), [
     t("email.recruiterInviteIntro", { candidate }),
     t("email.recruiterScope", { candidate }),
@@ -96,7 +105,7 @@ export function accessGrantedEmail(input: {
   expiryTz: string | null;
 }): RecruiterEmail {
   const { t } = translator(input.locale);
-  const candidate = oneLine(input.candidateName);
+  const candidate = candidateOneLine(input.candidateName, input.locale);
   return compose(input.locale, t("email.recruiterGrantedSubject", { candidate }), [
     t("email.recruiterGrantedIntro", { candidate }),
     t("email.recruiterScope", { candidate }),
@@ -114,7 +123,7 @@ export function endDateChangedEmail(input: {
   expiryTz: string | null;
 }): RecruiterEmail {
   const { t } = translator(input.locale);
-  const candidate = oneLine(input.candidateName);
+  const candidate = candidateOneLine(input.candidateName, input.locale);
   return compose(input.locale, t("email.recruiterEndChangedSubject", { candidate }), [
     t("email.recruiterEndChangedIntro", { candidate }),
     input.expiresAt === null
@@ -134,7 +143,7 @@ export function accessEndedEmail(input: {
   cause: AccessEndCause;
 }): RecruiterEmail {
   const { t } = translator(input.locale);
-  const candidate = oneLine(input.candidateName);
+  const candidate = candidateOneLine(input.candidateName, input.locale);
   const cause =
     input.cause === "candidate"
       ? t("email.recruiterEndedByCandidate", { candidate })

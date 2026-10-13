@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   MIN_LENGTH,
   SIGNUP_COOKIE,
+  candidateDisplayName,
   isOpenMode,
   landingForSession,
   manualSignupOpen,
@@ -92,7 +93,7 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
             className="type-body-sm mb-4 min-w-0 break-words rounded-[var(--radius-action)] bg-[var(--muted)] p-3"
             data-testid="signup-invited"
           >
-            {t("recruiterInvite.invitedBy")} <strong data-user-content>{invited.candidateName}</strong>.{" "}
+            {t("recruiterInvite.invitedBy")} <strong data-user-content>{candidateDisplayName(invited.candidateName, t("recruiter.unnamed"))}</strong>.{" "}
             {t("recruiterInvite.expectedEmail")} <strong data-user-content>{invited.maskedEmail}</strong>
           </p>
         )}

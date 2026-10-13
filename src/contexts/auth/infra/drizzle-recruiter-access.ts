@@ -388,7 +388,13 @@ export async function lockCandidateAccess(db: Executor, candidateId: number): Pr
   await db.execute(sql`select pg_advisory_xact_lock(hashtext('recruiter-access'), ${candidateId})`);
 }
 
-/** Nome para os e-mails, os endereços que são do próprio candidato e o idioma da conta dele. */
+/**
+ * Nome para os e-mails, os endereços que são do próprio candidato e o idioma da conta dele.
+ *
+ * Sem nome escolhido nem nome de exibição, o nome é vazio — nunca o e-mail da
+ * conta (G22): quem mostra o nome troca o vazio pelo rótulo neutro do idioma
+ * (`candidateDisplayName`).
+ */
 async function candidateFacts(
   db: Executor,
   candidateId: number,
@@ -404,7 +410,7 @@ async function candidateFacts(
     .where(eq(authUser.candidateId, candidateId));
   const account = accounts[0];
   return {
-    name: firstNonEmpty(row?.name, account?.fullName, account?.email) ?? "",
+    name: firstNonEmpty(row?.name, account?.fullName) ?? "",
     emails: [...accounts.map((a) => a.email), ...(row?.email ? [row.email] : [])],
     locale: account?.locale ?? null,
   };

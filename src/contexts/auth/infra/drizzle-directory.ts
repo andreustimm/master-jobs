@@ -6,7 +6,7 @@
  * conta longe do caminho de autenticação é higiene barata — o arquivo que
  * resolve um token não deveria ter uma função capaz de criar um admin.
  */
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, sql, type SQL } from "drizzle-orm";
 import { getDb } from "../../../core/db/client.ts";
 import { clock } from "../../../core/clock.ts";
 import { authUser } from "../../../core/db/schema.ts";
@@ -107,8 +107,16 @@ export const drizzleUserDirectory: UserDirectory = {
   },
 
   async update(userId, patch) {
-    const set: { email?: string; fullName?: string | null; roles?: Role[] } = {};
-    if (patch.email !== undefined) set.email = patch.email.trim().toLowerCase();
+    const set: { email?: string; emailVerifiedAt?: SQL; fullName?: string | null; roles?: Role[] } = {};
+    if (patch.email !== undefined) {
+      const email = patch.email.trim().toLowerCase();
+      set.email = email;
+      // A prova da caixa é do endereço, não da conta: trocar o e-mail a zera,
+      // para que um convite pendente ao endereço novo não conclua sem que
+      // alguém prove que lê aquela caixa (ADR-018). Reenviar o mesmo endereço
+      // não a zera. O CASE lê o valor de antes do UPDATE, na mesma instrução.
+      set.emailVerifiedAt = sql`case when ${authUser.email} = ${email} then ${authUser.emailVerifiedAt} else null end`;
+    }
     if (patch.fullName !== undefined) set.fullName = normalizarNome(patch.fullName);
     if (patch.roles !== undefined) set.roles = patch.roles;
 

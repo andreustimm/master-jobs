@@ -305,6 +305,15 @@ describe("acesso de recrutador concedido pelo candidato (#465)", () => {
     expect(can(recruiter([7]), "suggestion:create", { kind: "global" }, NOW).allowed).toBe(false);
   });
 
+  it("UT-038b sessão emprestada de recrutador não sugere vaga, mesmo com a concessão na sessão (G24)", () => {
+    const borrowed = session({ roles: ["recruiter"], userId: 7, linkedCandidateIds: [7], impersonatedBy: 9 });
+    const decision = can(borrowed, "suggestion:create", seven, NOW);
+    expect(decision.allowed).toBe(false);
+    if (!decision.allowed) expect(decision.reason).toContain("sessão emprestada");
+    // A mesma sessão sem empréstimo sugere: o que nega é o empréstimo.
+    expect(can(recruiter([7]), "suggestion:create", seven, NOW).allowed).toBe(true);
+  });
+
   it("UT-039 decidir sugestão é do próprio candidato, fora de sessão emprestada", () => {
     expect(can(candidateSession(7), "suggestion:decide", seven, NOW).allowed).toBe(true);
     const borrowed = session({ roles: ["candidate"], candidateId: 7, impersonatedBy: 1 });

@@ -538,7 +538,8 @@ fit; o currículo é só o documento corrente, nunca a lista de versões; a tela
 vaga lê com o escopo de candidato da sessão, que no recrutador é nulo, e não
 mostra nota nem análise de quem ele acompanha. Sugestão é proposta: só o aceite
 do próprio candidato (`suggestion:decide`, negado à sessão emprestada) cria a
-candidatura. O id que o recrutador manda nas duas actions de sugerir é seletor
+candidatura; sugerir (`suggestion:create`) também é negado à sessão emprestada,
+porque a sugestão chega ao candidato com o nome do recrutador. O id que o recrutador manda nas duas actions de sugerir é seletor
 registrado (G40).
 
 **Sem criptografia em repouso feita por este código.** Localmente, o
