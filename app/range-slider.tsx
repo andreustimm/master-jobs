@@ -97,7 +97,7 @@ export function RangeSlider({
   /**
    * Piso vazio fora da URL. Em Vagas `fit=` vazio é escolha ("toda nota") e
    * difere do ausente (o corte padrão), então lá o campo vazio continua indo;
-   * no Funil ausente e vazio são o mesmo "sem piso".
+   * no Funil e na faixa salarial ausente e vazio são o mesmo "sem piso".
    */
   omitEmptyMin?: boolean;
   /** Where the scale ends before a typed value stretches it. */

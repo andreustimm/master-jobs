@@ -121,6 +121,28 @@ export async function run(ctx) {
     JSON.stringify({ thumbs, withCeiling, ceilingKept }),
   );
 
+  // Só o teto: o mínimo vazio é "sem piso", que é a ausência do parâmetro (#520).
+  // O Score, no mesmo formulário de filtros, segue gravando `fit=` vazio, porque
+  // lá vazio ("toda nota") difere do ausente (o corte padrão).
+  await page.goto(payBase, { waitUntil: "networkidle" });
+  await page.locator('[data-testid="filters-pay-max"]').fill("11000");
+  await page.locator('[data-testid="filters-pay-currency"]').selectOption("USD");
+  await page.locator('[data-testid="filters-pay-period"]').selectOption("month");
+  await page.locator('[data-testid="filters-pay-submit"]').click();
+  await settle(/payMax=11000/);
+  const ceilingOnlyUrl = page.url();
+  await page.locator('[data-testid="filters-score-min"]').fill("");
+  await page.locator('[data-testid="filters-score-submit"]').click();
+  await settle((url) => url.searchParams.get("fit") === "");
+  const scoreUrl = page.url();
+  check(
+    "#520 só o teto salarial: a URL leva payMax e não leva pay= vazio; o Score segue gravando fit= vazio",
+    !new URL(ceilingOnlyUrl).searchParams.has("pay")
+      && new URL(ceilingOnlyUrl).searchParams.get("payMax") === "11000"
+      && new URL(scoreUrl).searchParams.get("fit") === "",
+    JSON.stringify({ ceilingOnlyUrl, scoreUrl }),
+  );
+
   // Vagas repetidas por país: quatro publicações da mesma vaga viram uma linha
   // com três bandeiras, porque as duas brasileiras somam numa marca só.
   const grupoBase = `${BASE}/jobs?q=${encodeURIComponent("Country Fixture")}&fit=0`;

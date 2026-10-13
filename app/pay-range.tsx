@@ -75,6 +75,9 @@ export function PayRange({
       // devolveria como inválido. No Score o piso segue sendo 0, que ali
       // significa "toda nota".
       floorLimit={1}
+      // Mínimo vazio e `pay` ausente são o mesmo "sem piso" para o leitor da
+      // URL; sem nome, o campo vazio não grava `pay=` (#520).
+      omitEmptyMin
       ceiling={PAY_SLIDER_CEILING[unit]}
       step={PAY_SLIDER_STEP[unit]}
       labels={labels}

@@ -9,7 +9,7 @@ entry_points: /jobs?pay=<min>&payMax=<max>&cur=USD&per=month; /jobs?sort=pay
 qa_status: pass
 bug_ids: BUG-20260929-jobs-cockpit-ignores-salary-filter; BUG-20260929-jobs-grouped-pay-banner-off-by-one
 fix_status: fixed
-retest_status: pass
+retest_status: pending
 fix_commits: 7bdacc7f7c323dfb6d3fa2f14b657b149487b8ac
 evidence: docs/qa/evidence/2026-09-21-docs-qa-jornada-do-quadro-filtrado/pay-disclosed-only-empty.png; docs/qa/evidence/2026-09-29-cockpit-contagens-filtros/CH-filtered-board-numbers-agree/jobs-pay-deep-link.png
 last_report: docs/qa/reports/2026-09-29-cockpit-contagens-filtros.md
@@ -30,3 +30,8 @@ trocado, com aviso. O campo aceita até 2.000.000.
 Reteste targeted de #396 (29/09): a recarga preservou `pay=6000`,
 `payMax=9000`, USD e mês na sessão manual; a área E2E `searches` passou os
 casos de mínimo, faixa salarial, agrupamento, ordenação e recarga (`80/80`).
+
+**Reset 2026-10-12 (#520):** com o mínimo vazio, a faixa não grava mais `pay=`
+vazio na URL; ausente e vazio já eram o mesmo "sem piso" na leitura. Refazer:
+aplicar só o teto e conferir a URL sem `pay`, a lista igual à de antes e a
+recarga devolvendo o teto; no Score, limpar o piso ainda grava `fit=` vazio.
