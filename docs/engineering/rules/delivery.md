@@ -474,10 +474,17 @@ A validação estrutural de Markdown e metadados usa os validadores únicos que 
 existem, sem cópia: `pnpm check:instructions` (symlinks, links, âncoras e IDs de
 regra), `pnpm check:release-ready` (changelogs e fragmentos) e
 `pnpm check:qa-tracker` (esquema dos cenários). A proporcionalidade é de quem
-valida antes da PR; o CI roda o portão inteiro em toda PR de propósito, porque
-`qualidade` é check obrigatório, e check obrigatório filtrado por caminho fica
-pendente ou pulado — e pulado conta como aprovado. A seleção por caminho que
-existe é a do deploy (`scripts/vercel-ignore-build.sh`, provada por
+valida antes da PR. No CI, os checks obrigatórios (`qualidade`,
+`schema-e-migracao`) **nunca** são filtrados por caminho, porque check
+obrigatório pulado conta como aprovado; eles rodam em toda PR com `always()`.
+O único recorte é dentro deles ([#528](https://github.com/andreustimm/master-jobs/issues/528)):
+num PR só de documentação — lista de permissão em `scripts/github/pr-scope.ts`
+—, o job `escopo` responde `completo=false`, `pwa-browser` e `banco-nas-majors`
+ficam pulados, e os obrigatórios aceitam **esses dois** pulos só com `escopo`
+verde dizendo isso. `contratos`, o Vitest com cobertura e o `build` rodam sempre
+(o Tailwind varre os `.md` do repositório, então Markdown pode mudar o CSS).
+Push, chamada da promoção e dispatch rodam a suíte completa. A outra seleção
+por caminho é a do deploy (`scripts/vercel-ignore-build.sh`, provada por
 `tests/vercel-ignore-build.test.ts`): só documentação, testes e automação não
 publicam versão nova.
 

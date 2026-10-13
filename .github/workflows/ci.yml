@@ -67,6 +67,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  escopo:
+    # O recorte do PR (#528): PR só de documentação — lista de permissão em
+    # `scripts/github/pr-scope.ts` — não paga `pwa-browser` nem
+    # `banco-nas-majors`, que nenhum desses Markdown alcança. Fora de
+    # `pull_request` a resposta é sempre a suíte completa, então push em `dev`,
+    # chamada da promoção e dispatch rodam tudo como antes. Falha fechada: se
+    # este job falhar, os pesados ficam pulados SEM recorte, e `qualidade`
+    # reprova (só aceita pulo com `escopo` verde dizendo `completo=false`).
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
+    timeout-minutes: 5
+    outputs:
+      completo: ${{ steps.escopo.outputs.completo }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target-sha || github.sha }}
+          persist-credentials: false
+          # O commit de merge do PR e o primeiro pai dele, que é a base.
+          fetch-depth: 2
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+
+      - name: Recorte do PR
+        id: escopo
+        env:
+          EVENTO: ${{ github.event_name }}
+        run: node --experimental-strip-types --no-warnings scripts/github/pr-scope.ts >> "$GITHUB_OUTPUT"
+
   contratos:
     # Os gates curtos que não dependem de teste: changelogs, tracker de QA,
     # tipos e os contratos das skills de QA. Juntos custam menos que a
@@ -278,6 +309,8 @@ jobs:
     # O contrato de privacidade abre um Chromium real. Ele fica separado da
     # cobertura para não concorrer com os testes curtos, mas continua sendo
     # obrigatório no mesmo portão que autoriza a promoção.
+    needs: escopo
+    if: needs.escopo.outputs.completo != 'false'
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 10
 
@@ -331,6 +364,9 @@ jobs:
         run: pnpm test:pwa-browser
 
   build:
+    # Não entra no recorte de #528: o Tailwind v4 varre o repositório inteiro,
+    # inclusive os `.md` de `docs/`, então um PR só de documentação pode mudar o
+    # CSS compilado. Custa ~1 min.
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 15
 
@@ -371,6 +407,8 @@ jobs:
     # arquivo. Em série num runner só, as duas majors levaram 401 s + 422 s,
     # rente ao teto de 15 min; por isso a matriz major × fatia. O resultado
     # entra no check obrigatório `schema-e-migracao`, que depende deste job.
+    needs: escopo
+    if: needs.escopo.outputs.completo != 'false'
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 15
     strategy:
@@ -404,8 +442,11 @@ jobs:
     # `always()` é o mesmo do agregador `qualidade`: sem ele, uma fatia
     # vermelha faria este check obrigatório ser PULADO, e pulado conta como
     # aprovado na proteção de branch.
+    #
+    # Num PR só de documentação (`escopo` verde com `completo=false`, #528), o
+    # `banco-nas-majors` pulado é o esperado; pulado sem esse recorte reprova.
     if: ${{ always() }}
-    needs: [banco-nas-majors]
+    needs: [escopo, banco-nas-majors]
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 15
 
@@ -415,7 +456,12 @@ jobs:
           RESULTADOS: ${{ toJSON(needs) }}
         run: |
           echo "$RESULTADOS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
-          echo "$RESULTADOS" | jq -e 'length > 0 and (to_entries | all(.value.result == "success"))' > /dev/null
+          echo "$RESULTADOS" | jq -e '
+            (.escopo.result == "success" and .escopo.outputs.completo == "false") as $documentacao
+            | length > 0 and (to_entries | all(
+                .value.result == "success"
+                or ($documentacao and .key == "banco-nas-majors" and .value.result == "skipped")))
+          ' > /dev/null
 
       - uses: actions/checkout@v7
         with:
@@ -539,8 +585,13 @@ jobs:
     # obrigatório pulado como aprovado. Com ele, o job roda sempre e reprova
     # por conta própria quando qualquer dependência não terminou em sucesso —
     # falha, pulo ou cancelamento.
+    #
+    # Única exceção ao "tudo em sucesso" (#528): com `escopo` verde dizendo
+    # `completo=false` (PR só de documentação), `pwa-browser` e
+    # `banco-nas-majors` pulados passam. Qualquer outro pulo, ou pulo sem esse
+    # recorte, reprova.
     if: ${{ always() }}
-    needs: [contratos, testes, cobertura, pwa-browser, build, banco-nas-majors, schema-e-migracao]
+    needs: [escopo, contratos, testes, cobertura, pwa-browser, build, banco-nas-majors, schema-e-migracao]
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 5
 
@@ -550,7 +601,13 @@ jobs:
           RESULTADOS: ${{ toJSON(needs) }}
         run: |
           echo "$RESULTADOS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
-          echo "$RESULTADOS" | jq -e 'length > 0 and (to_entries | all(.value.result == "success"))' > /dev/null
+          echo "$RESULTADOS" | jq -e '
+            (.escopo.result == "success" and .escopo.outputs.completo == "false") as $documentacao
+            | ["pwa-browser", "banco-nas-majors"] as $recortaveis
+            | length > 0 and (to_entries | all(
+                .value.result == "success"
+                or ($documentacao and .value.result == "skipped" and (.key | IN($recortaveis[])))))
+          ' > /dev/null
 
   validacao:
     if: inputs.target-sha != ''
