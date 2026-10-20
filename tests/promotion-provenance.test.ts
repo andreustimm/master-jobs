@@ -59,6 +59,23 @@ function calls(): string[][] {
 function refs(): string {
   return git(remote, "for-each-ref", "--format=%(refname) %(objectname)");
 }
+function summary(): string {
+  return readFileSync(`${root}/summary.md`, "utf8");
+}
+/** A skip that waits for a person: green run, yellow annotation, nothing validated or written. */
+function expectWarningSkip(result: ReturnType<typeof run>, reason: string, before: string) {
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.outputs).toMatchObject({ source, target: source, skip: "true" });
+  // One annotation line: the newlines of the reason are escaped, never raw.
+  const annotation = result.stdout.split("\n").find((line) => line.startsWith("::warning::"))!;
+  expect(annotation).toContain(reason);
+  expect(annotation).toContain("%0A");
+  expect(result.stdout).not.toContain("::error");
+  expect(summary()).toContain("Promoção parada: precisa de uma pessoa");
+  expect(summary()).toContain(reason);
+  expect(refs()).toBe(before);
+  expect(calls().every((args) => !args.includes("POST"))).toBe(true);
+}
 type CIEvent = { id?: number; head_branch?: string; event?: string; conclusion?: string | null };
 function run(phase: string, options: { target?: string; validated?: string; confirm?: boolean; scheduled?: boolean; ci?: CIEvent; sha?: string; preparedSource?: string } = {}) {
   const sha = options.sha ?? source;
@@ -73,13 +90,14 @@ function run(phase: string, options: { target?: string; validated?: string; conf
       : { inputs: { "target-sha": sha, "confirmar-migracao": options.confirm ?? false } };
   writeFileSync(`${root}/event.json`, JSON.stringify(event));
   writeFileSync(`${root}/output`, "");
+  writeFileSync(`${root}/summary.md`, "");
   const result = spawnSync(process.execPath, [SCRIPT, phase, repo], {
     encoding: "utf8",
     env: {
       ...process.env, PATH: `${root}/bin:${process.env.PATH}`, FIXTURE_ROOT: root,
       GITHUB_REPOSITORY: "owner/repo", GITHUB_EVENT_PATH: `${root}/event.json`,
       GITHUB_EVENT_NAME: options.ci ? "workflow_run" : options.scheduled ? "schedule" : "workflow_dispatch",
-      GITHUB_OUTPUT: `${root}/output`, PROMOTION_TARGET: options.target ?? "",
+      GITHUB_OUTPUT: `${root}/output`, GITHUB_STEP_SUMMARY: `${root}/summary.md`, PROMOTION_TARGET: options.target ?? "",
       PROMOTION_SOURCE: options.preparedSource ?? sha,
       VALIDATED_SHA: options.validated ?? "",
     },
@@ -331,6 +349,9 @@ describe("V01-03 — migrations use staging..target", () => {
     publishSource("fix: migração", DESTRUCTIVE);
     const before = refs();
     const blocked = run("prepare");
+    // Dispatch is a person's request: the refusal stays a red run, never a skip.
+    expect(blocked.status).not.toBe(0);
+    expect(blocked.outputs.skip).toBeUndefined();
     expect(blocked.stderr).toContain("Migração exige confirmação");
     // O erro diz qual arquivo e por quê: é o que a pessoa vai revisar.
     expect(blocked.stderr).toContain("drizzle/postgres/0017_x.sql: remove objeto");
@@ -786,10 +807,41 @@ describe("V01-06 — scheduled entry and changelog fragments", () => {
     expect(refs()).toBe(before);
   });
 
-  it("schedule never carries migration approval", () => {
+  it("schedule never carries migration approval: it ends in a warning skip, not a red run", () => {
     publishSource("fix: migração", DESTRUCTIVE);
     const before = refs();
-    expect(run("prepare", { scheduled: true }).stderr).toContain("Migração exige confirmação");
+    // The fixture event forges `confirmar-migracao: true`; the timer ignores it.
+    const result = run("prepare", { scheduled: true });
+    expectWarningSkip(result, "Migração exige confirmação humana", before);
+    expect(result.stdout).toContain("drizzle/postgres/0017_x.sql: remove objeto");
+    // Says what the person does next, and which SHA this run saw.
+    expect(summary()).toContain("dispare \"Promover para staging\"");
+    expect(summary()).toContain(source);
+    expect(summary()).toContain("confirmar-migracao=true");
+  });
+
+  it("schedule ends in a warning skip when the dev tip has no push CI run, and a dispatch for it stays red", () => {
+    publishSource();
+    setAPI({ runs: [] });
+    const before = refs();
+    const scheduled = run("prepare", { scheduled: true });
+    expectWarningSkip(scheduled, `CI de dev ausente para ${source}.`, before);
+    // A person asked for this SHA: absence is a failure, never a quiet skip.
+    const dispatched = run("prepare");
+    expect(dispatched.status).not.toBe(0);
+    expect(dispatched.stderr).toContain("CI de dev ausente");
+    expect(dispatched.outputs.skip).toBeUndefined();
+    expect(refs()).toBe(before);
+  });
+
+  it("a CI event whose own run the API cannot list is an anomaly and stays red", () => {
+    publishSource();
+    setAPI({ runs: [] });
+    const before = refs();
+    const result = run("prepare", { ci: {} });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("CI de dev ausente");
+    expect(result.outputs.skip).toBeUndefined();
     expect(refs()).toBe(before);
   });
 
@@ -858,7 +910,8 @@ describe("V01-07 — CI event entry and the release loop", () => {
     const result = run("prepare", { ci: {}, sha: stale });
     expect(result.status, result.stderr).toBe(0);
     expect(result.outputs).toMatchObject({ source: stale, skip: "true" });
-    expect(result.stdout).toContain("dev já avançou");
+    expect(result.stdout).toContain("::notice::dev já avançou");
+    expect(summary()).toContain("Nada a promover");
     expect(calls()).toEqual([]);
     expect(refs()).toBe(before);
   });
@@ -917,11 +970,15 @@ describe("V01-07 — CI event entry and the release loop", () => {
     expect(refs()).toBe(before);
   });
 
-  it("the CI event never carries migration approval", () => {
+  it("the CI event never carries migration approval: warning skip, then the dispatch promotes", () => {
     publishSource("fix: migração", DESTRUCTIVE);
     const before = refs();
-    expect(run("prepare", { ci: {} }).stderr).toContain("Migração exige confirmação");
-    expect(refs()).toBe(before);
+    expectWarningSkip(run("prepare", { ci: {} }), "Migração exige confirmação humana", before);
+    // The skip is the same refusal, not an exemption: no `validar` and no write, and
+    // only a person's dispatch with the confirmation moves staging.
+    const dispatched = run("prepare", { confirm: true });
+    expect(dispatched.status, dispatched.stderr).toBe(0);
+    expect(dispatched.outputs.skip).toBe("false");
   });
 
   it("wires the CI event, the safety-net schedule and the dispatch", () => {

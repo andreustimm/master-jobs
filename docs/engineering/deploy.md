@@ -963,7 +963,9 @@ por ele ter mudado).
 
 O job automático para vermelho com `Migração pendente exige execução manual`,
 e a promoção `dev → staging` já tinha parado antes, pedindo
-`confirmar-migracao=true` ([promotion.md](promotion.md)). Quem revisa escolhe a
+`confirmar-migracao=true` ([promotion.md](promotion.md)); no agendamento e no
+evento de CI ela para como aviso amarelo (run verde, motivo no resumo), não
+como vermelho. Quem revisa escolhe a
 ordem, porque nenhuma é segura sozinha:
 
 - **Contrair o que o código novo já não usa** (remover coluna, índice ou
