@@ -26,7 +26,17 @@ inteira.
 `vocabulary.title` e `nav.appearance` já estavam no dicionário e sem uso: a
 tradução existia e o componente a ignorava.
 
-Origem: regra 9. Prova: `tests/i18n.test.ts` e a varredura de G30.
+**Onde a chave nova entra.** No fragmento da área, `src/core/i18n/<área>.pt-BR.ts`
+e o par `<área>.en.ts`; `pt-BR.ts` e `en.ts` só os juntam e seguem sendo de onde
+`ptBR`, `en` e `Dictionary` são importados. Dois PRs só colidem se mexerem na
+mesma área (#531). Área nova é o par de arquivos mais um `import` e um
+espalhamento em cada junção, e o nome do fragmento não leva palavra de segurança
+(`auth`, `session`, `password`…), que eleva o caminho a L2 (G53). Os testes
+reprovam par faltando, chave que difere entre os idiomas, seção definida por dois
+fragmentos e fragmento que a junção não entrega.
+
+Origem: regra 9. Prova: `tests/i18n.test.ts`, `tests/i18n-fragments.test.ts` e a
+varredura de G30.
 
 <a id="g30"></a>
 ## G30 — Rota nova entra na varredura de idioma; dado do usuário é marcado
