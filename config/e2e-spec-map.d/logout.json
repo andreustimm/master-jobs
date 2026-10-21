@@ -1,0 +1,13 @@
+{
+  "id": "logout",
+  "modules": [
+    "tests/e2e/ui/logout.mjs"
+  ],
+  "patterns": [
+    "app/logout-action.ts"
+  ],
+  "routes": [
+    "/jobs",
+    "/login"
+  ]
+}

@@ -10,7 +10,7 @@
 // prazo não roda de novo: o recibo mora no diretório Git da worktree, fora da
 // árvore versionada. `--fresh` ignora o recibo (e grava um novo).
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { planGates, renderPlan, testsMentioning, validateImpactMap, type ImpactMap, type Plan, type PlannedGate } from "./impact.ts";
@@ -19,6 +19,8 @@ import { selectE2E, validateE2EMap, type E2EMap, type Selection } from "./e2e-se
 
 export const IMPACT_FILE = "config/validation-impact.json";
 export const E2E_MAP_FILE = "config/e2e-spec-map.json";
+/** Uma área por arquivo, `<id>.json`: PRs que mexem em áreas diferentes não editam o mesmo arquivo (#531). */
+export const E2E_AREAS_DIR = "config/e2e-spec-map.d";
 export const DEFAULT_BASE = "origin/dev";
 /** Relativo ao diretório Git da worktree (`git rev-parse --git-path`). */
 export const RECEIPT_GIT_PATH = "jho-gates/receipt.json";
@@ -31,8 +33,26 @@ export function loadImpactMap(root: string): ImpactMap {
   return validateImpactMap(JSON.parse(readFileSync(resolve(root, IMPACT_FILE), "utf8")));
 }
 
+/**
+ * O mapa de E2E como está no disco, sem validar: o arquivo-base mais as áreas de
+ * `E2E_AREAS_DIR`, em ordem de id. O nome do arquivo é o id da área.
+ */
+export function readE2EMapSource(root: string): Record<string, unknown> {
+  const base = JSON.parse(readFileSync(resolve(root, E2E_MAP_FILE), "utf8")) as Record<string, unknown>;
+  if ("areas" in base) throw new Error(`e2e-spec-map: as áreas moram em ${E2E_AREAS_DIR}/<id>.json, não em ${E2E_MAP_FILE}`);
+  const files = readdirSync(resolve(root, E2E_AREAS_DIR)).filter((file) => !file.startsWith("."));
+  const areas = files.map((file) => {
+    if (!file.endsWith(".json")) throw new Error(`e2e-spec-map: ${E2E_AREAS_DIR}/${file} não é um <id>.json`);
+    const area = JSON.parse(readFileSync(resolve(root, E2E_AREAS_DIR, file), "utf8")) as { id?: unknown } | null;
+    if (file !== `${String(area?.id)}.json`) throw new Error(`e2e-spec-map: ${E2E_AREAS_DIR}/${file} precisa se chamar ${String(area?.id)}.json`);
+    return area as { id: string };
+  });
+  areas.sort((a, b) => (a.id < b.id ? -1 : 1));
+  return { ...base, areas };
+}
+
 export function loadE2EMap(root: string): E2EMap {
-  return validateE2EMap(JSON.parse(readFileSync(resolve(root, E2E_MAP_FILE), "utf8")));
+  return validateE2EMap(readE2EMapSource(root));
 }
 
 /** A seleção de E2E de um gate com `e2eAreas`; `null` para os outros gates. */

@@ -1,0 +1,14 @@
+{
+  "id": "cockpit-cards",
+  "modules": [
+    "tests/e2e/ui/cockpit-cards.mjs",
+    "tests/e2e/cockpit-cards.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/",
+    "/jobs",
+    "/login",
+    "/pipeline"
+  ]
+}

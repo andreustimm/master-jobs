@@ -263,7 +263,10 @@ varredura axe de `a11y.mjs`. `pnpm test:e2e --areas a,b` roda a fumaça
 cria), na ordem da suíte; nome desconhecido recusa antes do build. Cada área
 provou rodar só com a fumaça e o seu `requires`; área nova que ainda não
 provou declara `requires: PREFIX` e roda depois de tudo o que vem antes. O gate
-`e2e` de `pnpm gates` escolhe as áreas por `config/e2e-spec-map.json`: módulo
+`e2e` de `pnpm gates` escolhe as áreas pelo mapa — `config/e2e-spec-map.json`
+(transversais e apelidos de rota) e `config/e2e-spec-map.d/<id>.json`, uma área
+por arquivo com o id no nome, que `loadE2EMap` junta em ordem de id, de modo que
+área nova é arquivo novo e nenhum PR edita o arquivo de outro: módulo
 da área, padrão da área, ou arquivo de uma rota que ela visita (página,
 layout, componente da pasta, Route Handler; dinâmico casa qualquer valor).
 Caminho transversal (layout raiz, estilos, navegação, `components/`, o próprio

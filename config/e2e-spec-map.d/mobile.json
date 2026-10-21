@@ -1,0 +1,20 @@
+{
+  "id": "mobile",
+  "modules": [
+    "tests/e2e/ui/mobile.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/",
+    "/candidate",
+    "/candidate/skills",
+    "/compare",
+    "/jobs",
+    "/jobs/[id]",
+    "/p/[slug]",
+    "/pipeline",
+    "/searches",
+    "/searches/tracks/new",
+    "/suggestions"
+  ]
+}

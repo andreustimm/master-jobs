@@ -1,0 +1,16 @@
+{
+  "id": "admin",
+  "modules": [
+    "tests/e2e/ui/admin.mjs"
+  ],
+  "patterns": [
+    "app/changelog-content.tsx",
+    "app/changelog-modal.tsx"
+  ],
+  "routes": [
+    "/",
+    "/account",
+    "/admin/users",
+    "/jobs"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "id": "search-relevance",
+  "modules": [
+    "tests/e2e/ui/search-relevance.mjs",
+    "tests/e2e/search-relevance.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/jobs"
+  ]
+}

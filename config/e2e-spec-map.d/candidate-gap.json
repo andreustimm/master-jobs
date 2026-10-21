@@ -1,0 +1,14 @@
+{
+  "id": "candidate-gap",
+  "modules": [
+    "tests/e2e/ui/candidate-gap.mjs",
+    "tests/e2e/gap-fixture.mjs"
+  ],
+  "patterns": [
+    "app/candidate-vocabulary-gap.tsx"
+  ],
+  "routes": [
+    "/candidate",
+    "/login"
+  ]
+}

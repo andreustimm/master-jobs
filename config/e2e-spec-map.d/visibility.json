@@ -1,0 +1,10 @@
+{
+  "id": "visibility",
+  "modules": [
+    "tests/e2e/ui/visibility.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/candidate"
+  ]
+}

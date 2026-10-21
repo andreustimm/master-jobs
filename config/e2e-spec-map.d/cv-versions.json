@@ -1,0 +1,10 @@
+{
+  "id": "cv-versions",
+  "modules": [
+    "tests/e2e/ui/cv-versions.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/candidate"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "id": "rate-limit",
+  "modules": [
+    "tests/e2e/ui/rate-limit.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/",
+    "/candidate",
+    "/p/[slug]"
+  ]
+}

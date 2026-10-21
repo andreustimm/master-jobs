@@ -1,0 +1,18 @@
+{
+  "id": "legal",
+  "modules": [
+    "tests/e2e/ui/legal.mjs"
+  ],
+  "patterns": [
+    "app/legal-document.tsx",
+    "app/terms/**",
+    "app/privacy/**",
+    "content/legal/**",
+    "src/core/legal.ts"
+  ],
+  "routes": [
+    "/privacy",
+    "/signup",
+    "/terms"
+  ]
+}

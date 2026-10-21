@@ -1,0 +1,23 @@
+{
+  "id": "roles",
+  "modules": [
+    "tests/e2e/ui/roles.mjs"
+  ],
+  "patterns": [
+    "app/changelog-content.tsx",
+    "app/changelog-modal.tsx"
+  ],
+  "routes": [
+    "/",
+    "/account",
+    "/admin/users",
+    "/candidate",
+    "/jobs",
+    "/jobs/new",
+    "/login",
+    "/pipeline",
+    "/recruiter",
+    "/recruiter/[id]",
+    "/referrals"
+  ]
+}

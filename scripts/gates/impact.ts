@@ -20,7 +20,7 @@ export type GateSpec = {
   satisfies?: string[];
   /**
    * Recebe `--areas` com as áreas de E2E que os arquivos pedem
-   * (`config/e2e-spec-map.json`), ou nada quando eles pedem a suíte inteira.
+   * (`config/e2e-spec-map.json` e `config/e2e-spec-map.d/`), ou nada quando eles pedem a suíte inteira.
    */
   e2eAreas?: boolean;
 };

@@ -1,0 +1,18 @@
+{
+  "id": "themes",
+  "modules": [
+    "tests/e2e/ui/themes.mjs"
+  ],
+  "patterns": [
+    "app/theme-action.ts",
+    "app/theme-switch.tsx"
+  ],
+  "routes": [
+    "/admin/users",
+    "/candidate",
+    "/candidate/skills",
+    "/jobs",
+    "/login",
+    "/referrals"
+  ]
+}
