@@ -1,11 +1,22 @@
 /**
  * O plano do CI de PR (issue #535): quais jobs pesados uma PR para `dev` paga.
  *
- * Decisão do dono, 13/10/2026, que afrouxou a G57 só em PR: o E2E roda quando
- * a tabela de impacto (`config/validation-impact.json`, `planGates`) pede o
- * gate `e2e` para o diff — não em toda PR. Diagnóstico do mesmo dia: o
- * `e2e-navegador` era 41,6% dos minutos do `ci.yml` (15,3 min por execução), e
- * 18 de 50 PRs não tocavam nada que a tabela mande testar em navegador.
+ * Decisão do dono, 13/10/2026, que afrouxou a G57 só em PR. Diagnóstico do
+ * mesmo dia: o `e2e-navegador` era 41,6% dos minutos do `ci.yml` (15,3 min por
+ * execução) e `banco-nas-majors` 13%. Uma saída por job recortado, cada uma
+ * decidida por uma entrada de `DECISIONS`:
+ *
+ * - `e2e` (`e2e-navegador`): a tabela de impacto (`config/validation-impact.json`,
+ *   `planGates`) pede o gate `e2e` para o diff.
+ * - `banco` (`banco-nas-majors`): o diff toca `DATABASE_PATTERNS`.
+ *
+ * O item da decisão que pulava `testes`, `cobertura` e `build` em PR só de
+ * documentação NÃO está aqui: o recorte de documentação é o do job `escopo`
+ * (#528, `pr-scope.ts`), que mediu que o Vitest lê `DESIGN.md`, regras e skills
+ * e que o Tailwind varre os `.md` — a fonte mais protetora vale (G62).
+ *
+ * Recorte novo entra como uma chave em `DECISIONS`, a saída de mesmo nome no
+ * job `plano` e o pulo dela nos agregadores; o resto do plano não muda.
  *
  * Falha fechada: tudo o que não for PR para `dev` com diff legível e
  * conhecido recebe o plano completo. Evento que não é `pull_request` (push em
@@ -15,13 +26,13 @@
  * relaxa a si mesmo. O que a PR deixa de rodar, o push em `dev` roda.
  *
  * O script lê o diff do commit de merge que o `pull_request` testa, contra o
- * primeiro pai, que é a base. Escreve `e2e=<true|false>` na saída padrão (o
+ * primeiro pai, que é a base. Escreve `<saída>=<true|false>` na saída padrão (o
  * passo a redireciona para `$GITHUB_OUTPUT`) e o motivo na saída de erro.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { planGates, validateImpactMap, type ImpactMap } from "../gates/impact.ts";
+import { globToRegex, planGates, validateImpactMap, type ImpactMap } from "../gates/impact.ts";
 
 export const IMPACT_FILE = "config/validation-impact.json";
 
@@ -48,13 +59,53 @@ export type PlanInput = {
   targetSha: string | undefined;
 };
 
-export type CiPlan = {
-  /** Roda o job `e2e-navegador`. */
-  e2e: boolean;
-  motivo: string;
-};
+/**
+ * Onde uma mudança pode quebrar o banco numa major do PostgreSQL. Fora disto,
+ * `banco-nas-majors` só roda no push em `dev`.
+ *
+ * As cinco primeiras entradas são a decisão do dono de 13/10/2026. As outras
+ * fecham o que a revisão do orquestrador achou fora dela, no mesmo dia:
+ * dependência (`package.json`, `pnpm-lock.yaml`: um bump do driver do
+ * PostgreSQL muda como as queries chegam ao banco, e é exatamente o PR que o
+ * Renovate abre), a configuração do `drizzle-kit` (`drizzle.config.ts` só
+ * reexporta `drizzle.postgres.config.ts`, que é a que vale) e o runner do
+ * próprio `banco-nas-majors`.
+ */
+export const DATABASE_PATTERNS: readonly string[] = [
+  "drizzle/**",
+  "src/core/db/**",
+  "supabase/**",
+  "tests/support/**",
+  "config/postgres-majors.json",
+  "package.json",
+  "pnpm-lock.yaml",
+  "drizzle.config.ts",
+  "drizzle.postgres.config.ts",
+  "scripts/versions/postgres-majors.ts",
+];
 
-const full = (motivo: string): CiPlan => ({ e2e: true, motivo: `${motivo}: plano completo` });
+/** O que cada decisão recebe: os caminhos da PR e os gates que a tabela pede para eles. */
+export type PlanFacts = { paths: readonly string[]; gates: readonly string[] };
+
+const DATABASE_REGEXES = DATABASE_PATTERNS.map(globToRegex);
+
+/** Uma entrada por saída do job `plano`: `true` roda o job, `false` o pula. */
+export const DECISIONS = {
+  e2e: ({ gates }: PlanFacts) => gates.includes("e2e"),
+  banco: ({ paths }: PlanFacts) => paths.some((path) => DATABASE_REGEXES.some((pattern) => pattern.test(path))),
+} as const satisfies Record<string, (facts: PlanFacts) => boolean>;
+
+export type PlanOutput = keyof typeof DECISIONS;
+export const PLAN_OUTPUTS = Object.keys(DECISIONS) as PlanOutput[];
+
+export type CiPlan = Record<PlanOutput, boolean> & { motivo: string };
+
+const decide = (facts: PlanFacts | null, motivo: string): CiPlan => {
+  const plan = { motivo } as CiPlan;
+  for (const output of PLAN_OUTPUTS) plan[output] = facts === null || DECISIONS[output](facts);
+  return plan;
+};
+const full = (motivo: string): CiPlan => decide(null, `${motivo}: plano completo`);
 const firstLine = (error: unknown) => (error instanceof Error ? error.message : String(error)).split("\n")[0];
 
 /**
@@ -90,15 +141,17 @@ export function ciPlan(input: PlanInput, map: ImpactMap, diff: () => string[]): 
   if (self !== undefined) return full(`${self} muda o próprio plano`);
   let gates: string[];
   try {
-    gates = planGates(map, paths).gates.map((gate) => gate.id);
+    const planned = planGates(map, paths);
+    // Caminho que a tabela não conhece não prova nada sobre nenhuma decisão,
+    // nem sobre as que não leem os gates (`banco`).
+    if (planned.unknown.length > 0) return full(`caminho desconhecido (${planned.unknown[0]})`);
+    gates = planned.gates.map((gate) => gate.id);
   } catch (error) {
     return full(`caminho inválido (${firstLine(error)})`);
   }
-  const e2e = gates.includes("e2e");
-  return {
-    e2e,
-    motivo: `${paths.length} arquivo(s); a tabela de impacto ${e2e ? "pede" : "não pede"} o gate e2e`,
-  };
+  const facts = { paths, gates };
+  const ran = PLAN_OUTPUTS.map((output) => `${output} ${DECISIONS[output](facts) ? "roda" : "pula"}`);
+  return decide(facts, `${paths.length} arquivo(s); ${ran.join(", ")}`);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
@@ -109,5 +162,5 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     () => changedPaths((args) => execFileSync("git", args, { encoding: "utf8" })),
   );
   console.error(`plano: ${plan.motivo}`);
-  console.log(`e2e=${plan.e2e}`);
+  for (const output of PLAN_OUTPUTS) console.log(`${output}=${plan[output]}`);
 }

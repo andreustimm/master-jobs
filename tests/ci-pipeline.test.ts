@@ -68,57 +68,74 @@ describe("agregador qualidade", () => {
     expect(runAggregator({}).status).not.toBe(0);
   });
 
-  describe("recorte de PR só de documentação (#528)", () => {
-    const recortaveis = ["pwa-browser", "banco-nas-majors"];
+  describe("pulos declarados: `escopo` (#528) e `plano` (#535)", () => {
     const documentacao = { result: "success", outputs: { completo: "false" } };
     const completo = { result: "success", outputs: { completo: "true" } };
+    const semBanco = { result: "success", outputs: { e2e: "false", banco: "false" } };
+    const comBanco = { result: "success", outputs: { e2e: "false", banco: "true" } };
     const verdes = Object.fromEntries(needsOf(aggregator).map((name) => [name, { result: "success" }]));
-    const pulados = Object.fromEntries(recortaveis.map((name) => [name, { result: "skipped" }]));
+    const skipped = { result: "skipped" };
 
-    it("os jobs recortáveis dependem de escopo e pulam só com completo=false", () => {
-      for (const name of recortaveis) {
-        expect(needsOf(ci.jobs[name]!), name).toEqual(["escopo"]);
-        expect(ci.jobs[name]!.if, name).toBe("needs.escopo.outputs.completo != 'false'");
-      }
-      // O resto da suíte nunca é recortado. `build` fica de fora porque o
-      // Tailwind varre os `.md` do repositório: Markdown pode mudar o CSS.
+    it("cada job pulável depende só do seu recortador e roda só com a saída dele", () => {
+      expect(needsOf(ci.jobs["pwa-browser"]!)).toEqual(["escopo"]);
+      expect(ci.jobs["pwa-browser"]!.if).toBe("needs.escopo.outputs.completo != 'false'");
+      expect(needsOf(ci.jobs["banco-nas-majors"]!)).toEqual(["plano"]);
+      expect(ci.jobs["banco-nas-majors"]!.if).toBe("needs.plano.outputs.banco == 'true'");
+      // O resto da suíte nunca é recortado: o Vitest lê `DESIGN.md`, regras e
+      // skills, e o Tailwind varre os `.md` do repositório (#528).
       for (const name of ["contratos", "testes", "cobertura", "build"]) {
-        expect(ci.jobs[name]!.if ?? "", name).not.toContain("escopo");
+        expect(ci.jobs[name]!.if ?? "", name).not.toMatch(/escopo|plano/);
         expect(needsOf(ci.jobs[name]!), name).not.toContain("escopo");
+        expect(needsOf(ci.jobs[name]!), name).not.toContain("plano");
       }
     });
 
-    it("aprova os recortáveis pulados quando escopo verde disse completo=false", () => {
-      expect(runAggregator({ ...verdes, escopo: documentacao, ...pulados }).status).toBe(0);
+    it("aprova cada pulo quando o recortador verde o declarou, e os dois juntos", () => {
+      expect(runAggregator({ ...verdes, escopo: documentacao, "pwa-browser": skipped }).status).toBe(0);
+      expect(runAggregator({ ...verdes, plano: semBanco, "banco-nas-majors": skipped }).status).toBe(0);
+      const docs = { ...verdes, escopo: documentacao, plano: semBanco, "pwa-browser": skipped, "banco-nas-majors": skipped };
+      expect(runAggregator(docs).status).toBe(0);
     });
 
-    it("reprova os mesmos pulos sem o recorte: escopo completo, vermelho ou sem saída", () => {
-      for (const escopo of [completo, { result: "failure" }, { result: "success" }]) {
-        expect(runAggregator({ ...verdes, escopo, ...pulados }).status, JSON.stringify(escopo)).not.toBe(0);
+    it("reprova o pulo sem a declaração do SEU recortador: completo, vermelho, pulado ou sem saída", () => {
+      for (const escopo of [completo, { result: "failure" }, skipped, { result: "success" }]) {
+        const outcome = runAggregator({ ...verdes, escopo, plano: semBanco, "pwa-browser": skipped });
+        expect(outcome.status, JSON.stringify(escopo)).not.toBe(0);
       }
+      for (const plano of [comBanco, { result: "failure" }, skipped, { result: "success" }]) {
+        const outcome = runAggregator({ ...verdes, escopo: documentacao, plano, "banco-nas-majors": skipped });
+        expect(outcome.status, JSON.stringify(plano)).not.toBe(0);
+      }
+      // Um recortador não declara o pulo do outro.
+      expect(runAggregator({ ...verdes, escopo: documentacao, "banco-nas-majors": skipped }).status).not.toBe(0);
+      expect(runAggregator({ ...verdes, plano: semBanco, "pwa-browser": skipped }).status).not.toBe(0);
     });
 
-    it("reprova pulo de job que não é recortável, mesmo com o recorte", () => {
-      for (const name of ["contratos", "testes", "cobertura", "build", "schema-e-migracao"]) {
-        const outcome = runAggregator({ ...verdes, escopo: documentacao, ...pulados, [name]: { result: "skipped" } });
-        expect(outcome.status, name).not.toBe(0);
+    it("reprova pulo de job que não é recortável, mesmo com os dois recortes", () => {
+      const docs = { ...verdes, escopo: documentacao, plano: semBanco, "pwa-browser": skipped, "banco-nas-majors": skipped };
+      for (const name of ["escopo", "plano", "contratos", "testes", "cobertura", "build", "schema-e-migracao"]) {
+        expect(runAggregator({ ...docs, [name]: skipped }).status, name).not.toBe(0);
       }
     });
 
     it("reprova falha de job recortável, mesmo com o recorte", () => {
       expect(runAggregator({ ...verdes, escopo: documentacao, "pwa-browser": { result: "failure" } }).status).not.toBe(0);
+      expect(runAggregator({ ...verdes, plano: semBanco, "banco-nas-majors": { result: "failure" } }).status).not.toBe(0);
     });
 
-    it("schema-e-migracao aceita banco-nas-majors pulado só no recorte", () => {
+    it("schema-e-migracao aceita banco-nas-majors pulado só com o plano verde dizendo banco=false", () => {
       const schema = ci.jobs["schema-e-migracao"]!;
-      expect(new Set(needsOf(schema))).toEqual(new Set(["escopo", "banco-nas-majors"]));
+      expect(new Set(needsOf(schema))).toEqual(new Set(["plano", "banco-nas-majors"]));
       const step = schema.steps.find((candidate) => candidate.env?.RESULTADOS)!;
       const run = (needs: Record<string, unknown>) =>
         spawnSync("bash", ["-e", "-c", step.run!], { encoding: "utf8", env: { ...process.env, RESULTADOS: JSON.stringify(needs) } }).status;
-      expect(run({ escopo: documentacao, "banco-nas-majors": { result: "skipped" } })).toBe(0);
-      expect(run({ escopo: completo, "banco-nas-majors": { result: "skipped" } })).not.toBe(0);
-      expect(run({ escopo: documentacao, "banco-nas-majors": { result: "failure" } })).not.toBe(0);
-      expect(run({ escopo: completo, "banco-nas-majors": { result: "success" } })).toBe(0);
+      expect(run({ plano: semBanco, "banco-nas-majors": skipped })).toBe(0);
+      expect(run({ plano: comBanco, "banco-nas-majors": { result: "success" } })).toBe(0);
+      for (const plano of [comBanco, { result: "failure" }, skipped, { result: "success" }]) {
+        expect(run({ plano, "banco-nas-majors": skipped }), JSON.stringify(plano)).not.toBe(0);
+      }
+      expect(run({ plano: semBanco, "banco-nas-majors": { result: "failure" } })).not.toBe(0);
+      expect(run({ plano: skipped, "banco-nas-majors": { result: "success" } })).not.toBe(0);
     });
   });
 
@@ -186,11 +203,11 @@ describe("plano do CI de PR (#535)", () => {
     for (const name of consumed) expect(written, name).toContain(name);
   });
 
-  it("só o E2E consome o plano, e fora do portão", () => {
+  it("consomem o plano só os jobs que ele recorta e os agregadores que conferem o pulo", () => {
     const consumers = Object.entries(ci.jobs)
       .filter(([, job]) => needsOf(job).includes("plano"))
       .map(([name]) => name);
-    expect(consumers.sort()).toEqual(["e2e-navegador", "qualidade"]);
+    expect(consumers.sort()).toEqual(["banco-nas-majors", "e2e-navegador", "qualidade", "schema-e-migracao"]);
     expect(ci.jobs["e2e-navegador"]!.needs).toBe("plano");
   });
 });

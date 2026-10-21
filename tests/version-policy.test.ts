@@ -316,8 +316,8 @@ describe("majors do PostgreSQL testadas", () => {
     // roda sempre e reprova sozinho quando alguma fatia não passou.
     const gate = ci.jobs["schema-e-migracao"]!;
     expect(gate.if).toBe("${{ always() }}");
-    // `escopo` entra só para o recorte de PR só de documentação (#528).
-    expect(gate.needs).toEqual(["escopo", "banco-nas-majors"]);
+    // `plano` entra só para o recorte do banco em PR para `dev` (#535).
+    expect(gate.needs).toEqual(["plano", "banco-nas-majors"]);
     const step = gate.steps.find((candidate) => candidate.env?.RESULTADOS === "${{ toJSON(needs) }}")!;
     const run = (needs: Record<string, unknown>) =>
       spawnSync("bash", ["-e", "-c", step.run!], { encoding: "utf8", env: { ...process.env, RESULTADOS: JSON.stringify(needs) } }).status;
@@ -326,10 +326,10 @@ describe("majors do PostgreSQL testadas", () => {
       expect(run({ "banco-nas-majors": { result } }), result).not.toBe(0);
     }
     expect(run({})).not.toBe(0);
-    // Pulado só passa no recorte declarado por um `escopo` verde.
-    const documentacao = { result: "success", outputs: { completo: "false" } };
-    expect(run({ escopo: documentacao, "banco-nas-majors": { result: "skipped" } })).toBe(0);
-    expect(run({ escopo: { result: "failure" }, "banco-nas-majors": { result: "skipped" } })).not.toBe(0);
+    // Pulado só passa no recorte declarado por um `plano` verde.
+    const semBanco = { result: "success", outputs: { banco: "false" } };
+    expect(run({ plano: semBanco, "banco-nas-majors": { result: "skipped" } })).toBe(0);
+    expect(run({ plano: { result: "failure" }, "banco-nas-majors": { result: "skipped" } })).not.toBe(0);
   });
 
   it("workflow e docs citam as chaves; os números moram só em config/postgres-majors.json", () => {

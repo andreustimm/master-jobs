@@ -636,7 +636,7 @@ no push das três branches. Os gates correm em jobs paralelos:
 | Job | O que prova |
 |---|---|
 | `escopo` | o recorte do PR: só documentação (lista de permissão em `scripts/github/pr-scope.ts`) ou suíte completa; fora de `pull_request`, sempre completa |
-| `plano` | o recorte do E2E em PR para `dev` pela tabela de impacto (abaixo); em qualquer outro evento, o plano completo |
+| `plano` | o recorte do E2E (pela tabela de impacto) e do banco nas majors em PR para `dev` (abaixo); fora disso, o plano completo |
 | `contratos` | changelogs prontos, versões explícitas ([política de versões](versions.md)), tracker de QA, tipos, contratos das skills de QA |
 | `testes` (4 fatias) | a suíte Vitest, cada fatia num runner com o próprio PostgreSQL em Docker |
 | `cobertura` | mescla os blobs das fatias e aplica o piso de `vitest.config.ts` sobre o total |
@@ -657,13 +657,12 @@ um quarto da suíte não mede nada; o piso vale sobre a soma, em `cobertura`.
 **PR só de documentação (#528).** Quando todo arquivo do PR é Markdown na lista
 de permissão — `docs/` (menos `docs/prompts/`), `changelog.d/`, `.compozy/`,
 `.claude/`, `.github/` e a raiz, menos `CHANGELOG.md` e `USER_CHANGELOG*` —,
-`pwa-browser` e `banco-nas-majors` ficam pulados, e `qualidade` e
-`schema-e-migracao` aceitam esse pulo **só** com `escopo` verde dizendo
-`completo=false`. `contratos` e o Vitest com cobertura continuam, porque leem
-documentos; `build` também, porque o Tailwind varre os `.md` do repositório e
-Markdown pode mudar o CSS. Push em `dev`, a chamada da promoção e o dispatch rodam sempre a
-suíte completa. `e2e-navegador` não é recortado: a trava de #202/#303 o mantém
-sem `needs` e fora do agregador.
+`pwa-browser` fica pulado, e `qualidade` aceita esse pulo **só** com `escopo`
+verde dizendo `completo=false`. `contratos` e o Vitest com cobertura continuam,
+porque leem documentos; `build` também, porque o Tailwind varre os `.md` do
+repositório e Markdown pode mudar o CSS. Push em `dev`, a chamada da promoção e
+o dispatch rodam sempre a suíte completa. `banco-nas-majors` e `e2e-navegador`
+são recortados pelo `plano`, abaixo — documentação não pede nenhum dos dois.
 
 O job `e2e-navegador` roda ao lado a suíte `pnpm test:e2e` inteira, sem
 segredo e com PostgreSQL descartável no loopback do runner. Ele é a única
@@ -684,27 +683,39 @@ Não bloqueante vale nas três portas, e não só no agregador:
   produção: o job também não roda. Ali só contam os checks que o ruleset de
   `main` exige, e `staging` recebe o SHA cujo push em `dev` já rodou o E2E.
 
-**O plano do E2E em PR** (decisão do dono, 13/10/2026, G57;
+**O plano do CI de PR** (decisão do dono, 13/10/2026, G57;
 [#535](https://github.com/andreustimm/master-jobs/issues/535)). Medido em
 14 dias, o E2E era 41,6% dos minutos do `ci.yml`, a 15,3 min por execução, e
-18 de 50 PRs não tocavam nada que a tabela mande testar em navegador. O job
-`plano` lê o diff do commit de merge da PR contra a base e roda `planGates`
-(`scripts/gates/impact.ts`) sobre ele; `e2e-navegador` só espera o `plano` e só
-roda quando o gate `e2e` está no plano. A decisão vale só em `pull_request` com
-base `dev`. Falha fechada para o resto: push (em `dev`, `staging` e `main`),
-dispatch, chamada da promoção, PR de produção (base `main`), diff vazio ou
-ilegível e PR que edita `ci.yml`, `ci-plan.ts`, `impact.ts` ou
-`validation-impact.json` — o plano não relaxa a si mesmo — recebem o plano
-completo. O recorte só existe em PR: o push em `dev` roda tudo, e é ele que a
-promoção lê. `plano` entra em `qualidade.needs`; plano vermelho reprova o
-portão. O E2E não escolhe áreas no CI: quando roda, é a suíte inteira.
+`banco-nas-majors` 13%. O job `plano` (`scripts/github/ci-plan.ts`) lê o diff do
+commit de merge da PR contra a base e publica uma saída por job que recorta:
 
-Ainda não há atalho para o resto de uma PR só de documentação: cerca de
-quarenta arquivos de teste leem `docs/`, os changelogs e `.claude/skills/`, e o
-build compila os changelogs. Pular a suíte nesses casos deixaria passar
-exatamente a quebra de contrato documental que ela existe para pegar. O ganho
-para essas PRs vem do paralelismo, que já vale para todas, e de não pagar o
-E2E.
+- `e2e`: `planGates` (`scripts/gates/impact.ts`) sobre o diff pede o gate
+  `e2e`. `e2e-navegador` só espera o `plano` e só roda com `e2e=true`.
+- `banco`: o diff toca a lista do banco (`DATABASE_PATTERNS`: `drizzle/`,
+  `src/core/db/`, `supabase/`, `tests/support/`, `config/postgres-majors.json`,
+  dependências, a configuração do `drizzle-kit` e o runner do job).
+  `banco-nas-majors` só roda com `banco=true`, e `qualidade` e
+  `schema-e-migracao` aceitam o pulo **só** com `plano` verde dizendo
+  `banco=false`.
+
+O recorte vale só em `pull_request` com base `dev`. Falha fechada para o resto:
+push (em `dev`, `staging` e `main`), dispatch, chamada da promoção, PR de
+produção (base `main`), diff vazio ou ilegível, caminho que a tabela não
+reconhece e PR que edita `ci.yml`, `ci-plan.ts`, `impact.ts` ou
+`validation-impact.json` — o plano não relaxa a si mesmo — recebem o plano
+completo (no dispatch e na chamada da promoção, o `if:` do `e2e-navegador`
+continua excluindo o job, como antes). O push em `dev` roda tudo, e é ele que a
+promoção lê. `plano` entra em `qualidade.needs`; plano vermelho reprova o
+portão. O E2E não escolhe áreas no CI: quando roda, é a suíte inteira. Recorte
+novo entra como uma chave em `DECISIONS` (`ci-plan.ts`), a saída de mesmo nome
+no job e o pulo dela em `$pulavel` do agregador.
+
+A decisão de 13/10 também pulava `testes`, `cobertura` e `build` em PR só de
+documentação. Isso **não** vale: cerca de quarenta arquivos de teste leem
+`docs/`, os changelogs e `.claude/skills/`, e o Tailwind varre os `.md` (#528);
+pular a suíte deixaria passar a quebra de contrato documental que ela existe
+para pegar. Vale a fonte mais protetora (G62). O ganho dessas PRs vem do
+paralelismo, de não pagar o E2E e de pular `pwa-browser` e `banco-nas-majors`.
 
 Medido em 23/09/2026: o job único levava 6 min 53 s (run 35803388420, em `dev`);
 os jobs paralelos, 2 min 41 s do disparo ao `qualidade` (run 35850357880, PR

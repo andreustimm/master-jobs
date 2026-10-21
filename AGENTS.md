@@ -196,7 +196,7 @@ Comandos: [docs/cli.md](docs/cli.md). Índice: [docs/README.md](docs/README.md).
    [[G44](docs/engineering/rules/delivery.md#g44)]
 2. Valide local e enxuto: `pnpm typecheck` + `vitest related` do diff, E2E
    afetado se toca navegador; a suíte completa é do CI, que em PR para `dev`
-   só roda o E2E quando a tabela de impacto pede (dono, 13/10/2026). Só
+   só roda o E2E e o banco nas majors quando o diff pede (dono, 13/10/2026). Só
    Markdown: `pnpm check:instructions`, `check:release-ready`,
    `check:qa-tracker`. Gate estourou o teto (check 10 min, E2E 8, L1 10, L2
    30): registre e siga.

@@ -477,24 +477,28 @@ regra), `pnpm check:release-ready` (changelogs e fragmentos) e
 valida antes da PR. No CI, os checks obrigatórios (`qualidade`,
 `schema-e-migracao`) **nunca** são filtrados por caminho, porque check
 obrigatório pulado conta como aprovado; eles rodam em toda PR com `always()`.
-O recorte é dentro deles ([#528](https://github.com/andreustimm/master-jobs/issues/528)):
-num PR só de documentação — lista de permissão em `scripts/github/pr-scope.ts`
-—, o job `escopo` responde `completo=false`, `pwa-browser` e `banco-nas-majors`
-ficam pulados, e os obrigatórios aceitam **esses dois** pulos só com `escopo`
-verde dizendo isso. `contratos`, o Vitest com cobertura e o `build` rodam sempre
-(o Tailwind varre os `.md` do repositório, então Markdown pode mudar o CSS).
+O recorte é dentro deles, só em PR, e cada pulo só passa quando o job que o
+declara terminou verde:
 
-O E2E tem recorte próprio, **por decisão do dono, de 13/10/2026**
-([#535](https://github.com/andreustimm/master-jobs/issues/535)): em
-`pull_request` com base `dev`, o job `e2e-navegador` só roda quando a tabela de
-impacto (`config/validation-impact.json`) pede o gate `e2e` para o diff. O job
-`plano` do `ci.yml` decide (`scripts/github/ci-plan.ts`, provado por
-`tests/ci-plan.test.ts`) e falha fechado: push em `dev`, `staging` e `main`,
-`workflow_dispatch`, a chamada da promoção (`validar`), a PR de produção, diff
-vazio ou ilegível e a PR que muda o próprio plano rodam o E2E, como antes. Pular
-o E2E não toca o check obrigatório, porque ele já está fora do portão
-(`NON_BLOCKING_CI_JOBS`), e o que a PR deixa de rodar o push em `dev` roda. A
-outra seleção por caminho é a do deploy (`scripts/vercel-ignore-build.sh`, provada por
+- **PR só de documentação** ([#528](https://github.com/andreustimm/master-jobs/issues/528)):
+  lista de permissão em `scripts/github/pr-scope.ts`; o job `escopo` responde
+  `completo=false` e `pwa-browser` fica pulado. `contratos`, o Vitest com
+  cobertura e o `build` rodam sempre (o Vitest lê documentos, e o Tailwind varre
+  os `.md`, então Markdown pode mudar o CSS).
+- **Plano do diff, por decisão do dono, de 13/10/2026**
+  ([#535](https://github.com/andreustimm/master-jobs/issues/535)): em
+  `pull_request` com base `dev`, o job `plano` (`scripts/github/ci-plan.ts`,
+  provado por `tests/ci-plan.test.ts`) roda o `e2e-navegador` só quando a tabela
+  de impacto (`config/validation-impact.json`) pede o gate `e2e`, e o
+  `banco-nas-majors` só quando o diff toca o banco. Falha fechada: push em
+  `dev`, `staging` e `main`, `workflow_dispatch`, a chamada da promoção
+  (`validar`), a PR de produção, diff vazio ou ilegível, caminho desconhecido e
+  a PR que muda o próprio plano recebem o plano completo. O item da decisão que
+  pulava `testes`, `cobertura` e `build` em PR só de documentação não vale:
+  colide com a evidência da #528, e vale a fonte mais protetora (G62).
+
+O que a PR deixa de rodar, o push em `dev` roda. A outra seleção por caminho é
+a do deploy (`scripts/vercel-ignore-build.sh`, provada por
 `tests/vercel-ignore-build.test.ts`): só documentação, testes e automação não
 publicam versão nova.
 
