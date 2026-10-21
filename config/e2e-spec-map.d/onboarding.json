@@ -1,0 +1,12 @@
+{
+  "id": "onboarding",
+  "modules": [
+    "tests/e2e/ui/onboarding.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/candidate",
+    "/login",
+    "/p/[slug]"
+  ]
+}

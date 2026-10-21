@@ -1,7 +1,9 @@
 // E2E seletivo (#320): dos caminhos que pediram o gate `e2e`, quais áreas de
 // `tests/e2e/ui/index.mjs` rodar — ou a suíte inteira. O mapa mora em
-// `config/e2e-spec-map.json`; aqui só a validação (que falha fechado) e a
-// seleção, em funções puras.
+// `config/e2e-spec-map.json` (transversais e apelidos de rota) e
+// `config/e2e-spec-map.d/<id>.json` (uma área por arquivo, #531), juntados por
+// `loadE2EMap`; aqui só a validação (que falha fechado) e a seleção, em funções
+// puras.
 //
 // Um caminho seleciona área por três vias: é módulo da área (o teste mudou),
 // casa um padrão da área, ou é arquivo de uma rota que a área visita. Caminho
@@ -158,7 +160,7 @@ export function selectE2E(map: E2EMap, files: readonly string[]): Selection {
     }
     const hits = [...byModule, ...byRoute];
     if (hits.length === 0) {
-      escalations.push({ path: file, reason: "sem área em config/e2e-spec-map.json" });
+      escalations.push({ path: file, reason: "sem área em config/e2e-spec-map.d/" });
       continue;
     }
     for (const area of hits) selected.add(area.id);

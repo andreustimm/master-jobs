@@ -34,6 +34,7 @@
         "config/tasks-project.json",
         "config/validation-impact.json",
         "config/e2e-spec-map.json",
+        "config/e2e-spec-map.d/**",
         ".deep-review.yaml",
         ".coderabbit.yaml",
         ".gitignore",

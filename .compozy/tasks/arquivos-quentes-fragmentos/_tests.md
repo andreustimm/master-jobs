@@ -23,7 +23,25 @@ seções por idioma. Sonda negativa: tirar `eyebrow` de `cockpit.en.ts` quebra
 `tsc` em `cockpit.en.ts(11,3): TS2741`; fragmento extra com seção repetida,
 chave a mais e fora da junção reprova três verificações do teste novo.
 
-Metade 2 (PR seguinte): a seleção de E2E devolve a mesma resposta com o mapa
-fragmentado (`tests/e2e-spec-map.test.ts` sem mudar de expectativa, salvo a
-ordem das áreas, que passa a ser por id), id duplicado entre fragmentos reprova,
-e fragmento cujo nome difere do `id` reprova.
+Metade 2a, mapa de E2E (`tests/e2e-spec-map.test.ts`, com diretórios
+temporários, sem rede nem banco):
+
+- A seleção devolve as mesmas áreas com o mapa fragmentado; muda só a ordem,
+  que passa a ser por id (duas expectativas: as áreas de `app/searches/page.tsx`
+  e o `--areas` que `pnpm gates` monta para ela).
+- O loader junta um arquivo por área em ordem de id, e o id que é prefixo de
+  outro vem antes (`jobs` antes de `jobs-new`).
+- Arquivo oculto (`.DS_Store`) é ignorado; arquivo com nome diferente do id,
+  arquivo que não é `.json` e `areas` no arquivo-base reprovam, cada um com a
+  sua mensagem; diretório sem nenhuma área falha fechado
+  (`areas ausentes`).
+- `tests/recruiter-directory.test.ts` lê o mapa por `loadE2EMap` em vez do JSON.
+
+Prova de equivalência (manual, no PR): as 53 áreas montadas dos fragmentos são
+iguais às do JSON original (`deepStrictEqual` sobre o conteúdo, ordenadas por
+id), `routeAliases`, versões e `crossCutting` (original mais
+`config/e2e-spec-map.d/**`) idem.
+
+Metade 2b, `AREAS` por glob: `selectAreas` devolve a mesma ordem e os mesmos
+fechos de `requires` que hoje para qualquer lista, e `tests/e2e-spec-map.test.ts`
+continua provando que o mapa conhece exatamente as áreas do executor.

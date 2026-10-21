@@ -29,6 +29,7 @@ import {
   source,
 } from "../src/core/db/schema.ts";
 import { vercelBlobStorage } from "../src/core/storage/infra/vercel-blob.ts";
+import { loadE2EMap } from "../scripts/gates/cli.ts";
 import { discoverEntries } from "./support/entry-inventory.ts";
 import { fakeBlobSdk } from "./support/storage-fakes.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
@@ -439,7 +440,6 @@ describe("inventário", () => {
     expect(architecture).toContain(`"app/recruiter/directory/[id]/page.tsx": { guard: 'requirePage("candidate:discover")' }`);
     expect(RECRUITER_SWEEP).toContain("/recruiter/directory");
     expect(Object.keys(UNMEASURED_PAGES)).toContain("app/recruiter/directory/[id]/page.tsx");
-    const map = JSON.parse(readFileSync("config/e2e-spec-map.json", "utf8")) as { areas: { id: string; modules: string[] }[] };
-    expect(map.areas.find((area) => area.id === "recruiter-directory")?.modules).toContain("tests/e2e/ui/recruiter-directory.mjs");
+    expect(loadE2EMap(".").areas.find((area) => area.id === "recruiter-directory")?.modules).toContain("tests/e2e/ui/recruiter-directory.mjs");
   });
 });

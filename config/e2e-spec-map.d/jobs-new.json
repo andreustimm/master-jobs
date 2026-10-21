@@ -1,0 +1,11 @@
+{
+  "id": "jobs-new",
+  "modules": [
+    "tests/e2e/ui/jobs-new.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/jobs",
+    "/jobs/new"
+  ]
+}

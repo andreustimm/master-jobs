@@ -1,0 +1,15 @@
+{
+  "id": "search-synonyms",
+  "modules": [
+    "tests/e2e/ui/search-synonyms.mjs",
+    "tests/e2e/search-synonyms.mjs"
+  ],
+  "patterns": [
+    "config/search-synonyms.yaml",
+    "src/core/synonyms.ts",
+    "src/core/synonyms-load.ts"
+  ],
+  "routes": [
+    "/jobs"
+  ]
+}

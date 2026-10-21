@@ -1,0 +1,15 @@
+{
+  "id": "candidate-rescore",
+  "modules": [
+    "tests/e2e/ui/candidate-rescore.mjs"
+  ],
+  "patterns": [
+    "app/score-queue-card.tsx",
+    "app/score-queue-drain.ts"
+  ],
+  "routes": [
+    "/candidate",
+    "/compare",
+    "/login"
+  ]
+}

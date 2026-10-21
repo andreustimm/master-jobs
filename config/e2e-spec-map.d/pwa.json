@@ -1,0 +1,20 @@
+{
+  "id": "pwa",
+  "modules": [
+    "tests/e2e/ui/pwa.mjs"
+  ],
+  "patterns": [
+    "public/**"
+  ],
+  "routes": [
+    "/",
+    "/candidate",
+    "/jobs",
+    "/login",
+    "/manifest.json",
+    "/offline.html",
+    "/p/[slug]",
+    "/pipeline",
+    "/transition-test"
+  ]
+}

@@ -5,7 +5,9 @@ por 38 % dos PRs no mesmo objeto; `config/e2e-spec-map.json`, por 32 %;
 `AREAS` de `tests/e2e/ui/index.mjs`, por 25 %. Cada merge invalida os PRs
 abertos que tocam o mesmo trecho. O comentário de 2026-10-13 na issue adiou a
 divisão para uma janela sem PR aberta tocando o arquivo e pediu que ela fosse
-fatiada. As duas metades saem em PRs separados (L1).
+fatiada. As metades saem em PRs separados: o dicionário (L1), o mapa de E2E (2a,
+L2 só pela palavra de segurança nos ids `auth` e `password-reset`) e `AREAS` por
+glob (2b).
 
 ## Metade 1 — dicionário de interface (esta PR)
 
@@ -43,14 +45,41 @@ espalhamento) em cada junção; essas linhas são o único ponto onde dois PRs d
 área nova ainda colidem. Seção com o mesmo nome em dois fragmentos sobrescreve
 calada no espalhamento: `tests/i18n-fragments.test.ts` reprova.
 
-## Metade 2 — mapa de E2E (PR seguinte)
+## Metade 2a — mapa de E2E (segunda PR)
+
+O adiamento de 2026-10-13 citava a #537 mudando `scripts/gates/*`; a lista de
+arquivos da #537 e da #539 não toca `scripts/gates/` nem `config/e2e-spec-map.json`
+(só `config/validation-impact.json`, na #539), então o conflito esperado era
+uma linha de padrão.
 
 `config/e2e-spec-map.json` mantém `schemaVersion`, `mapVersion`, `crossCutting`
-e `routeAliases`; `areas` passa a `config/e2e-spec-map.d/<id>.json`, juntado por
-`loadE2EMap` e ordenado por id. `validateE2EMap` não muda. `AREAS` de
-`tests/e2e/ui/index.mjs` é descoberto por glob, com a ordem de execução e o
-`requires` declarados no próprio módulo da área. Fica para depois de decidir o
-que as PRs de CI (#537) fazem com `scripts/gates/`.
+e `routeAliases`; `areas` passa a `config/e2e-spec-map.d/<id>.json`, um arquivo
+por área com o id no nome. `readE2EMapSource` (`scripts/gates/cli.ts`) junta o
+base com o diretório, ordena por id e recusa arquivo de nome diferente do id,
+arquivo que não é `.json` (oculto como `.DS_Store` é ignorado) e `areas` no base;
+`loadE2EMap` = `validateE2EMap(readE2EMapSource(root))`, e `validateE2EMap` não
+muda. `config/e2e-spec-map.d/**` entra em `crossCutting` (editar o mapa já
+pedia a suíte inteira) e na classe `tooling` de `validation-impact.json`.
+
+**Ordem.** O mapa antigo listava as áreas em ordem de inserção; a seleção
+devolve na ordem do mapa, e passa a ser a dos ids. Muda só a lista que
+`pnpm gates` mostra e passa a `--areas`; `selectAreas` reordena pela suíte
+(`tests/e2e/ui/index.mjs`), então a execução é a mesma. Duas expectativas de
+`tests/e2e-spec-map.test.ts` mudam de ordem, e nada mais.
+
+**Custo conhecido.** Os ids `auth` e `password-reset` são palavra de segurança
+no caminho (`review_level.py`, `validation-impact.json`): o PR que criou os
+fragmentos é L2 por isso, e o PR futuro que editar um desses dois arquivos
+também, além de cair na classe `auth-security` (testes inteiros, `pwa-browser`
+e `e2e` no plano local, contra `related-tests` para o arquivo de outra área).
+Não vale renomear a área só para escapar do rótulo.
+
+## Metade 2b — `AREAS` por glob (terceira PR)
+
+`AREAS` de `tests/e2e/ui/index.mjs` é descoberto por glob, com a ordem de
+execução e o `requires` declarados no próprio módulo da área. A ordem da suíte
+é "a única que a suíte inteira já provou", então cada módulo carrega um `order`
+que preserva a ordem de hoje. Só depois que a 2a mesclar.
 
 ## Fora do escopo
 

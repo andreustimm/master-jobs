@@ -1,0 +1,21 @@
+{
+  "id": "searches",
+  "modules": [
+    "tests/e2e/ui/searches.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/",
+    "/account",
+    "/admin/captures",
+    "/admin/users",
+    "/jobs",
+    "/jobs/[id]",
+    "/jobs/[id]/paises",
+    "/login",
+    "/recruiter",
+    "/searches",
+    "/searches/tracks/[id]",
+    "/searches/tracks/new"
+  ]
+}

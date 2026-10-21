@@ -1,0 +1,11 @@
+{
+  "id": "account",
+  "modules": [
+    "tests/e2e/ui/account.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/account",
+    "/login"
+  ]
+}

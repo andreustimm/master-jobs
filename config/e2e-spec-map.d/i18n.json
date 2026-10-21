@@ -1,0 +1,36 @@
+{
+  "id": "i18n",
+  "modules": [
+    "tests/e2e/ui/i18n.mjs"
+  ],
+  "patterns": [
+    "app/locale-action.ts",
+    "app/locale-switch.tsx"
+  ],
+  "routes": [
+    "/",
+    "/account",
+    "/admin/execucoes",
+    "/admin/operacoes",
+    "/admin/plataformas",
+    "/candidate",
+    "/candidate/skills",
+    "/candidate/vocabulary",
+    "/compare",
+    "/jobs",
+    "/jobs/[id]",
+    "/jobs/[id]/paises",
+    "/jobs/new",
+    "/login",
+    "/login/forgot",
+    "/login/reset",
+    "/pipeline",
+    "/privacy",
+    "/referrals",
+    "/signup",
+    "/signup/invite",
+    "/signup/verify",
+    "/suggestions",
+    "/terms"
+  ]
+}
