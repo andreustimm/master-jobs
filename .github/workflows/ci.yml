@@ -69,8 +69,8 @@ concurrency:
 jobs:
   escopo:
     # O recorte do PR (#528): PR só de documentação — lista de permissão em
-    # `scripts/github/pr-scope.ts` — não paga `pwa-browser` nem
-    # `banco-nas-majors`, que nenhum desses Markdown alcança. Fora de
+    # `scripts/github/pr-scope.ts` — não paga `pwa-browser`, que nenhum desses
+    # Markdown alcança (`banco-nas-majors` é do `plano`, #535). Fora de
     # `pull_request` a resposta é sempre a suíte completa, então push em `dev`,
     # chamada da promoção e dispatch rodam tudo como antes. Falha fechada: se
     # este job falhar, os pesados ficam pulados SEM recorte, e `qualidade`
@@ -100,21 +100,27 @@ jobs:
 
   plano:
     # O recorte do CI de PR (#535). Decisão do dono, 13/10/2026: em `pull_request`
-    # com base `dev`, o `e2e-navegador` só roda quando a tabela de impacto
-    # (`config/validation-impact.json`) pede o gate `e2e` para o diff. Push,
-    # `workflow_dispatch`, chamada da promoção (`target-sha`) e PR de outra base
-    # (a de produção) recebem sempre o plano completo — a lógica e a falha
-    # fechada estão em `scripts/github/ci-plan.ts`, provadas por
+    # com base `dev`, cada job pesado que o plano recorta só roda quando o diff
+    # pede, uma saída por job:
+    #   e2e   → `e2e-navegador`: a tabela de impacto
+    #           (`config/validation-impact.json`) pede o gate `e2e`;
+    #   banco → `banco-nas-majors`: o diff toca a lista do banco
+    #           (`DATABASE_PATTERNS` em `scripts/github/ci-plan.ts`).
+    # Push, `workflow_dispatch`, chamada da promoção (`target-sha`) e PR de
+    # outra base (a de produção) recebem sempre o plano completo — a lógica e a
+    # falha fechada estão em `scripts/github/ci-plan.ts`, provadas por
     # `tests/ci-plan.test.ts`.
     #
     # É agregado por `qualidade` como qualquer outro job: plano vermelho reprova
-    # o portão. Sem `paths:` no workflow, de propósito (a G57 explica): check
-    # obrigatório filtrado por caminho fica pendente ou pulado, e pulado conta
-    # como aprovado.
+    # o portão, e os agregadores só aceitam `skipped` do job cujo pulo o plano
+    # verde declarou. Sem `paths:` no workflow, de propósito (a G57 explica):
+    # check obrigatório filtrado por caminho fica pendente ou pulado, e pulado
+    # conta como aprovado.
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 5
     outputs:
       e2e: ${{ steps.plano.outputs.e2e }}
+      banco: ${{ steps.plano.outputs.banco }}
 
     steps:
       - uses: actions/checkout@v7
@@ -449,8 +455,13 @@ jobs:
     # arquivo. Em série num runner só, as duas majors levaram 401 s + 422 s,
     # rente ao teto de 15 min; por isso a matriz major × fatia. O resultado
     # entra no check obrigatório `schema-e-migracao`, que depende deste job.
-    needs: escopo
-    if: needs.escopo.outputs.completo != 'false'
+    #
+    # Em PR para `dev` só roda quando o diff toca o banco (`plano.banco`, #535,
+    # decisão do dono de 13/10/2026) — PR só de documentação nunca toca; o push
+    # em `dev` roda sempre, e é nele que uma regressão numa major fora desses
+    # caminhos aparece.
+    needs: plano
+    if: needs.plano.outputs.banco == 'true'
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 15
     strategy:
@@ -485,10 +496,11 @@ jobs:
     # vermelha faria este check obrigatório ser PULADO, e pulado conta como
     # aprovado na proteção de branch.
     #
-    # Num PR só de documentação (`escopo` verde com `completo=false`, #528), o
-    # `banco-nas-majors` pulado é o esperado; pulado sem esse recorte reprova.
+    # Com o `plano` verde dizendo `banco=false` (PR para `dev` que não toca o
+    # banco, #535), o `banco-nas-majors` pulado é o esperado; pulado sem esse
+    # plano reprova. O `schema-e-migracao` em si roda sempre.
     if: ${{ always() }}
-    needs: [escopo, banco-nas-majors]
+    needs: [plano, banco-nas-majors]
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 15
 
@@ -499,10 +511,10 @@ jobs:
         run: |
           echo "$RESULTADOS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
           echo "$RESULTADOS" | jq -e '
-            (.escopo.result == "success" and .escopo.outputs.completo == "false") as $documentacao
+            (.plano.result == "success" and .plano.outputs.banco == "false") as $semBanco
             | length > 0 and (to_entries | all(
                 .value.result == "success"
-                or ($documentacao and .key == "banco-nas-majors" and .value.result == "skipped")))
+                or ($semBanco and .key == "banco-nas-majors" and .value.result == "skipped")))
           ' > /dev/null
 
       - uses: actions/checkout@v7
@@ -632,10 +644,13 @@ jobs:
     # por conta própria quando qualquer dependência não terminou em sucesso —
     # falha, pulo ou cancelamento.
     #
-    # Única exceção ao "tudo em sucesso" (#528): com `escopo` verde dizendo
-    # `completo=false` (PR só de documentação), `pwa-browser` e
-    # `banco-nas-majors` pulados passam. Qualquer outro pulo, ou pulo sem esse
-    # recorte, reprova.
+    # Única exceção ao "tudo em sucesso": um job pulado passa quando o job que
+    # o recorta terminou verde e declarou o pulo — `pwa-browser` com `escopo`
+    # dizendo `completo=false` (PR só de documentação, #528);
+    # `banco-nas-majors` com `plano` dizendo `banco=false` (#535). Pulo sem
+    # essa declaração, com o recortador vermelho ou de outro job reprova. Job
+    # novo que um recorte passe a pular entra em `$pulavel` E em
+    # `tests/ci-pipeline.test.ts`.
     if: ${{ always() }}
     needs: [escopo, plano, contratos, testes, cobertura, pwa-browser, build, banco-nas-majors, schema-e-migracao]
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
@@ -648,11 +663,15 @@ jobs:
         run: |
           echo "$RESULTADOS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
           echo "$RESULTADOS" | jq -e '
-            (.escopo.result == "success" and .escopo.outputs.completo == "false") as $documentacao
-            | ["pwa-browser", "banco-nas-majors"] as $recortaveis
+            (if .escopo.result == "success" then .escopo.outputs else {} end) as $escopo
+            | (if .plano.result == "success" then .plano.outputs else {} end) as $plano
+            | {
+                "pwa-browser": ($escopo.completo == "false"),
+                "banco-nas-majors": ($plano.banco == "false")
+              } as $pulavel
             | length > 0 and (to_entries | all(
                 .value.result == "success"
-                or ($documentacao and .value.result == "skipped" and (.key | IN($recortaveis[])))))
+                or (.value.result == "skipped" and ($pulavel[.key] // false))))
           ' > /dev/null
 
   validacao:
