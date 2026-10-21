@@ -33,7 +33,7 @@ temporários, sem rede nem banco):
   outro vem antes (`jobs` antes de `jobs-new`).
 - Arquivo oculto (`.DS_Store`) é ignorado; arquivo com nome diferente do id,
   arquivo que não é `.json` e `areas` no arquivo-base reprovam, cada um com a
-  mensagem que nomeia o arquivo; diretório sem nenhuma área falha fechado
+  sua mensagem; diretório sem nenhuma área falha fechado
   (`areas ausentes`).
 - `tests/recruiter-directory.test.ts` lê o mapa por `loadE2EMap` em vez do JSON.
 

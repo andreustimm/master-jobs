@@ -5,7 +5,9 @@ por 38 % dos PRs no mesmo objeto; `config/e2e-spec-map.json`, por 32 %;
 `AREAS` de `tests/e2e/ui/index.mjs`, por 25 %. Cada merge invalida os PRs
 abertos que tocam o mesmo trecho. O comentário de 2026-10-13 na issue adiou a
 divisão para uma janela sem PR aberta tocando o arquivo e pediu que ela fosse
-fatiada. As duas metades saem em PRs separados (L1).
+fatiada. As metades saem em PRs separados: o dicionário (L1), o mapa de E2E (2a,
+L2 só pela palavra de segurança nos ids `auth` e `password-reset`) e `AREAS` por
+glob (2b).
 
 ## Metade 1 — dicionário de interface (esta PR)
 
@@ -68,7 +70,9 @@ devolve na ordem do mapa, e passa a ser a dos ids. Muda só a lista que
 **Custo conhecido.** Os ids `auth` e `password-reset` são palavra de segurança
 no caminho (`review_level.py`, `validation-impact.json`): o PR que criou os
 fragmentos é L2 por isso, e o PR futuro que editar um desses dois arquivos
-também. Não vale renomear a área só para escapar do rótulo.
+também, além de cair na classe `auth-security` (testes inteiros, `pwa-browser`
+e `e2e` no plano local, contra `related-tests` para o arquivo de outra área).
+Não vale renomear a área só para escapar do rótulo.
 
 ## Metade 2b — `AREAS` por glob (terceira PR)
 
