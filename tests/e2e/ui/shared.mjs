@@ -79,7 +79,12 @@ export function makePortugueseLeaks({ page, gotoMeasured }) {
           const text = (node.textContent ?? "").trim();
           const parent = node.parentElement;
           if (!parent || text.length < 3) continue;
-          if (["SCRIPT", "STYLE"].includes(parent.tagName)) continue;
+          // `TITLE` não é texto da página: com metadata em streaming, o Next
+          // anexa o `<title>` ao `<body>` quando `generateMetadata` resolve
+          // depois do shell (docs de `generateMetadata`, "Streaming metadata").
+          // Em `/p/<slug>` ele leva o nome da pessoa, e a varredura reprovava
+          // só nas execuções em que o título chegava tarde.
+          if (["SCRIPT", "STYLE", "TITLE"].includes(parent.tagName)) continue;
           if (parent.closest("[data-user-content]")) continue;
           // `lang` explícito e diferente da página é declaração deliberada, não
           // vazamento: o nome de um idioma se escreve no próprio idioma.
