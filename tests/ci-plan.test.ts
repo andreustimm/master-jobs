@@ -127,9 +127,7 @@ describe("banco-nas-majors em PR: só quando o diff toca a lista do banco", () =
       "src/core/dbx/x.ts",
       "src/core/scoring/db.ts",
       "scripts/versions/check.ts",
-      "drizzle.sqlite.config.ts",
       "tests/support-extra/x.ts",
-      "sub/package.json",
       "docs/data-model.md",
       "changelog.d/x.md",
     ]) {
@@ -185,6 +183,12 @@ describe("tudo o que não é PR para dev recebe o plano completo", () => {
     const outside = plan(["../fora.md"]);
     expect(outside).toMatchObject({ e2e: true, banco: true });
     expect(outside.motivo).toContain("caminho inválido");
+    // Desconhecido liga TODAS as saídas, inclusive as que não leem os gates.
+    for (const path of ["sql/seed.sql", "infra/terraform/main.tf"]) {
+      const unknown = plan(["docs/a.md", path]);
+      expect(unknown, path).toMatchObject({ e2e: true, banco: true });
+      expect(unknown.motivo).toContain(`caminho desconhecido (${path})`);
+    }
   });
 
   it("PR que muda o próprio plano não o relaxa", () => {

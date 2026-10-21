@@ -25,8 +25,8 @@
     },
     {
       "id": "browser-visible",
-      "description": "o que só o navegador observa: textos legais e changelogs exibidos nas telas, o compilador do changelog e os cabeçalhos (CSP) de next.config.ts",
-      "patterns": ["content/legal/**", "CHANGELOG.md", "USER_CHANGELOG*.md", "scripts/build-changelog.ts", "next.config.ts"],
+      "description": "o que só o navegador observa: textos legais e changelogs exibidos nas telas, o compilador e o renderizador do changelog e os cabeçalhos (CSP) de next.config.ts",
+      "patterns": ["content/legal/**", "CHANGELOG.md", "USER_CHANGELOG*.md", "scripts/build-changelog.ts", "scripts/changelog-markdown.ts", "src/core/changelog.ts", "next.config.ts"],
       "gates": ["e2e"]
     },
     {

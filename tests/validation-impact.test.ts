@@ -121,7 +121,7 @@ describe("mapa de impacto — cada classe resolve os gates que declara", () => {
   it("o que só o navegador observa pede E2E, mesmo fora das telas (#535)", () => {
     // Textos legais e changelogs aparecem em tela; a CSP de `next.config.ts`
     // só o navegador aplica.
-    for (const path of ["content/legal/privacy.en.md", "CHANGELOG.md", "USER_CHANGELOG.pt-BR.md", "scripts/build-changelog.ts", "next.config.ts"]) {
+    for (const path of ["content/legal/privacy.en.md", "CHANGELOG.md", "USER_CHANGELOG.pt-BR.md", "scripts/build-changelog.ts", "scripts/changelog-markdown.ts", "src/core/changelog.ts", "next.config.ts"]) {
       expect(classifyPath(MAP, path), path).toContain("browser-visible");
       expect(gateIds([path]), path).toContain("e2e");
     }

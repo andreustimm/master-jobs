@@ -141,7 +141,11 @@ export function ciPlan(input: PlanInput, map: ImpactMap, diff: () => string[]): 
   if (self !== undefined) return full(`${self} muda o próprio plano`);
   let gates: string[];
   try {
-    gates = planGates(map, paths).gates.map((gate) => gate.id);
+    const planned = planGates(map, paths);
+    // Caminho que a tabela não conhece não prova nada sobre nenhuma decisão,
+    // nem sobre as que não leem os gates (`banco`).
+    if (planned.unknown.length > 0) return full(`caminho desconhecido (${planned.unknown[0]})`);
+    gates = planned.gates.map((gate) => gate.id);
   } catch (error) {
     return full(`caminho inválido (${firstLine(error)})`);
   }
