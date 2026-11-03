@@ -223,6 +223,7 @@ describe("suíte fatiada", () => {
     expect(shards).toEqual(shards.map((_, index) => index + 1));
     expect(shardStep.run).toContain(`--shard=\${{ matrix.fatia }}/${shards.length}`);
     expect(shardStep.run).toContain("--reporter=blob");
+    expect(shardStep.run).toContain("--outputFile.blob=.vitest/blob/blob-${{ matrix.fatia }}.json");
     expect(shardStep.run).toContain("--coverage");
   });
 
@@ -264,7 +265,7 @@ describe("suíte fatiada", () => {
     // `.vitest/blob` é onde o Vitest 5 grava e lê os blobs por padrão.
     expect(download.with).toMatchObject({ pattern: "blob-*", path: ".vitest/blob", "merge-multiple": true });
     const merge = coverage.steps.find((step) => step.run?.includes("--merge-reports"))!;
-    expect(merge.run).toBe("pnpm vitest run --merge-reports --coverage");
+    expect(merge.run).toBe("pnpm vitest run --merge-reports=.vitest/blob --coverage");
   });
 
   it("dá às fatias o histórico com tags que os testes de release exigem", () => {
