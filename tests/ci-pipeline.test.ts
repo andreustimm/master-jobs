@@ -236,6 +236,7 @@ describe("suíte fatiada", () => {
   it("publica os blobs, que moram num diretório oculto", () => {
     const upload = tests.steps.find((step) => step.uses?.startsWith("actions/upload-artifact@"))!;
     expect(upload.with?.name).toBe("blob-${{ matrix.fatia }}");
+    expect(upload.with?.path).toBe(".vitest/blob/*");
     expect(upload.with?.["include-hidden-files"]).toBe(true);
     expect(upload.with?.["if-no-files-found"]).toBe("error");
     // Refazer só a fatia vermelha reenvia o mesmo nome no mesmo run.
