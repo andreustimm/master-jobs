@@ -34,6 +34,8 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 <!-- sem-nota-usuario: 1.33.2 - 2026-10-05T17:47:35.000Z -->
 
+<!-- sem-nota-usuario: 1.36.0 - 2026-11-03T20:40:02.000Z -->
+
 ## [Unreleased]
 
 ## [1.35.0] - 2026-11-03T19:11:15.000Z

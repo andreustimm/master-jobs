@@ -9,6 +9,16 @@ versionamento por [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [1.36.0] - 2026-11-03
+
+### Alterado
+
+- Configura a chave pública do escritor do Project 3 para validar mensagens assinadas durante o bootstrap.
+
+### Corrigido
+
+- CI: no retorno de `main` para `dev`, geração, upload e mesclagem dos relatórios Vitest usam o mesmo diretório, evitando que uma integração sem conflito textual quebre o pipeline.
+
 ## [1.35.0] - 2026-11-03
 
 ### Alterado
