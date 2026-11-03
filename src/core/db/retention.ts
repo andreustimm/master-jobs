@@ -5,9 +5,8 @@
  * original API payload and successfully parsed page HTML are temporary input,
  * not product state. Keeping all three copies made the corpus hundreds of MB.
  *
- * User-owned application history is outside this routine. A closed job is only
- * removed when no application references it, preserving the repository's
- * irreversible-data invariant.
+ * User decisions and authored vacancies are outside this routine. A closed
+ * job is removed only when it has no protected interaction or human origin.
  *
  * Sign-up records (`auth_signup`, #464, ADR-009) are purged here too: a pending
  * sign-up older than 24 h can no longer be confirmed and still holds CV text,
@@ -183,7 +182,7 @@ export async function inventoryOldJobs(now = new Date()): Promise<{
 
 /**
  * The only authorized way to delete a job: closed before `closedBefore` and
- * without any application. Must run inside a transaction.
+ * without a protected interaction or human origin. Must run inside a transaction.
  *
  * Two statements on purpose. A single `DELETE ... WHERE NOT EXISTS
  * (application)` evaluates the predicate with the snapshot taken when the
