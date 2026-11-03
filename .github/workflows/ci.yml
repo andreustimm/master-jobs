@@ -190,6 +190,7 @@ jobs:
       - name: Testes (fatia ${{ matrix.fatia }} de 4)
         run: >-
           pnpm vitest run --shard=${{ matrix.fatia }}/4 --coverage --reporter=blob
+          --outputFile.blob=.vitest-reports/blob-${{ matrix.fatia }}.json
           --coverage.thresholds.statements=0 --coverage.thresholds.branches=0
           --coverage.thresholds.functions=0 --coverage.thresholds.lines=0
 
@@ -253,7 +254,7 @@ jobs:
       - name: Cobertura total contra os limiares
         # Reprova também se alguma fatia registrou teste falho: a mesclagem
         # repete o resultado de cada um.
-        run: pnpm vitest run --merge-reports --coverage
+        run: pnpm vitest run --merge-reports=.vitest-reports --coverage
 
   pwa-browser:
     # O contrato de privacidade abre um Chromium real. Ele fica separado da
