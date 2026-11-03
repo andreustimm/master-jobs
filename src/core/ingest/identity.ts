@@ -103,3 +103,31 @@ export function ambiguousExternalIds(entries: readonly { externalId: string | nu
   }
   return ambiguous;
 }
+
+export type RetiredIdentity = {
+  fingerprint: string;
+  sourceId: string;
+  externalId: string;
+  externalUsable: boolean;
+};
+
+/**
+ * A live row wins over a marker: it may contain a person's decisions. External
+ * IDs are only usable when both the original and the current listing can
+ * identify the posting unambiguously. Human-authored imports bypass expiry.
+ */
+export function isRetiredObservation(input: {
+  fingerprint: string;
+  sourceId: string;
+  externalKey: string | null;
+  hasLiveMatch: boolean;
+  humanAuthored: boolean;
+  tombstones: readonly RetiredIdentity[];
+}): boolean {
+  if (input.hasLiveMatch || input.humanAuthored) return false;
+  return input.tombstones.some((marker) =>
+    marker.fingerprint === input.fingerprint ||
+    (input.externalKey !== null && marker.externalUsable &&
+      marker.sourceId === input.sourceId && marker.externalId === input.externalKey),
+  );
+}

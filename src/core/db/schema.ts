@@ -225,6 +225,21 @@ export const job = production.table(
   ],
 );
 
+/** Compact identity retained after administrative expiry to avoid reimport as new. */
+export const jobRetentionTombstone = production.table(
+  "job_retention_tombstone",
+  {
+    fingerprint: text("fingerprint").primaryKey(),
+    sourceId: text("source_id").notNull(),
+    externalId: text("external_id").notNull(),
+    externalUsable: boolean("external_usable").notNull().default(false),
+    firstSeenAt: text("first_seen_at").notNull(),
+    expiredAt: text("expired_at").notNull(),
+    policyVersion: integer("policy_version").notNull().default(1),
+  },
+  (t) => [index("job_retention_tombstone_source_external_idx").on(t.sourceId, t.externalId)],
+);
+
 /* -------------------------------------------------------------------------- */
 /* Scoring (derived — safe to wipe and recompute)                              */
 /* -------------------------------------------------------------------------- */
