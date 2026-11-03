@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DB } from "../src/core/db/client.ts";
 import {
   application,
+  authUser,
   candidate,
   job,
   jobAnalysis,
@@ -166,12 +167,21 @@ describe("retenção do banco", () => {
     const verifiedId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "verified");
     const periodicId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "periodic");
     const archivedId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "archived");
+    const authoredId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "authored");
+    const untrackedId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "untracked");
+    const archivedApplicationId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "archived-application");
     const recruiterId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "recruiter");
     const removableId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "removable");
     const manualId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "manual");
     await db.update(job).set({ sourceId: "manual:local" }).where(eq(job.id, manualId));
     await db.update(job).set({ archivedAt: "2020-01-02T00:00:00.000Z" }).where(eq(job.id, archivedId));
     const [owner] = await db.insert(candidate).values({ slug: "owner", name: "Owner", isDefault: true }).returning();
+    const [author] = await db.insert(authUser).values({ email: "author@example.test", roles: ["recruiter"] }).returning();
+    await db.update(job).set({ postedByUserId: author!.id }).where(eq(job.id, authoredId));
+    await db.insert(application).values([
+      { candidateId: owner!.id, jobId: untrackedId, status: "untracked" },
+      { candidateId: owner!.id, jobId: archivedApplicationId, status: "archived" },
+    ]);
     const [message] = await db.insert(mailMessage).values({ messageId: "mail-retention" }).returning();
     await db.insert(jobAnalysis).values({ jobId: analysisId, inputHash: "a", promptVersion: "1", schemaVersion: "1" });
     await db.insert(mailSuggestion).values({ jobId: mailId, mailId: message!.id });
@@ -183,12 +193,13 @@ describe("retenção do banco", () => {
     expect(result.candidates.closedJobs).toBe(1);
     expect(result.applied?.prunedJobs).toBe(1);
     const ids = (await db.select({ id: job.id }).from(job)).map((row) => row.id);
-    expect(ids).toEqual(expect.arrayContaining([analysisId, mailId, verifiedId, periodicId, archivedId, recruiterId, manualId]));
+    expect(ids).toEqual(expect.arrayContaining([analysisId, mailId, verifiedId, periodicId, archivedId, authoredId, untrackedId, archivedApplicationId, recruiterId, manualId]));
     expect(ids).not.toContain(removableId);
     expect(await db.select().from(jobAnalysis)).toHaveLength(1);
     expect(await db.select().from(mailSuggestion)).toHaveLength(1);
     expect(await db.select().from(verifyTask)).toHaveLength(2);
     expect(await db.select().from(recruiterSuggestion)).toHaveLength(1);
+    expect(await db.select().from(application)).toHaveLength(2);
   });
 });
 

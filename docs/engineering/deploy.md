@@ -601,8 +601,8 @@ faltam proteção contra reimportação, validação integral das interações e
 atualizado. A rotina existente `db cleanup` continua limitada a vagas fechadas.
 
 Quando habilitado, `.github/workflows/varredura.yml` roda a coleta completa
-contra **produção** às segundas às 06:00 UTC (03:00 em São Paulo), com
-reconferência adicional diária às 07:00 UTC. `workflow_dispatch` permite
+contra **produção** às segundas às 06:00 UTC (03:00 em São Paulo), incluindo
+reconferência; nos demais dias, só a reconferência roda às 07:00 UTC. `workflow_dispatch` permite
 executar cada rotina à mão. `SUPABASE_CRAWL_ENABLED` controla ambos os horários.
 
 **Agendador alternativo.** A

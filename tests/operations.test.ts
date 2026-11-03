@@ -172,8 +172,11 @@ describe("varredura.yml aceita o pedido", () => {
       const condicao = porNome.get(nome)?.if ?? "";
       expect(condicao, nome).toContain(`inputs.rotina == '${rotina}'`);
       // Rechecagem é diária; coleta, captura e pontuação são semanais.
-      if (rotina === "recheck") expect(condicao, nome).toContain("github.event_name == 'schedule'");
-      else expect(condicao, nome).toContain("github.event.schedule == '0 6 * * 1'");
+      if (rotina === "recheck") {
+        expect(condicao, nome).toContain("github.event_name == 'schedule'");
+        expect(condicao, nome).toContain("steps.preflight.outcome == 'success'");
+        expect(condicao, nome).toContain("!cancelled()");
+      } else expect(condicao, nome).toContain("github.event.schedule == '0 6 * * 1'");
       expect(condicao, nome).toContain("github.event_name == 'workflow_dispatch'");
       expect(condicao, nome).toContain("inputs.rotina == 'tudo'");
       // O pedido de uma execução nunca dispara a varredura inteira.
@@ -182,7 +185,7 @@ describe("varredura.yml aceita o pedido", () => {
   });
 
   it("agenda a descoberta semanal e a reconferência em separado", () => {
-    expect(workflow.on.schedule.map((item) => item.cron)).toEqual(["0 6 * * 1", "0 7 * * *"]);
+    expect(workflow.on.schedule.map((item) => item.cron)).toEqual(["0 6 * * 1", "0 7 * * 0,2-6"]);
   });
 
   it("o pedido de uma execução roda só ela, com insumos fora do script", () => {

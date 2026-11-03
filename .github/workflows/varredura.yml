@@ -29,9 +29,9 @@ name: Varredura de vagas
 
 on:
   schedule:
-    # Coleta ampla às segundas; reconferência separada todos os dias.
+    # Coleta e reconferência às segundas; só reconferência nos outros dias.
     - cron: "0 6 * * 1"
-    - cron: "0 7 * * *"
+    - cron: "0 7 * * 0,2-6"
   # Para rodar à mão depois de mexer em `config/sources.yaml`, sem esperar o dia,
   # e para a tela de operações do administrador pedir uma fatia só.
   #
@@ -118,6 +118,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: O segredo existe?
+        id: preflight
         run: |
           if [ -z "$DATABASE_URL" ]; then
             echo "::error::SUPABASE_DATABASE_URL ausente. Nenhuma varredura executada."
@@ -197,14 +198,14 @@ jobs:
       #    haja dois agendadores ativos ao mesmo tempo.
       - name: Enfileirar reconferência
         if: >-
-          github.event_name == 'schedule' ||
-          (github.event_name == 'workflow_dispatch' && (inputs.rotina == 'tudo' || inputs.rotina == 'recheck'))
+          !cancelled() && steps.preflight.outcome == 'success' && (github.event_name == 'schedule' ||
+          (github.event_name == 'workflow_dispatch' && (inputs.rotina == 'tudo' || inputs.rotina == 'recheck')))
         run: pnpm jho jobs recheck queue
 
       - name: Reconferir
         if: >-
-          github.event_name == 'schedule' ||
-          (github.event_name == 'workflow_dispatch' && (inputs.rotina == 'tudo' || inputs.rotina == 'recheck'))
+          !cancelled() && steps.preflight.outcome == 'success' && (github.event_name == 'schedule' ||
+          (github.event_name == 'workflow_dispatch' && (inputs.rotina == 'tudo' || inputs.rotina == 'recheck')))
         run: pnpm jho jobs recheck run --max 400
 
       # 4. Repontuar quem pediu.

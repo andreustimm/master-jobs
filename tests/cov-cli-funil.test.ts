@@ -369,7 +369,9 @@ describe("jho db prune", () => {
 
   it("`--days` chega ao domínio como número, não como a string do argv", async () => {
     const dozeDias = new Date(Date.now() - 12 * 86_400_000).toISOString();
-    await semearVaga({ id: "velha", fechadaEm: dozeDias });
+    const vagaId = await semearVaga({ id: "velha", fechadaEm: dozeDias });
+    await banco().insert(source).values({ id: "lever:teste", kind: "lever", handle: "teste", label: "Teste" });
+    await banco().update(job).set({ sourceId: "lever:teste" }).where(eq(job.id, vagaId));
 
     const r = await rodar("db", "prune", "--days", "7");
 

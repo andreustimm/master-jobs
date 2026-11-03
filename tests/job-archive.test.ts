@@ -197,7 +197,7 @@ describe("IT-001 — candidatura atravessa o arquivamento intacta", () => {
 });
 
 describe("IT-002 — arquivar e podar são políticas separadas", () => {
-  it("poda só a fechada sem candidatura; a arquivada com candidatura continua lá", async () => {
+  it("preserva vagas arquivadas e suas candidaturas durante a limpeza", async () => {
     const tracked = await seedJob({ externalId: "com-candidatura", closedAt: LONG_AGO });
     const untracked = await seedJob({ externalId: "sem-candidatura", closedAt: LONG_AGO });
     await seedApplication(tracked);
@@ -208,8 +208,9 @@ describe("IT-002 — arquivar e podar são políticas separadas", () => {
     const rows = await db.select({ id: job.id, archivedAt: job.archivedAt }).from(job);
     const ids = rows.map((r) => r.id);
     expect(ids).toContain(tracked);
-    expect(ids).not.toContain(untracked);
+    expect(ids).toContain(untracked);
     expect(rows.find((r) => r.id === tracked)!.archivedAt).toBe(NOW.toISOString());
+    expect(rows.find((r) => r.id === untracked)!.archivedAt).toBe(NOW.toISOString());
   });
 });
 
