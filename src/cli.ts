@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { and, desc, eq, ne } from "drizzle-orm";
 import { closeDb, getDb } from "./core/db/client.ts";
-import { runDatabaseCleanup } from "./core/db/retention.ts";
+import { inventoryOldJobs, runDatabaseCleanup } from "./core/db/retention.ts";
 import { MigrationNeedsReview, runMigrations } from "./core/db/migrate.ts";
 import { listBoard, primaryScoreFilter } from "./contexts/matching/index.ts";
 import { pipelineCounts, setApplicationStatus } from "./contexts/pursuit/index.ts";
@@ -252,6 +252,18 @@ db.command("prune")
     await withDb(async () => {
       const removed = await pruneClosed(Number(opts.days));
       console.log(`${c.green("✓")} pruned ${removed} closed job(s)`);
+    });
+  });
+
+db.command("retention-inventory")
+  .description("Estimate 14-day retention candidates without changing data")
+  .action(async () => {
+    await withDb(async () => {
+      const result = await inventoryOldJobs();
+      console.log(`Jobs older than 14 days: ${result.older}`);
+      console.log(`Protected by known interactions: ${result.protected}`);
+      console.log(`Potentially removable (estimate only): ${result.potentiallyRemovable}`);
+      console.log("No data changed; reimport protection and final validation are required before deletion.");
     });
   });
 

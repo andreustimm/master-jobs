@@ -13,7 +13,7 @@ import {
   source,
   verifyTask,
 } from "../src/core/db/schema.ts";
-import { runDatabaseCleanup } from "../src/core/db/retention.ts";
+import { inventoryOldJobs, runDatabaseCleanup } from "../src/core/db/retention.ts";
 import { observeRawJob } from "../src/core/ingest/observe.ts";
 import { listBoard } from "../src/core/db/repo.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
@@ -111,6 +111,17 @@ describe("retenção do banco", () => {
     expect(storedPage?.html).not.toBeNull();
   });
 
+  it("estima vagas antigas sem alterar dados e preserva as arquivadas", async () => {
+    const oldId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "old-inventory");
+    const protectedId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "old-archived");
+    const recentId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "recent-inventory");
+    await db.update(job).set({ firstSeenAt: "2026-08-01T00:00:00.000Z" }).where(eq(job.id, oldId));
+    await db.update(job).set({ firstSeenAt: "2026-08-01T00:00:00.000Z", archivedAt: "2026-08-02T00:00:00.000Z" }).where(eq(job.id, protectedId));
+    await db.update(job).set({ firstSeenAt: "2026-08-28T00:00:00.000Z" }).where(eq(job.id, recentId));
+    expect(await inventoryOldJobs(new Date("2026-08-29T12:00:00.000Z"))).toEqual({ older: 2, potentiallyRemovable: 1, protected: 1 });
+    expect(await db.select().from(job)).toHaveLength(3);
+  });
+
   it("aplica a limpeza e nunca remove vaga ligada a candidatura", async () => {
     const removableId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z");
     await seedParsedPage(removableId);
@@ -154,10 +165,12 @@ describe("retenção do banco", () => {
     const mailId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "mail");
     const verifiedId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "verified");
     const periodicId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "periodic");
+    const archivedId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "archived");
     const recruiterId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "recruiter");
     const removableId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "removable");
     const manualId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "manual");
     await db.update(job).set({ sourceId: "manual:local" }).where(eq(job.id, manualId));
+    await db.update(job).set({ archivedAt: "2020-01-02T00:00:00.000Z" }).where(eq(job.id, archivedId));
     const [owner] = await db.insert(candidate).values({ slug: "owner", name: "Owner", isDefault: true }).returning();
     const [message] = await db.insert(mailMessage).values({ messageId: "mail-retention" }).returning();
     await db.insert(jobAnalysis).values({ jobId: analysisId, inputHash: "a", promptVersion: "1", schemaVersion: "1" });
@@ -170,7 +183,7 @@ describe("retenção do banco", () => {
     expect(result.candidates.closedJobs).toBe(1);
     expect(result.applied?.prunedJobs).toBe(1);
     const ids = (await db.select({ id: job.id }).from(job)).map((row) => row.id);
-    expect(ids).toEqual(expect.arrayContaining([analysisId, mailId, verifiedId, periodicId, recruiterId, manualId]));
+    expect(ids).toEqual(expect.arrayContaining([analysisId, mailId, verifiedId, periodicId, archivedId, recruiterId, manualId]));
     expect(ids).not.toContain(removableId);
     expect(await db.select().from(jobAnalysis)).toHaveLength(1);
     expect(await db.select().from(mailSuggestion)).toHaveLength(1);

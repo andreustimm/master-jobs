@@ -595,6 +595,11 @@ failovers.
 > 03/09/2026 é apenas o diagnóstico histórico; consulte os
 > [gates documentados](../operations/turso-quota-incident-2026-09-03.md).
 
+`pnpm jho db retention-inventory` estima vagas com mais de 14 dias e as que
+têm vínculos conhecidos; é somente leitura. A estimativa não autoriza descarte:
+faltam proteção contra reimportação, validação integral das interações e backup
+atualizado. A rotina existente `db cleanup` continua limitada a vagas fechadas.
+
 Quando habilitado, `.github/workflows/varredura.yml` roda a coleta completa
 contra **produção** às segundas às 06:00 UTC (03:00 em São Paulo), com
 reconferência adicional diária às 07:00 UTC. `workflow_dispatch` permite

@@ -45,6 +45,7 @@ import { MANUAL_SOURCE_KINDS } from "../sources/types.ts";
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
 export const DEFAULT_CLOSED_JOB_DAYS = 90;
+export const DEFAULT_JOB_RETENTION_DAYS = 14;
 export const DEFAULT_PAGE_HTML_DAYS = 0;
 /** Pending sign-up never confirmed: discarded after this (PRD, ADR-009). */
 export const SIGNUP_PENDING_HOURS = 24;
@@ -149,10 +150,11 @@ type Transaction = Parameters<Parameters<DB["transaction"]>[0]>[0];
  * Protect periodic verification too: an existing task can become user-origin
  * without changing its job FK, so that update would not lock the parent row.
  */
-function hasNoHumanInteraction(id: SQLWrapper, sourceId: SQLWrapper, authorId: SQLWrapper): SQL {
+function hasNoHumanInteraction(id: SQLWrapper, sourceId: SQLWrapper, authorId: SQLWrapper, archivedAt: SQLWrapper): SQL {
   const manualKinds = sql.join(MANUAL_SOURCE_KINDS.map((kind) => sql`${kind}`), sql`, `);
   return sql`(
     ${authorId} is null
+    and ${archivedAt} is null
     and not exists (select 1 from ${source} s where s.id = ${sourceId} and s.kind in (${manualKinds}))
     and not exists (select 1 from ${application} a where a.job_id = ${id})
     and not exists (select 1 from ${jobAnalysis} a where a.job_id = ${id})
@@ -160,6 +162,23 @@ function hasNoHumanInteraction(id: SQLWrapper, sourceId: SQLWrapper, authorId: S
     and not exists (select 1 from ${recruiterSuggestion} r where r.job_id = ${id})
     and not exists (select 1 from ${verifyTask} v where v.job_id = ${id})
   )`;
+}
+
+/** Read-only estimate; candidates cannot be deleted until reimport protection exists. */
+export async function inventoryOldJobs(now = new Date()): Promise<{
+  older: number;
+  potentiallyRemovable: number;
+  protected: number;
+}> {
+  const before = cutoff(now, DEFAULT_JOB_RETENTION_DAYS);
+  const noInteraction = hasNoHumanInteraction(job.id, job.sourceId, job.postedByUserId, job.archivedAt);
+  const [row] = await getDb().select({
+    older: sql<number>`count(*)::int`,
+    potentiallyRemovable: sql<number>`count(*) filter (where ${noInteraction})::int`,
+  }).from(job).where(lt(job.firstSeenAt, before));
+  const older = Number(row?.older ?? 0);
+  const potentiallyRemovable = Number(row?.potentiallyRemovable ?? 0);
+  return { older, potentiallyRemovable, protected: older - potentiallyRemovable };
 }
 
 /**
@@ -187,7 +206,7 @@ export async function deleteClosedJobsWithoutApplication(
 ): Promise<{ id: number }[]> {
   const eligible = and(
     lt(job.closedAt, closedBefore),
-    hasNoHumanInteraction(job.id, job.sourceId, job.postedByUserId),
+    hasNoHumanInteraction(job.id, job.sourceId, job.postedByUserId, job.archivedAt),
   );
   const locked = await tx
     .select({ id: job.id })
@@ -267,7 +286,7 @@ export async function runDatabaseCleanup(
       (
         select count(*) from production.job j
         where j.closed_at < ${closedBefore}
-        and ${hasNoHumanInteraction(sql`j.id`, sql`j.source_id`, sql`j.posted_by_user_id`)}
+        and ${hasNoHumanInteraction(sql`j.id`, sql`j.source_id`, sql`j.posted_by_user_id`, sql`j.archived_at`)}
       ) as closed_jobs
   `);
 
