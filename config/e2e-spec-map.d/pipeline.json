@@ -1,0 +1,10 @@
+{
+  "id": "pipeline",
+  "modules": [
+    "tests/e2e/ui/pipeline.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/jobs/[id]"
+  ]
+}

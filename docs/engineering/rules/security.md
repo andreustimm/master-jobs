@@ -23,13 +23,24 @@ posicionamento do usuário.
 **Permitido.** Publicação pela API oficial (`w_member_social`); comentários e
 conexões **assistidos** (o agente redige, a pessoa executa); **job alert por
 e-mail**, que é a via legítima (ADR 0008); guardar e exibir uma URL do
-LinkedIn vinda de alerta ou cadastro manual — guardar não é buscar.
+LinkedIn vinda de alerta ou cadastro manual — guardar não é buscar; **login
+por OpenID Connect só para autenticar** (#464, ADR-003 da tarefa
+`login-social`): o produto oficial "Sign In with LinkedIn using OpenID
+Connect", escopos exatamente `openid profile email`, **sem** `w_member_social`.
+Do ID token sai só o sujeito (`sub`), o e-mail e se ele é verificado; nome,
+foto, título, URL de perfil e tokens não são gravados nem logados, e nada do
+provedor alimenta perfil de candidato, `/p/<slug>`, sourcing ou score.
+Desligar o provedor apaga a identidade.
 
 **Como o runtime garante.** `assertSafeRemoteUrl` recusa `linkedin.com`,
 `linkedin.cn`, `lnkd.in`, `licdn.com` e subdomínios antes do DNS, e
 `safeRemoteFetch` repete a checagem em cada salto de redirect. `jobs verify`
 devolve `inconclusive` sem pedido (nunca fecha a vaga); `scrape run` bloqueia
-antes do `robots.txt`. O inventário de transporte de saída é fechado.
+antes do `robots.txt`. O inventário de transporte de saída é fechado; o único
+arquivo que fala com o LinkedIn é o cliente OIDC
+(`src/contexts/auth/infra/oidc/client.ts`), que pede só descoberta, token e
+JWKS do emissor, e o adapter (`linkedin.ts`) fixa os escopos — provado por
+`tests/auth-oidc-adapters.test.ts` (UT-047).
 
 **Limite declarado.** A recusa casa pelo nome do host; scripts avulsos,
 navegador, ferramentas de agente e MCPs ficam fora do runtime e são cobertos só
@@ -154,9 +165,20 @@ action aceita `candidateId` (ou outro identificador de posse) da própria
 entrada — id em FormData, JSON ou parâmetro é pedido, não prova. O escopo nasce
 da sessão.
 
+**Exceção registrada: id como seletor (#465, ADR-015).** `suggestJobAction` e
+`createRecruiterJobAction` (com `suggestFor`) recebem o id do candidato a quem
+o recrutador sugere a vaga. Ele só escolhe dentro de
+`session.linkedCandidateIds` — as concessões vigentes que a sessão resolveu na
+carga —, fora dela a resposta é o mesmo 404 de um candidato inexistente, antes
+de qualquer gravação, e `suggestion:create` decide com ele; o autor e a
+concessão vêm da sessão. A lista vive em `SELECTOR_ID_BY_DESIGN`
+(`tests/support/entry-inventory.ts`); ler `candidateId` ou `suggestFor` da
+entrada fora dela reprova.
+
 Origem: regra 15. Prova: `tests/auth-policy.test.ts`,
 `tests/entry-denial.test.ts` (ids da vítima numa sessão válida de outro
-candidato e de recrutador vinculado).
+candidato e de recrutador vinculado; id de quem não acompanha, IT-143),
+`tests/architecture.test.ts`.
 
 <a id="g16"></a>
 ## G16 — Política correta precisa funcionar na composição
@@ -191,11 +213,15 @@ Origem: AGENTS (invariante "Admin não lê dado privado"). Prova:
 recrutador↔candidato, e nenhuma conta nova é apontada para candidato
 existente: os dois seriam leitura de CV alheio por procuração. Conta nova de
 papel candidato cria o **próprio** candidato (linha nova, privada, com a
-identidade digitada — nunca a do `profile.yaml`).
+identidade digitada — nunca a do `profile.yaml`). Desde a #465 o vínculo é uma
+concessão (`recruiter_grant`): só a seção de acesso de `/account` concede ou
+convida, por `access:manage`, que nega sessão emprestada; o admin revoga e
+cancela, nunca concede, e a CLI não tem verbo para isso.
 
 Origem: AGENTS (mesma invariante). Detalhes: [security.md](../../security.md)
 (Achado 5, "Conta nova cria o próprio candidato"). Prova:
-`tests/candidate-onboarding.test.ts`, `tests/candidate-ownership.test.ts`.
+`tests/candidate-onboarding.test.ts`, `tests/candidate-ownership.test.ts`,
+`tests/recruiter-access-actions.test.ts`.
 
 <a id="g17"></a>
 ## G17 — Recuperar senha não revela quem está cadastrado
@@ -310,19 +336,37 @@ e a CSP não abre origem dele
 **Endereço.** `/p/` lê `public_slug`, nunca o `slug` interno; trocar o endereço
 faz o antigo responder 404 sem redirecionar (ADR 0024).
 
+**Segundo leitor: o diretório de recrutadores (#465).** `/recruiter/directory`,
+`/recruiter/directory/[id]` e a rota de imagem dele leem a MESMA lista de
+permissão: `publicProfile(slug)` é `allowlistedProfile({ slug }, ["public"])`, o
+diretório chama `allowlistedProfile({ id }, ["recruiters", "public"])`, e o
+mapeamento linha → perfil mora num lugar só, `toAllowlistedProfile()` (puro).
+As visibilidades são constante do servidor (`DIRECTORY_VISIBILITIES`); nenhum
+parâmetro da requisição amplia visibilidade nem campo. O cartão da busca é um
+recorte desse objeto, e a busca casa só nome, headline e skill confirmada —
+piso, nota e currículo nunca entram na consulta. Só recrutador entra
+(`candidate:discover`, guarda antes de qualquer leitura); o link `/p/` só sai
+para perfil Público. A regra não afrouxa: o que o diretório mostra é,
+campo a campo, o que `/p/` mostraria.
+
 Origem: AGENTS (invariante "`/p/[slug]`"). Prova:
 `tests/public-profile.test.ts`, `tests/public-name.test.ts`,
 `tests/public-slug.test.ts`, `tests/candidate-public-facts.test.ts`,
-`tests/candidate-images.test.ts`.
+`tests/candidate-images.test.ts`, `tests/candidate-directory.test.ts`,
+`tests/recruiter-directory.test.ts`.
 
 <a id="g22"></a>
 ## G22 — Perfil não público responde 404, não 403
 
 **Obrigação.** Perfil privado, inexistente ou com endereço revogado responde
-**404**. 403 confirmaria que o slug existe, e existência é informação.
+**404**. 403 confirmaria que o slug existe, e existência é informação. No
+diretório de recrutadores (#465), perfil Privado, id inexistente ou malformado
+e perfil que ficou Privado depois da busca respondem o mesmo 404; a busca não
+conta nem sugere perfil Privado.
 
-Origem: AGENTS (mesma invariante). Prova: `tests/public-slug.test.ts` e o
-serviço de perfil público; o status HTTP real é conferido no E2E.
+Origem: AGENTS (mesma invariante). Prova: `tests/public-slug.test.ts`,
+`tests/recruiter-directory.test.ts` e o serviço de perfil público; o status
+HTTP real é conferido no E2E.
 
 <a id="g23"></a>
 ## G23 — Texto do CV público exige segundo consentimento e continua filtrado
@@ -335,7 +379,12 @@ a seção do piso até o próximo nome de seção conhecido; na dúvida (seção
 valor, resto que ainda parece piso, valor com cara de dinheiro a até duas
 linhas da seção), o bloco inteiro. O consentimento não
 cria exceção tácita a G21. A rota é anônima: as expressões do filtro têm
-custo linear, travado em teste.
+custo linear, travado em teste. Desde #465 (ADR-014 do pacote
+`recrutador-acesso`), o mesmo consentimento vale para **Recrutadores** e
+**Público**: o diretório de recrutadores mostra o texto pelo mesmo
+`publicCvMarkdown()`, e voltar para Privado apaga o consentimento. Mudar a
+visibilidade ou o consentimento exige também `access:manage`, que a sessão
+emprestada não tem.
 
 **Limite declarado.** Detecção por padrão, com limite escrito em
 `src/core/public-cv.ts` e travado em teste: valor sem rótulo e telefone sem

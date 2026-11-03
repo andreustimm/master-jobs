@@ -15,7 +15,9 @@
  * simulado abaixo.
  */
 
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { dataCollectionDoCliente, naoColetaNada } from "./support/sentry-client.ts";
 
 const original = process.env.SENTRY_DSN;
 
@@ -69,6 +71,7 @@ describe("register", () => {
       init: (opcoes: Record<string, unknown>) => {
         recebido = opcoes;
       },
+      withStaticSpan: (callback: unknown) => callback,
       captureRequestError: () => {},
     }));
     try {
@@ -77,7 +80,11 @@ describe("register", () => {
     } finally {
       delete process.env.SENTRY_TRACES_SAMPLE_RATE;
     }
-    expect(recebido).toMatchObject({ sendDefaultPii: false, tracesSampleRate: 0.05, tracePropagationTargets: [] });
+    expect(recebido).toMatchObject({ tracesSampleRate: 0.05, tracePropagationTargets: [] });
+    // O que o `init` recebeu, entregue a um cliente real do SDK: é o cliente
+    // que resolve `dataCollection`, e uma chave que ele não lê não desliga nada.
+    const real = await vi.importActual<typeof import("@sentry/nextjs")>("@sentry/nextjs");
+    naoColetaNada(await dataCollectionDoCliente(recebido, real));
     const peneira = recebido.beforeSendTransaction as (e: object) => unknown;
     const limpo = peneira({
       transaction: "GET /jobs?q=termo-secreto",
@@ -85,6 +92,87 @@ describe("register", () => {
     });
     expect(JSON.stringify(limpo)).not.toContain("termo-secreto");
     expect(JSON.stringify(limpo)).not.toContain("jho_session");
+  });
+
+  it("no SDK 11 o ciclo de trace é estático e a peneira de span vai marcada para ele", async () => {
+    // O `@sentry/nextjs` 11 passou a transmitir spans em fluxo por padrão
+    // (`traceLifecycle: 'stream'`). Nesse modo o SDK IGNORA
+    // `beforeSendTransaction` e só chama `beforeSendSpan` se ele não estiver
+    // marcado como estático — e um span em fluxo traz `name`/`attributes`, que a
+    // peneira não conhece. Resultado: a URL com o filtro da pessoa sairia
+    // inteira. O ciclo estático mantém as duas peneiras testadas em
+    // `tests/sentry-tracing.test.ts` no caminho; `withStaticSpan` é o que faz o
+    // SDK entregar a `scrubSpan` o formato que ela conhece.
+    process.env.SENTRY_DSN = "https://chave@exemplo.ingest.sentry.io/1";
+    let recebido: Record<string, unknown> = {};
+    const marcadas = new Set<unknown>();
+    vi.doMock("@sentry/nextjs", () => ({
+      init: (opcoes: Record<string, unknown>) => {
+        recebido = opcoes;
+      },
+      withStaticSpan: (callback: unknown) => {
+        marcadas.add(callback);
+        return callback;
+      },
+      captureRequestError: () => {},
+    }));
+    const { register } = await import("../instrumentation.ts");
+    await register();
+    expect(recebido.traceLifecycle).toBe("static");
+    expect(marcadas.has(recebido.beforeSendSpan)).toBe(true);
+    const span = (recebido.beforeSendSpan as (s: object) => unknown)({
+      description: "GET /jobs?q=termo-secreto",
+      data: { "url.full": "https://x/jobs?q=termo-secreto" },
+    });
+    expect(JSON.stringify(span)).not.toContain("termo-secreto");
+  });
+
+  it("acha `withStaticSpan` também em `default`, onde o import nativo do Node o deixa", async () => {
+    // O build CJS do `@sentry/nextjs` reexporta o `@sentry/node` por um laço
+    // dinâmico: empacotado pelo Next o nome aparece no módulo, mas no
+    // `import()` nativo do Node ele só existe em `default`. Sem procurar ali,
+    // o `init` estouraria e o servidor ficaria sem relato nenhum.
+    process.env.SENTRY_DSN = "https://chave@exemplo.ingest.sentry.io/1";
+    let recebido: Record<string, unknown> = {};
+    const marcadas = new Set<unknown>();
+    const sdk = {
+      init: (opcoes: Record<string, unknown>) => {
+        recebido = opcoes;
+      },
+      withStaticSpan: (callback: unknown) => {
+        marcadas.add(callback);
+        return callback;
+      },
+      captureRequestError: () => {},
+    };
+    vi.doMock("@sentry/nextjs", () => ({ init: sdk.init, captureRequestError: sdk.captureRequestError, default: sdk }));
+    const { register } = await import("../instrumentation.ts");
+    await register();
+    expect(recebido.traceLifecycle).toBe("static");
+    expect(marcadas.has(recebido.beforeSendSpan)).toBe(true);
+  });
+
+  it("sem `withStaticSpan` em lugar nenhum, não inicializa com a peneira de span desligada", async () => {
+    process.env.SENTRY_DSN = "https://chave@exemplo.ingest.sentry.io/1";
+    let iniciou = false;
+    vi.doMock("@sentry/nextjs", () => ({
+      init: () => {
+        iniciou = true;
+      },
+      captureRequestError: () => {},
+    }));
+    const { register } = await import("../instrumentation.ts");
+    await expect(register()).resolves.toBeUndefined();
+    expect(iniciou).toBe(false);
+  });
+
+  it("a major instalada do SDK é a que as peneiras conhecem", () => {
+    // O SDK 12 remove `beforeSendTransaction`, e o `init` recebe as opções por
+    // spread — o compilador não reclamaria da chave órfã, e as transações
+    // passariam a sair sem peneira. Subir de major exige reescrever a peneira
+    // para spans em fluxo (`name`/`attributes`) e só então mudar este número.
+    const instalado = JSON.parse(readFileSync("node_modules/@sentry/nextjs/package.json", "utf8")) as { version: string };
+    expect(instalado.version.split(".")[0]).toBe("11");
   });
 });
 

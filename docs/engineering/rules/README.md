@@ -130,6 +130,7 @@ segunda definição. "Regra N" é a numeração mantida na entrada comum.
 | G85 | Paridade dos harnesses | [delivery](delivery.md#g85) | [#317](https://github.com/andreustimm/master-jobs/issues/317) | nova: espelhos gerados de `.claude/` e gate `pnpm check:harness`; #461: classificador de risco de shell único para os três harnesses |
 | G86 | Cinco papéis; juiz ≠ autor | [orchestration](orchestration.md#g86) | [#318](https://github.com/andreustimm/master-jobs/issues/318) | nova |
 | G87 | Modelo/effort explícitos; modo de assinatura falha fechado | [orchestration](orchestration.md#g87) | [#318](https://github.com/andreustimm/master-jobs/issues/318) | nova: `config/model-routing.json` e `pnpm route` |
+| G88 | Puxar, não empurrar: WIP, prioridade e merge com head fixado | [delivery](delivery.md#g88) | [#526](https://github.com/andreustimm/master-jobs/issues/526) | nova: regra global `ENTREGA.md` do dono aplicada ao projeto |
 
 **Obrigações posteriores à auditoria**, sem ID `G` (G85 em diante já nasce com
 ID), preservadas no mesmo destino: [R24 — issue e Project 3](delivery.md#r24),

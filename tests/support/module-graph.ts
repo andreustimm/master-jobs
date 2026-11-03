@@ -66,13 +66,46 @@ export function moduleEdges(source: string): ModuleEdge[] {
   return edges;
 }
 
-/** O arquivo local que um especificador relativo ou `@/` nomeia, ou `null`. */
-export function resolveLocal(from: string, specifier: string): string | null {
-  if (!specifier.startsWith(".") && !specifier.startsWith("@/")) return null;
-  const base = specifier.startsWith("@/") ? resolve(specifier.slice(2)) : resolve(dirname(from), specifier);
-  const stripped = base.replace(/\.(ts|tsx)$/, "");
-  for (const candidate of [base, `${stripped}.ts`, `${stripped}.tsx`, join(base, "index.ts")]) {
-    if (existsSync(candidate) && statSync(candidate).isFile()) return relative(process.cwd(), candidate);
+/** Os apelidos de `paths` do tsconfig.json: prefixo do especificador → diretório a partir da raiz. */
+const PATH_ALIASES: ReadonlyArray<readonly [string, string]> = [
+  ["@core/", "src/core/"],
+  ["@/", ""],
+];
+
+/**
+ * A extensão que o import escreve e as do fonte TypeScript que ela pode
+ * nomear: `./x.js` aponta para `x.ts` quando quem compila é o TypeScript.
+ */
+const SOURCE_TWINS: Readonly<Record<string, readonly string[]>> = {
+  "": [".ts", ".tsx"],
+  ".ts": [".tsx"],
+  ".tsx": [".ts"],
+  ".js": [".ts", ".tsx"],
+  ".jsx": [".tsx"],
+  ".mjs": [".mts"],
+  ".cjs": [".cts"],
+};
+
+/**
+ * O arquivo local que um especificador relativo ou com apelido do tsconfig
+ * (`@/`, `@core/`) nomeia, relativo a `root`, ou `null`.
+ */
+export function resolveLocal(from: string, specifier: string, root: string = process.cwd()): string | null {
+  const alias = PATH_ALIASES.find(([prefix]) => specifier.startsWith(prefix));
+  if (alias === undefined && !specifier.startsWith(".")) return null;
+  const base = alias
+    ? resolve(root, alias[1], specifier.slice(alias[0].length))
+    : resolve(root, dirname(from), specifier);
+  const ext = /\.(?:ts|tsx|js|jsx|mjs|cjs)$/.exec(base)?.[0] ?? "";
+  const stem = base.slice(0, base.length - ext.length);
+  const candidates = [
+    base,
+    ...(SOURCE_TWINS[ext] ?? []).map((twin) => `${stem}${twin}`),
+    join(base, "index.ts"),
+    join(base, "index.tsx"),
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate) && statSync(candidate).isFile()) return relative(root, candidate);
   }
   return null;
 }

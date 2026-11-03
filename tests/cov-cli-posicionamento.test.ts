@@ -28,7 +28,7 @@
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { syncCandidateFromProfile } from "../src/core/candidate.ts";
+import { ensureCandidate, syncCandidateFromProfile } from "../src/core/candidate.ts";
 import {
   engagement,
   llmModel,
@@ -200,12 +200,14 @@ describe("jho contacts add <name>", () => {
     expect(linha?.candidateId).toBe(ativo);
   });
 
-  it("URL de contato antigo sem dono é recusada com explicação, não com erro do banco", async () => {
-    // Contato gravado antes da 0031 fica sem dono e ainda ocupa a URL no índice
-    // global. O dono que o recadastra recebe a recusa legível apontando a #405.
-    await syncCandidateFromProfile();
+  it("URL já cadastrada por outra conta não impede o cadastro na rede ativa", async () => {
+    // A URL é única por candidato (#405): a outra conta guarda a própria linha,
+    // e o comando grava uma nova na rede de quem a CLI opera.
+    const ativo = await syncCandidateFromProfile();
+    const outra = await ensureCandidate({ slug: "outra-rede", name: "Outra" });
     await banco().insert(targetAccount).values({
-      name: "Rafael Souza",
+      candidateId: outra,
+      name: "Rafael da outra conta",
       category: "peer",
       linkedinUrl: "https://www.linkedin.com/in/rafael",
     });
@@ -215,11 +217,13 @@ describe("jho contacts add <name>", () => {
     );
 
     expect(r.erro).toBeUndefined();
-    expect(r.code).toBe(1);
-    expect(r.err).toContain("Recusado");
-    expect(r.out).toContain("#405");
-    expect(`${r.err}\n${r.out}`).not.toContain("23505");
-    expect(await banco().select().from(targetAccount)).toHaveLength(1);
+    expect(r.code).toBeUndefined();
+    expect(r.out).toContain("adicionado");
+    const linhas = await banco().select().from(targetAccount).orderBy(targetAccount.id);
+    expect(linhas.map((l) => [l.candidateId, l.name])).toEqual([
+      [outra, "Rafael da outra conta"],
+      [ativo, "Rafael Souza"],
+    ]);
   });
 
   it("sem candidato ativo, recusa em vez de gravar contato sem dono", async () => {

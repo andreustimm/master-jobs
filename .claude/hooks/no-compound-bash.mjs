@@ -3,18 +3,25 @@
 // (`shell-policy.mjs`, #461) — a mesma que a guarda do Codex e o plugin do
 // OpenCode chamam.
 //
-// - Comando composto: recusa com saída 2 e o motivo no stderr. A lista de
-//   permissão casa pelo prefixo; `a && b`, `a; b`, `$(...)` e várias linhas
-//   cairiam em aprovação manual e travariam o terminal.
-// - Risco (`classifyRisk`) e comando de laço fora da lista: imprime o JSON de
+// - Comando composto: recusa com saída 2 e o motivo no stderr. Com `Bash`
+//   liberado na lista (#481), este hook é a barreira: `a && b`, `a; b`,
+//   `$(...)` e várias linhas esconderiam um comando atrás do outro.
+// - Risco (`classifyRisk`, uma lista do que é proibido: o que ela não
+//   reconhece passa) e comando de laço fora da lista: imprime o JSON de
 //   PreToolUse com `permissionDecision` `ask` ou `deny` e sai 0. Vale qualquer
 //   que seja a forma que o Claude Code use para casar a lista — com ou sem o
 //   `rtk` que o hook global acrescenta —, porque o classificador tira o
 //   prefixo antes de julgar.
+// - Comando `git` simples: o contexto real (checkout principal ou worktree de
+//   trabalho, destino do push) vem do próprio git (`push-target.mjs`, #476).
+// - Falha do processo (node ausente, módulo quebrado): o `|| exit 2` do
+//   comando em `.claude/settings.json` bloqueia, como no Codex — saída
+//   diferente de 0 e 2 deixaria o comando passar.
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
+import { resolveGitTarget } from "./push-target.mjs";
 import { bashRulesFromSettings, compoundMessage, findCompound, isReadOnlyStage, judgeShell } from "./shell-policy.mjs";
 
 export { findCompound, isReadOnlyStage };
@@ -35,13 +42,15 @@ export function loadRules(path = SETTINGS) {
  * PreToolUse com `ask`/`deny` (risco) ou nada.
  * @param {string} command
  * @param {import("./shell-policy.mjs").BashRules | null} rules
- * @param {import("./shell-policy.mjs").ShellEnv} [env] raiz do projeto, cwd e diretório pessoal
+ * @param {import("./shell-policy.mjs").ShellEnv} [env] raiz do projeto, cwd e diretório pessoal;
+ *   sem `gitTarget`, o contexto do git é resolvido aqui a partir do `cwd`
  * @returns {{ exit: 0 | 2, stdout?: string, stderr?: string }}
  */
 export function hookOutcome(command, rules, env = {}) {
   let verdict;
   try {
-    verdict = judgeShell(command, rules, env);
+    const gitTarget = env.gitTarget === undefined ? resolveGitTarget(command, { cwd: env.cwd }) : env.gitTarget;
+    verdict = judgeShell(command, rules, { ...env, gitTarget });
   } catch (error) {
     // Falha fecha na decisão: o hook que cai deixaria o comando passar.
     verdict = { decision: "ask", reason: `a política de shell não conseguiu julgar o comando (${error?.message ?? error})`, kind: "risk" };

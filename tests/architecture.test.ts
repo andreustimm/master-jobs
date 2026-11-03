@@ -1,9 +1,10 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import {
   discoverEntries,
   exportedBindings,
@@ -13,9 +14,10 @@ import {
   isServerModule,
   productionSources,
   routeMethods,
+  SELECTOR_ID_BY_DESIGN,
   stripComments,
 } from "./support/entry-inventory.ts";
-import { ambientReads, forbiddenReach, moduleEdges, type ForbiddenEdge } from "./support/module-graph.ts";
+import { ambientReads, forbiddenReach, moduleEdges, resolveLocal, type ForbiddenEdge } from "./support/module-graph.ts";
 
 /**
  * Executable architecture rules.
@@ -158,6 +160,46 @@ describe("erasable TypeScript (ADR 0006)", () => {
     // A regra antiga só lia `from "…"`: as grafias abaixo passavam sem extensão.
     const semExtensao = "import x from './x';\nexport * from './y';\nawait import('./z');";
     expect(moduleEdges(semExtensao).map((e) => e.specifier)).toEqual(["./x", "./y", "./z"]);
+  });
+});
+
+describe("resolveLocal — o arquivo que o especificador nomeia", () => {
+  // Raiz descartável: os casos não dependem de arquivo real do repositório.
+  const root = mkdtempSync(join(tmpdir(), "module-graph-"));
+  for (const file of [
+    "src/core/db/client.ts",
+    "src/core/ui/index.tsx",
+    "src/core/mail/index.ts",
+    "components/botao.tsx",
+    "scripts/util.ts",
+    "scripts/hook.mjs",
+  ]) {
+    mkdirSync(dirname(join(root, file)), { recursive: true });
+    writeFileSync(join(root, file), "export {};\n");
+  }
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+  const from = "app/page.tsx";
+
+  it("resolve os apelidos do tsconfig: `@core/*` e `@/*`", () => {
+    expect(resolveLocal(from, "@core/db/client", root)).toBe("src/core/db/client.ts");
+    expect(resolveLocal(from, "@core/db/client.ts", root)).toBe("src/core/db/client.ts");
+    expect(resolveLocal(from, "@/components/botao", root)).toBe("components/botao.tsx");
+  });
+
+  it("`.js` nomeia o `.ts` irmão, e `.js` real continua valendo", () => {
+    expect(resolveLocal("scripts/main.ts", "./util.js", root)).toBe("scripts/util.ts");
+    expect(resolveLocal("scripts/main.ts", "./hook.mjs", root)).toBe("scripts/hook.mjs");
+  });
+
+  it("diretório resolve para `index.ts` ou `index.tsx`", () => {
+    expect(resolveLocal(from, "@core/mail", root)).toBe("src/core/mail/index.ts");
+    expect(resolveLocal(from, "@core/ui", root)).toBe("src/core/ui/index.tsx");
+  });
+
+  it("pacote e arquivo inexistente não resolvem", () => {
+    expect(resolveLocal(from, "drizzle-orm", root)).toBeNull();
+    expect(resolveLocal(from, "@scope/pacote", root)).toBeNull();
+    expect(resolveLocal(from, "@core/nao-existe", root)).toBeNull();
   });
 });
 
@@ -478,7 +520,6 @@ describe("V10-05 leque de consultas: toda composição de tela está no inventá
     "app/jobs/jobs-data.ts": { measuredBy: "loadJobsView" },
     "app/candidate/page.tsx": { declared: "pessoa e fila de pontuação: uma consulta cada, o resto em série" },
     "app/referrals/page.tsx": { declared: "oportunidades de indicação e empresas da rede, uma consulta cada" },
-    "app/recruiter/[candidateId]/page.tsx": { declared: "contagem e página do funil de um candidato, uma consulta cada" },
     "app/compare/page.tsx": { declared: "tradutor com sessão, depois currículo e detalhe da comparação" },
   };
 
@@ -543,9 +584,29 @@ describe("architecture inventory", () => {
       ["app/job-modal.tsx", new Set(["row.url", "externalApplyUrl"])],
       ["app/joblist.tsx", new Set(["r.url", "externalApplyUrl"])],
       ["app/jobs/[id]/page.tsx", new Set(["job.url", "externalApplyUrl"])],
-      ["app/p/[slug]/page.tsx", new Set(["profile.linkedinUrl", "profile.githubUrl"])],
+      // O corpo do perfil, comum a `/p/[slug]` e ao diretório de recrutadores (#465).
+      ["app/p/[slug]/profile-view.tsx", new Set(["profile.linkedinUrl", "profile.githubUrl"])],
       ["app/pipeline/page.tsx", new Set(["r.url"])],
+      // O download do currículo atual do candidato acompanhado (#465, US-015).
+      ["app/recruiter/[candidateId]/cv/page.tsx", new Set(["downloadHref"])],
       ["app/referrals/page.tsx", new Set(["externalUrl"])],
+      // Termos e Política em outra aba, para o formulário de cadastro não
+      // perder o que já foi digitado (#464, US-021).
+      ["app/signup/signup-form.tsx", new Set(["LEGAL_HREF.terms", "LEGAL_HREF.privacy"])],
+    ]);
+    /**
+     * Âncoras que PRECISAM de navegação de página inteira na mesma aba, cada
+     * uma com o porquê. O início do login social (#464, ADR-012) responde 303
+     * para o Google/LinkedIn e grava o cookie do fluxo: pelo roteador do App
+     * Router viraria RSC fetch — e o prefetch começaria fluxos que ninguém
+     * pediu, cada um gravando cookie e consultando o provedor.
+     */
+    const fullPageAnchors = new Map<string, Set<string>>([
+      ["app/login/page.tsx", new Set(["startHref(id)"])],
+      // Os mesmos botões na tela de cadastro (#464, ADR-007).
+      ["app/signup/page.tsx", new Set(["startHref(id)"])],
+      // "Conectar" na tela da conta é o mesmo início, com `intent=link` (task_04).
+      ["app/account/page.tsx", new Set(["connectHref(method.provider)"])],
     ]);
     const offenders: string[] = [];
 
@@ -559,6 +620,7 @@ describe("architecture inventory", () => {
         const literalHref = /\bhref="([^"]*)"/.exec(compact)?.[1];
         if (literalHref?.startsWith("#")) continue;
         const href = /\bhref=\{([^}]+)\}/.exec(compact)?.[1]?.trim();
+        if (href && fullPageAnchors.get(file)?.has(href)) continue;
         const nativeNavigation = /\bdownload(?:\s|=)/.test(compact) || /\btarget="_blank"/.test(compact);
         if (!href || !allowedRawAnchors.get(file)?.has(href) || !nativeNavigation) {
           offenders.push(`${file}:${compact}`);
@@ -647,6 +709,51 @@ describe("write-path invariants (ADR 0005)", () => {
     const guarded = retention.slice(retention.indexOf("export async function deleteClosedJobsWithoutApplication"));
     expect(guarded).toContain('.for("update")');
     expect(guarded).toContain("not exists (select 1 from ${application} a where a.job_id = ${job.id})");
+  });
+});
+
+describe("acesso de recrutador (#465, ADR-011, ADR-012)", () => {
+  const SCHEMA = "src/core/db/schema.ts";
+  const GRANT_READERS = [
+    "src/contexts/auth/infra/drizzle-store.ts",
+    "src/contexts/auth/infra/drizzle-directory.ts",
+    "src/contexts/auth/infra/drizzle-recruiter-access.ts",
+  ];
+  const PRODUCTION = [...SRC, ...APP];
+
+  it("IT-015 só os três adapters de acesso tocam recruiter_grant", () => {
+    // Um leitor que pulasse o predicado de `activeGrantCondition` reabriria o
+    // acesso que a revogação ou o prazo já fecharam (ADR-012, risco).
+    const offenders = PRODUCTION.filter(
+      (file) =>
+        file !== SCHEMA &&
+        !GRANT_READERS.includes(file) &&
+        /\brecruiterGrant\b|\brecruiter_grant\b/.test(stripComments(read(file))),
+    );
+    expect(offenders).toEqual([]);
+    expect(GRANT_READERS.every((file) => existsSync(file))).toBe(true);
+  });
+
+  it("IT-015 ninguém atualiza nem apaga o histórico de acesso", () => {
+    const offenders = PRODUCTION.filter((file) => {
+      const code = stripComments(read(file));
+      return (
+        /\.(update|delete)\(\s*recruiterAccessEvent\s*\)/.test(code) ||
+        /\b(update|delete\s+from)\s+(production\.)?"?recruiter_access_event\b/i.test(code)
+      );
+    });
+    expect(offenders).toEqual([]);
+  });
+
+  it("IT-015 recruiter_candidate está congelada: só o schema a nomeia", () => {
+    const offenders = PRODUCTION.filter(
+      (file) => file !== SCHEMA && /\brecruiterCandidate\b|\brecruiter_candidate\b/.test(stripComments(read(file))),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it("IT-015 as regras de acesso ficam no domínio puro", () => {
+    expect(PURE_CORE).toContain("src/contexts/auth/domain/recruiter-access.ts");
   });
 });
 
@@ -933,6 +1040,20 @@ describe("authorisation (AUTH-01)", () => {
     "app/recruiter/[candidateId]/page.tsx": {
       guard: 'requirePage("candidate:read", { kind: "candidate", candidateId })',
     },
+    // Currículo atual e sugerir vaga (#465, task_04): o vínculo da sessão dá o
+    // 404, a política decide a leitura e a sugestão.
+    "app/recruiter/[candidateId]/cv/page.tsx": {
+      guard: 'requirePage("candidate:read", { kind: "candidate", candidateId })',
+    },
+    "app/recruiter/[candidateId]/suggest/page.tsx": {
+      guard: 'requirePage("suggestion:create", { kind: "candidate", candidateId })',
+    },
+    // As sugestões que o próprio candidato decide; a sessão emprestada só lê.
+    "app/suggestions/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
+    // Diretório de perfis (#465, ADR-013): só recrutador, antes de qualquer
+    // leitura; as visibilidades são constante do servidor, não parâmetro.
+    "app/recruiter/directory/page.tsx": { guard: 'requirePage("candidate:discover")' },
+    "app/recruiter/directory/[id]/page.tsx": { guard: 'requirePage("candidate:discover")' },
     "app/referrals/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
     "app/searches/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
     "app/searches/tracks/[id]/page.tsx": { guard: 'requireOwnCandidatePage("candidate:read")' },
@@ -940,7 +1061,7 @@ describe("authorisation (AUTH-01)", () => {
     "app/transition-test/page.tsx": { guard: 'requirePage("job:read")' },
     "app/login/page.tsx": {
       exception:
-        "pré-sessão: formulário de entrada; lê só se EXISTE alguma conta, para mostrar os comandos de primeiro acesso",
+        "pré-sessão: formulário de entrada; lê só se EXISTE alguma conta (comandos de primeiro acesso) e a própria sessão, para mandar quem já entrou à sua tela",
     },
     "app/login/forgot/page.tsx": { exception: "pré-sessão: formulário de recuperação; não lê dado nenhum" },
     "app/login/reset/page.tsx": {
@@ -949,6 +1070,24 @@ describe("authorisation (AUTH-01)", () => {
     "app/p/[slug]/page.tsx": {
       exception:
         "portfólio público: `publicProfile()` monta por lista de permissão, 404 para não público, limite por IP no proxy",
+    },
+    // Cadastro aberto (#464, ADR-012): pré-conta por natureza.
+    "app/signup/page.tsx": {
+      exception:
+        "pré-conta: formulário de cadastro; lê só a pendência e o convite dos próprios cookies (e-mail verificado no modo social, nome de quem convidou e endereço mascarado) e a própria sessão, para mandar quem já entrou à sua tela",
+    },
+    // Convite de recrutador (#465, ADR-018): quem foi convidado ainda não tem conta.
+    "app/signup/invite/page.tsx": {
+      exception:
+        "pré-conta: o token de uso único da URL, procurado pelo hash, é a autorização; link morto de qualquer tipo dá a mesma página neutra, e o GET não altera dado",
+    },
+    "app/signup/verify/page.tsx": {
+      exception:
+        "pré-conta: etapa do código; lê só a pendência do próprio cookie (e-mail e espera do reenvio), nunca um id da URL",
+    },
+    "app/terms/page.tsx": { exception: "documento público: Termos de Uso versionados de `content/legal/`, sem dado de ninguém" },
+    "app/privacy/page.tsx": {
+      exception: "documento público: Política de Privacidade versionada de `content/legal/`, sem dado de ninguém",
     },
   };
 
@@ -962,6 +1101,20 @@ describe("authorisation (AUTH-01)", () => {
     "app/login/callback/route.ts": {
       methods: ["GET"],
       why: "pré-sessão: o link mágico de uso único é a autorização e cria a sessão",
+    },
+    // Login social (#464, ADR-012): o início é pré-sessão por natureza; o
+    // `intent=link` resolve e autoriza a sessão dentro da própria rota
+    // (`account:manage-methods`, que nega sessão emprestada) antes de sair
+    // para o provedor.
+    "app/login/oauth/[provider]/route.ts": {
+      methods: ["GET"],
+      why: "pré-sessão: só redireciona ao provedor com o cookie cifrado do fluxo; `intent=link` exige `account:manage-methods` na rota",
+    },
+    // O retorno: a autorização é o fluxo OIDC — cookie cifrado e autenticado,
+    // `state` conferido e queimado no servidor, PKCE e ID token validado.
+    "app/login/oauth/[provider]/callback/route.ts": {
+      methods: ["GET"],
+      why: "pré-sessão: cookie do fluxo + `state` de uso único + PKCE + ID token validado criam a sessão",
     },
     // O cron não tem sessão para validar: a Vercel o chama sem cookie. Ele
     // se autentica com `CRON_SECRET` em `authorization`, comparado em tempo
@@ -1003,7 +1156,8 @@ describe("authorisation (AUTH-01)", () => {
    * de rota nem leem dado privado; o layout só consulta a sessão para o crachá.
    */
   const SEGMENT_POLICY: Record<string, string> = {
-    "app/layout.tsx": "casca: lê a própria sessão (`renderSession`) só para crachá e navegação",
+    "app/layout.tsx":
+      "casca: lê a própria sessão (`renderSession`) só para crachá e navegação, e a contagem de sugestões pendentes do candidato dela",
     "app/error.tsx": "fallback de erro sem dado",
     "app/forbidden.tsx": "fallback 403 sem dado",
     "app/not-found.tsx": "fallback 404 sem dado",
@@ -1175,6 +1329,32 @@ describe("authorisation (AUTH-01)", () => {
     expect(APP.length).toBeGreaterThan(10);
   });
 
+  it("G40 id de candidato vindo da entrada só como seletor registrado, dentro do vínculo da sessão (#465)", () => {
+    // Uma action nova que lesse `candidateId` do formulário sem passar por
+    // `linkedCandidateIds` alcançaria quem a sessão não acompanha.
+    const reads = /\.get\(\s*["'](candidateId|suggestFor)["']\s*\)/g;
+    const offenders: string[] = [];
+    for (const file of APP) {
+      for (const match of stripComments(read(file)).matchAll(reads)) {
+        const registered = [...SELECTOR_ID_BY_DESIGN.values()].some((entry) => entry.file === file && entry.field === match[1]);
+        if (!registered) offenders.push(`${file}: lê ${match[1]} da entrada sem exceção registrada`);
+      }
+    }
+    for (const [name, { file, why }] of SELECTOR_ID_BY_DESIGN) {
+      if (!APP.includes(file) || !exportedBindings(read(file)).some((binding) => binding.exported === name)) {
+        offenders.push(`${name}: exceção órfã`);
+        continue;
+      }
+      const code = stripComments(read(file));
+      for (const control of [/linkedCandidateIds\.includes\(/, /notFound\(\)/, /authorize\(session, "suggestion:create"/]) {
+        if (!control.test(code)) offenders.push(`${file}: falta ${control.source}`);
+      }
+      if (why.trim().length < 20) offenders.push(`${name}: exceção sem justificativa`);
+    }
+    expect(offenders).toEqual([]);
+    expect(SELECTOR_ID_BY_DESIGN.size).toBeGreaterThan(0);
+  });
+
   it("V03-01 roteia só por app/: outro diretório de rotas seria superfície fora do inventário", () => {
     for (const dir of ["pages", "src/app", "src/pages"]) {
       expect(existsSync(dir), dir).toBe(false);
@@ -1322,12 +1502,18 @@ describe("authorisation (AUTH-01)", () => {
     // The classic multi-tenant leak: the UI filters correctly, and a hand-made
     // POST with someone else's id walks straight through. Scope must come from
     // the session, which is why `guardOwnCandidate` takes no id at all.
+    //
+    // The only files allowed to read it are the registered selector
+    // exceptions (ADR-015 of #465), where the id merely picks within
+    // `session.linkedCandidateIds`; the G40 case below holds them to that.
+    const selectors = new Set([...SELECTOR_ID_BY_DESIGN.values()].filter((entry) => entry.field === "candidateId").map((entry) => entry.file));
     const offenders: string[] = [];
     for (const file of APP) {
       const code = read(file);
-      if (/formData\.get\(\s*["']candidateId["']/.test(code)) offenders.push(file);
+      if (/formData\.get\(\s*["']candidateId["']/.test(code) && !selectors.has(file)) offenders.push(file);
     }
     expect(offenders).toEqual([]);
+    expect(selectors.size).toBeLessThanOrEqual(1);
   });
 
   it("redeems the magic link in a Route Handler, never in a page", () => {

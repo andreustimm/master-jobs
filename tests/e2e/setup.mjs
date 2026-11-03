@@ -10,9 +10,9 @@
  * senha errada de propósito, e o limite de 8 em 15 minutos é real: depois de
  * algumas execuções ele bloquearia o teste com uma proteção que funcionou.
  */
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { closeDb, getDb } from "../../src/core/db/client.ts";
-import { application, authEvent, authLoginToken, authUser, candidate, candidateDocument, candidateSkill, fxRate, job, jobScore, savedTerm, scoreTask, skill, targetAccount, termAttribution } from "../../src/core/db/schema.ts";
+import { application, applicationEvent, authEvent, authIdentity, authLoginToken, authSignup, authUser, candidate, candidateDocument, candidateSkill, fxRate, job, jobScore, recruiterAccessEvent, recruiterDirectoryQuery, recruiterGrant, recruiterInvite, recruiterSuggestion, savedTerm, scoreTask, skill, targetAccount, termAttribution } from "../../src/core/db/schema.ts";
 import { linkRecruiterToCandidate } from "../../src/contexts/auth/index.ts";
 import { seedOwner } from "../../src/contexts/auth/app/seed.ts";
 import { hashToken } from "../../src/contexts/auth/infra/drizzle-store.ts";
@@ -45,6 +45,13 @@ import { scoreOne } from "../../src/core/scoring/apply.ts";
 import { SCORER_VERSION } from "../../src/core/scoring/score.ts";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
 import { GAP_GUEST_FIXTURE } from "./gap-fixture.mjs";
+import { PIPELINE_FILTER_FIXTURE } from "./pipeline-filters-fixture.mjs";
+import { SOCIAL_FIXTURES } from "./social-fixtures.mjs";
+import { METHODS_FIXTURES } from "./account-methods-fixtures.mjs";
+import { DIRECTORY_FIXTURES } from "./recruiter-directory-fixtures.mjs";
+import { ACCESS_FIXTURES } from "./recruiter-access-fixtures.mjs";
+import { SUGGESTION_FIXTURES } from "./recruiter-suggestions-fixtures.mjs";
+import { INVITE_FIXTURES, INVITE_SIGNUP_EMAILS } from "./recruiter-invite-fixtures.mjs";
 import { PUBLIC_CV_FIXTURE, PUBLIC_FACTS_OFF_FIXTURE, factColumns } from "./public-cv-format.mjs";
 import { isolationRefusal } from "./database-guard.mjs";
 
@@ -101,6 +108,36 @@ export const E2E_ROLES = {
   // a área `candidate-gap` prova que as lacunas dela saem da busca dela, e não
   // do `profile.yaml` do dono nem das skills do próprio currículo (#427).
   gapGuest: { email: GAP_GUEST_FIXTURE.email, roles: ["candidate"] },
+  // Funil próprio e fixo da área `pipeline-filters` (#478).
+  pipelineFilters: { email: PIPELINE_FILTER_FIXTURE.email, roles: ["candidate"] },
+  // Login social (#464): ver `social-fixtures.mjs`. A convidada nasce sem
+  // senha, como as contas que um admin cria, para provar o primeiro acesso
+  // pelo Google sem link mágico.
+  socialCandidate: { email: SOCIAL_FIXTURES.candidate.email, roles: ["candidate"] },
+  socialRecruiter: { email: SOCIAL_FIXTURES.recruiter.email, roles: ["recruiter"] },
+  socialConflict: { email: SOCIAL_FIXTURES.conflict.email, roles: ["candidate"] },
+  socialInvited: { email: SOCIAL_FIXTURES.invited.email, roles: ["candidate"], noPassword: true },
+  // Diretório de recrutadores (#465): ver `recruiter-directory-fixtures.mjs`.
+  directoryRecruiter: { email: DIRECTORY_FIXTURES.recruiter.email, roles: ["recruiter"] },
+  directoryAdmin: { email: DIRECTORY_FIXTURES.admin.email, roles: ["admin"] },
+  directoryRita: { email: DIRECTORY_FIXTURES.rita.account, roles: ["candidate"] },
+  // Acesso de recrutador (#465, task_02): ver `recruiter-access-fixtures.mjs`.
+  accessCandidate: { email: ACCESS_FIXTURES.candidate.email, roles: ACCESS_FIXTURES.candidate.roles },
+  accessRecruiter: { email: ACCESS_FIXTURES.recruiter.email, roles: ACCESS_FIXTURES.recruiter.roles },
+  accessFresh: { email: ACCESS_FIXTURES.fresh.email, roles: ACCESS_FIXTURES.fresh.roles },
+  // Área do recrutador e sugestões (#465, task_04): ver `recruiter-suggestions-fixtures.mjs`.
+  suggestionsCandidate: { email: SUGGESTION_FIXTURES.candidate.email, roles: SUGGESTION_FIXTURES.candidate.roles },
+  suggestionsOther: { email: SUGGESTION_FIXTURES.other.email, roles: SUGGESTION_FIXTURES.other.roles },
+  suggestionsRecruiter: { email: SUGGESTION_FIXTURES.recruiter.email, roles: SUGGESTION_FIXTURES.recruiter.roles },
+  // Convite de recrutador (#465, task_03): ver `recruiter-invite-fixtures.mjs`.
+  inviteCandidate: { email: INVITE_FIXTURES.inviter.email, roles: INVITE_FIXTURES.inviter.roles },
+  // Formas de entrar (#464, task_04): ver `account-methods-fixtures.mjs`.
+  ...Object.fromEntries(
+    Object.entries(METHODS_FIXTURES).map(([key, fixture]) => [
+      `methods-${key}`,
+      { email: fixture.email, roles: fixture.roles, noPassword: fixture.noPassword ?? false },
+    ]),
+  ),
 };
 
 try {
@@ -579,7 +616,7 @@ try {
   // Contas por papel, cada uma com o próprio candidato quando o papel pede um.
   // O slug deriva do e-mail: apontar duas contas para o mesmo candidato seria
   // dar a uma o dado da outra, que é justamente o que a política impede.
-  for (const { email, roles, disabled, noCandidate } of Object.values(E2E_ROLES)) {
+  for (const { email, roles, disabled, noCandidate, noPassword } of Object.values(E2E_ROLES)) {
     const [existing] = await getDb()
       .select({ id: authUser.id })
       .from(authUser)
@@ -598,7 +635,7 @@ try {
     await getDb().insert(authUser).values({ email, roles, candidateId: scoped });
     // Mesma senha da conta principal: o que muda entre os cenários é o PAPEL, e
     // uma senha por conta só acrescentaria variável sem acrescentar cobertura.
-    await setPassword(email, PASSWORD);
+    if (!noPassword) await setPassword(email, PASSWORD);
     if (disabled) {
       await getDb()
         .update(authUser)
@@ -612,6 +649,155 @@ try {
         .where(eq(candidate.id, scoped));
     }
   }
+
+  // Identidades do login social (#464). Numa base reaproveitada, a execução
+  // anterior já ligou o Google da convidada: apaga e recria, para o vínculo
+  // automático (E2E-008) acontecer de novo.
+  const socialEmails = Object.values(SOCIAL_FIXTURES).map((fixture) => fixture.email);
+  const socialUsers = await getDb()
+    .select({ id: authUser.id, email: authUser.email })
+    .from(authUser)
+    .where(inArray(authUser.email, socialEmails));
+  if (socialUsers.length > 0) {
+    await getDb().delete(authIdentity).where(inArray(authIdentity.userId, socialUsers.map((user) => user.id)));
+  }
+  for (const fixture of Object.values(SOCIAL_FIXTURES)) {
+    if (!fixture.provider) continue;
+    const user = socialUsers.find((row) => row.email === fixture.email);
+    if (!user) throw new Error(`conta do login social não criada: ${fixture.email}`);
+    await getDb().insert(authIdentity).values({
+      userId: user.id,
+      provider: fixture.provider,
+      subject: fixture.subject,
+      emailAtLink: fixture.email,
+      origin: "manual",
+    });
+  }
+
+  // Formas de entrar (#464, task_04). A jornada liga, desliga e define senha:
+  // a cada execução, cada conta volta ao estado do fixture — sem senha onde o
+  // fixture diz, com as identidades e os termos dele, e nada mais.
+  for (const fixture of Object.values(METHODS_FIXTURES)) {
+    const [user] = await getDb().select({ id: authUser.id }).from(authUser).where(eq(authUser.email, fixture.email));
+    if (!user) throw new Error(`conta de formas de entrar não criada: ${fixture.email}`);
+    await getDb().delete(authIdentity).where(eq(authIdentity.userId, user.id));
+    for (const identity of fixture.identities ?? []) {
+      await getDb().insert(authIdentity).values({ userId: user.id, emailAtLink: fixture.email, ...identity });
+    }
+    await getDb()
+      .update(authUser)
+      .set({
+        termsVersion: fixture.terms?.termsVersion ?? null,
+        privacyVersion: fixture.terms?.privacyVersion ?? null,
+        termsAcceptedAt: fixture.terms?.termsAcceptedAt ?? null,
+        ...(fixture.noPassword ? { passwordHash: null } : {}),
+      })
+      .where(eq(authUser.id, user.id));
+    if (!fixture.noPassword) await setPassword(fixture.email, PASSWORD);
+  }
+
+  // Acesso de recrutador (#465, task_02). A jornada concede, convida e revoga:
+  // a cada execução os candidatos da área voltam a não ter nada compartilhado
+  // — nem histórico, que é também o que o limite diário conta —, com os nomes
+  // do fixture e o recrutador com e-mail provado, que é quem recebe concessão
+  // direta em vez de convite.
+  const accessCandidates = [];
+  for (const fixture of [ACCESS_FIXTURES.candidate, ACCESS_FIXTURES.fresh]) {
+    const [user] = await getDb()
+      .select({ candidateId: authUser.candidateId })
+      .from(authUser)
+      .where(eq(authUser.email, fixture.email));
+    if (user?.candidateId == null) throw new Error(`candidato do acesso de recrutador não criado: ${fixture.email}`);
+    await getDb().update(candidate).set({ name: fixture.name }).where(eq(candidate.id, user.candidateId));
+    accessCandidates.push(user.candidateId);
+  }
+  await getDb().delete(recruiterAccessEvent).where(inArray(recruiterAccessEvent.candidateId, accessCandidates));
+  await getDb().delete(recruiterGrant).where(inArray(recruiterGrant.candidateId, accessCandidates));
+  await getDb().delete(recruiterInvite).where(inArray(recruiterInvite.candidateId, accessCandidates));
+  await getDb()
+    .update(authUser)
+    .set({ fullName: ACCESS_FIXTURES.recruiter.fullName, emailVerifiedAt: "2026-01-01T00:00:00.000Z" })
+    .where(eq(authUser.email, ACCESS_FIXTURES.recruiter.email));
+
+  // Área do recrutador e sugestões (#465, task_04). A jornada sugere, aceita,
+  // recusa e revoga: a cada execução os dois candidatos voltam a ter só a
+  // concessão ao Rui, nenhuma sugestão nem histórico, o currículo da Ana e uma
+  // candidatura no funil dela. As vagas da área ficam abertas.
+  {
+    const suggestionCandidates = {};
+    for (const key of ["candidate", "other"]) {
+      const fixture = SUGGESTION_FIXTURES[key];
+      const [user] = await getDb()
+        .select({ candidateId: authUser.candidateId })
+        .from(authUser)
+        .where(eq(authUser.email, fixture.email));
+      if (user?.candidateId == null) throw new Error(`candidato da área de sugestões não criado: ${fixture.email}`);
+      await getDb().update(candidate).set({ name: fixture.name }).where(eq(candidate.id, user.candidateId));
+      suggestionCandidates[key] = user.candidateId;
+    }
+    const ids = Object.values(suggestionCandidates);
+    const [recruiterUser] = await getDb()
+      .update(authUser)
+      .set({ fullName: SUGGESTION_FIXTURES.recruiter.fullName, emailVerifiedAt: "2026-01-01T00:00:00.000Z" })
+      .where(eq(authUser.email, SUGGESTION_FIXTURES.recruiter.email))
+      .returning({ id: authUser.id });
+    await getDb().delete(recruiterSuggestion).where(inArray(recruiterSuggestion.candidateId, ids));
+    await getDb().delete(recruiterAccessEvent).where(inArray(recruiterAccessEvent.candidateId, ids));
+    await getDb().delete(recruiterGrant).where(inArray(recruiterGrant.candidateId, ids));
+    await getDb().delete(application).where(inArray(application.candidateId, ids));
+    await getDb()
+      .insert(job)
+      .values(
+        Object.values(SUGGESTION_FIXTURES.jobs).map((fixture) => ({
+          id: fixture.id,
+          fingerprint: `e2e:${fixture.id}`,
+          contentHash: `e2e:${fixture.id}`,
+          sourceId: "ashby:e2e",
+          externalId: String(fixture.id),
+          companyName: fixture.companyName,
+          title: fixture.title,
+          descriptionText: "Recruiter suggestion fixture.",
+          url: `https://jobs.example.com/${fixture.id}`,
+          raw: { e2e: true },
+        })),
+      )
+      .onConflictDoNothing({ target: job.id });
+    await getDb()
+      .update(job)
+      .set({ closedAt: null, archivedAt: null })
+      .where(inArray(job.id, Object.values(SUGGESTION_FIXTURES.jobs).map((fixture) => fixture.id)));
+    await getDb().insert(application).values({
+      candidateId: suggestionCandidates.candidate,
+      jobId: SUGGESTION_FIXTURES.jobs.funnel.id,
+      status: "applied",
+      appliedAt: "2026-09-01T12:00:00.000Z",
+    });
+    await saveDocument({
+      candidateId: suggestionCandidates.candidate,
+      kind: "cv",
+      label: "E2E CV da área de sugestões",
+      format: "markdown",
+      content: SUGGESTION_FIXTURES.cv,
+    });
+    await getDb().delete(scoreTask).where(inArray(scoreTask.candidateId, ids));
+    for (const candidateId of ids) await linkRecruiterToCandidate(recruiterUser.id, candidateId, recruiterUser.id);
+  }
+
+  // Convite de recrutador (#465, task_03). A jornada convida e se cadastra
+  // pelo link: a cada execução a candidata volta a não ter nada compartilhado,
+  // e as contas que o cadastro criou (com identidades e pendências) somem —
+  // senão o cadastro de agora encontraria o e-mail com conta.
+  const [inviter] = await getDb()
+    .select({ candidateId: authUser.candidateId })
+    .from(authUser)
+    .where(eq(authUser.email, INVITE_FIXTURES.inviter.email));
+  if (inviter?.candidateId == null) throw new Error(`candidata do convite não criada: ${INVITE_FIXTURES.inviter.email}`);
+  await getDb().update(candidate).set({ name: INVITE_FIXTURES.inviter.name }).where(eq(candidate.id, inviter.candidateId));
+  await getDb().delete(recruiterAccessEvent).where(eq(recruiterAccessEvent.candidateId, inviter.candidateId));
+  await getDb().delete(recruiterGrant).where(eq(recruiterGrant.candidateId, inviter.candidateId));
+  await getDb().delete(recruiterInvite).where(eq(recruiterInvite.candidateId, inviter.candidateId));
+  await getDb().delete(authSignup).where(inArray(authSignup.email, INVITE_SIGNUP_EMAILS));
+  await getDb().delete(authUser).where(inArray(authUser.email, INVITE_SIGNUP_EMAILS));
 
   // #325: candidato sem conta, público e com o CV publicado, cujo texto veio
   // de PDF. `saveDocument` não regrava conteúdo igual, então rodar de novo
@@ -692,7 +878,70 @@ try {
       });
   }
 
-  const [ownerUser] = await getDb().select({ id: authUser.id }).from(authUser).where(eq(authUser.email, EMAIL)).limit(1);
+  // Diretório de recrutadores (#465): Paula (Público), Rita (Recrutadores, com
+  // conta) e Pedro (Privado), devolvidos ao estado do fixture a cada execução —
+  // a área troca a visibilidade de Rita e a devolve, mas uma execução que pare
+  // no meio não pode herdar o estado para a próxima. O limite de busca do
+  // recrutador do diretório também recomeça.
+  {
+    const [ritaAccount] = await getDb()
+      .select({ candidateId: authUser.candidateId })
+      .from(authUser)
+      .where(eq(authUser.email, DIRECTORY_FIXTURES.rita.account))
+      .limit(1);
+    if (!ritaAccount?.candidateId) throw new Error("conta de Rita do diretório sem candidato");
+    const [anyJob] = await getDb().select({ id: job.id }).from(job).orderBy(job.id).limit(1);
+    for (const key of ["paula", "rita", "pedro"]) {
+      const fixture = DIRECTORY_FIXTURES[key];
+      const identity = { name: fixture.name, headline: fixture.headline, location: fixture.location, email: fixture.email };
+      let id = ritaAccount.candidateId;
+      if (key === "rita") await getDb().update(candidate).set(identity).where(eq(candidate.id, id));
+      else id = await ensureCandidate({ slug: fixture.slug, ...identity });
+      await getDb()
+        .update(candidate)
+        .set({
+          visibility: fixture.visibility,
+          publicCv: fixture.publicCv,
+          workModel: fixture.workModel,
+          publicWorkModel: fixture.publicWorkModel,
+        })
+        .where(eq(candidate.id, id));
+      await saveDocument({ candidateId: id, kind: "cv", label: "E2E CV do diretório", content: fixture.cv });
+      await getDb().delete(scoreTask).where(eq(scoreTask.candidateId, id));
+      for (const name of fixture.skills) {
+        const [existing] = await getDb().select({ id: skill.id }).from(skill).where(eq(skill.canonicalName, name)).limit(1);
+        const catalogRow = existing ?? (
+          await getDb()
+            .insert(skill)
+            .values({ slug: `e2e-${name.toLowerCase()}`, canonicalName: name, category: "framework", aliases: [] })
+            .onConflictDoUpdate({ target: skill.slug, set: { canonicalName: name } })
+            .returning({ id: skill.id })
+        )[0];
+        await getDb()
+          .insert(candidateSkill)
+          .values({ candidateId: id, skillId: catalogRow.id, status: "confirmed", occurrences: 1 })
+          .onConflictDoUpdate({ target: [candidateSkill.candidateId, candidateSkill.skillId], set: { status: "confirmed" } });
+      }
+      // O que é só do funil: nota e valor discutido numa candidatura.
+      if (anyJob) {
+        await getDb()
+          .insert(application)
+          .values({ candidateId: id, jobId: anyJob.id, status: "interviewing", notes: fixture.note, rateDiscussed: fixture.rate })
+          .onConflictDoUpdate({
+            target: [application.candidateId, application.jobId],
+            set: { notes: fixture.note, rateDiscussed: fixture.rate },
+          });
+      }
+    }
+    const [directoryRecruiter] = await getDb()
+      .select({ id: authUser.id })
+      .from(authUser)
+      .where(eq(authUser.email, DIRECTORY_FIXTURES.recruiter.email))
+      .limit(1);
+    await getDb().delete(recruiterDirectoryQuery).where(eq(recruiterDirectoryQuery.recruiterUserId, directoryRecruiter.id));
+  }
+
+  const [ownerUser] =await getDb().select({ id: authUser.id }).from(authUser).where(eq(authUser.email, EMAIL)).limit(1);
   const [linkedRecruiter] = await getDb()
     .select({ id: authUser.id })
     .from(authUser)
@@ -852,6 +1101,90 @@ try {
     // Salvar currículo e editar a trilha enfileiram repontuação; a nota fixa
     // acima é o cenário, e o worker não pode trocá-la pela do scorer.
     await getDb().delete(scoreTask).where(eq(scoreTask.candidateId, guestId));
+  }
+
+  // #478: o funil fixo da área `pipeline-filters`, com nota na trilha
+  // principal da conta. `onConflictDoNothing` em tudo: numa base reaproveitada
+  // o estado já é este, e a área só lê.
+  const [funnelOwner] = await getDb()
+    .select({ candidateId: authUser.candidateId })
+    .from(authUser)
+    .where(eq(authUser.email, E2E_ROLES.pipelineFilters.email))
+    .limit(1);
+  if (funnelOwner?.candidateId !== null && funnelOwner?.candidateId !== undefined) {
+    const funnelId = funnelOwner.candidateId;
+    if (!(await ensurePrimaryTrack(funnelId))) await setMatchingProfile(funnelId, await loadProfile(true));
+    const funnelTrack = await ensurePrimaryTrack(funnelId);
+    if (!funnelTrack) throw new Error("E2E pipeline-filters account has no primary track");
+    const fixtures = PIPELINE_FILTER_FIXTURE.jobs;
+    await getDb().insert(job).values(fixtures.map((fixture) => ({
+      id: fixture.id,
+      fingerprint: `e2e:${fixture.id}`,
+      contentHash: `e2e:${fixture.id}`,
+      sourceId: "ashby:e2e",
+      externalId: String(fixture.id),
+      companyName: PIPELINE_FILTER_FIXTURE.companies[fixture.company],
+      title: fixture.title,
+      descriptionText: "Pipeline filter fixture.",
+      url: `https://jobs.example.com/${fixture.id}`,
+      raw: { e2e: true },
+      // `undefined` cai no default do banco (agora); só a vaga que prova o dia
+      // local do detalhe (#500) fixa o instante.
+      firstSeenAt: fixture.firstSeenAt,
+    }))).onConflictDoNothing({ target: job.id });
+    await getDb().insert(jobScore).values(fixtures.map((fixture) => ({
+      candidateId: funnelId,
+      trackId: funnelTrack.id,
+      jobId: fixture.id,
+      fit: fixture.fit,
+      titleScore: 10,
+      keywordScore: 10,
+      seniorityScore: 10,
+      geoScore: 10,
+      compScore: 10,
+      freshnessScore: 5,
+      benefitScore: 5,
+      penalty: 0,
+      cluster: "other",
+      matchedKeywords: [],
+      missingKeywords: [],
+      reasons: [],
+      blockers: [],
+      scorerVersion: "e2e",
+      profileHash: "e2e",
+    }))).onConflictDoNothing({ target: [jobScore.candidateId, jobScore.trackId, jobScore.jobId] });
+    await getDb().insert(application).values(fixtures.map((fixture) => ({
+      candidateId: funnelId,
+      jobId: fixture.id,
+      status: fixture.status,
+      channel: fixture.channel,
+      appliedAt: fixture.appliedAt ?? null,
+    }))).onConflictDoNothing();
+    // O histórico do detalhe (#500): um evento "registrada em Candidatura
+    // enviada" no instante da candidatura, para a data da linha ser lida no
+    // fuso de quem vê. Só para quem tem `appliedAt` e ainda não tem evento.
+    for (const fixture of fixtures.filter((item) => item.appliedAt)) {
+      const [row] = await getDb()
+        .select({ id: application.id })
+        .from(application)
+        .where(and(eq(application.candidateId, funnelId), eq(application.jobId, fixture.id)))
+        .limit(1);
+      if (!row) continue;
+      const [known] = await getDb()
+        .select({ id: applicationEvent.id })
+        .from(applicationEvent)
+        .where(eq(applicationEvent.applicationId, row.id))
+        .limit(1);
+      if (known) continue;
+      await getDb().insert(applicationEvent).values({
+        applicationId: row.id,
+        at: fixture.appliedAt,
+        kind: "status_change",
+        fromStatus: null,
+        toStatus: fixture.status,
+      });
+    }
+    await getDb().delete(scoreTask).where(eq(scoreTask.candidateId, funnelId));
   }
 
   const tokenFixtures = [

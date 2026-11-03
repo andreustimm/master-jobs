@@ -104,6 +104,7 @@ describe("fatia sync contra o banco", () => {
       recheck: async () => ({ items: 0, errors: 0, detail: {} }),
       rescore: async () => ({ items: 0, errors: 0, detail: {} }),
       alarm: async () => {},
+      recruiterAccess: async () => ({}),
     });
 
     await Promise.all([runSweepSlice("sync", deps("w1")), runSweepSlice("sync", deps("w2"))]);

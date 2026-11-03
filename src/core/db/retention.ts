@@ -8,9 +8,16 @@
  * User-owned application history is outside this routine. A closed job is only
  * removed when no application references it, preserving the repository's
  * irreversible-data invariant.
+ *
+ * Sign-up records (`auth_signup`, #464, ADR-009) are purged here too: a pending
+ * sign-up older than 24 h can no longer be confirmed and still holds CV text,
+ * and a completed one is only needed for the per-IP cap (one hour) and a short
+ * audit window, so it goes after 30 days. The account itself lives in
+ * `auth_user` and is untouched.
  */
 import {
   and,
+  inArray,
   isNotNull,
   lt,
   lte,
@@ -20,12 +27,29 @@ import {
   type SQLWrapper,
 } from "drizzle-orm";
 import { getDb, type DB } from "./client.ts";
-import { application, job, jobPage, source } from "./schema.ts";
+import {
+  application,
+  authSignup,
+  job,
+  jobPage,
+  recruiterDirectoryQuery,
+  recruiterInvite,
+  source,
+} from "./schema.ts";
 import { MANUAL_SOURCE_KINDS } from "../sources/types.ts";
 
 const DAY_MS = 86_400_000;
+const HOUR_MS = 3_600_000;
 export const DEFAULT_CLOSED_JOB_DAYS = 90;
 export const DEFAULT_PAGE_HTML_DAYS = 0;
+/** Pending sign-up never confirmed: discarded after this (PRD, ADR-009). */
+export const SIGNUP_PENDING_HOURS = 24;
+/** Completed sign-up record: kept this long, then purged (ADR-009). */
+export const SIGNUP_COMPLETED_DAYS = 30;
+/** Dead recruiter invitation (expired, cancelled, superseded): kept this long after it ended (#465, ADR-016). */
+export const DEAD_INVITE_DAYS = 30;
+/** Directory search log: only the per-recruiter limit reads it, over ten minutes (ADR-017). */
+export const DIRECTORY_QUERY_DAYS = 1;
 
 export type DatabaseCleanupOptions = {
   /** False is a read-only inventory. Mutation always requires an explicit true. */
@@ -43,6 +67,10 @@ export type CleanupCandidates = {
   parsedPageHtmlBytes: number;
   closedJobs: number;
   reclaimableBytes: number;
+  /** `auth_signup` rows past retention: pending > 24 h or completed > 30 days. */
+  expiredSignups: number;
+  /** Recruiter invitations that ended more than 30 days ago. */
+  deadInvites: number;
 };
 
 export type DatabaseCleanupResult = {
@@ -52,8 +80,41 @@ export type DatabaseCleanupResult = {
     compactedJobs: number;
     clearedPages: number;
     prunedJobs: number;
+    purgedSignups: number;
+    purgedInvites: number;
+    purgedDirectoryQueries: number;
   };
 };
+
+/**
+ * Recruiter invitations that can no longer become access, ended more than 30
+ * days ago (ADR-016). `pending` and `accepted` stay: the first may still be
+ * used, the second is the origin of a grant. The candidate's history keeps the
+ * email, and its `invite_id` becomes null through the foreign key.
+ */
+function deadInvite(now: Date): SQL {
+  return and(
+    inArray(recruiterInvite.status, ["expired", "cancelled", "superseded"]),
+    lt(recruiterInvite.decidedAt, cutoff(now, DEAD_INVITE_DAYS)),
+  )!;
+}
+
+/**
+ * Which `auth_signup` rows are past retention.
+ *
+ * Pending is judged by `created_at`, not `expires_at`: a social pending expires
+ * in 15 minutes but the PRD discards any unconfirmed sign-up after 24 h, and a
+ * single cutoff keeps "expired" (refused by the service) separate from
+ * "purged" (gone from the table).
+ */
+function expiredSignup(now: Date): SQL {
+  const pendingBefore = new Date(now.getTime() - SIGNUP_PENDING_HOURS * HOUR_MS).toISOString();
+  const completedBefore = cutoff(now, SIGNUP_COMPLETED_DAYS);
+  return sql`(
+    (${authSignup.completedAt} is null and ${authSignup.createdAt} < ${pendingBefore})
+    or (${authSignup.completedAt} is not null and ${authSignup.completedAt} < ${completedBefore})
+  )`;
+}
 
 function wholeNonNegative(value: number, label: string): number {
   if (!Number.isInteger(value) || value < 0) {
@@ -188,6 +249,13 @@ export async function runDatabaseCleanup(
       ) as closed_jobs
   `);
 
+  const [signups] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(authSignup)
+    .where(expiredSignup(now));
+
+  const [invites] = await db.select({ n: sql<number>`count(*)` }).from(recruiterInvite).where(deadInvite(now));
+
   const candidates: CleanupCandidates = {
     onlineJobs: Number(inventory?.online_jobs ?? 0),
     onlinePayloadBytes: Number(inventory?.online_payload_bytes ?? 0),
@@ -197,6 +265,8 @@ export async function runDatabaseCleanup(
     reclaimableBytes:
       Number(inventory?.online_payload_bytes ?? 0) +
       Number(inventory?.parsed_page_html_bytes ?? 0),
+    expiredSignups: Number(signups?.n ?? 0),
+    deadInvites: Number(invites?.n ?? 0),
   };
 
   if (!options.apply) {
@@ -247,10 +317,28 @@ export async function runDatabaseCleanup(
 
     const pruned = await deleteClosedJobsWithoutApplication(tx, closedBefore);
 
+    const purged = await tx
+      .delete(authSignup)
+      .where(expiredSignup(now))
+      .returning({ id: authSignup.id });
+
+    const deadInvites = await tx
+      .delete(recruiterInvite)
+      .where(deadInvite(now))
+      .returning({ id: recruiterInvite.id });
+
+    const directoryQueries = await tx
+      .delete(recruiterDirectoryQuery)
+      .where(lt(recruiterDirectoryQuery.at, cutoff(now, DIRECTORY_QUERY_DAYS)))
+      .returning({ id: recruiterDirectoryQuery.id });
+
     return {
       compactedJobs: compacted.length,
       clearedPages: cleared.length,
       prunedJobs: pruned.length,
+      purgedSignups: purged.length,
+      purgedInvites: deadInvites.length,
+      purgedDirectoryQueries: directoryQueries.length,
     };
   });
 

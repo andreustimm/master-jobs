@@ -6,6 +6,8 @@ import {
   sweepEnvironmentAllowed,
   type SliceReport,
 } from "../../../../src/contexts/operations/index.ts";
+import { runRecruiterAccessMaintenance } from "../../../../src/contexts/auth/index.ts";
+import { sendSuggestionDigests } from "../../../../src/contexts/pursuit/index.ts";
 import { comVigia } from "../../../timeout-watch.ts";
 import { cronDenied, ingestionDenied } from "../authorize.ts";
 
@@ -42,11 +44,21 @@ export async function GET(request: NextRequest) {
     if (blocked) return blocked;
   }
 
+  // O acesso de recrutador (#465, ADR-016) usa o relógio do contexto de
+  // autenticação, o mesmo do predicado de acesso; o instante da varredura só
+  // decide se a hora já virou. Os passos 1 e 2 (prazos) vêm antes do 3 (avisos
+  // agrupados de sugestão), na mesma reserva horária.
   const report = await comVigia(`/api/cron/varredura?fatia=${parsed.slice}`, () =>
-    runSweep(parsed.slice, { alarm: raiseAlarm }),
+    runSweep(parsed.slice, { alarm: raiseAlarm, recruiterAccess: recruiterAccessHour }),
   );
   logReport(report);
   return NextResponse.json(report);
+}
+
+/** O trabalho horário `manutencao:recruiter-access`: prazos de acesso, depois os avisos de sugestão. */
+async function recruiterAccessHour(): Promise<Record<string, number>> {
+  const access = await runRecruiterAccessMaintenance();
+  return { ...access, ...(await sendSuggestionDigests()) };
 }
 
 /**

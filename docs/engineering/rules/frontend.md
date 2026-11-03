@@ -26,7 +26,17 @@ inteira.
 `vocabulary.title` e `nav.appearance` já estavam no dicionário e sem uso: a
 tradução existia e o componente a ignorava.
 
-Origem: regra 9. Prova: `tests/i18n.test.ts` e a varredura de G30.
+**Onde a chave nova entra.** No fragmento da área, `src/core/i18n/<área>.pt-BR.ts`
+e o par `<área>.en.ts`; `pt-BR.ts` e `en.ts` só os juntam e seguem sendo de onde
+`ptBR`, `en` e `Dictionary` são importados. Dois PRs só colidem se mexerem na
+mesma área (#531). Área nova é o par de arquivos mais um `import` e um
+espalhamento em cada junção, e o nome do fragmento não leva palavra de segurança
+(`auth`, `session`, `password`…), que eleva o caminho a L2 (G53). Os testes
+reprovam par faltando, chave que difere entre os idiomas, seção definida por dois
+fragmentos e fragmento que a junção não entrega.
+
+Origem: regra 9. Prova: `tests/i18n.test.ts`, `tests/i18n-fragments.test.ts` e a
+varredura de G30.
 
 <a id="g30"></a>
 ## G30 — Rota nova entra na varredura de idioma; dado do usuário é marcado
@@ -72,7 +82,10 @@ Origem: regra 9. Critério de revisão.
 ## G32 — Componente lê só token semântico (regra 10)
 
 **Obrigação.** Componente usa token semântico: `--background`,
-`--foreground`, `--card`, `--primary` (superfície de botão), `--primary-text`
+`--foreground`, `--card`, `--primary` (superfície de botão), `--primary-hover`
+(a mesma superfície sob o ponteiro: opaca, por tema e modo, medida contra
+`--primary-foreground` em `tests/design.test.ts` — nunca `bg-primary/80`, que
+depende do que há atrás e caiu abaixo de 4,5:1, #501), `--primary-text`
 (link e texto de acento — contrasta com o FUNDO, não com o botão), `--border`,
 `--muted`, `--hairline`, `--good`, `--warn`, `--warn-text` (texto de aviso —
 mesma lógica do `--primary-text`: `--warn` sozinho não chega em 4.5:1 em todo

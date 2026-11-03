@@ -12,6 +12,7 @@ import { connectDatabase } from "../src/core/db/client.ts";
 import { importProduction } from "../scripts/migration/import-production.ts";
 import { selectProduction } from "../scripts/migration/select-production.ts";
 import { PRODUCTION_PROJECT_REF } from "../scripts/migration/production-target.ts";
+import { readPostgresMajors } from "../scripts/versions/postgres-majors.ts";
 import { provisionTestDatabase } from "./support/db.ts";
 
 let directory: string;
@@ -76,6 +77,21 @@ it("imports the selected snapshot into PostgreSQL and verifies the committed row
     await target.drop();
   }
 });
+
+it("the cutover rehearsal passes on the PostgreSQL major this run targets", () => {
+  // Runs the real `rehearse-production.ts` (its own throwaway container) on the
+  // synthetic snapshot. The child inherits `JHO_TEST_POSTGRES_MAJOR`, so
+  // `pnpm test:postgres-majors` rehearses on the production major as well as
+  // the newest one.
+  const result = spawnSync(process.execPath, ["--no-warnings", "scripts/migration/rehearse-production.ts", path], { encoding: "utf8" });
+  expect(result.stderr).toBe("");
+  expect(result.status).toBe(0);
+  const expected = process.env.JHO_TEST_POSTGRES_MAJOR?.trim() || readPostgresMajors().latest;
+  expect(JSON.parse(result.stdout)).toMatchObject({
+    postgresMajor: expected, migrationReplay: "unchanged", rollback: "verified", occupiedTarget: "rejected", identityInsert: "verified",
+  });
+  expect(result.stdout).not.toContain("Business history");
+}, 60_000);
 
 it("refuses new tables and columns until transfer policy is reviewed", () => {
   source.exec("CREATE TABLE new_business_data (id INTEGER PRIMARY KEY)");

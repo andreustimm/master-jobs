@@ -1,0 +1,12 @@
+{
+  "id": "public-profile",
+  "modules": [
+    "tests/e2e/ui/public-profile.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/",
+    "/candidate",
+    "/p/[slug]"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "recruiter-logo-transition",
+  "modules": [
+    "tests/e2e/ui/recruiter-logo-transition.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/",
+    "/account",
+    "/jobs",
+    "/login"
+  ]
+}

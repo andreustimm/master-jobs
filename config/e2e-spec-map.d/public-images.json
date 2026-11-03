@@ -1,0 +1,19 @@
+{
+  "id": "public-images",
+  "modules": [
+    "tests/e2e/ui/public-images.mjs"
+  ],
+  "patterns": [
+    "app/image-response.ts",
+    "src/core/storage/**",
+    "src/core/public-images*.ts",
+    "src/core/candidate-images.ts"
+  ],
+  "routes": [
+    "/",
+    "/candidate",
+    "/candidate/image/[kind]",
+    "/p/[slug]",
+    "/p/[slug]/image/[kind]"
+  ]
+}

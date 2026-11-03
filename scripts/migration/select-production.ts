@@ -12,8 +12,12 @@ export const policies: Record<string, string> = {
   engagement: "all", fx_rate: "all", llm_model: "all", llm_provider: "all",
   mail_message: "all", mail_suggestion: "all", metric_snapshot: "all",
   positioning_task: "all", post: "all", recruiter_candidate: "all",
-  skill: "all", source: "configuration", target_account: "all",
+  skill: "all", source: "configuration",
   company: "referenced-or-researched", job: "business-references-or-manual",
+  // Contato tem dono obrigatório (#379, #405) e o snapshot não diz de quem é
+  // cada um. Importar sem dono violaria o NOT NULL; atribuir a um candidato
+  // seria adivinhar. A rede do dono já está no alvo, atribuída pela 0034.
+  target_account: "exclude-unowned",
   // Derivada e agora por trilha (ADR-008): o snapshot não tem trilha, e a
   // versão 1.4.0 do scorer recalcula tudo no alvo de qualquer forma.
   job_score: "exclude-derived",
@@ -64,9 +68,18 @@ export const postSnapshotColumns: Record<string, Record<string, unknown>> = {
   source: { retired_at: null, origin: "system", config_revision: 1, secret_ref: null, managed_at: null },
   // Desfazer do funil (#316). Todo evento do snapshot é original: nenhum desfaz outro.
   application_event: { reverts_event_id: null },
-  // Dono do contato (#379). O snapshot não diz de quem é cada contato: chega
-  // sem dono, e contato sem dono não aparece para ninguém.
+  // Dono do contato (#379). A tabela não atravessa a importação (ver `policies`).
   target_account: { candidate_id: null },
+  // Login social e cadastro (#464). Conta do snapshot foi criada por admin:
+  // e-mail nunca confirmado, nenhum termo aceito, origem e idioma desconhecidos.
+  auth_user: {
+    email_verified_at: null,
+    terms_version: null,
+    privacy_version: null,
+    terms_accepted_at: null,
+    signup_origin: null,
+    locale: null,
+  },
 };
 
 /**
@@ -97,6 +110,20 @@ export const postSnapshotTables = new Set([
   // Checagem do vigia de cota (ADR 0030, Fase 3): estado operacional, nasce
   // vazia — nenhuma checagem existiu antes deste agendador existir.
   "quota_watch",
+  // Login social e cadastro (#464, ADR-009): o snapshot não tem provedor ligado
+  // nem cadastro pendente. Nascem vazias.
+  "auth_identity",
+  "auth_signup",
+  // Acesso do recrutador (#465, ADR-011): nascem vazias. A cópia de
+  // `recruiter_candidate` para concessões ativas é a etapa de dados da 0036, que
+  // roda no alvo; uma importação feita depois dela traria vínculos sem
+  // concessão, e o recrutador ficaria sem acesso até o candidato conceder.
+  "recruiter_grant",
+  "recruiter_invite",
+  "recruiter_access_event",
+  "recruiter_suggestion",
+  "recruiter_suggestion_by",
+  "recruiter_directory_query",
 ]);
 
 const selectedJobs = `SELECT id FROM job WHERE

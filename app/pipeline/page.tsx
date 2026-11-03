@@ -5,11 +5,10 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
-  FUNNEL_STATUSES,
   PIPELINE_PAGE_SIZE,
   pipelineCounts,
+  pipelineFacets,
   pipelineRows,
-  type ApplicationStatus,
 } from "../../src/contexts/pursuit/index.ts";
 import { jobLifecycleState } from "../../src/core/ingest/lifecycle.ts";
 import { isPublicJobUrl } from "../../src/core/job-url.ts";
@@ -17,40 +16,58 @@ import { ACTION_BUTTON, Fit, StatusBadge } from "../ui";
 import { applicationStatusOptions } from "../status.ts";
 import { requireOwnCandidatePage } from "../auth";
 import { getTranslator } from "../i18n";
+import {
+  broadenHintKey,
+  clearPipelineFiltersHref,
+  hasPipelineFilters,
+  pipelineHref,
+  readPipelineFilters,
+  toPipelineFilters,
+} from "./filter-state";
+import { PipelineFilterBar } from "./pipeline-filters";
+import { channelLabel } from "./channel.ts";
+import { LocalDate } from "../local-date";
 
 export const dynamic = "force-dynamic";
 
-/** Estágio da URL: desconhecido não quebra a página, mostra o funil inteiro. */
-function readStage(value: string | undefined): {
-  stage: ApplicationStatus | null;
-  invalid: boolean;
-} {
-  if (!value) return { stage: null, invalid: false };
-  const stage = FUNNEL_STATUSES.find((status) => status === value);
-  return stage ? { stage, invalid: false } : { stage: null, invalid: true };
-}
+/**
+ * O cartão do estágio escolhido. Era só `border-[var(--primary)]`, sem largura
+ * de borda: a cor mudava numa borda de 0 px e nada se via (#494). O `Card`
+ * desenha o contorno com `ring-1`; o escolhido troca por um anel de 2 px na cor
+ * primária, e `aria-current` diz o mesmo a quem não vê.
+ */
+const ACTIVE_STAGE = "ring-2 ring-primary";
 
 export default async function Pipeline({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { t } = await getTranslator();
+  const { t, locale } = await getTranslator();
   const { candidateId } = await requireOwnCandidatePage("candidate:read");
+  // "aplicado em {date}" com a data numa ilha que conhece o fuso de quem lê.
+  const [appliedBefore, appliedAfter] = t("pipeline.appliedOn", { date: "\u0000" }).split("\u0000");
 
   const params = await searchParams;
   const one = (key: string) => {
     const value = params[key];
     return Array.isArray(value) ? value[0] : value;
   };
-  const { stage, invalid } = readStage(one("stage"));
+  // Estágio desconhecido não quebra a página: mostra o funil inteiro, com aviso.
+  const state = readPipelineFilters(params);
+  const { stage } = state;
+  const filters = toPipelineFilters(state);
+  const filtered = hasPipelineFilters(state);
   const asked = Math.max(1, Number(one("page") ?? 1) || 1);
 
   // As contagens vêm antes das linhas porque é delas que sai a última página.
   // Pedir uma página além do fim devolvia zero linhas, e a tela dizia "nada no
   // funil ainda" para quem TEM candidatura — a mesma mentira que a lista vazia
-  // contaria num estágio desconhecido.
-  const counts = await pipelineCounts(candidateId);
+  // contaria num estágio desconhecido. Com os mesmos filtros da lista: o
+  // contador de um estágio é quantas linhas ele mostraria. Em série, como o
+  // resto da página: o pool tem três conexões (V10-05 em architecture.test.ts).
+  const counts = await pipelineCounts(candidateId, filters);
+  const facets = await pipelineFacets(candidateId);
   // O total vem das contagens, não da página: paginar não muda quantas
   // candidaturas existem, e recontar por página faria o número piscar.
   const everything = Object.values(counts).reduce((sum, n) => sum + n, 0);
@@ -59,21 +76,16 @@ export default async function Pipeline({
   const page = Math.min(asked, lastPage);
 
   const rows = await pipelineRows(candidateId, {
+    ...filters,
     status: stage,
     limit: PIPELINE_PAGE_SIZE,
     offset: (page - 1) * PIPELINE_PAGE_SIZE,
   });
-  const href = (next: { stage?: string | null; page?: number }): Route => {
-    const query = new URLSearchParams();
-    const wanted = next.stage === undefined ? stage : next.stage;
-    if (wanted) query.set("stage", wanted);
-    const wantedPage = next.page ?? 1;
-    if (wantedPage > 1) query.set("page", String(wantedPage));
-    const search = query.toString();
-    // Mesma saída das demais telas com filtro na URL: o Next tipa rota, e um
-    // `string` montado em tempo de execução não passa por esse tipo.
-    return (search ? `/pipeline?${search}` : "/pipeline") as Route;
-  };
+  const href = (next: { stage?: string | null; page?: number }): Route =>
+    pipelineHref(state, {
+      ...(next.stage !== undefined ? { stage: next.stage ?? undefined } : {}),
+      ...(next.page !== undefined && next.page > 1 ? { page: String(next.page) } : {}),
+    });
 
   return (
     <main className="pt-10" data-testid="route-pipeline">
@@ -82,20 +94,32 @@ export default async function Pipeline({
         {t("copy.pipelineLead")}
       </p>
 
-      {invalid && (
+      {state.invalidStage && (
         <Card className="mb-4 p-4 text-sm text-muted-foreground" data-testid="pipeline-unknown-stage">
           {t("pipeline.unknownStage")}
         </Card>
       )}
 
+      {state.notices.length > 0 && (
+        <Card className="mb-4 gap-1 p-4" role="status" data-testid="pipeline-notices">
+          {state.notices.map((notice) => (
+            <p key={notice} className="type-body-md" data-testid={`pipeline-notice-${notice}`}>
+              {t(`filterNotices.${notice}`)}
+            </p>
+          ))}
+        </Card>
+      )}
+
+      <PipelineFilterBar state={state} facets={facets} broadenHint={broadenHintKey()} t={t} />
+
       <div className="mb-8 flex flex-wrap gap-2.5">
-        <TransitionLink href={href({ stage: null })} data-testid="pipeline-filter-all">
-          <Card
-            className={cn(
-              "min-w-[96px] gap-0 px-4 py-2.5",
-              stage === null && "border-[var(--primary)]",
-            )}
-          >
+        <TransitionLink
+          href={href({ stage: null })}
+          data-testid="pipeline-filter-all"
+          data-count={everything}
+          aria-current={stage === null ? "true" : undefined}
+        >
+          <Card className={cn("min-w-[96px] gap-0 px-4 py-2.5", stage === null && ACTIVE_STAGE)}>
             <div className="font-mono text-2xl font-bold tabular-nums">{everything}</div>
             <div className="mt-0.5 font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
               {t("pipeline.allStages")}
@@ -103,20 +127,19 @@ export default async function Pipeline({
           </Card>
         </TransitionLink>
         {applicationStatusOptions(t)
-          .filter(({ value }) => counts[value])
+          // O estágio escolhido fica à vista mesmo zerado pelos filtros: é
+          // nele que a pessoa está, e o zero é a resposta.
+          .filter(({ value }) => counts[value] || stage === value)
           .map(({ value, label }) => (
             <TransitionLink
               key={value}
               href={href({ stage: value })}
               data-testid={`pipeline-filter-${value}`}
+              data-count={counts[value] ?? 0}
+              aria-current={stage === value ? "true" : undefined}
             >
-              <Card
-                className={cn(
-                  "min-w-[96px] gap-0 px-4 py-2.5",
-                  stage === value && "border-[var(--primary)]",
-                )}
-              >
-                <div className="font-mono text-2xl font-bold tabular-nums">{counts[value]}</div>
+              <Card className={cn("min-w-[96px] gap-0 px-4 py-2.5", stage === value && ACTIVE_STAGE)}>
+                <div className="font-mono text-2xl font-bold tabular-nums">{counts[value] ?? 0}</div>
                 <div className="mt-0.5 font-mono type-micro tracking-[.1em] text-muted-foreground uppercase">
                   {label}
                 </div>
@@ -125,7 +148,19 @@ export default async function Pipeline({
           ))}
       </div>
 
-      {rows.length === 0 && stage ? (
+      {rows.length === 0 && filtered ? (
+        <Card className="p-6 text-sm text-muted-foreground" data-testid="pipeline-empty-filtered">
+          {t("pipeline.noneMatching")}{" "}
+          <TransitionLink
+            href={clearPipelineFiltersHref(state)}
+            data-testid="pipeline-clear-filters"
+            className="text-[var(--primary-text)] hover:underline"
+          >
+            {t("pipeline.clearFilters")}
+          </TransitionLink>
+          .
+        </Card>
+      ) : rows.length === 0 && stage ? (
         <Card className="p-6 text-sm text-muted-foreground" data-testid="pipeline-empty-stage">
           {t("pipeline.noneInStage")}{" "}
           <TransitionLink
@@ -174,14 +209,28 @@ export default async function Pipeline({
                     </Badge>
                   )}
                   {r.channel && (
-                    <Badge variant="outline" className="font-mono type-micro">
-                      {r.channel}
+                    <Badge variant="outline" className="font-mono type-micro" data-testid={`pipeline-channel-${r.jobId}`}>
+                      {channelLabel(t, r.channel) ?? <span data-user-content>{r.channel}</span>}
+                    </Badge>
+                  )}
+                  {r.suggestedByRecruiter && (
+                    // Vem da sugestão aceita, não do canal: a candidatura que já
+                    // existia antes do aceite guarda o canal dela (ADR-015).
+                    <Badge variant="outline" className="font-mono type-micro" data-testid={`pipeline-suggested-${r.jobId}`}>
+                      {t("pipeline.suggestedByRecruiter")}
                     </Badge>
                   )}
                 </div>
                 <div className="mt-0.5 text-xs text-muted-foreground">
                   {r.companyName}
-                  {r.appliedAt ? ` · ${t("pipeline.appliedOn", { date: r.appliedAt.slice(0, 10) })}` : ""}
+                  {r.appliedAt ? (
+                    <>
+                      {" · "}
+                      {appliedBefore}
+                      <LocalDate iso={r.appliedAt} locale={locale} testId={`pipeline-applied-${r.jobId}`} />
+                      {appliedAfter}
+                    </>
+                  ) : null}
                 </div>
                 {r.nextAction && (
                   <div className="mt-0.5 text-xs text-muted-foreground">

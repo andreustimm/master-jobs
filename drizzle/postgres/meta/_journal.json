@@ -239,6 +239,27 @@
       "when": 1790910049534,
       "tag": "0033_source_run_due_total",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1791218296045,
+      "tag": "0034_contatos_candidato_obrigatorio",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1791326213455,
+      "tag": "0035_login_social",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1791369250689,
+      "tag": "0036_recrutador_acesso",
+      "breakpoints": true
     }
   ]
 }

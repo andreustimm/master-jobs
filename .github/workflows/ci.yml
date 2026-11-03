@@ -13,7 +13,7 @@
 #
 # `runs-on:` de todo job é a mesma expressão, nunca um literal (issue #367,
 # ADR 0030 decisão 1/4): `vars.CI_RUNS_ON` ausente ou vazia mantém o runner
-# hospedado de hoje (`fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"')`); setada
+# hospedado de hoje (`fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"')`); setada
 # com JSON válido, troca o runner de todo job sem editar este arquivo. Um
 # valor SEM aspas (`self-hosted`, em vez de `'"self-hosted"'` ou
 # `'["self-hosted","linux","master-jobs"]'`) não é JSON válido: `fromJSON`
@@ -67,11 +67,88 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  escopo:
+    # O recorte do PR (#528): PR só de documentação — lista de permissão em
+    # `scripts/github/pr-scope.ts` — não paga `pwa-browser`, que nenhum desses
+    # Markdown alcança (`banco-nas-majors` é do `plano`, #535). Fora de
+    # `pull_request` a resposta é sempre a suíte completa, então push em `dev`,
+    # chamada da promoção e dispatch rodam tudo como antes. Falha fechada: se
+    # este job falhar, os pesados ficam pulados SEM recorte, e `qualidade`
+    # reprova (só aceita pulo com `escopo` verde dizendo `completo=false`).
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
+    timeout-minutes: 5
+    outputs:
+      completo: ${{ steps.escopo.outputs.completo }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target-sha || github.sha }}
+          persist-credentials: false
+          # O commit de merge do PR e o primeiro pai dele, que é a base.
+          fetch-depth: 2
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+
+      - name: Recorte do PR
+        id: escopo
+        env:
+          EVENTO: ${{ github.event_name }}
+        run: node --experimental-strip-types --no-warnings scripts/github/pr-scope.ts >> "$GITHUB_OUTPUT"
+
+  plano:
+    # O recorte do CI de PR (#535). Decisão do dono, 13/10/2026: em `pull_request`
+    # com base `dev`, cada job pesado que o plano recorta só roda quando o diff
+    # pede, uma saída por job:
+    #   e2e   → `e2e-navegador`: a tabela de impacto
+    #           (`config/validation-impact.json`) pede o gate `e2e`;
+    #   banco → `banco-nas-majors`: o diff toca a lista do banco
+    #           (`DATABASE_PATTERNS` em `scripts/github/ci-plan.ts`).
+    # Push, `workflow_dispatch`, chamada da promoção (`target-sha`) e PR de
+    # outra base (a de produção) recebem sempre o plano completo — a lógica e a
+    # falha fechada estão em `scripts/github/ci-plan.ts`, provadas por
+    # `tests/ci-plan.test.ts`.
+    #
+    # É agregado por `qualidade` como qualquer outro job: plano vermelho reprova
+    # o portão, e os agregadores só aceitam `skipped` do job cujo pulo o plano
+    # verde declarou. Sem `paths:` no workflow, de propósito (a G57 explica):
+    # check obrigatório filtrado por caminho fica pendente ou pulado, e pulado
+    # conta como aprovado.
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
+    timeout-minutes: 5
+    outputs:
+      e2e: ${{ steps.plano.outputs.e2e }}
+      banco: ${{ steps.plano.outputs.banco }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target-sha || github.sha }}
+          persist-credentials: false
+          # O commit de merge do PR e o primeiro pai dele, que é a base.
+          fetch-depth: 2
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+
+      - name: Plano do diff
+        id: plano
+        # Entra por `env:`, nunca interpolado no `run:`: `github.base_ref` é
+        # nome de branch, texto de quem abre a PR.
+        env:
+          EVENTO: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          TARGET_SHA: ${{ inputs.target-sha }}
+        run: node --experimental-strip-types --no-warnings scripts/github/ci-plan.ts >> "$GITHUB_OUTPUT"
+
   contratos:
     # Os gates curtos que não dependem de teste: changelogs, tracker de QA,
     # tipos e os contratos das skills de QA. Juntos custam menos que a
     # preparação de um runner, por isso dividem um.
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 10
 
     steps:
@@ -93,6 +170,15 @@ jobs:
           # ninguém lembrou de atualizar.
           node-version-file: package.json
           cache: pnpm
+
+      - uses: actions/setup-python@v7
+        # O tracker de QA e os contratos das skills rodam em Python. A versão
+        # vem de `.python-version` (o Renovate a sobe), e não do `python3` que
+        # a imagem do runner trouxer no dia. No runner próprio não há cache de
+        # ferramentas: a imagem (scripts/runner/Dockerfile) já traz `python3`.
+        if: runner.environment != 'self-hosted'
+        with:
+          python-version-file: .python-version
 
       - run: pnpm install --frozen-lockfile
 
@@ -117,6 +203,14 @@ jobs:
         # de `.claude/`; espelho ausente, divergente ou órfão reprova (G85).
         run: pnpm check:harness
 
+      - name: Versões explícitas
+        # Política de versões (issue #468, docs/engineering/versions.md): nada
+        # de `ubuntu-latest`, imagem sem tag ou Action sem versão — o que troca
+        # por fora do CI —, e a major do Node igual em todas as fontes. Qual é a
+        # versão mais nova é o Renovate quem diz; aqui só se garante que existe
+        # uma versão escrita para ele subir.
+        run: pnpm check:versions
+
       - name: Tracker de QA conforme o esquema
         # `docs/qa/state.csv` é visão gerada e ignorada pelo git, então o
         # esquema dos cenários só era conferido quando alguém rodava o
@@ -139,7 +233,7 @@ jobs:
     #
     # A cobertura de uma fatia é parcial e não diz nada sozinha: os limiares
     # ficam zerados aqui e são aplicados sobre o total, no job `cobertura`.
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 15
     strategy:
       # Uma fatia vermelha não cancela as outras: a lista completa de falhas
@@ -190,7 +284,7 @@ jobs:
       - name: Testes (fatia ${{ matrix.fatia }} de 4)
         run: >-
           pnpm vitest run --shard=${{ matrix.fatia }}/4 --coverage --reporter=blob
-          --outputFile.blob=.vitest-reports/blob-${{ matrix.fatia }}.json
+          --outputFile.blob=.vitest/blob/blob-${{ matrix.fatia }}.json
           --coverage.thresholds.statements=0 --coverage.thresholds.branches=0
           --coverage.thresholds.functions=0 --coverage.thresholds.lines=0
 
@@ -200,9 +294,11 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           name: blob-${{ matrix.fatia }}
-          path: .vitest-reports/*
-          # `.vitest-reports` começa com ponto, e o upload ignora arquivo
-          # oculto por padrão — sem isto o artefato sobe vazio.
+          # O reporter `blob` grava em `.vitest/blob/` desde o Vitest 5 (antes,
+          # `.vitest-reports/`), e `--merge-reports` lê do mesmo lugar.
+          path: .vitest/blob/*
+          # `.vitest` começa com ponto, e o upload ignora arquivo oculto por
+          # padrão — sem isto o artefato sobe vazio.
           include-hidden-files: true
           if-no-files-found: error
           # "Re-run failed jobs" reaproveita as fatias verdes e refaz só a
@@ -211,9 +307,11 @@ jobs:
           overwrite: true
           # Os blobs das fatias verdes precisam sobreviver até esse re-run: se
           # expirarem antes, `cobertura` mescla só a fatia refeita e reprova o
-          # piso num commit cujos testes passaram todos. Sete dias cobrem um
-          # re-run tardio sem guardar artefato indefinidamente.
-          retention-days: 7
+          # piso num commit cujos testes passaram todos. Dois dias cobrem o
+          # re-run do mesmo dia ou do dia seguinte e guardam menos de um terço
+          # do que sete guardavam na cota de artefatos. Um re-run depois disso
+          # refaz todas as fatias, não só a vermelha.
+          retention-days: 2
 
   cobertura:
     # Junta as quatro fatias e aplica os limiares de `vitest.config.ts` sobre o
@@ -227,7 +325,7 @@ jobs:
     # `qualidade` reprova pela fatia vermelha de qualquer jeito.
     if: ${{ !cancelled() }}
     needs: testes
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 10
 
     steps:
@@ -248,19 +346,21 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           pattern: blob-*
-          path: .vitest-reports
+          path: .vitest/blob
           merge-multiple: true
 
       - name: Cobertura total contra os limiares
         # Reprova também se alguma fatia registrou teste falho: a mesclagem
         # repete o resultado de cada um.
-        run: pnpm vitest run --merge-reports=.vitest-reports --coverage
+        run: pnpm vitest run --merge-reports=.vitest/blob --coverage
 
   pwa-browser:
     # O contrato de privacidade abre um Chromium real. Ele fica separado da
     # cobertura para não concorrer com os testes curtos, mas continua sendo
     # obrigatório no mesmo portão que autoriza a promoção.
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+    needs: escopo
+    if: needs.escopo.outputs.completo != 'false'
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 10
 
     steps:
@@ -313,7 +413,10 @@ jobs:
         run: pnpm test:pwa-browser
 
   build:
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+    # Não entra no recorte de #528: o Tailwind v4 varre o repositório inteiro,
+    # inclusive os `.md` de `docs/`, então um PR só de documentação pode mudar o
+    # CSS compilado. Custa ~1 min.
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 15
 
     steps:
@@ -345,15 +448,76 @@ jobs:
         # `prebuild` gera o service worker e o changelog compilado.
         run: pnpm build
 
+  banco-nas-majors:
+    # A suíte inteira roda na major `latest`. Aqui todo teste que usa
+    # PostgreSQL real (derivado dos imports, não de lista), com o ensaio de
+    # corte, roda em cada major de `config/postgres-majors.json` —
+    # `production` e `latest`, citadas pela chave: os números moram só naquele
+    # arquivo. Em série num runner só, as duas majors levaram 401 s + 422 s,
+    # rente ao teto de 15 min; por isso a matriz major × fatia. O resultado
+    # entra no check obrigatório `schema-e-migracao`, que depende deste job.
+    #
+    # Em PR para `dev` só roda quando o diff toca o banco (`plano.banco`, #535,
+    # decisão do dono de 13/10/2026) — PR só de documentação nunca toca; o push
+    # em `dev` roda sempre, e é nele que uma regressão numa major fora desses
+    # caminhos aparece.
+    needs: plano
+    if: needs.plano.outputs.banco == 'true'
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        major: [production, latest]
+        fatia: [1, 2]
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target-sha || github.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Banco na major ${{ matrix.major }} (fatia ${{ matrix.fatia }} de 2)
+        run: pnpm test:postgres-majors --major=${{ matrix.major }} --shard=${{ matrix.fatia }}/2
+
   schema-e-migracao:
     # Separado do portão de qualidade porque responde outra pergunta: não é "o
     # código funciona", é "o banco acompanha o código". Um schema.ts alterado
     # sem migração correspondente passa em todos os testes — eles rodam sobre um
     # banco recriado do zero — e quebra só no ambiente que já tem dado.
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
-    timeout-minutes: 10
+    #
+    # Também responde pelas majors do PostgreSQL (`banco-nas-majors`). O
+    # `always()` é o mesmo do agregador `qualidade`: sem ele, uma fatia
+    # vermelha faria este check obrigatório ser PULADO, e pulado conta como
+    # aprovado na proteção de branch.
+    #
+    # Com o `plano` verde dizendo `banco=false` (PR para `dev` que não toca o
+    # banco, #535), o `banco-nas-majors` pulado é o esperado; pulado sem esse
+    # plano reprova. O `schema-e-migracao` em si roda sempre.
+    if: ${{ always() }}
+    needs: [plano, banco-nas-majors]
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
+    timeout-minutes: 15
 
     steps:
+      - name: Banco passou nas majors do PostgreSQL declaradas
+        env:
+          RESULTADOS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTADOS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$RESULTADOS" | jq -e '
+            (.plano.result == "success" and .plano.outputs.banco == "false") as $semBanco
+            | length > 0 and (to_entries | all(
+                .value.result == "success"
+                or ($semBanco and .key == "banco-nas-majors" and .value.result == "skipped")))
+          ' > /dev/null
+
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.target-sha || github.sha }}
@@ -385,11 +549,15 @@ jobs:
     # autenticação real. Até aqui ela só rodava na máquina de quem lembrava, e
     # o CI via apenas o Vitest e a fronteira da PWA.
     #
-    # Job próprio, sem `needs`, e fora de `qualidade.needs`: é a única exceção
-    # registrada ao agregador e à promoção (`NON_BLOCKING_CI_JOBS` em
-    # scripts/release/promotion-ci.ts).
+    # Job próprio, fora de `qualidade.needs`: é a única exceção registrada ao
+    # agregador e à promoção (`NON_BLOCKING_CI_JOBS` em
+    # scripts/release/promotion-ci.ts). Só espera o `plano` (segundos, sem
+    # instalar nada), que decide se ele roda: em PR para `dev`, só quando a
+    # tabela de impacto pede o gate `e2e` (#535). Pular o E2E não toca o
+    # portão, porque ele já está fora dele; push em `dev` continua rodando.
     #
-    # Banco: o próprio `run-isolated.mjs` sobe um `postgres:17` descartável pelo
+    # Banco: o próprio `run-isolated.mjs` sobe um PostgreSQL descartável, na major
+    # `latest` de `config/postgres-majors.json`, pelo
     # Docker do runner, preso a 127.0.0.1, com senha aleatória — o mesmo
     # caminho da máquina local. Um `services:` do Actions seria um segundo
     # caminho, que o harness não usa e que poderia divergir do primeiro; e
@@ -405,8 +573,9 @@ jobs:
     # promoção dispara em `staging`: ali só interessam os checks que o ruleset
     # de `main` exige, e 15 minutos de navegador só atrasam a PR de produção
     # (#303). `staging` recebe exatamente o SHA cujo push em `dev` já rodou o E2E.
-    if: github.event_name != 'workflow_dispatch' && inputs.target-sha == ''
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+    needs: plano
+    if: github.event_name != 'workflow_dispatch' && inputs.target-sha == '' && needs.plano.outputs.e2e == 'true'
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 40
     permissions:
       contents: read
@@ -475,9 +644,17 @@ jobs:
     # obrigatório pulado como aprovado. Com ele, o job roda sempre e reprova
     # por conta própria quando qualquer dependência não terminou em sucesso —
     # falha, pulo ou cancelamento.
+    #
+    # Única exceção ao "tudo em sucesso": um job pulado passa quando o job que
+    # o recorta terminou verde e declarou o pulo — `pwa-browser` com `escopo`
+    # dizendo `completo=false` (PR só de documentação, #528);
+    # `banco-nas-majors` com `plano` dizendo `banco=false` (#535). Pulo sem
+    # essa declaração, com o recortador vermelho ou de outro job reprova. Job
+    # novo que um recorte passe a pular entra em `$pulavel` E em
+    # `tests/ci-pipeline.test.ts`.
     if: ${{ always() }}
-    needs: [contratos, testes, cobertura, pwa-browser, build, schema-e-migracao]
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+    needs: [escopo, plano, contratos, testes, cobertura, pwa-browser, build, banco-nas-majors, schema-e-migracao]
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     timeout-minutes: 5
 
     steps:
@@ -486,12 +663,22 @@ jobs:
           RESULTADOS: ${{ toJSON(needs) }}
         run: |
           echo "$RESULTADOS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
-          echo "$RESULTADOS" | jq -e 'length > 0 and (to_entries | all(.value.result == "success"))' > /dev/null
+          echo "$RESULTADOS" | jq -e '
+            (if .escopo.result == "success" then .escopo.outputs else {} end) as $escopo
+            | (if .plano.result == "success" then .plano.outputs else {} end) as $plano
+            | {
+                "pwa-browser": ($escopo.completo == "false"),
+                "banco-nas-majors": ($plano.banco == "false")
+              } as $pulavel
+            | length > 0 and (to_entries | all(
+                .value.result == "success"
+                or (.value.result == "skipped" and ($pulavel[.key] // false))))
+          ' > /dev/null
 
   validacao:
     if: inputs.target-sha != ''
     needs: [qualidade, schema-e-migracao]
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
     outputs:
       sha: ${{ steps.alvo.outputs.sha }}
     steps:

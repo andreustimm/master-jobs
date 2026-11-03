@@ -1,0 +1,28 @@
+{
+  "id": "a11y",
+  "modules": [
+    "tests/e2e/a11y.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/",
+    "/account",
+    "/admin/operacoes",
+    "/admin/users",
+    "/candidate",
+    "/candidate/skills",
+    "/candidate/vocabulary",
+    "/jobs",
+    "/jobs/[id]",
+    "/jobs/[id]/paises",
+    "/jobs/new",
+    "/login",
+    "/pipeline",
+    "/privacy",
+    "/referrals",
+    "/signup",
+    "/signup/verify",
+    "/suggestions",
+    "/terms"
+  ]
+}

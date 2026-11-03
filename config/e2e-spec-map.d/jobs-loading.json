@@ -1,0 +1,14 @@
+{
+  "id": "jobs-loading",
+  "modules": [
+    "tests/e2e/ui/jobs-loading.mjs",
+    "tests/e2e/jobs-loading.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/compare",
+    "/jobs",
+    "/jobs/[id]",
+    "/login"
+  ]
+}

@@ -12,8 +12,9 @@ import {
   authLoginToken,
   authSession,
   authUser,
-  recruiterCandidate,
+  recruiterGrant,
 } from "../../../core/db/schema.ts";
+import { activeGrantCondition } from "./drizzle-recruiter-access.ts";
 import type {
   AuthRepository,
   Identity,
@@ -62,18 +63,23 @@ export const ownedCandidateId = sql<number | null>`case when not exists (
 ) then ${authUser}.candidate_id end`;
 
 /**
- * Candidatos que um recrutador acompanha.
+ * Candidatos que um recrutador acompanha: concessões `active` sem fim ou com
+ * fim no futuro, pelo relógio de `clock()` (#465, ADR-012).
  *
  * Uma consulta só, usada por todos os caminhos que montam uma `Identity` ou
  * uma `Session`, para os vínculos não divergirem entre login por senha e por
  * link — divergência aqui vira "o recrutador vê no login A e não vê no B".
+ * É também o corte: revogação, prazo vencido, conta removida e papel retirado
+ * valem na próxima requisição, sem cache nem job no meio. Conta desabilitada
+ * já cai antes, em `resolve()`.
  */
 export async function linkedCandidatesFor(userId: number, roles: Role[]): Promise<number[]> {
   if (!roles.includes("recruiter")) return [];
   const rows = await getDb()
-    .select({ candidateId: recruiterCandidate.candidateId })
-    .from(recruiterCandidate)
-    .where(eq(recruiterCandidate.recruiterUserId, userId));
+    .select({ candidateId: recruiterGrant.candidateId })
+    .from(recruiterGrant)
+    .where(and(eq(recruiterGrant.recruiterUserId, userId), activeGrantCondition(clock().iso())))
+    .orderBy(recruiterGrant.candidateId);
   return rows.map((r) => r.candidateId);
 }
 

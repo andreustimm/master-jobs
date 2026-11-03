@@ -11,10 +11,13 @@
 //   laço `for`/`while`/`until`/`if`/`case` aceita `;` e quebra de linha, e o
 //   corpo continua julgado comando a comando.
 // - `classifyRisk`: o que pergunta (`ask`) ou é negado (`deny`), julgado por
-//   token — a fonte de verdade do risco de shell. `.claude/settings.json` não
-//   repete esta lista em `ask`; guarda só o `deny` ancorado de reserva.
+//   token — a fonte de verdade do risco de shell. É uma lista do que é
+//   proibido: com `Bash` liberado no `.claude/settings.json` (#481), o que ela
+//   não reconhece passa. `.claude/settings.json` não repete esta lista em
+//   `ask`; guarda só o `deny` ancorado de reserva.
 // - `judgeShell`: as duas coisas e, em laço, cada comando do corpo contra a
-//   lista `allow` do `.claude/settings.json`.
+//   lista `.claude/settings.json` (com `Bash` liberado, decidem o
+//   classificador e o `deny`).
 
 /** @typedef {"ask" | "deny"} RiskDecision */
 /** @typedef {{ decision: RiskDecision, reason: string }} Risk */
@@ -534,6 +537,21 @@ function shortCluster(arg, letter) {
 }
 
 /**
+ * Caminho de worktree de trabalho: `.claude/worktrees/<nome>` (relativo ou
+ * absoluto, um segmento só) ou `~/.codex/worktrees/<id>/<nome>` (também com o
+ * diretório pessoal por extenso). Sem `..`, variável, crase ou curinga — o
+ * shell os expande e o caminho escaparia do lugar. Link simbólico com nome
+ * de worktree não é resolvido (a política é pura; limite registrado em G85).
+ */
+export function isWorkWorktree(path) {
+  if (typeof path !== "string" || path === "" || /[$`*?[\]{}]/.test(path) || path.split("/").includes("..")) return false;
+  return (
+    /(?:^|\/)\.claude\/worktrees\/[^/]+\/?$/.test(path) ||
+    /^(?:~|\/Users\/[^/]+|\/home\/[^/]+)\/\.codex\/worktrees\/[^/]+\/[^/]+\/?$/.test(path)
+  );
+}
+
+/**
  * Estágio de pipe que só lê: casado pelo nome do executável, nunca por
  * substring (`catamaran` não é `cat`), sem atribuição, sem redirecionamento de
  * escrita e sem a opção que faz o programa escrever arquivo ou rodar outro
@@ -599,7 +617,8 @@ function readOnlyGit(args) {
     case "worktree":
       return rest[0] === "list";
     case "branch":
-      return readOnlyBranch(rest);
+      // `--set-upstream-t=…`, `--unset-u`, `--edit-d` escrevem como a forma completa (#475).
+      return readOnlyBranch(expandGitOptions("branch", rest));
     default:
       return false;
   }
@@ -637,7 +656,10 @@ const MAX_JUDGEMENTS = 2000;
 let budget = MAX_JUDGEMENTS;
 /** Teto de tamanho do comando julgado; acima dele, pergunta. */
 export const MAX_COMMAND = 100_000;
-const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+/** `NOME=valor` e `NOME+=valor` (acrescenta ao valor herdado). */
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*\+?=/;
+/** `NOME+=valor` vira `NOME=valor`: o que se lê é o nome, e o valor acrescentado é o que se julga. */
+const plainAssignment = (word) => word.replace(/^([A-Za-z_][A-Za-z0-9_]*)\+=/, "$1=");
 const PROTECTED_BRANCHES = new Set(["main", "staging", "dev"]);
 
 /** @returns {Risk} */
@@ -675,8 +697,23 @@ const WRAPPERS = {
 const XARGS = { value: ["-n", "-L", "-P", "-s", "-I", "-J", "-E", "-d", "-a", "-R", "-S", "--max-args", "--max-lines", "--max-procs", "--max-chars", "--eof", "--delimiter", "--arg-file", "--process-slot-var"] };
 const WATCH = { value: ["-n", "--interval"] };
 
-/** Pula as opções de `spec` e devolve o comando que vem depois. */
-function skipOptions(rest, spec) {
+/**
+ * Palavras do texto de `env -S`, que respeita aspas como o shell (#485):
+ * `env -S 'sh -c "git push -f"'` roda `sh -c 'git push -f'`. Vai pelo lexer
+ * da política; o escape do `env` (`\_`, `\c`) não é o do shell, e `notes.escaped`
+ * marca o texto com `\` para perguntar.
+ */
+function splitString(text, notes) {
+  if (text.includes("\\")) notes.escaped = true;
+  return lex(text).tokens.map((token) => token.value ?? "").filter(Boolean);
+}
+
+/**
+ * Pula as opções de `spec` e devolve o comando que vem depois. Opção curta em
+ * grupo (`env -vS '…'`, `xargs -0n1`) é lida como o `getopt`: a primeira letra
+ * com valor consome o resto do grupo. `notes.split` diz que `-S` injetou palavras.
+ */
+function skipOptions(rest, spec, notes = {}) {
   const value = new Set(spec.value ?? []);
   const split = new Set(spec.split ?? []);
   const injected = [];
@@ -693,13 +730,23 @@ function skipOptions(rest, spec) {
     }
     if (!arg.startsWith("-") || arg === "-") break;
     const long = arg.startsWith("--");
-    const flag = long ? arg.split("=")[0] : arg.slice(0, 2);
+    let flag = long ? arg.split("=")[0] : arg.slice(0, 2);
     let attached = long ? (arg.includes("=") ? arg.slice(arg.indexOf("=") + 1) : undefined) : arg.length > 2 ? arg.slice(2) : undefined;
+    if (!long && !value.has(flag)) {
+      const at = [...arg.slice(1)].findIndex((letter) => value.has(`-${letter}`));
+      if (at !== -1) {
+        flag = `-${arg[at + 1]}`;
+        attached = arg.length > at + 2 ? arg.slice(at + 2) : undefined;
+      }
+    }
     if (value.has(flag) && attached === undefined) {
       attached = rest[k + 1];
       k++;
     }
-    if (split.has(flag) && attached !== undefined) injected.push(...attached.split(/\s+/).filter(Boolean));
+    if (split.has(flag) && attached !== undefined) {
+      injected.push(...splitString(attached, notes));
+      notes.split = true;
+    }
     k++;
   }
   k += spec.positional ?? 0;
@@ -760,20 +807,49 @@ function globMayBeSecret(word) {
   }
 }
 
-/** A política de permissões: editar pela shell também pergunta. */
-const POLICY_PATH = /(?:^|\/)(?:\.claude\/settings\.json$|\.claude\/hooks(?:\/|$)|scripts\/harness(?:\/|$)|opencode\.json$|\.codex(?:\/|$)|\.opencode\/plugins(?:\/|$))/;
-const POLICY_WRITE = "altera a política de permissões (.claude/settings.json, hooks, scripts/harness, opencode.json, .codex, .opencode/plugins)";
+/**
+ * A lista de permissões: editar pela shell também pergunta, como a ferramenta
+ * de edição (`Edit/Write(**\/.claude/settings.json)`). Desde 11/10/2026, por
+ * decisão do dono, hooks, `scripts/harness/`, `opencode.json`, `.codex/` e
+ * `.opencode/plugins/` são arquivo comum: editar não pergunta.
+ */
+const POLICY_PATH = /(?:^|\/)\.claude\/settings\.json$/;
+const POLICY_WRITE = "altera a lista de permissões (.claude/settings.json)";
 
-function isPolicyPath(word) {
-  return POLICY_PATH.test(word.replace(/^\.\//, ""));
+/**
+ * A configuração do git gravada por fora do `git config` (`echo … >> .git/config`,
+ * `sed -i`, `tee`): o `git config` nega a chave que desvia o destino do push, e
+ * escrever o arquivo contornaria isso.
+ */
+const GIT_CONFIG_FILE = /(?:^|\/)\.git\/(?:config|config\.worktree|worktrees\/[^/]+\/config\.worktree)$/;
+
+/** Escrita em `path`: a lista de permissões pergunta; a configuração do git, por fora do `git config`, nega. */
+function policyPathVerdict(path) {
+  const word = path.replace(/^\.\//, "");
+  if (GIT_CONFIG_FILE.test(word)) return deny("escrever em .git/config contorna o `git config`, que nega a chave que desvia o destino do push: use `git config`");
+  return POLICY_PATH.test(word) ? ask(POLICY_WRITE) : null;
 }
+
+const policyPathsVerdict = (paths) => paths.reduce((worst, path) => stronger(worst, policyPathVerdict(path)), null);
 
 /**
  * Onde o comando roda (#461): `root` é a árvore do projeto (o worktree fica
  * dentro dela), `cwd` resolve caminho relativo e `home` resolve `~`/`$HOME`.
  * Vem do chamador — a política continua pura. Sem `root`, todo caminho
- * absoluto fora do temporário pergunta.
- * @typedef {{ root?: string, cwd?: string, home?: string }} ShellEnv
+ * absoluto fora do temporário pergunta. `gitTarget` é o contexto real do
+ * comando `git`, que o chamador resolve com o próprio git (`push-target.mjs`,
+ * #476); sem ele, o git é julgado só pelo texto.
+ * @typedef {{ root?: string, cwd?: string, home?: string, gitTarget?: GitTarget | null }} ShellEnv
+ */
+/**
+ * O que `resolveGitTarget` (`push-target.mjs`) descobriu para o comando:
+ * diretório efetivo, branch atual, se o diretório é a checkout principal e,
+ * no push, `@{push}`, o remoto, se a configuração deixa o push levar só o
+ * destino que se vê (`safe`), o `push.default` efetivo e os branches locais
+ * que são ref simbólica (`symrefs`). `command` e `cwd` amarram o resultado ao
+ * comando julgado.
+ * @typedef {{ safe: boolean, remote: string | null, pushRef: string | null, pushDefault?: string, symrefs?: string[] }} PushInfo
+ * @typedef {{ command: string, cwd: string, dir: string, branch: string, isMainWorktree: boolean, push: PushInfo | null }} GitTarget
  */
 /** @type {ShellEnv} */
 const NO_ENV = {};
@@ -802,11 +878,14 @@ const PERSONAL_CONFIG = /^(?:\.[^/]+$|\.(?:ssh|claude|codex|config)(?:\/|$))/;
 /**
  * `ask` quando o caminho gravado fica fora da árvore do projeto ou é
  * configuração pessoal (`~/.zshrc`, `~/.ssh/**`, `~/.claude/**`, `/etc`);
- * temporário passa.
+ * temporário passa. Com `readOnly` (a saída de um comando que só lê, como `git log`
+ * ou `cat`, redirecionada), a home que não é configuração pessoal também passa:
+ * `git log > ~/x.txt` não pergunta, `git log > ~/.zshrc` pergunta.
  * @param {string} target
  * @param {ShellEnv} env
+ * @param {boolean} [readOnly]
  */
-function outsideWrite(target, env) {
+function outsideWrite(target, env, readOnly = false) {
   if (!target) return null;
   const outside = ask(`escreve fora do projeto (${target})`);
   if (/^\$\{?TMPDIR\}?(?:\/|$)/.test(target)) return null;
@@ -826,6 +905,7 @@ function outsideWrite(target, env) {
   if (env.home && within(path, normalizePath(env.home))) {
     const relative = path.slice(normalizePath(env.home).length + 1);
     if (PERSONAL_CONFIG.test(relative)) return ask(`escreve na configuração pessoal (${target})`);
+    if (readOnly) return null;
   }
   return env.root && within(path, projectTree(env.root)) ? null : outside;
 }
@@ -849,7 +929,7 @@ function joinPath(base, path) {
 
 /** Escrita em `path`: a política de permissões pergunta; fora do projeto também. */
 function writeRisk(path, env) {
-  return stronger(isPolicyPath(path) ? ask(POLICY_WRITE) : null, outsideWrite(path, env));
+  return stronger(policyPathVerdict(path), outsideWrite(path, env));
 }
 
 /**
@@ -872,6 +952,11 @@ const OUTPUT_OPTIONS = {
   },
   sort: { short: "o", stop: "kStT", long: ["--output"] },
   openssl: { single: ["-out", "-keyout"] },
+  // #485: saída de cliente do Postgres e destino de `unzip -d`.
+  psql: { short: "oL", stop: "cdfhpUvPTFR", long: ["--output", "--log-file"] },
+  pg_dump: { short: "f", stop: "dFhpUnNtTZjESe", long: ["--file"] },
+  pg_restore: { short: "f", stop: "dFhpUnNtTIPLjS", long: ["--file"] },
+  unzip: { short: "d", stop: "xP" },
 };
 
 /** Os valores das opções de `spec` em `args` (ver `OUTPUT_OPTIONS`). */
@@ -950,10 +1035,42 @@ function tarOutput(args) {
 }
 
 /**
+ * Os argumentos posicionais, sem as opções: as de `value` consomem a palavra
+ * seguinte, salvo com valor colado (`-p1`, `--app=x`); depois de `--`, tudo é
+ * posicional.
+ * @param {string[]} args
+ * @param {Set<string>} [value]
+ */
+function positionals(args, value = NO_OPTIONS) {
+  const found = [];
+  for (let k = 0; k < args.length; k++) {
+    const arg = args[k];
+    if (arg === "--") {
+      found.push(...args.slice(k + 1));
+      break;
+    }
+    if (!arg.startsWith("-") || arg === "-") found.push(arg);
+    else if (value.has(arg)) k++;
+  }
+  return found;
+}
+
+const PATCH_VALUE = new Set([
+  "-i", "--input", "-o", "--output", "-d", "--directory", "-p", "--strip", "-D", "--ifdef", "-r", "--reject-file",
+  "-B", "--prefix", "-Y", "--basename-prefix", "-z", "--suffix", "-V", "--version-control", "-F", "--fuzz", "-g", "--get",
+]);
+
+/** `patch [opções] [original [patch]]` grava o original, `-o`, `-r` e o diretório de `-d`. */
+function patchOutput(args) {
+  const original = positionals(args, PATCH_VALUE).slice(0, 1);
+  return [...original, ...optionValues(args, { short: "odr", stop: "ipDBYzVFg", long: ["--output", "--directory", "--reject-file"] })];
+}
+
+/**
  * O que o comando grava, pelo nome do programa: destino de `tee`, `cp`, `mv`,
- * `ln`, `install`, `dd of=` e `truncate`; saída de `uniq` e `tar`; e as
- * opções de `OUTPUT_OPTIONS` (`curl -o`, `wget -O`, `sort -o`,
- * `openssl -out`). O `git` tem os seus em `judgeGit`.
+ * `ln`, `install`, `ditto`, `dd of=` e `truncate`; saída de `uniq`, `tar` e
+ * `patch`; e as opções de `OUTPUT_OPTIONS` (`curl -o`, `wget -O`, `sort -o`,
+ * `openssl -out`, `unzip -d`, `pg_dump -f`). O `git` tem os seus em `judgeGit`.
  */
 function writtenPaths(name, args) {
   if (Object.hasOwn(OUTPUT_OPTIONS, name)) return optionValues(args, OUTPUT_OPTIONS[name]);
@@ -971,7 +1088,10 @@ function writtenPaths(name, args) {
     case "cp":
     case "ln":
     case "install":
+    case "ditto":
       return targetDir.length > 0 ? targetDir : operands.slice(-1);
+    case "patch":
+      return patchOutput(args);
     case "dd":
       return args.filter((arg) => arg.startsWith("of=")).map((arg) => arg.slice(3));
     case "uniq":
@@ -1275,7 +1395,7 @@ function judgeRm(args, context) {
   const home = context.env?.home ? normalizePath(context.env.home) : null;
   const rootish = (target) => ROOTISH.test(target) || SYSTEM_DIR.test(target) || (home !== null && target.startsWith("/") && normalizePath(target) === home);
   if (recursive && targets.some(rootish)) return deny("rm recursivo na raiz, num diretório de sistema ou no diretório pessoal");
-  let worst = targets.some(isPolicyPath) ? ask(POLICY_WRITE) : null;
+  let worst = policyPathsVerdict(targets);
   if (context.bulk) worst = stronger(worst, ask("rm em massa (xargs, find -exec ou comando repetido pelo git)"));
   if (recursive) worst = stronger(worst, ask("rm recursivo"));
   return worst;
@@ -1299,6 +1419,132 @@ function judgeChmod(args) {
 }
 
 const GIT_GLOBAL_VALUE = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--super-prefix", "--list-cmds"]);
+/** O `push` e o encanamento dele: o mesmo julgamento de destino (`judgePush`). */
+const GIT_PUSH_SUBCOMMANDS = new Set(["push", "send-pack", "http-push"]);
+
+/**
+ * O comando é `git push` (ou o encanamento dele), também por alias de `-c`
+ * (`-c alias.p=push p …`): as palavras já sem atribuição, invólucro nem `rtk`.
+ * @param {string[]} command
+ */
+function isGitPush(command) {
+  return (
+    command[0] === "git" &&
+    command.slice(1).some((word) => GIT_PUSH_SUBCOMMANDS.has(word) || /^(?:-c)?alias\.[^=]*=\s*(?:push|send-pack|http-push)(?:\s|$)/i.test(word))
+  );
+}
+
+/** Opção longa que nomeia um programa que o git executa, por subcomando (o push trata as suas em `judgePush`). */
+const GIT_PROGRAM_OPTIONS = Object.assign(Object.create(null), {
+  fetch: ["--upload-pack"],
+  pull: ["--upload-pack"],
+  clone: ["--upload-pack"],
+  "ls-remote": ["--upload-pack"],
+  archive: ["--exec"],
+});
+
+/**
+ * O git não pergunta (decisão do dono, 11/10/2026): passa ou nega. O que
+ * perguntava — descarte fora de worktree de trabalho (G44), programa que o git
+ * executa, ref protegida, tag, histórico, configuração pessoal — nega, com a
+ * razão e o que fazer em vez disso.
+ */
+const GIT_NEVER_ASKS = "o git passa ou nega, não pergunta";
+/** Como o agente corrige o descarte negado: o git que descarta trabalho é de worktree de trabalho. */
+const IN_WORKTREE = "rode isso numa worktree de trabalho (`git worktree add -b <tipo>/<slug> .claude/worktrees/<nome> origin/dev`)";
+const needsWorktree = (what) => deny(`${what}; ${IN_WORKTREE}`);
+
+// ---------------------------------------------------------------------------
+// Opção longa abreviada do git (#475)
+
+/**
+ * O git aceita o prefixo único de uma opção longa (`reset --har`, `switch
+ * --discard`, `tag --dele`, `worktree remove --forc`, `config --glo`): a forma
+ * abreviada age como a completa, e o classificador só reconhecia a completa —
+ * a abreviada passava sem pergunta. Por subcomando, as opções longas que o
+ * classificador lê, nas duas direções (as que escrevem e as que liberam, como
+ * `clean --dry-run`, `rm --cached`, `restore --staged`), na ordem do mais
+ * perigoso ao menos: o prefixo que casa mais de uma (`--f` em `push`) o git
+ * recusa como ambíguo, e aqui vale a primeira.
+ *
+ * Opção exata do git que prefixa outra da tabela entra também, como
+ * `fetch --prune`, que prefixa `--prune-tags`: a forma exata vence a
+ * abreviação, e sem ela a rotina perguntaria. Opção que o git lê pelo analisador
+ * de diff (`--output`, `--ext-diff`, `--textconv`) e as opções globais
+ * (`--git-dir`, `--no-pager`) não aceitam abreviação e ficam de fora.
+ */
+const PUSH_OPTIONS = [
+  "--force", "--force-with-lease", "--force-if-includes", "--delete", "--mirror", "--all", "--branches", "--prune",
+  "--no-verify", "--tags", "--follow-tags", "--repo", "--receive-pack", "--exec", "--push-option", "--stdin",
+];
+
+const GIT_LONG_OPTIONS = {
+  push: PUSH_OPTIONS,
+  "send-pack": PUSH_OPTIONS,
+  "http-push": PUSH_OPTIONS,
+  worktree: ["--force", "--orphan", "--reason"],
+  reset: ["--hard", "--merge"],
+  clean: ["--dry-run"],
+  checkout: ["--force", "--pathspec-from-file", "--orphan", "--ignore-other-worktrees"],
+  switch: ["--force", "--discard-changes", "--ignore-other-worktrees", "--force-create", "--create", "--orphan"],
+  restore: ["--worktree", "--staged"],
+  rm: ["--force", "--cached"],
+  tag: ["--force", "--delete", "--message", "--file", "--local-user"],
+  branch: [
+    "--force", "--delete", "--move", "--copy", "--set-upstream-to", "--unset-upstream", "--edit-description", "--track", "--no-track",
+    "--create-reflog", "--list", "--show-current", "--contains", "--no-contains", "--merged", "--no-merged", "--points-at", "--sort", "--format",
+  ],
+  fetch: ["--prune-tags", "--force", "--tags", "--refmap", "--prune", "--upload-pack"],
+  pull: ["--prune-tags", "--force", "--tags", "--refmap", "--prune", "--upload-pack"],
+  clone: ["--upload-pack"],
+  "ls-remote": ["--upload-pack"],
+  archive: ["--exec"],
+  gc: ["--prune"],
+  commit: [
+    "--no-verify", "--message", "--file", "--reuse-message", "--reedit-message", "--template", "--author", "--date", "--fixup",
+    "--squash", "--trailer", "--cleanup",
+  ],
+  rebase: ["--exec"],
+  difftool: ["--extcmd"],
+  "symbolic-ref": ["--delete"],
+  "update-ref": ["--stdin"],
+  config: [
+    "--global", "--system", "--file", "--edit", "--add", "--replace-all", "--unset-all", "--unset", "--rename-section", "--remove-section",
+    "--get-all", "--get-regexp", "--get-urlmatch", "--get-color", "--get-colorbool", "--get", "--list", "--show-origin", "--show-scope",
+    "--name-only", "--blob", "--type", "--default", "--comment", "--value",
+  ],
+};
+
+/**
+ * Troca cada opção longa abreviada pela completa do subcomando (`--har` →
+ * `--hard`, `--forc=x` → `--force=x`), antes de o git ser julgado; o valor
+ * depois de `=` e tudo depois de `--` ficam como estão. A forma exata vence a
+ * abreviação; a que não prefixa nenhuma opção da tabela passa intacta.
+ * @param {string | undefined} sub
+ * @param {string[]} args
+ * @returns {string[]}
+ */
+function expandGitOptions(sub, args) {
+  if (typeof sub !== "string" || !Object.hasOwn(GIT_LONG_OPTIONS, sub)) return args;
+  const known = GIT_LONG_OPTIONS[/** @type {keyof typeof GIT_LONG_OPTIONS} */ (sub)];
+  const out = [];
+  for (let k = 0; k < args.length; k++) {
+    const arg = args[k];
+    if (arg === "--") {
+      out.push(...args.slice(k));
+      break;
+    }
+    if (!arg.startsWith("--")) {
+      out.push(arg);
+      continue;
+    }
+    const eq = arg.indexOf("=");
+    const name = eq === -1 ? arg : arg.slice(0, eq);
+    const full = name.length > 2 && !known.includes(name) ? known.find((option) => option.startsWith(name)) : undefined;
+    out.push(full === undefined ? arg : `${full}${eq === -1 ? "" : arg.slice(eq)}`);
+  }
+  return out;
+}
 
 /**
  * `git`: tira as opções globais (`-C dir`, `-c k=v`, `--git-dir`,
@@ -1308,48 +1554,74 @@ const GIT_GLOBAL_VALUE = new Set(["-C", "-c", "--git-dir", "--work-tree", "--nam
 function judgeGit(args, context) {
   let k = 0;
   const configs = [];
-  /** `-C` encadeia (`git -C a -C b` roda em `a/b`); `--git-dir`, `--work-tree` e `GIT_DIR=` apontam o repositório. */
+  /** `-C` encadeia: `git -C a -C b` roda em `a/b`. */
   let place = null;
-  const repos = [];
-  for (const assignment of context.assigned ?? []) {
-    const match = /^(?:GIT_DIR|GIT_WORK_TREE)=(.*)$/s.exec(assignment);
-    if (match) repos.push(match[1]);
-  }
   while (k < args.length && args[k].startsWith("-")) {
     const arg = args[k];
     const next = args[k + 1] ?? "";
     if (GIT_GLOBAL_VALUE.has(arg)) {
       if (arg === "-c" || arg === "--config-env") configs.push(next);
       if (arg === "-C") place = joinPath(place, next);
-      if (arg === "--git-dir" || arg === "--work-tree") repos.push(next);
       k += 2;
       continue;
     }
     if (/^-c./.test(arg)) configs.push(arg.slice(2));
     if (arg.startsWith("--config-env=")) configs.push(arg.slice("--config-env=".length));
-    const repo = /^--(?:git-dir|work-tree)=(.*)$/s.exec(arg);
-    if (repo) repos.push(repo[1]);
     k++;
   }
+  const sub = args[k];
+  const pushing = sub !== undefined && GIT_PUSH_SUBCOMMANDS.has(sub);
   let worst = null;
+  /** `-c alias.<sub>=<valor>` sem `!`: o git roda `<valor> <resto>` no lugar do subcomando. */
+  const aliased = [];
   for (const entry of configs) {
     const eq = entry.indexOf("=");
     const key = (eq === -1 ? entry : entry.slice(0, eq)).toLowerCase();
     const value = eq === -1 ? "" : entry.slice(eq + 1);
-    if (GIT_EXEC_KEY.test(key)) worst = stronger(worst, ask(`git -c ${key} executa programa ou desliga os hooks`));
-    if (key.startsWith("alias.") && value.trimStart().startsWith("!")) worst = stronger(worst, ask("alias do git que roda shell"));
-  }
-  const sub = args[k];
-  const rest = args.slice(k + 1);
-  const env = context.env ?? NO_ENV;
-  // O repositório fora do projeto (e fora do temporário): o que não só lê pergunta.
-  if (sub !== undefined && !GIT_READ_SUBCOMMANDS.has(sub)) {
-    for (const dir of [place, ...repos.map((repo) => joinPath(place, repo))]) {
-      if (dir !== null && outsideWrite(dir, env)) worst = stronger(worst, ask(`git ${sub} num repositório fora do projeto (${dir})`));
+    if (GIT_EXEC_KEY.test(key)) worst = stronger(worst, deny(`git -c ${key} executa programa ou desliga os hooks; ${GIT_NEVER_ASKS}`));
+    if (key.startsWith("alias.") && value.trimStart().startsWith("!")) worst = stronger(worst, deny(`alias do git que roda shell; ${GIT_NEVER_ASKS}`));
+    else if (sub !== undefined && key === `alias.${sub.toLowerCase()}` && value.trim() !== "") aliased.push(value);
+    // `remote.<r>.push`, `push.default=upstream`, `branch.<b>.merge`, `url.*.pushInsteadOf`:
+    // trocam o destino do push por fora do refspec que se lê (#476). Também
+    // `include.path`, que carrega um arquivo com qualquer uma delas (#505). No
+    // push o destino não se resolve pelo texto, então nega e manda tirar o
+    // `-c`; fora do push a chave não decide destino nenhum e passa.
+    if (pushing && (/^(?:push|remote|branch|url)\./.test(key) || GIT_PUSH_KEY.test(key))) {
+      worst = stronger(
+        worst,
+        deny(`git -c ${key} troca o destino do push e o texto não o resolve: tire o -c e explicite o destino (\`git push origin <branch>\`)`),
+      );
     }
   }
-  // Arquivo de saída: relativo ao diretório do `-C`.
-  for (const out of gitOutputs(sub, rest)) worst = stronger(worst, writeRisk(joinPath(place, out), env));
+  // A opção longa abreviada vale como a completa (#475): todo julgamento
+  // abaixo lê a forma completa.
+  const rest = expandGitOptions(sub, args.slice(k + 1));
+  const env = context.env ?? NO_ENV;
+  // Opção que nomeia um programa que o git roda no repositório local (`--upload-pack`,
+  // `archive --exec`): o programa é do texto, e o git não pergunta, então nega.
+  for (const option of GIT_PROGRAM_OPTIONS[sub] ?? []) {
+    if (rest.some((arg) => arg === option || arg.startsWith(`${option}=`))) {
+      worst = stronger(worst, deny(`git ${sub} ${option} executa o programa indicado no repositório local: tire a opção; ${GIT_NEVER_ASKS}`));
+    }
+  }
+  // Arquivo de saída: relativo ao diretório do `-C`. Escrever fora do projeto
+  // (ou na lista de permissões) nega: o git não pergunta.
+  for (const out of gitOutputs(sub, rest)) {
+    const written = writeRisk(joinPath(place, out), env);
+    if (written) worst = stronger(worst, deny(`${written.reason}; ${GIT_NEVER_ASKS}`));
+  }
+  // O alias vale além do subcomando de mesmo nome (o git não deixa alias
+  // sobrescrever comando interno, então os dois são julgados): `git -c
+  // alias.p=push p origin main` é push para `main`.
+  for (const value of aliased) {
+    const depth = context.aliasDepth ?? 0;
+    worst = stronger(
+      worst,
+      depth >= 4
+        ? deny(`alias do git encadeado demais para julgar; ${GIT_NEVER_ASKS}`)
+        : judgeGit([...args.slice(0, k), ...splitString(value, {}), ...args.slice(k + 1)], { ...context, aliasDepth: depth + 1 }),
+    );
+  }
   return stronger(worst, judgeGitSubcommand(sub, rest, { ...context, place }));
 }
 
@@ -1378,7 +1650,7 @@ function gitOutputs(sub, rest) {
  * que desligam os hooks): `-c` e `git config` com elas perguntam.
  */
 const GIT_EXEC_KEY =
-  /^(?:core\.(?:pager|editor|sshcommand|fsmonitor|hookspath|askpass)|diff\.external|sequence\.editor|credential\.helper|credential\..+\.helper|gpg\.program|gpg\.[^.]+\.program|.+\.textconv|diff\..+\.command|merge\..+\.driver|filter\..+\.(?:clean|smudge|process)|pager\..+|uploadpack\.packobjectshook)$/;
+  /^(?:core\.(?:pager|editor|sshcommand|gitproxy|fsmonitor|hookspath|askpass)|diff\.external|sequence\.editor|credential\.helper|credential\..+\.helper|gpg\.program|gpg\.[^.]+\.program|.+\.textconv|diff\..+\.command|merge\..+\.driver|filter\..+\.(?:clean|smudge|process)|pager\..+|uploadpack\.packobjectshook)$/;
 
 const has = (args, ...flags) => args.some((arg) => flags.includes(arg));
 
@@ -1406,24 +1678,67 @@ function optionPayloads(rest, short, long) {
   return found;
 }
 
+/**
+ * O contexto do git conferido por `judgeShell` (#476), só para o comando de
+ * cima: dentro de `xargs`, `find -exec`, `sh -c` ou lançador não vale.
+ * @returns {GitTarget | null}
+ */
+function verifiedGit(context) {
+  return context.depth === 0 && !context.bulk ? context.env?.[GIT_VERIFIED] ?? null : null;
+}
+
+/**
+ * Worktree de trabalho conferida (#476): registrada, diferente da checkout
+ * principal (que guarda o WIP do dono, G44) e fora de branch protegida. Ali o
+ * git que descarta trabalho passa sem pergunta, por decisão do dono.
+ */
+function inWorkTree(context) {
+  const verified = verifiedGit(context);
+  if (verified === null || verified.isMainWorktree !== false) return false;
+  const branch = pushDestination(verified.branch);
+  return !PROTECTED_BRANCHES.has(branch) && branch !== "HEAD";
+}
+
+/**
+ * `checkout`/`switch --ignore-other-worktrees` põe na worktree o branch que
+ * outra já usa: com `main`/`staging`/`dev` (ou nome que só se resolve na hora,
+ * como `-` e `@{-1}`), a worktree de trabalho vira uma em branch protegida.
+ * @param {string[]} rest
+ * @param {string} verb
+ */
+function ignoreOtherWorktrees(rest, verb) {
+  const end = rest.indexOf("--");
+  const args = end === -1 ? rest : rest.slice(0, end);
+  if (!args.includes("--ignore-other-worktrees")) return null;
+  const risky = args.some((arg) => arg === "-" || (!arg.startsWith("-") && (/[@$`*?[\]{}~^]/.test(arg) || PROTECTED_BRANCHES.has(pushDestination(arg)) || pushDestination(arg) === "HEAD")));
+  return risky ? deny(`${verb} --ignore-other-worktrees põe uma branch protegida (main/staging/dev) nesta worktree`) : null;
+}
+
 function judgeGitSubcommand(sub, rest, context) {
+  const work = inWorkTree(context);
   switch (sub) {
     case "push":
-      return judgePush(rest);
-    // Encanamento do push: mesmo destino, mesma proteção. `--stdin` lê os refs da entrada.
+      // O destino real (#476): resolvido pelo git no comando conferido; sem
+      // ele, o julgamento pelo texto de sempre.
+      return judgePush(rest, verifiedGit(context));
+    // Encanamento do push: mesmo destino, mesma proteção. `--stdin` lê os refs
+    // da entrada, e o destino não se vê pelo texto: nega, como o push que não resolve.
     case "send-pack":
     case "http-push":
-      return stronger(judgePush(rest), has(rest, "--stdin") ? ask(`git ${sub} --stdin lê os refs da entrada`) : null);
+      return stronger(
+        judgePush(rest),
+        has(rest, "--stdin") ? deny(`git ${sub} --stdin lê os refs da entrada e o destino não se vê pelo texto: explicite o destino (\`git push origin <branch>\`)`) : null,
+      );
     case "receive-pack":
-      return ask("git receive-pack atualiza refs lidos da entrada");
+      return deny(`git receive-pack atualiza refs lidos da entrada; ${GIT_NEVER_ASKS}`);
     case "branch":
       return judgeBranchWrite(rest);
     case "symbolic-ref": {
       const positional = rest.filter((arg) => !arg.startsWith("-"));
-      return positional.length >= 2 || has(rest, "-d", "--delete") ? ask("git symbolic-ref reescreve o HEAD") : null;
+      return positional.length >= 2 || has(rest, "-d", "--delete") ? deny("git symbolic-ref reescreve o HEAD: troque de branch com `git switch`") : null;
     }
     // `commit --amend` e `rebase`/`rebase -i` em branch de trabalho são rotina
-    // (G85): o portão de reescrita é o push forçado, que já pergunta.
+    // (G85): o portão da reescrita é o push para branch protegida, que nega.
     case "rebase": {
       let worst = null;
       for (const payload of optionPayloads(rest, "x", "--exec")) worst = stronger(worst, riskOf(payload, context.depth + 1, true, context.env));
@@ -1445,19 +1760,25 @@ function judgeGitSubcommand(sub, rest, context) {
       return rest[0] === "run" ? gitShellPayload(rest.slice(1), context) : null;
     case "config":
       return judgeGitConfig(rest, context);
+    // Em worktree de trabalho conferida, o que descarta só o trabalho dela
+    // passa (#476); na checkout principal ou sem contexto, nega e manda rodar
+    // numa worktree (G44, que protege o WIP do dono).
     case "commit":
-      return judgeCommit(rest);
+      return work ? null : judgeCommit(rest);
     case "reset":
-      return has(rest, "--hard", "--merge") ? ask("git reset --hard/--merge descarta mudanças") : null;
+      return !work && has(rest, "--hard", "--merge") ? needsWorktree("git reset --hard/--merge descarta mudanças") : null;
     case "clean":
-      return has(rest, "-n", "--dry-run") || rest.some((arg) => shortCluster(arg, "n")) ? null : ask("git clean apaga arquivo não versionado");
+      return work || has(rest, "-n", "--dry-run") || rest.some((arg) => shortCluster(arg, "n")) ? null : needsWorktree("git clean apaga arquivo não versionado");
     case "checkout":
-      return stronger(judgeCheckout(rest), branchOptions(rest, "git checkout", "b", "B", ["--orphan"], []));
+      return stronger(
+        stronger(work ? null : judgeCheckout(rest), branchOptions(rest, "git checkout", "b", "B", ["--orphan"], [], work)),
+        ignoreOtherWorktrees(rest, "git checkout"),
+      );
     case "switch": {
       const discard = has(rest, "-f", "--force", "--discard-changes") || rest.some((arg) => shortCluster(arg, "f"));
       return stronger(
-        discard ? ask("git switch descarta mudanças") : null,
-        branchOptions(rest, "git switch", "c", "C", ["--create", "--orphan"], ["--force-create"]),
+        stronger(discard && !work ? needsWorktree("git switch descarta mudanças") : null, ignoreOtherWorktrees(rest, "git switch")),
+        branchOptions(rest, "git switch", "c", "C", ["--create", "--orphan"], ["--force-create"], work),
       );
     }
     case "fetch":
@@ -1468,17 +1789,16 @@ function judgeGitSubcommand(sub, rest, context) {
         if (k > 0 && /^(?:-[mFu]|--message|--file|--local-user)$/.test(rest[k - 1])) return false;
         return arg === "--force" || arg === "--delete" || (/^-[A-Za-z]+$/.test(arg) && /[fd]/.test(arg.slice(1)));
       });
-      return rewrites ? ask("git tag -f/-d reescreve ou apaga tag (regra 22)") : null;
+      return rewrites ? deny("git tag -f/-d reescreve ou apaga tag (regra 22: toda tag SemVer tem Release)") : null;
     }
     case "replace":
-      return rest.length === 0 || has(rest, "-l", "--list") ? null : ask("git replace troca um objeto por outro em todo o histórico");
+      return rest.length === 0 || has(rest, "-l", "--list") ? null : deny("git replace troca um objeto por outro em todo o histórico");
     case "restore": {
       const staged = has(rest, "--staged", "-S") || rest.some((arg) => shortCluster(arg, "S"));
       const worktree = has(rest, "--worktree", "-W") || rest.some((arg) => shortCluster(arg, "W"));
-      return staged && !worktree ? null : ask("git restore sobrescreve arquivo do working tree");
+      return work || (staged && !worktree) ? null : needsWorktree("git restore sobrescreve arquivo do working tree");
     }
-    case "stash":
-      return rest[0] === "drop" || rest[0] === "clear" ? ask(`git stash ${rest[0]} apaga stash`) : null;
+    // `stash drop/clear` passa (11/10/2026): o stash é descartável, e o git não pergunta.
     case "worktree":
       if (rest[0] === "add") {
         const positional = [];
@@ -1486,30 +1806,48 @@ function judgeGitSubcommand(sub, rest, context) {
           if (/^(?:-[bB]|--orphan|--reason)$/.test(rest[k])) k++;
           else if (!rest[k].startsWith("-")) positional.push(rest[k]);
         }
-        const path = positional[0] === undefined ? null : outsideWrite(joinPath(context.place ?? null, positional[0]), context.env ?? NO_ENV);
+        const written = positional[0] === undefined ? null : outsideWrite(joinPath(context.place ?? null, positional[0]), context.env ?? NO_ENV);
+        const path = written ? deny(`${written.reason}; crie a worktree em .claude/worktrees/<nome> ou no temporário`) : null;
         return stronger(path, branchOptions(rest.slice(1), "git worktree add", "b", "B", ["--orphan"], []));
       }
-      return rest[0] === "remove" && (has(rest, "--force", "-f") || rest.some((arg) => shortCluster(arg, "f")))
-        ? ask("git worktree remove --force descarta mudanças")
-        : null;
+      if (rest[0] !== "remove") return null;
+      {
+        const args = rest.slice(1);
+        const dashDash = args.indexOf("--");
+        const options = dashDash === -1 ? args.filter((arg) => arg.startsWith("-")) : args.slice(0, dashDash).filter((arg) => arg.startsWith("-"));
+        const targets = dashDash === -1 ? args.filter((arg) => !arg.startsWith("-")) : [...args.slice(0, dashDash).filter((arg) => !arg.startsWith("-")), ...args.slice(dashDash + 1)];
+        const forces = options.reduce((n, arg) => n + (arg === "--force" ? 1 : /^-[A-Za-z]+$/.test(arg) ? [...arg.slice(1)].filter((c) => c === "f").length : 0), 0);
+        if (forces === 0) return null;
+        // Dentro de `xargs`/`find -exec` o alvo só existe na execução
+        // (`xargs -I@ … .claude/worktrees/@`): nega sempre.
+        if (context.bulk) return deny("git worktree remove --force em massa (xargs/find) monta o alvo na execução: remova uma worktree por comando, com o caminho escrito");
+        // `-ff` remove worktree travada: a trava é de outra sessão, nega sempre.
+        if (forces > 1) return deny("git worktree remove -ff passa por cima de worktree travada por outra sessão: use `--force` uma vez");
+        // Worktree de trabalho sai sem pergunta, por autorização do dono
+        // (06/10/2026): é a limpeza de rotina depois do merge. Sem alvo ou
+        // com qualquer outro caminho, nega.
+        return targets.length > 0 && targets.every(isWorkWorktree)
+          ? null
+          : deny("git worktree remove --force fora de worktree de trabalho (.claude/worktrees/<nome>) descarta mudanças: escreva o caminho dela");
+      }
     case "filter-branch":
     case "filter-repo":
-      return ask(`git ${sub} reescreve histórico`);
+      return deny(`git ${sub} reescreve histórico; ${GIT_NEVER_ASKS}`);
     case "update-ref": {
-      if (has(rest, "-d", "--stdin")) return ask("git update-ref apaga referência");
+      if (has(rest, "-d", "--stdin")) return deny("git update-ref -d/--stdin apaga ou reescreve referência fora do que se lê");
       return refWrite(rest.find((arg) => !arg.startsWith("-")), "git update-ref");
     }
     case "reflog":
-      return rest[0] === "expire" || rest[0] === "delete" ? ask(`git reflog ${rest[0]} apaga histórico de referência`) : null;
+      return rest[0] === "expire" || rest[0] === "delete" ? deny(`git reflog ${rest[0]} apaga histórico de referência; ${GIT_NEVER_ASKS}`) : null;
     case "gc":
-      return rest.some((arg) => arg.startsWith("--prune")) ? ask("git gc --prune descarta objetos") : null;
+      return rest.some((arg) => arg.startsWith("--prune")) ? deny("git gc --prune descarta objetos; use `git gc` sem --prune") : null;
     case "prune":
-      return ask("git prune descarta objetos");
+      return deny("git prune descarta objetos; use `git gc` sem --prune");
     case "rm": {
-      if (rest.includes("--cached")) return null;
+      if (work || rest.includes("--cached")) return null;
       const recursive = rest.some((arg) => arg === "-r" || shortCluster(arg, "r"));
       const force = rest.some((arg) => arg === "-f" || arg === "--force" || shortCluster(arg, "f"));
-      return recursive || force ? ask("git rm -r/-f apaga arquivos") : null;
+      return recursive || force ? needsWorktree("git rm -r/-f apaga arquivos") : null;
     }
     default:
       return null;
@@ -1521,9 +1859,38 @@ const CONFIG_VALUE = new Set(["-f", "--file", "--blob", "--type", "--default", "
 const CONFIG_WRITE = new Set(["--add", "--replace-all", "--unset", "--unset-all", "--rename-section", "--remove-section"]);
 
 /**
+ * Chaves de configuração do git que decidem para onde o push vai (#505), em
+ * minúsculas: `push.*` (`default`, `followTags`…), `remote.*` (`<r>.push`,
+ * `<r>.url`, `<r>.mirror`, `pushDefault`…), `url.<base>.insteadOf` e
+ * `.pushInsteadOf`, e `branch.<b>.merge`/`.remote`/`.pushRemote` (o upstream e
+ * o remoto de push), além de `include.path`/`includeIf.*.path`, que carregam
+ * outro arquivo com qualquer uma delas. Gravada, a chave persiste: o `git push
+ * origin feat/x` seguinte vai para onde ela manda, sem que o refspec diga —
+ * `remote.origin.push=refs/heads/feat/x:refs/heads/dev` empurra `dev`.
+ * Esta é a lista larga, de quem lê (o `-c` e a variável de chave do push, no
+ * `git push`, negam); `GIT_PUSH_WRITE_KEY` é a de quem grava. `branch.<b>.description`,
+ * `.rebase` e o resto de `branch.*` não desviam nada.
+ */
+const GIT_PUSH_KEY = /^(?:push\..+|remote\..+|url\..+\.(?:push)?insteadof|branch\..+\.(?:merge|remote|pushremote)|include\.path|includeif\..+\.path)$/;
+
+/**
+ * As chaves que desviam o destino do push e que o git não grava sozinho (#505):
+ * `remote.<r>.push`/`mirror`, `remote.pushDefault`, `push.*`,
+ * `url.*.pushInsteadOf`, `branch.<b>.pushRemote` e `include.path`/`includeIf`.
+ * `branch.<b>.merge`/`remote` e `remote.<r>.url` ficam de fora: `git push -u`,
+ * `git branch -u` e `git remote add` os gravam pelo próprio git.
+ */
+const GIT_PUSH_WRITE_KEY = /^(?:push\..+|remote\.pushdefault|remote\..+\.(?:push|mirror)|url\..+\.pushinsteadof|branch\..+\.pushremote|include\.path|includeif\..+\.path)$/;
+
+/**
  * `git config` que grava chave que executa programa (`core.pager`,
- * `core.hooksPath`…) ou qualquer `alias.*`: o efeito persiste depois da
- * chamada. Leitura (`--get`, `--list`, `get`, `list`) não pergunta.
+ * `core.hooksPath`…), qualquer `alias.*`, a configuração pessoal ou do sistema
+ * (`--global`, `--system`, `--file` fora do projeto) ou `--edit` nega: o efeito
+ * persiste depois da chamada. Gravar chave que desvia o destino do push
+ * (`GIT_PUSH_WRITE_KEY`) também nega: o `git push` seguinte só a vê com o
+ * contexto conferido, e as formas fora dele (`-c`, `--git-dir`, `sh -c`,
+ * alias) a ignorariam. Ler (`--get`, `--list`, `get`, `list`) e o resto da
+ * configuração local passam.
  */
 function judgeGitConfig(rest, context) {
   const positional = [];
@@ -1532,7 +1899,7 @@ function judgeGitConfig(rest, context) {
   let personal = null;
   for (let k = 0; k < rest.length; k++) {
     const arg = rest[k];
-    if (arg === "-e" || arg === "--edit") return ask("git config --edit grava qualquer chave");
+    if (arg === "-e" || arg === "--edit") return deny("git config --edit grava qualquer chave: use `git config <chave> <valor>`");
     if (CONFIG_READ.has(arg)) return null;
     if (arg === "--global" || arg === "--system") personal = arg;
     else if (arg.startsWith("--file=")) files.push(arg.slice("--file=".length));
@@ -1542,18 +1909,23 @@ function judgeGitConfig(rest, context) {
     else if (!arg.startsWith("-")) positional.push(arg);
   }
   if (positional[0] === "get" || positional[0] === "list") return null;
-  if (positional[0] === "edit") return ask("git config edit grava qualquer chave");
+  if (positional[0] === "edit") return deny("git config edit grava qualquer chave: use `git config <chave> <valor>`");
   const subcommand = ["set", "unset", "rename-section", "remove-section"].includes(positional[0]);
   const key = (subcommand ? positional[1] : positional[0])?.toLowerCase();
   // `git config chave` sozinho lê.
   if (!key || !(write || subcommand || positional.length >= 2)) return null;
   // Gravar em `--global`/`--system` ou em arquivo fora do projeto é configuração pessoal.
-  if (personal) return ask(`git config ${personal} grava na configuração pessoal ou do sistema`);
+  if (personal) return deny(`git config ${personal} grava na configuração pessoal ou do sistema: use --local`);
   for (const file of files) {
-    if (outsideWrite(joinPath(context.place ?? null, file), context.env ?? NO_ENV)) return ask(`git config --file grava fora do projeto (${file})`);
+    if (outsideWrite(joinPath(context.place ?? null, file), context.env ?? NO_ENV)) return deny(`git config --file grava fora do projeto (${file}): use --local`);
   }
-  if (GIT_EXEC_KEY.test(key)) return ask(`git config ${key} executa programa ou desliga os hooks`);
-  if (key.startsWith("alias.") || key === "alias") return ask("git config alias.* cria comando do git");
+  if (GIT_EXEC_KEY.test(key)) return deny(`git config ${key} executa programa ou desliga os hooks; ${GIT_NEVER_ASKS}`);
+  if (key.startsWith("alias.") || key === "alias") return deny("git config alias.* cria comando do git: chame o comando inteiro");
+  if (GIT_PUSH_WRITE_KEY.test(key)) {
+    return deny(
+      `git config ${key} desvia o destino do push de forma persistente, e o push que a usa fora do contexto do git não a vê: não é rotina; passe o destino no comando (\`git push origin <branch>:<branch>\`). \`git push -u\` e \`git branch -u\` gravam o upstream pelo próprio git`,
+    );
+  }
   return null;
 }
 
@@ -1564,11 +1936,11 @@ function judgeCommit(rest) {
   for (let k = 0; k < rest.length; k++) {
     const arg = rest[k];
     if (arg === "--") break;
-    if (arg === "--no-verify") return ask("git commit --no-verify pula os hooks do projeto");
+    if (arg === "--no-verify") return needsWorktree("git commit --no-verify pula os hooks do projeto");
     if (/^--(?:message|file|reuse-message|reedit-message|template|author|date|fixup|squash|trailer|cleanup)$/.test(arg)) k++;
     else if (/^-[A-Za-z]+$/.test(arg)) {
       for (let i = 1; i < arg.length; i++) {
-        if (arg[i] === "n") return ask("git commit -n pula os hooks do projeto");
+        if (arg[i] === "n") return needsWorktree("git commit -n pula os hooks do projeto");
         if (COMMIT_VALUE.includes(arg[i])) {
           if (i === arg.length - 1) k++;
           break;
@@ -1592,17 +1964,17 @@ function judgeCheckout(rest) {
   const positional = [];
   for (let k = 0; k < rest.length; k++) {
     const arg = rest[k];
-    if (arg === "--") return rest.length > k + 1 ? ask("git checkout -- <caminho> sobrescreve arquivo") : null;
-    if (arg === "-f" || arg === "--force" || shortCluster(arg, "f")) return ask("git checkout -f descarta mudanças");
-    if (arg === "-B") return ask("git checkout -B recria o branch");
-    if (arg.startsWith("--pathspec-from-file")) return ask("git checkout de caminhos sobrescreve arquivo");
+    if (arg === "--") return rest.length > k + 1 ? needsWorktree("git checkout -- <caminho> sobrescreve arquivo") : null;
+    if (arg === "-f" || arg === "--force" || shortCluster(arg, "f")) return needsWorktree("git checkout -f descarta mudanças");
+    if (arg === "-B") return needsWorktree("git checkout -B recria o branch");
+    if (arg.startsWith("--pathspec-from-file")) return needsWorktree("git checkout de caminhos sobrescreve arquivo");
     if (arg === "-b" || arg === "--orphan") k++;
     else if (!arg.startsWith("-")) positional.push(arg);
   }
-  if (positional.includes(".")) return ask("git checkout . sobrescreve o working tree");
-  if (positional.length >= 2) return ask("git checkout <ref> <caminho> sobrescreve arquivo");
+  if (positional.includes(".")) return needsWorktree("git checkout . sobrescreve o working tree");
+  if (positional.length >= 2) return needsWorktree("git checkout <ref> <caminho> sobrescreve arquivo");
   if (positional.length === 1 && (FILE_LIKE.test(positional[0]) || PATH_ONLY.test(positional[0]))) {
-    return ask("git checkout <caminho> sobrescreve arquivo");
+    return needsWorktree("git checkout <caminho> sobrescreve arquivo");
   }
   return null;
 }
@@ -1610,16 +1982,51 @@ function judgeCheckout(rest) {
 const PUSH_VALUE = new Set(["--repo", "--receive-pack", "--exec", "--push-option"]);
 
 /**
- * Push: `main`, `staging` e `dev` por qualquer refspec (`HEAD:main`,
- * `refs/heads/main`, `:main`) são negados; forçado, `--all`/`--mirror`,
- * `--prune`, `--no-verify`, refspec com variável e push sem refspec
- * explícito perguntam.
+ * Push, por decisão do dono (11/10/2026): "git push não precisa de
+ * autorização". O julgamento tem dois resultados, passa ou nega — nunca
+ * `ask` —, e o que nega é bloqueio que o agente corrige sozinho.
+ *
+ * Nega: `main`, `staging` e `dev` por qualquer refspec (`HEAD:main`,
+ * `refs/heads/main`, `:main`, `+dev`) ou pelo destino real (`@{push}`,
+ * upstream, `HEAD`, configuração); `--all`/`--mirror`/`--branches` e o push
+ * "matching" (`:`); tag apagada ou sobrescrita (regra 22) e ref sem `/`
+ * apagada; e o destino que não dá para resolver — variável ou curinga no
+ * refspec, `HEAD` sem contexto, push sem refspec cujo `@{push}` o git não
+ * resolve ou cuja configuração (`remote.*.push`, `push.default`…) desvia —,
+ * com a instrução de explicitar o destino.
+ *
+ * Passa: o resto, inclusive forçado (`-f`, `--force`, `--force-with-lease`,
+ * `+ref`), `--no-verify`, `--prune` e apagar branch de trabalho
+ * `<tipo>/<slug>`. Sem o contexto conferido (#476) o refspec sem `:` vale como
+ * "mesmo nome"; com ele, o destino real vem do git: o push sem refspec vai
+ * para o `@{push}`, `HEAD` vai para o branch atual.
+ *
+ * Refspec sem `:` é resolvido pelo git local antes de virar destino: ref
+ * simbólica (`atalho` → `dev`, `main-worktree/HEAD`) leva o destino do alvo, e
+ * com `push.default=upstream` o nome de um branch vai para o upstream dele.
+ * @param {string[]} rest
+ * @param {GitTarget | null} [verified]
  */
-function judgePush(rest) {
+function judgePush(rest, verified = null) {
   let worst = null;
   let everything = false;
   let deleting = false;
+  let forced = false;
+  let otherRepo = false;
+  let tags = false;
+  /** `--tags` sozinho empurra só as tags: o push padrão (`push.default`) não entra. */
+  let onlyTags = false;
   const positional = [];
+  /**
+   * Destino que não dá para resolver: nega com a forma que o agente pode usar.
+   * Com configuração do push que desvia o destino (ou `push.default=upstream`),
+   * o refspec sem `:` também não se resolve, então o exemplo traz o `:`.
+   * @param {string} why
+   */
+  const unresolved = (why) => {
+    const example = verified !== null && (!safe || upstreamMode) ? "git push origin <branch>:<branch>" : "git push origin <branch>";
+    return deny(`git push sem destino resolvível (${why}): explicite o destino (\`${example}\`)`);
+  };
   for (let k = 0; k < rest.length; k++) {
     const arg = rest[k];
     if (arg === "--") {
@@ -1628,40 +2035,156 @@ function judgePush(rest) {
     }
     if (arg.startsWith("--")) {
       const flag = arg.split("=")[0];
-      if (flag === "--force" || flag === "--force-with-lease" || flag === "--force-if-includes") worst = stronger(worst, ask("push forçado"));
+      if (flag === "--force" || flag === "--force-with-lease" || flag === "--force-if-includes") forced = true;
       else if (flag === "--mirror" || flag === "--all" || flag === "--branches") {
         everything = true;
-        worst = stronger(worst, ask(`git push ${flag} empurra todos os branches`));
-      } else if (flag === "--prune") worst = stronger(worst, ask("git push --prune apaga branch remoto"));
-      else if (flag === "--no-verify") worst = stronger(worst, ask("git push --no-verify pula o hook pre-push"));
-      else if (flag === "--delete") deleting = true;
-      else if (PUSH_VALUE.has(flag) && !arg.includes("=")) k++;
+        worst = stronger(worst, deny(`git push ${flag} empurra todos os branches, branches protegidas inclusive`));
+      } else if (flag === "--delete") deleting = true;
+      else if (flag === "--tags") {
+        tags = true;
+        onlyTags = true;
+      } else if (flag === "--follow-tags") tags = true;
+      else if (flag === "--repo") otherRepo = true;
+      else if (flag === "--receive-pack" || flag === "--exec") {
+        worst = stronger(worst, deny(`git push ${flag} executa o programa indicado no repositório local: tire a opção; ${GIT_NEVER_ASKS}`));
+      }
+      if (PUSH_VALUE.has(flag) && !arg.includes("=")) k++;
       continue;
     }
     if (/^-[A-Za-z0-9]+$/.test(arg)) {
-      if (arg.includes("f")) worst = stronger(worst, ask("push forçado"));
+      if (arg.includes("f")) forced = true;
       if (arg.includes("d")) deleting = true;
       if (arg.endsWith("o")) k++;
       continue;
     }
     positional.push(arg);
   }
-  const refspecs = positional.slice(1);
-  if (refspecs.length === 0 && !everything) worst = stronger(worst, ask("git push sem refspec explícito pode ir para branch protegida"));
+  const push = verified?.push ?? null;
+  const safe = push !== null && push.safe === true;
+  // `git push <remoto> tag <nome>` é `refs/tags/<nome>` (com `--delete`, `:refs/tags/<nome>`).
+  // Com `--repo`, o repositório já foi dado e toda palavra é refspec.
+  const refspecs = [];
+  for (let k = otherRepo ? 0 : 1; k < positional.length; k++) {
+    if (positional[k] === "tag" && k + 1 < positional.length) refspecs.push(`refs/tags/${positional[++k]}`);
+    else refspecs.push(positional[k]);
+  }
+  if (refspecs.some((spec) => spec.startsWith("+"))) forced = true;
+  // `--tags`/`--follow-tags` forçado ou apagando sobrescreve tag publicada (regra 22).
+  if (tags && (forced || deleting)) worst = stronger(worst, deny("git push forçado com --tags/--follow-tags sobrescreve tag (regra 22)"));
+  /** Branch atual conferido (`null` sem contexto ou com HEAD destacado). */
+  const current =
+    verified && typeof verified.branch === "string" && verified.branch !== "" && pushDestination(verified.branch) !== "HEAD" ? pushDestination(verified.branch) : null;
+  const prefix = typeof push?.remote === "string" && push.remote !== "" ? `refs/remotes/${push.remote}/` : null;
+  /** Destino do `@{push}`, quando a configuração é segura e ele resolve. */
+  const pushTarget = safe && prefix !== null && typeof push.pushRef === "string" && push.pushRef.startsWith(prefix) ? push.pushRef.slice(prefix.length) : null;
+  // Com `push.default=upstream`/`tracking`, o refspec sem `:` que nomeia um
+  // branch vai para o upstream dele, não para o mesmo nome.
+  const upstreamMode = push !== null && (push.pushDefault === "upstream" || push.pushDefault === "tracking");
+  const symrefs = new Set(Array.isArray(push?.symrefs) ? push.symrefs.filter((name) => typeof name === "string").map(pushDestination) : []);
+  /** Destino que o push escreve, resolvido. */
+  const destinations = [];
+  /** Destinos que o git inferiu (`@{push}`, upstream), sem que o comando os escreva. */
+  const inferred = new Set();
+  if (refspecs.length === 0 && !everything && !onlyTags) {
+    const remote = otherRepo ? null : positional[0] ?? null;
+    const resolved = !otherRepo && pushTarget !== null && (remote === null || remote === push.remote);
+    if (resolved) {
+      destinations.push(pushTarget);
+      inferred.add(pushTarget);
+    } else {
+      worst = stronger(
+        worst,
+        unresolved(verified === null ? "o contexto do git não foi conferido" : "o git não resolve o @{push} ou a configuração do push desvia o destino"),
+      );
+    }
+  }
   for (const spec of refspecs) {
     const bare = spec.replace(/^\+/, "");
-    if (bare !== spec) worst = stronger(worst, ask("push forçado (+refspec)"));
     const colon = bare.indexOf(":");
-    const target = pushDestination(colon === -1 ? bare : bare.slice(colon + 1));
+    const source = colon === -1 ? bare : bare.slice(0, colon);
+    let target = pushDestination(colon === -1 ? bare : bare.slice(colon + 1));
     if (PROTECTED_BRANCHES.has(target)) return deny(`push direto para ${target}`);
-    // `$VAR`, curinga e o `{}` de `find -exec`/`xargs -I`: o destino só aparece na hora.
-    if (/[$`*{]/.test(bare)) worst = stronger(worst, ask("refspec com variável ou curinga"));
-    if (target === "HEAD") worst = stronger(worst, ask("git push HEAD sem destino explícito"));
-    // Apagar ref remoto (`:x` ou `--delete x`): branch de trabalho `<tipo>/<slug>`
-    // passa; tag (regra 22: toda tag SemVer tem Release) e nome sem `/` perguntam.
-    if ((deleting || (colon === 0 && bare.length > 1)) && (target.startsWith("tags/") || !target.includes("/"))) {
-      worst = stronger(worst, ask(`git push apaga ref remoto que pode ser tag (${target})`));
+    // Destino em `refs/remotes/…` (ou `remotes/…`, que o git casa com ele) e em namespace fora de
+    // `heads` e `tags` (`refs/notes/…`, `refs/stash`): não é branch de trabalho nem tag, e reescreve
+    // ref de acompanhamento ou de uso interno, como `refs/remotes/origin/dev`.
+    if (/^remotes\//.test(target) || (colon !== -1 && /^refs\/(?!heads\/|tags\/)/.test(bare.slice(colon + 1)))) {
+      worst = stronger(worst, deny(`git push para ${spec} escreve ref fora de heads e tags (refs/remotes, refs/notes…): empurre um branch <tipo>/<slug>`));
+      continue;
     }
+    // `:` (ou `+:`) é o push "matching": todo branch com o mesmo nome no remoto, `dev` inclusive.
+    if (target === "") {
+      worst = stronger(worst, deny(`git push ${spec} empurra todos os branches de mesmo nome, branches protegidas inclusive`));
+      continue;
+    }
+    // `$VAR`, curinga e o `{}` de `find -exec`/`xargs -I`: o destino só aparece na hora.
+    if (/[$`*{]/.test(bare)) {
+      worst = stronger(worst, unresolved("refspec com variável ou curinga"));
+      continue;
+    }
+    // Sem `:destino`, o git segue a ref simbólica até o branch dela:
+    // `main-worktree/HEAD` e `worktrees/<n>/HEAD` são o branch de outra worktree.
+    if (colon === -1 && !deleting && (/^(?:main-worktree|worktrees)\//.test(bare) || (target !== "HEAD" && bare.split("/").includes("HEAD")))) {
+      worst = stronger(worst, unresolved(`${spec} é o branch de outra worktree`));
+      continue;
+    }
+    // Branch local que é ref simbólica (`refs/heads/atalho` → `dev`): o push leva o alvo.
+    if (!deleting && source !== "" && symrefs.has(pushDestination(source))) {
+      worst = stronger(worst, unresolved(`${spec} é ref simbólica e leva o branch para onde ela aponta`));
+      continue;
+    }
+    // `HEAD` sem `:destino` vai para o branch atual, que só o contexto conferido conhece.
+    if (target === "HEAD") {
+      if (colon !== -1 || deleting || current === null) {
+        worst = stronger(worst, unresolved("HEAD sem destino explícito"));
+        continue;
+      }
+      target = current;
+      if (PROTECTED_BRANCHES.has(target)) return deny(`push direto para ${target} (HEAD é ${verified.branch})`);
+    } else if (colon === -1 && !deleting && verified) {
+      if (target !== current) {
+        // Outro nome: o git o resolve aqui (ref simbólica, upstream). Sem
+        // upstream, é o mesmo nome; com ele, o destino não é conhecido.
+        if (upstreamMode) {
+          worst = stronger(worst, unresolved(`push.default=upstream leva ${target} para o upstream dele`));
+          continue;
+        }
+      } else if (upstreamMode) {
+        if (pushTarget === null) {
+          worst = stronger(worst, unresolved("push.default=upstream e o upstream não resolve"));
+          continue;
+        }
+        target = pushTarget;
+        inferred.add(target);
+      }
+    }
+    // Sem `:destino`, `remote.<r>.push` na configuração pode trocar o destino.
+    if (colon === -1 && !deleting && verified && !safe) {
+      worst = stronger(worst, unresolved("a configuração do push (remote.*.push, remote.pushDefault, url.*.pushInsteadOf…) pode trocar o destino"));
+      continue;
+    }
+    // Apagar ref remoto (`:x` ou `--delete x`): branch de trabalho `<tipo>/<slug>`
+    // passa; tag (regra 22: toda tag SemVer tem Release) e nome sem `/` não.
+    if ((deleting || (colon === 0 && bare.length > 1)) && (target.startsWith("tags/") || !target.includes("/"))) {
+      worst = stronger(worst, deny(`git push apaga ref remoto que pode ser tag (${target}); regra 22`));
+    }
+    // Forçado sobre tag (regra 22): `refs/tags/…`, `tag <nome>`, destino curto
+    // sem `/`, que o remoto casa com a tag de mesmo nome (`HEAD:v1.0.0`), ou
+    // nome sem `/` que não é o branch atual (`-f origin v1.0.0`).
+    if (
+      forced &&
+      (target.startsWith("tags/") ||
+        (colon > 0 && !/^refs\/heads\//.test(bare.slice(colon + 1)) && !target.includes("/")) ||
+        (colon === -1 && !target.includes("/") && target !== current))
+    ) {
+      worst = stronger(worst, deny(`git push forçado pode sobrescrever tag (${target}); regra 22`));
+    }
+    destinations.push(target);
+  }
+  const protectedDestination = destinations.find((name) => PROTECTED_BRANCHES.has(pushDestination(name)));
+  if (protectedDestination !== undefined) {
+    // Destino que o git inferiu (`@{push}`, upstream): o branch de trabalho se empurra com o destino escrito.
+    const hint = inferred.has(protectedDestination) ? "; para empurrar o branch de trabalho, explicite o destino (`git push origin <branch>:<branch>`)" : "";
+    worst = stronger(worst, deny(`git push cujo destino real é branch protegida (${protectedDestination})${hint}`));
   }
   return worst;
 }
@@ -1676,7 +2199,7 @@ function judgeBranchWrite(rest) {
   );
   if (!writes) return null;
   const target = rest.find((arg) => !arg.startsWith("-") && PROTECTED_BRANCHES.has(pushDestination(arg)));
-  return target ? ask(`git branch reescreve a branch protegida ${target}`) : null;
+  return target ? deny(`git branch reescreve a branch protegida ${target}`) : null;
 }
 
 /**
@@ -1693,11 +2216,11 @@ function refWrite(ref, verb) {
   const bare = ref.replace(/^\+/, "");
   const target = pushDestination(bare);
   if (/[$`*{]/.test(bare)) {
-    return /^(?:remotes|notes)\//.test(target) ? null : ask(`${verb} escreve ref por curinga ou variável (${ref})`);
+    return /^(?:remotes|notes)\//.test(target) ? null : deny(`${verb} escreve ref por curinga ou variável (${ref}): escreva o nome da ref`);
   }
-  if (target === "HEAD") return ask(`${verb} reescreve o HEAD`);
-  if (PROTECTED_BRANCHES.has(target)) return ask(`${verb} reescreve a branch protegida ${target}`);
-  if (target.startsWith("tags/")) return ask(`${verb} escreve a tag ${target.slice("tags/".length)} (regra 22)`);
+  if (target === "HEAD") return deny(`${verb} reescreve o HEAD`);
+  if (PROTECTED_BRANCHES.has(target)) return deny(`${verb} reescreve a branch protegida ${target}`);
+  if (target.startsWith("tags/")) return deny(`${verb} escreve a tag ${target.slice("tags/".length)} (regra 22)`);
   return null;
 }
 
@@ -1713,14 +2236,17 @@ function refWrite(ref, verb) {
  * @param {string} forceLetters
  * @param {string[]} createLong
  * @param {string[]} forceLong
+ * @param {boolean} [work] worktree de trabalho conferida (#476): recriar
+ *   branch que não é protegida passa
  */
-function branchOptions(rest, verb, createLetters, forceLetters, createLong, forceLong) {
+function branchOptions(rest, verb, createLetters, forceLetters, createLong, forceLong, work = false) {
   let worst = null;
   const created = (name) => {
-    if (name && PROTECTED_BRANCHES.has(pushDestination(name))) worst = stronger(worst, ask(`${verb} cria a branch protegida ${name}`));
+    if (name && PROTECTED_BRANCHES.has(pushDestination(name))) worst = stronger(worst, deny(`${verb} cria a branch protegida ${name}`));
   };
-  const forced = () => {
-    worst = stronger(worst, ask(`${verb} recria o branch por cima (-B/-C)`));
+  const forced = (name) => {
+    if (work && name && !/[$`*?[\]{}]/.test(name) && !PROTECTED_BRANCHES.has(pushDestination(name)) && pushDestination(name) !== "HEAD") return;
+    worst = stronger(worst, needsWorktree(`${verb} recria o branch por cima (-B/-C)`));
   };
   for (let k = 0; k < rest.length; k++) {
     const arg = rest[k];
@@ -1728,14 +2254,14 @@ function branchOptions(rest, verb, createLetters, forceLetters, createLong, forc
     if (arg.startsWith("--")) {
       const eq = arg.indexOf("=");
       const flag = eq === -1 ? arg : arg.slice(0, eq);
-      if (forceLong.includes(flag)) forced();
+      if (forceLong.includes(flag)) forced(eq === -1 ? rest[++k] : arg.slice(eq + 1));
       else if (createLong.includes(flag)) created(eq === -1 ? rest[++k] : arg.slice(eq + 1));
       continue;
     }
     if (!/^-[A-Za-z]/.test(arg)) continue;
     for (let i = 1; i < arg.length; i++) {
       if (forceLetters.includes(arg[i])) {
-        forced();
+        forced(arg.slice(i + 1) || rest[k + 1]);
         if (i === arg.length - 1) k++;
         break;
       }
@@ -1764,14 +2290,14 @@ function judgeFetch(sub, rest) {
       specs.push(...rest.slice(k + 1));
       break;
     }
-    if (arg === "--prune-tags" || (/^-[A-Za-z]+$/.test(arg) && arg.includes("P"))) worst = stronger(worst, ask(`git ${sub} --prune-tags apaga tag local`));
+    if (arg === "--prune-tags" || (/^-[A-Za-z]+$/.test(arg) && arg.includes("P"))) worst = stronger(worst, deny(`git ${sub} --prune-tags apaga tag local (regra 22)`));
     if (arg === "--force" || shortCluster(arg, "f")) force = true;
     if (arg === "--tags" || shortCluster(arg, "t")) tags = true;
     if (arg === "--refmap") specs.push(rest[++k] ?? "");
     else if (arg.startsWith("--refmap=")) specs.push(arg.slice("--refmap=".length));
     else if (!arg.startsWith("-")) specs.push(arg);
   }
-  if (force && tags) worst = stronger(worst, ask(`git ${sub} --force --tags sobrescreve tag local`));
+  if (force && tags) worst = stronger(worst, deny(`git ${sub} --force --tags sobrescreve tag local (regra 22)`));
   for (const spec of specs) {
     const colon = spec.lastIndexOf(":");
     if (colon !== -1) worst = stronger(worst, refWrite(spec.slice(colon + 1), `git ${sub}`));
@@ -1788,6 +2314,95 @@ function pushDestination(ref) {
   let out = ref.replace(/^refs\//, "");
   out = out.replace(/^heads\//, "");
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Git em worktree de trabalho, com o contexto resolvido pelo chamador (#476)
+
+/** Marca interna de `judgeShell`: o chamador não a forja pelo `env`. */
+const GIT_VERIFIED = Symbol("contexto do git conferido");
+/** Opções globais do git que não mudam repositório nem configuração. */
+const PLAIN_GIT_GLOBAL_FLAGS = new Set(["--no-pager", "-P"]);
+/** Caminho de `-C` que o shell não expande: sem variável, crase, curinga, chave, `~` ou barra invertida. */
+const PLAIN_DIR = /^[^$`*?[\]{}~\\]+$/;
+
+/**
+ * Comando `git` cujo contexto o chamador pode resolver com o próprio git
+ * (#476), por lista de permissão: um único comando simples (sem laço, pipe,
+ * substituição, heredoc nem curinga), `git` como primeira palavra (só
+ * `rtk`/`rtk proxy` à frente — nada de atribuição como `GIT_DIR=`, invólucro
+ * como `env -C` ou shell aninhado) e opções globais só `-C <dir>`
+ * (encadeável, sem nada que o shell expanda nem componente `..`), `--no-pager` e `-P` — nada de
+ * `-c`, `--config-env`, `--git-dir` ou `--work-tree`. Fora dessa forma, o
+ * julgamento pelo texto de sempre. Devolve a cadeia de `-C`, o subcomando e
+ * os argumentos, ou `null`.
+ * @param {string} command
+ * @returns {{ chain: string[], sub: string, rest: string[] } | null}
+ */
+export function plainGitCommand(command) {
+  if (typeof command !== "string" || command.length > MAX_COMMAND) return null;
+  const text = command.trim();
+  if (LOOP_START.test(text) || findCompound(text) !== null) return null;
+  const lexed = lex(text);
+  if (lexed.substitutions.length > 0 || lexed.heredoc) return null;
+  const { commands, paren } = splitSimple(lexed.tokens);
+  if (paren || commands.length !== 1) return null;
+  const [simple] = commands;
+  if (simple.subs.length > 0 || simple.heredocs.length > 0 || simple.globs.length > 0) return null;
+  const words = stripRtk(simple.raw);
+  if (words[0] !== "git") return null;
+  const chain = [];
+  let k = 1;
+  while (k < words.length && words[k].startsWith("-")) {
+    const arg = words[k];
+    if (arg === "-C") {
+      const dir = words[k + 1];
+      if (dir === undefined || dir === "" || !PLAIN_DIR.test(dir)) return null;
+      // `..` depois de um link simbólico: o git sobe pelo caminho físico, e o
+      // contexto resolvido pelo texto apontaria outro diretório.
+      if (dir.split("/").includes("..")) return null;
+      chain.push(dir);
+      k += 2;
+    } else if (PLAIN_GIT_GLOBAL_FLAGS.has(arg)) k++;
+    else return null;
+  }
+  const sub = words[k];
+  if (sub === undefined) return null;
+  return { chain, sub, rest: words.slice(k + 1) };
+}
+
+/** `-C` encadeado a partir do diretório atual, como o git resolve. */
+function effectiveDir(cwd, chain) {
+  let dir = cwd;
+  for (const step of chain) dir = step.startsWith("/") ? step : `${dir}/${step}`;
+  return normalizePath(dir);
+}
+
+/**
+ * O contexto que o chamador passou em `env.gitTarget`, quando vale para ESTE
+ * comando (#476): forma de `plainGitCommand`, o mesmo texto, o mesmo
+ * diretório atual e o mesmo diretório efetivo, branch e worktree informados.
+ * Qualquer falta: `null`, e o git é julgado pelo texto, como antes.
+ * @param {string} text comando já sem espaço nas pontas
+ * @param {ShellEnv} env
+ * @returns {GitTarget | null}
+ */
+function verifiedGitTarget(text, env) {
+  const target = env?.gitTarget;
+  if (!target || typeof target !== "object" || typeof env.cwd !== "string" || !env.cwd.startsWith("/")) return null;
+  const probe = plainGitCommand(text);
+  if (!probe) return null;
+  if (typeof target.command !== "string" || target.command.trim() !== text) return null;
+  if (target.cwd !== env.cwd || typeof target.dir !== "string") return null;
+  if (normalizePath(target.dir) !== effectiveDir(env.cwd, probe.chain)) return null;
+  if (typeof target.isMainWorktree !== "boolean" || typeof target.branch !== "string" || target.branch === "") return null;
+  return target;
+}
+
+/** O `env` com o contexto conferido sob a marca interna, ou o próprio `env`. */
+function withVerifiedGit(text, env) {
+  const target = verifiedGitTarget(text, env);
+  return target ? { ...env, [GIT_VERIFIED]: target } : env;
 }
 
 const VERCEL_VALUE = new Set(["--scope", "-S", "--token", "-t", "--cwd", "--local-config", "-A", "--global-config", "-Q", "--team", "-T", "--env", "-e", "--build-env", "-b", "--meta", "-m", "--regions", "--archive"]);
@@ -1809,9 +2424,35 @@ function judgeVercel(args) {
   const [sub, action] = positional;
   if (VERCEL_PRODUCTION.has(sub)) return ask(`produção: vercel ${sub}`);
   if (sub === "env" && ["add", "rm", "remove", "update"].includes(action)) return ask(`produção: vercel env ${action}`);
+  // #485: `env pull` e `pull` gravam os segredos do projeto em disco, em qualquer destino.
+  if ((sub === "env" && action === "pull") || sub === "pull") return ask(`vercel ${sub === "pull" ? "pull" : "env pull"} grava segredos em arquivo`);
   if ((sub === "project" || sub === "projects") && (action === "rm" || action === "remove")) return ask(`produção: vercel ${sub} ${action}`);
   if (sub === "blob" && ["del", "delete", "rm", "remove"].includes(action)) return ask(`produção: vercel blob ${action}`);
+  if ((sub === "teams" || sub === "team") && ["rm", "remove", "delete"].includes(action)) return ask(`produção: vercel ${sub} ${action}`);
+  if (sub === "git" && action === "disconnect") return ask("produção: vercel git disconnect");
+  if ((sub === "integration" || sub === "integrations") && ["rm", "remove", "uninstall"].includes(action)) return ask(`produção: vercel ${sub} ${action}`);
+  if (sub === "api") return judgeVercelApi(args);
   return null;
+}
+
+const API_WRITE_METHODS = new Set(["DELETE", "POST", "PATCH", "PUT"]);
+
+/**
+ * `vercel api`: `-X/--method` DELETE, POST, PATCH ou PUT escreve; sem método,
+ * campo ou corpo (`-f`, `-F`, `--field`, `-d`, `--data`, `--input`) vira POST.
+ */
+function judgeVercelApi(args) {
+  let method = null;
+  let body = false;
+  for (let k = 0; k < args.length; k++) {
+    const arg = args[k];
+    if (arg === "-X" || arg === "--method") method = args[++k] ?? "";
+    else if (arg.startsWith("--method=")) method = arg.slice("--method=".length);
+    else if (/^-X./.test(arg)) method = arg.slice(2);
+    else if (/^(?:-[fFd]|--(?:field|raw-field|data|input))(?:=|$)/.test(arg) || /^-[fFd]./.test(arg)) body = true;
+  }
+  const write = method === null ? body : API_WRITE_METHODS.has(method.toUpperCase());
+  return write ? ask(`produção: vercel api ${method?.toUpperCase() ?? "POST"}`) : null;
 }
 
 const SUPABASE_VALUE = new Set(["--workdir", "--profile", "-o", "--output", "--network-id", "--dns-resolver", "--db-url", "-p", "--password", "--project-ref", "-s", "--schema", "-f", "--file"]);
@@ -1831,8 +2472,372 @@ function judgeSupabase(args) {
   if ((key === "db query" || key === "migration up") && remote) return ask(`produção: supabase ${key} remoto`);
   if (group === "secrets") return ask("produção: supabase secrets");
   if (key === "functions deploy" || key === "functions delete" || key === "projects delete") return ask(`produção: supabase ${key}`);
-  if (key === "storage rm" || key === "branches delete") return ask(`produção: supabase ${key}`);
+  if (key === "storage rm" || key === "branches delete" || key === "config push") return ask(`produção: supabase ${key}`);
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Ferramentas fora do catálogo do projeto (#485): banco, nuvem, disco, sistema
+// e segredo. A política é uma lista do que é proibido; estas famílias entraram
+// quando `Bash` foi liberado em geral (#481).
+
+const LOCAL_HOSTS = new Set(["", "localhost", "127.0.0.1", "::1", "[::1]"]);
+
+/** `localhost`, loopback, socket (`/tmp`, `%2Ftmp`) ou host vazio. */
+function isLocalHost(host) {
+  return LOCAL_HOSTS.has(host.toLowerCase()) || host.startsWith("/") || /^%2f/i.test(host);
+}
+
+/** Hosts de uma URL `postgres://…` ou de conninfo `host=…` na palavra. */
+function connectionHosts(word) {
+  const hosts = [];
+  const url = /^postgres(?:ql)?:\/\/([^/?#]*)/i.exec(word);
+  if (url) {
+    const authority = url[1].slice(url[1].lastIndexOf("@") + 1);
+    for (const part of authority.split(",")) hosts.push(part.startsWith("[") ? part.slice(0, part.indexOf("]") + 1) : part.replace(/:\d*$/, ""));
+  }
+  for (const match of word.matchAll(/(?:^|[\s?&])host(?:addr)?=([^\s&]*)/gi)) hosts.push(...match[1].split(","));
+  return hosts;
+}
+
+const PG_ENV_TARGET = /^(?:PGHOST|PGHOSTADDR|DATABASE_URL|POSTGRES_URL|PGSERVICE)=(.*)$/s;
+
+/**
+ * O cliente do Postgres aponta para fora da máquina: host ou URL que não é
+ * `localhost`/`127.0.0.1`/socket, ou destino por variável (`$DATABASE_URL`,
+ * `$POSTGRES_URL`), que só aparece na hora. O texto de `psql -c` não conta.
+ */
+function postgresRemote(name, args, assigned) {
+  for (const assignment of assigned) {
+    const match = PG_ENV_TARGET.exec(assignment);
+    if (match && (match[1].includes("$") || match[1].split(",").some((host) => !isLocalHost(host)) || connectionHosts(match[1]).some((host) => !isLocalHost(host)))) {
+      return true;
+    }
+  }
+  for (let k = 0; k < args.length; k++) {
+    const arg = args[k];
+    if (name === "psql" && (arg === "-c" || arg === "--command")) {
+      k++;
+      continue;
+    }
+    if (name === "psql" && (/^-c./.test(arg) || arg.startsWith("--command="))) continue;
+    let host = null;
+    if (arg === "-h" || arg === "--host") host = args[++k] ?? "";
+    else if (arg.startsWith("--host=")) host = arg.slice("--host=".length);
+    else if (/^-h./.test(arg)) host = arg.slice(2);
+    if (host !== null) {
+      if (host.includes("$") || host.split(",").some((part) => !isLocalHost(part))) return true;
+      continue;
+    }
+    if (arg.includes("$")) return true;
+    const value = arg.startsWith("--") && arg.includes("=") ? arg.slice(arg.indexOf("=") + 1) : arg;
+    if (connectionHosts(value).some((part) => !isLocalHost(part))) return true;
+  }
+  return false;
+}
+
+/** SQL que escreve ou muda o banco; na dúvida (palavra solta), conta como escrita. */
+const SQL_WRITE =
+  /\b(?:insert|update|delete|drop|truncate|alter|create|grant|revoke|copy|merge|vacuum|reindex|cluster|comment|lock|call|do|refresh|import|reassign|execute|prepare|security|set\s+(?:role|session))\b/i;
+/** Meta-comando do psql que roda shell, script, escreve arquivo ou executa o resultado. */
+const PSQL_META_WRITE = /\\(?:!|ir?\b|include|copy|o\b|out|w\b|write|g\b|gx|gexec|gset|s\b|e\b|edit|ef|ev)/;
+
+/**
+ * `psql`/`pg_dump`/`pg_dumpall`/`pg_restore` (#485). Banco local passa. Banco
+ * remoto: `pg_dump`/`pg_dumpall` pergunta (copia os dados de produção),
+ * `pg_restore` pergunta (escreve), e `psql` pergunta salvo quando só roda
+ * `-c` de leitura (sem DDL/DML), ou `-l`; `-f`, entrada redirecionada ou
+ * sessão interativa perguntam.
+ */
+function judgePostgres(name, args, context, assigned) {
+  if (!postgresRemote(name, args, assigned)) return null;
+  if (name === "pg_dump" || name === "pg_dumpall") return ask(`${name} de banco remoto copia os dados de produção`);
+  if (name === "pg_restore") return ask("pg_restore escreve em banco remoto");
+  const commands = [];
+  let script = (context.stdin?.length ?? 0) > 0 || context.input === true;
+  let list = false;
+  for (let k = 0; k < args.length; k++) {
+    const arg = args[k];
+    if (arg === "-c" || arg === "--command") commands.push(args[++k] ?? "");
+    else if (arg.startsWith("--command=")) commands.push(arg.slice("--command=".length));
+    else if (/^-c./.test(arg)) commands.push(arg.slice(2));
+    else if (arg === "-f" || arg === "--file" || arg.startsWith("--file=") || /^-f./.test(arg)) script = true;
+    else if (arg === "-l" || arg === "--list" || arg === "-V" || arg === "--version") list = true;
+  }
+  if (script) return ask("psql em banco remoto roda script (-f ou entrada)");
+  if (commands.length === 0) return list ? null : ask("psql em banco remoto sem -c de leitura (sessão ou entrada)");
+  return commands.some((sql) => SQL_WRITE.test(sql) || PSQL_META_WRITE.test(sql)) ? ask("psql escreve em banco remoto (DDL/DML ou meta-comando)") : null;
+}
+
+const DOCKER_VALUE = new Set(["-H", "--host", "-c", "--context", "--config", "-l", "--log-level", "--tlscacert", "--tlscert", "--tlskey"]);
+const COMPOSE_VALUE = new Set(["-f", "--file", "-p", "--project-name", "--profile", "--env-file", "--project-directory", "--ansi", "--progress", "--parallel"]);
+const DOCKER_OBJECTS = new Set(["container", "image", "volume", "network", "system", "builder", "buildx"]);
+const DOCKER_DELETE = new Set(["rm", "remove", "prune"]);
+
+/** Tira as opções do início (`value` consome a palavra seguinte). */
+function skipLeading(args, value) {
+  let k = 0;
+  while (k < args.length && args[k].startsWith("-") && args[k] !== "-") k += value.has(args[k]) ? 2 : 1;
+  return args.slice(k);
+}
+
+/**
+ * Docker destrutivo (#488): `rm`, `rmi`, `container|image|volume|network rm`,
+ * `prune` (inclusive `system prune`) e `compose rm`/`compose down -v`/`--rmi`.
+ * Leitura e build (`ps`, `logs`, `build`, `compose up`) passam; o comando
+ * dentro de `run`/`exec` é julgado pela busca de sufixo (`nestedRisk`).
+ */
+function judgeDocker(name, args) {
+  let rest = name === "docker" ? skipLeading(args, DOCKER_VALUE) : args;
+  if (name === "docker" && rest[0] !== "compose") {
+    const [sub, ...more] = rest;
+    if (sub === "rm" || sub === "rmi") return ask(`docker ${sub} apaga ${sub === "rm" ? "contêiner" : "imagem"}`);
+    const action = more.find((arg) => !arg.startsWith("-"));
+    return DOCKER_OBJECTS.has(sub) && DOCKER_DELETE.has(action) ? ask(`docker ${sub} ${action} apaga dado do Docker`) : null;
+  }
+  if (name === "docker") rest = rest.slice(1);
+  const [action, ...options] = skipLeading(rest, COMPOSE_VALUE);
+  if (action === "rm") return ask("docker compose rm apaga contêiner");
+  const removes = options.some((arg) => /^--(?:volumes|rmi)(?:=|$)/.test(arg) || shortCluster(arg, "v"));
+  return action === "down" && removes ? ask("docker compose down -v/--rmi apaga volume ou imagem") : null;
+}
+
+const FLY_VALUE = new Set([
+  "-a", "--app", "-c", "--config", "-t", "--access-token", "-r", "--region", "-o", "--org", "-i", "--image", "-e", "--env",
+  "--build-arg", "--build-secret", "--strategy", "--vm-size", "--dockerfile", "--label", "--process-group",
+]);
+
+/** Fly.io (plano B de deploy): `deploy`, `secrets`, `scale` e destruir app, máquina ou volume. */
+function judgeFly(name, args) {
+  const [group, action] = positionals(args, FLY_VALUE);
+  if (["deploy", "secrets", "secret", "scale", "destroy"].includes(group)) return ask(`produção: ${name} ${group}`);
+  const destroys = ["destroy", "delete", "remove", "rm"].includes(action);
+  if (destroys && ["apps", "app", "machine", "machines", "m", "volumes", "volume", "vol"].includes(group)) return ask(`produção: ${name} ${group} ${action}`);
+  return null;
+}
+
+const KUBECTL_VALUE = new Set(["-n", "--namespace", "--context", "--cluster", "--kubeconfig", "-l", "--selector", "-f", "--filename", "-o", "--output", "-s", "--server", "--user", "--token", "--as", "-c", "--container"]);
+const DEFAULTS_VALUE = new Set(["-host"]);
+
+/** Apagar dado ou mudar o sistema por ferramenta de nuvem, disco ou macOS. */
+function judgeSystemTool(name, args) {
+  const [verb, object] = positionals(args);
+  switch (name) {
+    case "drizzle-kit":
+      return verb === "push" ? ask("drizzle-kit push aplica o schema direto no banco do DATABASE_URL") : null;
+    case "terraform":
+    case "tofu": {
+      if (verb === "destroy") return ask(`${name} destroy apaga a infraestrutura`);
+      const auto = args.some((arg) => /^--?(?:auto-approve|destroy)(?:=|$)/.test(arg)) || positionals(args).length > 1;
+      return verb === "apply" && auto ? ask(`${name} apply sem confirmação (-auto-approve ou plano salvo)`) : null;
+    }
+    case "kubectl":
+      return positionals(args, KUBECTL_VALUE)[0] === "delete" ? ask("kubectl delete apaga recurso do cluster") : null;
+    case "aws": {
+      if (args.some((arg) => /^(?:delete|terminate)-/.test(arg))) return ask("aws delete-*/terminate-* apaga recurso");
+      if (!args.includes("s3")) return null;
+      if (args.includes("rm") && args.includes("--recursive")) return ask("aws s3 rm --recursive apaga em massa");
+      if (args.includes("rb") && args.includes("--force")) return ask("aws s3 rb --force apaga o bucket");
+      return args.includes("sync") && args.includes("--delete") ? ask("aws s3 sync --delete apaga no destino") : null;
+    }
+    case "gcloud":
+      return args.includes("delete") ? ask("gcloud … delete apaga recurso") : null;
+    case "diskutil": {
+      if (/^(?:erase|secureerase|zerodisk|randomdisk|reformat|partitiondisk)/i.test(verb ?? "")) return ask(`diskutil ${verb} apaga o disco`);
+      return /^(?:apfs|ap|cs|corestorage|appleraid|ar)$/i.test(verb ?? "") && /^(?:delete|erase|remove)/i.test(object ?? "")
+        ? ask(`diskutil ${verb} ${object} apaga volume`)
+        : null;
+    }
+    case "shred":
+    case "unlink":
+    case "rimraf":
+      return ask(`${name} apaga arquivo`);
+    case "trash":
+      return args.some((arg) => arg === "--recursive" || arg === "-R" || shortCluster(arg, "r")) ? ask("trash -r apaga diretório") : null;
+    case "truncate": {
+      const sizes = optionValues(args, { short: "s", stop: "r", long: ["--size"] });
+      return sizes.some((size) => /^(?:0+[KMGTPEZY]?(?:i?B)?|[-<\/%].*)$/i.test(size)) ? ask("truncate zera ou encolhe arquivo") : null;
+    }
+    case "tmutil":
+      return /^(?:delete\w*|thinlocalsnapshots)$/i.test(verb ?? "") ? ask(`tmutil ${verb} apaga backup`) : null;
+    case "crontab":
+      return args.includes("-l") && !args.some((arg) => arg === "-r" || arg === "-e" || arg === "-i") ? null : ask("crontab grava ou apaga agendamento");
+    case "launchctl":
+      return ["load", "bootstrap", "submit", "enable"].includes(verb) ? ask(`launchctl ${verb} instala serviço do sistema`) : null;
+    case "defaults":
+      return ["write", "delete", "import", "rename"].includes(positionals(args, DEFAULTS_VALUE)[0]) ? ask("defaults grava preferência do sistema") : null;
+    case "osascript":
+      return ask("osascript automatiza o sistema e roda shell");
+    case "csrutil":
+      return verb !== undefined && verb !== "status" ? ask(`csrutil ${verb} mexe na proteção do sistema`) : null;
+    case "spctl":
+      return args.some((arg) => /^--(?:(?:master|global)-(?:disable|enable)|add|remove|enable|disable|reset-default)$/.test(arg))
+        ? ask("spctl mexe no Gatekeeper")
+        : null;
+    case "shutdown":
+    case "reboot":
+    case "halt":
+    case "poweroff":
+      return ask(`${name} desliga a máquina`);
+    default:
+      return /^(?:mkfs|newfs)(?:[._]|$)/.test(name) ? ask(`${name} formata disco`) : null;
+  }
+}
+
+/**
+ * Segredo pela shell (#485): imprimir o ambiente inteiro (`printenv`, `set`,
+ * `export -p`, `declare -x`; `env` sem comando fica em `judgeWords`) pergunta;
+ * tirar senha do Keychain (`security find-*-password -w/-g`,
+ * `dump-keychain`, `export`) é negado.
+ */
+function judgeSecretTool(name, args) {
+  switch (name) {
+    case "printenv":
+      return positionals(args).length === 0 ? ask("printenv sem argumento imprime o ambiente (segredos)") : null;
+    case "set":
+      return args.length === 0 ? ask("set sem argumento imprime as variáveis (segredos)") : null;
+    case "export":
+      return args.every((arg) => arg.startsWith("-")) ? ask("export -p imprime o ambiente (segredos)") : null;
+    case "declare":
+    case "typeset":
+      return args.every((arg) => /^[-+]/.test(arg)) ? ask(`${name} sem nome imprime as variáveis (segredos)`) : null;
+    case "security": {
+      const [sub] = positionals(args);
+      const reveals = args.some((arg) => shortCluster(arg, "w") || shortCluster(arg, "g"));
+      if (/^find-\w+-password$/.test(sub ?? "") && reveals) return deny(`security ${sub} -w/-g imprime senha do Keychain`);
+      return sub === "dump-keychain" || sub === "export" ? deny(`security ${sub} exporta o Keychain`) : null;
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * Invólucros que rodam outro comando (#485): `arch -arm64 git push`,
+ * `uv run …`, `op run -- …`. `sub`: o subcomando que lança (sem ele, a
+ * primeira palavra já lança); `shell`: argumento com espaço é texto de shell
+ * (`hyperfine "git push -f"`, `parallel "rm {}" ::: a`, `flock x -c "…"`).
+ * O comando é a primeira palavra que não é opção; a busca de sufixo
+ * (`nestedRisk`) cobre o executável conhecido em qualquer posição.
+ */
+const LAUNCHING_WRAPPERS = {
+  arch: {},
+  coproc: {},
+  noglob: {},
+  nocorrect: {},
+  unbuffer: {},
+  setsid: {},
+  flock: { shell: true },
+  chronic: {},
+  entr: { shell: true },
+  parallel: { shell: true, bulk: true },
+  hyperfine: { shell: true },
+  "sandbox-exec": {},
+  taskpolicy: {},
+  xcrun: {},
+  uv: { sub: ["run"] },
+  poetry: { sub: ["run"] },
+  bundle: { sub: ["exec"] },
+  direnv: { sub: ["exec"] },
+  mise: { sub: ["exec", "x"] },
+  op: { sub: ["run"] },
+  doppler: { sub: ["run"] },
+  dotenv: {},
+};
+
+function judgeWrapped(name, args, context) {
+  const spec = LAUNCHING_WRAPPERS[name];
+  let rest = args;
+  if (spec.sub) {
+    const at = args.findIndex((arg) => !arg.startsWith("-"));
+    if (at === -1 || !spec.sub.includes(args[at])) return nestedRisk(args, context);
+    rest = args.slice(at + 1);
+  }
+  const base = spec.bulk ? { ...context, bulk: true } : context;
+  let worst = null;
+  if (spec.shell) {
+    for (const arg of rest) {
+      if (/\s/.test(arg)) worst = stronger(worst, riskOf(arg, context.depth + 1, spec.bulk === true, context.env));
+    }
+  }
+  // O comando do invólucro; o executável conhecido mais adiante fica com `nestedRisk`.
+  const start = rest.findIndex((arg) => !arg.startsWith("-") || arg === "-");
+  if (start !== -1 && worst?.decision !== "deny") worst = stronger(worst, judgeWords(rest.slice(start), deeper(base, { suffix: true })));
+  return worst?.decision === "deny" ? worst : stronger(worst, nestedRisk(rest, base));
+}
+
+/**
+ * Executáveis que a política conhece (#485): todo sufixo do argv de um
+ * comando desconhecido que começa por um deles é julgado como comando —
+ * `arch -arm64 git push --force`, `docker run img rm -rf /x`. Vale a decisão
+ * mais forte. `mkfs*` e `newfs*` entram pelo prefixo.
+ */
+const KNOWN_COMMANDS = new Set([
+  "git", "rm", "sudo", "su", "doas", "pkexec", "vercel", "supabase", "psql", "pg_dump", "pg_dumpall", "pg_restore",
+  "drizzle-kit", "fly", "flyctl", "terraform", "tofu", "kubectl", "aws", "gcloud", "docker", "docker-compose", "chmod",
+  "chown", "chgrp", "dd", "shred", "diskutil", "crontab", "launchctl", "defaults", "osascript", "csrutil", "spctl",
+  "shutdown", "reboot", "halt", "poweroff", "sh", "bash", "zsh", "dash", "ksh", "fish", "node", "pnpm", "npx", "npm",
+  "pnpx", "bunx", "yarn", "bun", "curl", "wget", "cp", "mv", "tee", "ln", "install", "ditto", "patch", "unzip", "tar",
+  "truncate", "unlink", "trash", "rimraf", "tmutil", "rsync", "ssh", "scp", "sftp", "brew", "script", "xargs", "find",
+  "watch", "eval", "printenv", "security", "openssl", "sort", "uniq",
+  ...Object.keys(WRAPPERS),
+  ...Object.keys(LAUNCHING_WRAPPERS),
+]);
+
+/**
+ * Comandos que não executam o próprio argv: a palavra `sudo` em
+ * `grep -n sudo arquivo` ou `gh label create docker` é dado, não comando.
+ * `jho` é a CLI do projeto, que não roda o que recebe.
+ */
+const NON_EXECUTING = new Set([
+  "echo", "printf", "cat", "head", "tail", "less", "more", "wc", "grep", "egrep", "fgrep", "rg", "ag", "ack", "ls", "tree",
+  "jq", "yq", "cut", "tr", "column", "nl", "diff", "cmp", "comm", "file", "stat", "which", "whereis", "whatis",
+  "apropos", "type", "man", "tldr", "help", "basename", "dirname", "realpath", "readlink", "mkdir", "rmdir", "touch",
+  "test", "[", "[[", "cd", "pushd", "popd", "gh", "jho", "kill", "pkill", "pgrep", "killall", "ps", "lsof", "sleep",
+  "seq", "date", "true", "false", "read", "wait", "unset", "alias", "unalias", "hash", "sed", "awk", "md5", "shasum",
+  "sha256sum", "xxd", "od", "hexdump", "strings", "du", "df", "pbcopy",
+  // Executores de teste: o argv é filtro (`vitest run env`, `pytest -k sudo`), não comando.
+  "vitest", "playwright", "pytest", "jest",
+]);
+
+/** `fd` só executa o argv com `-x`/`-X`/`--exec`/`--exec-batch` (inclusive em grupo, `-Hx`). */
+function fdExecutes(args) {
+  return args.some((arg) => arg.startsWith("--exec") || (/^-[^-]/.test(arg) && /[xX]/.test(arg)));
+}
+
+/**
+ * A palavra é um executável conhecido: pelo nome ou por caminho num
+ * diretório de binários (`/bin/rm`, `node_modules/.bin/vercel`). Caminho de
+ * dado (`tests/install`) não conta.
+ */
+export function isKnownCommand(word) {
+  const slash = word.lastIndexOf("/");
+  if (slash !== -1 && !/(?:^|\/)(?:s?bin|\.bin)$/.test(word.slice(0, slash))) return false;
+  const name = word.slice(slash + 1);
+  return KNOWN_COMMANDS.has(name) || /^(?:mkfs|newfs)(?:[._]|$)/.test(name);
+}
+
+/** Teto de posições com executável conhecido num argv; acima dele, pergunta. */
+const MAX_SUFFIXES = 32;
+
+/**
+ * Busca de sufixo (#485): cada posição do argv com executável conhecido é
+ * julgada como início de comando, e vale a decisão mais forte. Fecha o
+ * invólucro que a política não conhece pelo nome. Roda uma vez por argv:
+ * dentro de um sufixo (`context.suffix`) não repete, porque o sufixo de um
+ * sufixo já foi enumerado — texto novo (`sh -c`, `env -S`) começa de novo.
+ */
+function nestedRisk(args, context) {
+  if (context.suffix) return null;
+  const starts = [];
+  for (let k = 0; k < args.length; k++) if (isKnownCommand(args[k])) starts.push(k);
+  if (starts.length > MAX_SUFFIXES) return ask("argv com executáveis conhecidos demais para julgar");
+  let worst = null;
+  for (const k of starts) {
+    worst = stronger(worst, judgeWords(args.slice(k), deeper(context, { suffix: true })));
+    if (worst?.decision === "deny") break;
+  }
+  return worst;
 }
 
 /** `tee`, `cp`, `mv`, `ln`, `sed -i`… apontando para a política. */
@@ -1843,20 +2848,92 @@ function policyWrite(name, args) {
     case "mv":
     case "ln":
     case "truncate":
-      return operands.some(isPolicyPath) ? ask(POLICY_WRITE) : null;
+      return policyPathsVerdict(operands);
     case "cp":
     case "install":
     case "rsync":
-      return operands.length > 0 && isPolicyPath(operands[operands.length - 1]) ? ask(POLICY_WRITE) : null;
+      return operands.length > 0 ? policyPathVerdict(operands[operands.length - 1]) : null;
     case "sed":
     case "perl":
-      return args.some((arg) => arg === "--in-place" || arg.startsWith("--in-place=") || shortCluster(arg, "i") || /^-i/.test(arg)) &&
-        operands.some(isPolicyPath)
-        ? ask(POLICY_WRITE)
+      return args.some((arg) => arg === "--in-place" || arg.startsWith("--in-place=") || shortCluster(arg, "i") || /^-i/.test(arg))
+        ? policyPathsVerdict(operands)
         : null;
     default:
       return null;
   }
+}
+
+/**
+ * Variáveis cujo valor é um programa que o git, o `gh`, o `man` ou o editor
+ * executam (#485): `GIT_SSH_COMMAND="rm -rf src" git fetch` roda `rm`.
+ */
+const PROGRAM_VARIABLES = new Set([
+  "GIT_SSH_COMMAND", "GIT_SSH", "GIT_PROXY_COMMAND", "GIT_EXTERNAL_DIFF", "GIT_EDITOR", "GIT_SEQUENCE_EDITOR", "GIT_ASKPASS",
+  "SSH_ASKPASS", "GIT_PAGER", "PAGER", "MANPAGER", "GH_PAGER", "EDITOR", "VISUAL", "GH_EDITOR", "BROWSER", "GH_BROWSER",
+]);
+
+/**
+ * Opções do `ssh` que rodam comando local, carregam biblioteca, gravam log ou
+ * leem config que pode rodar: `-F`, `-E` e `-I` também no grupo de opções sem
+ * valor (`-qF x`), e não dentro do valor de outra (`-oIdentityFile`).
+ */
+const SSH_RUNS_LOCAL = [/(?:proxy|local|knownhosts)command|pkcs11provider|securitykeyprovider/i, /(?:^|\s)-[46AaCfGgKkMNnqsTtVvXxYy]*[FEI]/];
+
+/**
+ * Risco das atribuições de um comando: o valor de variável que executa
+ * programa é julgado como comando (vale a decisão mais forte), e config do
+ * git por variável (`GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n`) vale como `git -c`.
+ * `GIT_CONFIG_PARAMETERS` não é lido: nega (o git não pergunta; `command` são
+ * as palavras do comando já sem atribuição).
+ */
+function variableRisk(assignments, context, command = []) {
+  if (assignments.length === 0) return null;
+  const values = new Map();
+  for (const assignment of assignments) {
+    const eq = assignment.indexOf("=");
+    values.set(assignment.slice(0, eq), assignment.slice(eq + 1));
+  }
+  let worst = null;
+  for (const [name, value] of values) {
+    if (PROGRAM_VARIABLES.has(name)) {
+      // O transporte do git já é o `ssh`: `GIT_SSH_COMMAND="ssh -i chave"` é rotina, se for só o `ssh`.
+      const ssh = (name === "GIT_SSH_COMMAND" || name === "GIT_SSH") && /^\s*(?:[\w./~-]*\/)?ssh(?:\s[^;&|`$()<>{}\n\\'"]*)?$/.test(value);
+      if (ssh) worst = stronger(worst, SSH_RUNS_LOCAL.some((pattern) => pattern.test(value)) ? deny(`${name} com ssh que roda comando local; ${GIT_NEVER_ASKS}`) : null);
+      // O programa recebe argumentos do git (o arquivo a editar, o host): `EDITOR=rm` apaga, como em `xargs`.
+      else worst = stronger(worst, riskOf(value, context.depth + 1, true, context.env));
+      // Como `diff.external`: o git passa o caminho do arquivo do projeto ao programa (`GIT_EXTERNAL_DIFF=rm`).
+      if (name === "GIT_EXTERNAL_DIFF") worst = stronger(worst, deny(`GIT_EXTERNAL_DIFF executa programa sobre os arquivos, como diff.external; ${GIT_NEVER_ASKS}`));
+    } else if (name === "GIT_CONFIG_PARAMETERS") {
+      // O texto não é lido: nega, e no push manda explicitar o destino.
+      const pushing = isGitPush(command);
+      worst = stronger(
+        worst,
+        deny(
+          pushing
+            ? "GIT_CONFIG_PARAMETERS configura o git por variável e o texto não resolve o destino do push: tire a variável e explicite o destino (`git push origin <branch>`)"
+            : "GIT_CONFIG_PARAMETERS configura o git por variável e o texto não é lido: use `git -c chave=valor`",
+        ),
+      );
+    } else {
+      const index = /^GIT_CONFIG_KEY_(\d+)$/.exec(name);
+      if (!index) continue;
+      const key = value.toLowerCase();
+      const configured = values.get(`GIT_CONFIG_VALUE_${index[1]}`) ?? "";
+      if (GIT_EXEC_KEY.test(key)) {
+        worst = stronger(worst, deny(`${name}=${key} executa programa ou desliga os hooks; ${GIT_NEVER_ASKS}`));
+        worst = stronger(worst, riskOf(configured, context.depth + 1, false, context.env));
+      }
+      // Alias por variável, com ou sem `!`: `alias.p=push -f origin HEAD:main` roda push sem que o texto o mostre.
+      if (key.startsWith("alias.")) worst = stronger(worst, deny(`${name}=${key} cria comando do git que o texto não mostra: chame o comando inteiro; ${GIT_NEVER_ASKS}`));
+      // Como o `-c`: a chave que desvia o destino do push (#505), por variável.
+      // No `git push` nega e manda tirar a variável; fora dele não decide destino nenhum e passa.
+      if (isGitPush(command) && (/^(?:push|remote|branch|url)\./.test(key) || GIT_PUSH_KEY.test(key))) {
+        worst = stronger(worst, deny(`${name}=${key} troca o destino do push e o texto não o resolve: tire a variável e explicite o destino (\`git push origin <branch>\`)`));
+      }
+    }
+    if (worst?.decision === "deny") return worst;
+  }
+  return worst;
 }
 
 /**
@@ -1868,23 +2945,52 @@ function judgeWords(input, context) {
   if (context.depth > MAX_DEPTH) return ask("comando aninhado demais para julgar");
   if (--budget < 0) return ask("comando com leituras demais para julgar");
   let words = input.slice();
+  const inherited = context.assigned?.length ?? 0;
   const assigned = [...(context.assigned ?? [])];
+  // `env` sem comando imprime o ambiente inteiro (#485); `env -i` não.
+  let printsEnv = false;
+  let escaped = null;
   for (let guard = 0; guard < 64 && words.length > 0; guard++) {
     const head = words[0];
-    if (ASSIGNMENT.test(head)) assigned.push(words.shift());
+    if (ASSIGNMENT.test(head)) assigned.push(plainAssignment(words.shift()));
     else if (head === "rtk") {
       words.shift();
       if (words[0] === "proxy") words.shift();
     } else if (head.includes("/") && !head.endsWith("/")) words[0] = head.slice(head.lastIndexOf("/") + 1);
     else if (Object.hasOwn(WRAPPERS, head)) {
       if (head === "command" && words.slice(1).some((arg) => arg === "-v" || arg === "-V")) return null;
-      words = skipOptions(words.slice(1), WRAPPERS[head]);
+      printsEnv = head === "env" && !words.slice(1).some((arg) => arg === "-" || arg === "--ignore-environment" || shortCluster(arg, "i"));
+      const notes = {};
+      words = skipOptions(words.slice(1), WRAPPERS[head], notes);
+      // `env -S '…'` injeta palavras que não estavam no argv: a busca de sufixo recomeça.
+      if (notes.split) context = { ...context, suffix: false };
+      if (notes.escaped) escaped = ask("env -S com \\ (escape do env, não do shell) não é julgado");
     } else break;
   }
-  if (words.length === 0) return null;
+  // Programa apontado por variável (`GIT_SSH_COMMAND="rm -rf src" git fetch`): só as atribuições deste comando.
+  const launched = stronger(escaped, variableRisk(assigned.slice(inherited), context, words));
+  if (launched?.decision === "deny") return launched;
+  const verdict = stronger(launched, judgeCommand(words, assigned, printsEnv, context));
+  // O git não pergunta (11/10/2026): o que viria como `ask` — inclusive o que
+  // vem de dentro dele, como o programa de `rebase -x` ou de `GIT_EDITOR` — nega.
+  return words[0] === "git" ? gitNeverAsks(verdict) : verdict;
+}
+
+/** `ask` no comando `git` vira `deny`, com a mesma razão. */
+function gitNeverAsks(verdict) {
+  return verdict?.decision === "ask" ? deny(`${verdict.reason}; ${GIT_NEVER_ASKS}`) : verdict;
+}
+
+/** Builtins que atribuem (e exportam) `NOME=valor` dos argumentos. */
+const DECLARATIONS = new Set(["export", "declare", "typeset", "local", "readonly"]);
+
+/** O comando já sem atribuição, `rtk` nem invólucro de `judgeWords`. */
+function judgeCommand(words, assigned, printsEnv, context) {
+  if (words.length === 0) return printsEnv ? ask("env sem comando imprime o ambiente (segredos)") : null;
   const [name, ...args] = words;
   let write = policyWrite(name, args);
   for (const path of writtenPaths(name, args)) write = stronger(write, writeRisk(path, context.env ?? NO_ENV));
+  if (Object.hasOwn(LAUNCHING_WRAPPERS, name)) return stronger(write, judgeWrapped(name, args, { ...context, assigned }));
   switch (name) {
     case "sudo":
     case "doas":
@@ -1950,8 +3056,26 @@ function judgeWords(input, context) {
     case "ksh":
     case "fish":
       return judgeShellInvocation(args, context);
-    default:
-      return write;
+    case "docker":
+    case "docker-compose":
+      return stronger(stronger(write, judgeDocker(name, args)), nestedRisk(args, context));
+    case "psql":
+    case "pg_dump":
+    case "pg_dumpall":
+    case "pg_restore":
+      return stronger(write, judgePostgres(name, args, context, assigned));
+    case "fly":
+    case "flyctl":
+      return judgeFly(name, args);
+    default: {
+      // Comando desconhecido: o próprio risco e todo sufixo que começa por
+      // executável conhecido (#485), salvo em quem não executa o argv.
+      let own = stronger(write, stronger(judgeSystemTool(name, args), judgeSecretTool(name, args)));
+      // `export GIT_EDITOR="…"` antes do `git` no mesmo comando (laço, `if`): o valor vale como atribuição.
+      if (DECLARATIONS.has(name)) own = stronger(own, variableRisk(args.filter((arg) => ASSIGNMENT.test(arg)).map(plainAssignment), context));
+      if (own?.decision === "deny" || NON_EXECUTING.has(name) || (name === "fd" && !fdExecutes(args))) return own;
+      return stronger(own, nestedRisk(args, context));
+    }
   }
 }
 
@@ -1971,8 +3095,9 @@ function riskOf(text, depth, bulk = false, env = NO_ENV) {
       // `>& arquivo` também grava; `>&2` e `>&-` só duplicam descritor.
       const writes = WRITE_REDIRECT.has(redirect.op) || (redirect.op === ">&" && !/^(?:\d+|-)$/.test(redirect.target));
       if (!writes) continue;
-      if (isPolicyPath(redirect.target)) worst = stronger(worst, ask(POLICY_WRITE));
-      worst = stronger(worst, outsideWrite(redirect.target, env));
+      worst = stronger(worst, policyPathVerdict(redirect.target));
+      // A saída de um comando que só lê pode ir para a home (fora da configuração pessoal).
+      worst = stronger(worst, outsideWrite(redirect.target, env, readOnlyWords(command.raw, [])));
     }
     for (const inner of command.subs) worst = stronger(worst, riskOf(inner, depth + 1, false, env));
     const words = commandWords(command.raw);
@@ -1981,7 +3106,9 @@ function riskOf(text, depth, bulk = false, env = NO_ENV) {
         ...command.heredocs.map((heredoc) => heredoc.body),
         ...command.redirects.filter((redirect) => redirect.op === "<<<").map((redirect) => redirect.target),
       ];
-      worst = stronger(worst, judgeWords(words, { depth, bulk, stdin, env }));
+      // `input`: a entrada vem de arquivo (`< x.sql`), que o programa pode executar.
+      const input = command.redirects.some((redirect) => redirect.op === "<" || redirect.op === "<>");
+      worst = stronger(worst, judgeWords(words, { depth, bulk, stdin, env, input }));
     }
     if (worst?.decision === "deny") return worst;
   }
@@ -2111,8 +3238,9 @@ export function simpleCommands(command) {
 }
 
 /**
- * Cada comando de um laço contra a lista, como se rodasse sozinho: o
- * `Bash(for:*)` libera a forma, não o corpo.
+ * Cada comando de um laço contra a lista, como se rodasse sozinho: a forma
+ * do laço não libera o corpo. Com `Bash` sem padrão no allow (#481), todo
+ * corpo passa pela lista, e decidem o classificador e o `deny`.
  * @param {BashRules | null} rules
  * @returns {ShellVerdict | null}
  */
@@ -2149,7 +3277,7 @@ export function judgeShell(command, rules, env = NO_ENV) {
     const text = command.trim();
     const compound = findCompound(text);
     if (compound) return { decision: "deny", reason: compound, kind: "compound" };
-    const risk = classifyRisk(text, env);
+    const risk = classifyRisk(text, withVerifiedGit(text, env));
     /** @type {ShellVerdict | null} */
     const verdict = risk ? { ...risk, kind: "risk" } : null;
     if (verdict?.decision === "deny" || !LOOP_START.test(text)) return verdict;

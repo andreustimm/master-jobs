@@ -331,7 +331,7 @@ describe("stopImpersonation quando o admin que assumiu não é mais encontrável
         linkedCandidates: async () => [],
         linksOf: async () => [],
         linkCandidate: async () => {},
-        unlinkById: async () => {},
+        revokeGrant: async () => ({ ok: true as const }),
       },
       audit: {
         record: async (e) => {

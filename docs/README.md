@@ -61,12 +61,14 @@ Depois do primeiro `list`, o ciclo normal é `jho jobs show <id>` → `jho track
 | [`cli.md`](cli.md) | Referência completa de comandos, flags e defaults de `jho`. |
 | [`operations.md`](operations.md) | A rotina diária/semanal: sincronizar, triar, mover o funil, exportar o relatório, podar vagas velhas. |
 | [`product/jobs-url-contract.md`](product/jobs-url-contract.md) | Todo filtro da tela Vagas vive na URL: quais parâmetros existem, o que cada ausência significa e por que `source` repete. |
+| [`product/pipeline-url-contract.md`](product/pipeline-url-contract.md) | Os filtros da tela Funil na URL: texto, busca ampliada, empresa, canal e score, e o que a busca reaproveita de Vagas. |
 | [`product/job-lifecycle-and-application-history.md`](product/job-lifecycle-and-application-history.md) | Regras de fechamento, arquivamento e leitura do histórico para candidato e recrutador. |
 | [`engineering/session-2026-09-16.md`](engineering/session-2026-09-16.md) | Registro histórico das decisões, bloqueios e próximos passos discutidos naquela sessão. |
 | [`engineering/local-postgres.md`](engineering/local-postgres.md) | Compose local com imagem Supabase Postgres, PGMQ, pgvector e limites de paridade. |
 | [`engineering/runbooks/435-contas-e2e-producao.md`](engineering/runbooks/435-contas-e2e-producao.md) | Roteiro do dono para desligar e apagar as contas do E2E (`@local.test`, candidatos `e2e-%`) que ficaram em produção e deixar um dono só (`is_default`). |
 | [`engineering/local-storage.md`](engineering/local-storage.md) | MinIO local para o armazenamento de objetos (foto e capa), suíte de contrato e como apontar para AWS S3. |
-| [`engineering/stack-lts-upgrade-proposal.md`](engineering/stack-lts-upgrade-proposal.md) | Proposta de upgrade LTS e matriz de paridade entre local, CI, Vercel e Supabase. |
+| [`engineering/versions.md`](engineering/versions.md) | **Política de versões:** tudo na versão mais nova (SO, runtime, dependências, imagens, bancos), o Renovate que mantém assim, o gate `pnpm check:versions` e o que fica com o dono. |
+| [`engineering/stack-lts-upgrade-proposal.md`](engineering/stack-lts-upgrade-proposal.md) | Registro histórico; substituída pela política de versões. |
 | [`.compozy/tasks/job-lifecycle-retention/`](../.compozy/tasks/job-lifecycle-retention/) | PRD, especificação e testes para arquivar vagas preservando candidaturas. |
 | [`.compozy/tasks/environment-sample-only/`](../.compozy/tasks/environment-sample-only/) | Especificação e evidências da entrega que restringiu dev/staging a fixtures. Estado atual na issue vinculada. |
 | [`operations/turso-quota-incident-2026-09-03.md`](operations/turso-quota-incident-2026-09-03.md) | Histórico do incidente Turso e de sua contenção; conferir as demandas residuais no Project antes de alterar agendadores. |

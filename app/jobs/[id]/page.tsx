@@ -1,3 +1,4 @@
+import { LocalDate } from "../../local-date";
 import { TransitionLink } from "../../transition-link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
@@ -24,7 +25,7 @@ import { trackAction, undoTrackAction } from "../../actions";
 import { Fit, Legend, ScoreBar, StatusBadge } from "../../ui";
 import { candidateScope, mayAdminister, requirePage } from "../../auth";
 import { getTranslator } from "../../i18n";
-import type { Translator } from "../../../src/core/i18n/index.ts";
+import type { LocaleId, Translator } from "../../../src/core/i18n/index.ts";
 import { LoadingRegion, SkeletonBar } from "../../skeleton";
 import {
   applicationStatusLabel,
@@ -48,7 +49,7 @@ const AVAILABILITY_LABEL = {
 } as const satisfies Record<Availability, string>;
 
 export default async function JobDetail({ params }: { params: Promise<{ id: string }> }) {
-  const { t } = await getTranslator();
+  const { t, locale } = await getTranslator();
   const session = await requirePage("job:read");
   const candidateId = candidateScope(session);
 
@@ -114,7 +115,7 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
         </p>
         <p className="mt-1.5 font-mono type-meta text-muted-foreground">
           <span data-user-content>{source?.label ?? job.sourceId}</span> ·{" "}
-          {t("jobDetail.seenOn")} {job.firstSeenAt.slice(0, 10)}
+          {t("jobDetail.seenOn")} <LocalDate iso={job.firstSeenAt} locale={locale} testId="job-first-seen" />
         </p>
         {/* Só o que um evento de verificação prova: sem evento, "desconhecida";
             checagem velha, "vencida" — nunca "aberta" por omissão (#223). */}
@@ -132,9 +133,14 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
               : AVAILABILITY_LABEL[availability.state],
           )}{" "}
           ·{" "}
-          {availability.lastCheckedAt
-            ? `${t("jobDetail.checkedOn")} ${availability.lastCheckedAt.slice(0, 10)}`
-            : t("jobDetail.checkedNever")}
+          {availability.lastCheckedAt ? (
+            <>
+              {t("jobDetail.checkedOn")}{" "}
+              <LocalDate iso={availability.lastCheckedAt} locale={locale} testId="job-checked-at" />
+            </>
+          ) : (
+            t("jobDetail.checkedNever")
+          )}
         </p>
 
         {/* Two destinations: the bare URL shows the description, /apply opens
@@ -267,6 +273,7 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
             candidateId={candidateId}
             jobId={job.id}
             t={t}
+            locale={locale}
             current={{ status: application.status, appliedAt: application.appliedAt }}
           />
         </Suspense>
@@ -368,8 +375,9 @@ async function Timeline({
   candidateId,
   jobId,
   t,
+  locale,
   current,
-}: SectionProps & { current: { status: ApplicationStatus; appliedAt: string | null } }) {
+}: SectionProps & { locale: LocaleId; current: { status: ApplicationStatus; appliedAt: string | null } }) {
   const timeline = await applicationTimeline(candidateId, jobId);
   if (timeline.length === 0) return null;
   const changes = timeline.flatMap((event) =>
@@ -392,7 +400,7 @@ async function Timeline({
               >
                 <div className="min-w-0 flex-1">
                   <p className="type-caption-sm text-muted-foreground">
-                    {event.at.slice(0, 10)}
+                    <LocalDate iso={event.at} locale={locale} testId="application-timeline-event-date" />
                     {" · "}
                     <span className={reverted.has(event.id) ? "line-through" : undefined}>
                       {describeEvent(event, t)}

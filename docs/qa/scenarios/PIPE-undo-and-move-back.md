@@ -11,8 +11,8 @@ bug_ids:
 fix_status:
 retest_status:
 fix_commits:
-evidence: docs/qa/reports/2026-09-28-pr-354-funil-desfazer.md
-last_report: docs/qa/reports/2026-09-28-pr-354-funil-desfazer.md
+evidence: docs/qa/reports/2026-10-06-qa-478-funil-filtros.md
+last_report: docs/qa/reports/2026-10-06-qa-478-funil-filtros.md
 overlaps: PIPE-refused-transition-keeps-draft; PIPE-read-application-history; PIPE-save-resume-decision
 ---
 
@@ -53,3 +53,12 @@ teto); desfazer uma reabertura e reabrir de novo chega ao estágio certo — o
 Major da 2ª rodada de revisão (`da2b8f9`) está corrigido. O conflito de duas
 abas avisa "Esta candidatura mudou em outra tela..." e não corrompe nada.
 Relatório: `docs/qa/reports/2026-09-28-pr-354-funil-desfazer.md`.
+
+**Canária 06/10 (#478, funil filtrado, `origin/dev` 4f62a49a): passa no
+recorte percorrido.** Com `/pipeline?channel=referral` aberto, mover a vaga de
+Candidatura enviada para Triagem com nota e desfazer pelo aviso; mover de novo
+e desfazer pela linha do histórico. O histórico ganhou as linhas "desfazer:"
+com as revertidas marcadas "desfeito", e a segunda sessão (375 px, inglês) viu
+o contador filtrado ir de 1 Applied + 1 Screening para 2 Screening e voltar,
+sem perder o filtro de canal. Os passos 1, 4, 5 e 6 não foram refeitos nesta
+rodada. Relatório: `docs/qa/reports/2026-10-06-qa-478-funil-filtros.md`.

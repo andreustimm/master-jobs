@@ -463,10 +463,49 @@ describe("V03-03 sessão emprestada não administra, nem quando o alvo é admin"
 
     const { ran, returned } = await sweepCandidateActions(ids);
 
-    expect(await victimSnapshot()).toEqual(before);
+    // A única escrita que o recrutador com acesso FAZ no escopo da vítima é a
+    // proposta (ADR-003): sugestão pendente e o evento dela no histórico de
+    // compartilhamento. Funil, currículo e o resto ficam byte a byte.
+    const proposal = new Set(["recruiter_suggestion", "recruiter_access_event"]);
+    const withoutProposal = (snapshot: Record<string, string>) =>
+      Object.fromEntries(Object.entries(snapshot).filter(([table]) => !proposal.has(table)));
+    expect(withoutProposal(await victimSnapshot())).toEqual(withoutProposal(before));
+    const proposed = await db.execute<{ status: string }>(
+      sql`select status from production.recruiter_suggestion where candidate_id = ${victim}`,
+    );
+    expect([...proposed].every((row) => row.status === "pending")).toBe(true);
     expect(returned).not.toContain(VICTIM_SENTINEL);
     // O recrutador acompanha; nenhuma escrita de candidato chega a rodar.
     expect(ran.filter((name) => ["saveCvAction", "setVisibilityAction", "deleteVersionAction"].includes(name))).toEqual([]);
     // A mesma varredura de V03-02, com o mesmo custo.
   }, 30_000);
+
+  it("IT-143 recrutador manda o id de quem não o acompanha: 404 antes de qualquer escrita, em sugerir e em cadastrar com sugestão", async () => {
+    const recruiterToken = await login("recrutador-outro@example.test", ["recruiter"], null);
+    const [recruiter] = await db.select().from(authUser).where(eq(authUser.email, "recrutador-outro@example.test"));
+    const followed = await ensureCandidate({ slug: "acompanhada", name: "Acompanhada" });
+    await linkRecruiterToCandidate(recruiter!.id, followed, recruiter!.id);
+    boundary.token = recruiterToken;
+    const ids = await seedVictim();
+    const before = await snapshot();
+    boundary.effects = [];
+
+    const suggest = await load("app/recruiter/[candidateId]/suggest/actions.ts", "suggestJobAction");
+    const create = await load("app/jobs/new/actions.ts", "createRecruiterJobAction");
+    const forms = [
+      hostileForm({ jobId: ids.jobId! }),
+      (() => {
+        const data = hostileForm({ jobId: ids.jobId! });
+        data.set("suggestFor", String(victim));
+        data.set("title", "Vaga forjada");
+        data.set("companyName", "Acme");
+        return data;
+      })(),
+    ];
+    expect(await outcome(suggest, [forms[0]])).toBe("NEXT_HTTP_ERROR_FALLBACK;404");
+    expect(await outcome(create, [forms[1]])).toBe("NEXT_HTTP_ERROR_FALLBACK;404");
+    expect(boundary.effects).toEqual(["notFound()", "notFound()"]);
+    expect(fetchCalls).toEqual([]);
+    expect(await snapshot()).toEqual(before);
+  });
 });

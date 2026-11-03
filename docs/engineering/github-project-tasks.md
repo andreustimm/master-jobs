@@ -160,7 +160,8 @@ nunca recupere o quadro publicando snapshots de branches.
 persistida e sem scripts de instalação. Conteúdo de issue é dado validado,
 nunca código ou argumento de shell. Todos os escritores usam um único grupo
 por Project com `queue: max` e `cancel-in-progress: false`; a agenda de dez
-minutos drena intenções duráveis e recupera inclusão de issues perdidas.
+minutos drena intenções duráveis e recupera inclusão de issues perdidas, mas
+só existe com `TASKS_WRITER_ENABLED=true` (ver abaixo).
 
 Eventos de PR/CI/deploy reconsultam HEAD, tentativa, ambiente, lease e vínculos
 nativos, depois registram evidência/sugestão idempotente. Não alteram Status.
@@ -184,6 +185,13 @@ o código confiável e as credenciais estarem prontos. Enquanto a flag estiver
 desligada, somente dispatch manual pode inicializar ou recuperar o escritor.
 Isso permite integrar o workflow em dev sem executar um arquivo ainda ausente
 de main. A flag de enforcement é separada para permitir o piloto.
+
+O workflow **não declara `schedule` enquanto a flag não existir**: a condição do
+job já o pulava, mas cada agendamento criava um run `skipped` (1.255 em 14 dias)
+que enchia a lista de runs. Quem cria `TASKS_WRITER_ENABLED=true` devolve, na
+mesma PR, o bloco `schedule: - cron: '*/10 * * * *'` (está comentado no
+workflow) e inverte a asserção de `tests/tasks-workflows.test.ts`; sem isso, a
+fila durável só é drenada por evento ou dispatch.
 
 O check `Vínculo da tarefa / canonical-task` executa código de main e exige PR
 para dev com assignee, vínculo nativo, Project, claim válido da branch e

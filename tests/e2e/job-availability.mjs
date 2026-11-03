@@ -13,7 +13,8 @@ import { authUser, job, source } from "../../src/core/db/schema.ts";
 import { applyVerdict } from "../../src/core/ingest/verdict.ts";
 
 async function login(browser, base, email, password) {
-  const context = await browser.newContext({ viewport: { width: 375, height: 812 } });
+  // Fuso de São Paulo: o "conferido em" é o dia de quem lê, não o de UTC (#500).
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, timezoneId: "America/Sao_Paulo" });
   await context.addCookies([{ name: "jho_locale", value: "pt-BR", url: base }]);
   const page = await context.newPage();
   await page.goto(`${base}/login`, { waitUntil: "networkidle" });
@@ -64,6 +65,15 @@ export async function checkJobAvailability(browser, base, account, check) {
         state: await line.getAttribute("data-availability"),
         reason: await line.getAttribute("data-reason"),
         text: await line.innerText(),
+        // A data da última checagem: o instante gravado, o que a tela mostra e
+        // o dia desse instante em São Paulo e em UTC (#500).
+        checked: await page.evaluate(() => {
+          const time = document.querySelector('[data-testid="job-checked-at"]');
+          if (!time) return null;
+          const iso = time.getAttribute("datetime") ?? "";
+          const format = (timeZone) => new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeZone }).format(new Date(iso));
+          return { iso, shown: time.textContent, local: format("America/Sao_Paulo"), utc: format("UTC") };
+        }),
       };
     };
 
@@ -71,14 +81,21 @@ export async function checkJobAvailability(browser, base, account, check) {
     check("E2E-004 vaga nunca verificada mostra desconhecida", never.state === "unknown" && never.text.includes("nunca conferido"), JSON.stringify(never));
 
     const alive = await state(viva);
-    check("E2E-004 vaga verificada mostra disponível com a última checagem",
-      alive.state === "open" && alive.text.includes(today.slice(0, 10)), JSON.stringify(alive));
+    check("E2E-004 vaga verificada mostra disponível com a última checagem, no dia de quem lê",
+      alive.state === "open" && alive.checked?.iso === today && alive.checked.shown === alive.checked.local
+        && alive.text.includes(alive.checked.local),
+      JSON.stringify(alive));
     await page.reload({ waitUntil: "networkidle" });
     check("E2E-004 disponibilidade sobrevive a refresh",
       (await page.getByTestId("job-availability").getAttribute("data-availability")) === "open");
 
     const stale = await state(velha);
     check("E2E-004 checagem velha mostra vencida, não disponível", stale.state === "stale", JSON.stringify(stale));
+    // E2E-500: 00:00 UTC de 1/1 é 21:00 de 31/12 em São Paulo; em UTC o dia sairia um adiante.
+    check("E2E-500 'conferido em' mostra o dia no fuso de quem lê, não em UTC",
+      stale.checked?.shown === stale.checked?.local && stale.checked?.local !== stale.checked?.utc
+        && stale.checked?.iso === "2026-01-01T00:00:00.000Z",
+      JSON.stringify(stale.checked));
 
     const closed = await state(fechada);
     check("E2E-004 vaga fechada com candidatura: encerrada e histórico visível",

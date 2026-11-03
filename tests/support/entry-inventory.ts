@@ -221,6 +221,43 @@ export const UNGUARDED_BY_DESIGN = new Map<string, { file: string; why: string }
       why: "pré-sessão: o token de uso único é a autorização, queimado antes de gravar",
     },
   ],
+  // Cadastro aberto (#464, ADR-007): quem se cadastra ainda não tem sessão.
+  [
+    "startManualSignup",
+    {
+      file: "app/signup/actions.ts",
+      why: "pré-conta: valida e grava só a pendência (sem conta, sem sessão); limite por IP na ação, cinco envios por e-mail por hora, resposta idêntica para e-mail com conta",
+    },
+  ],
+  [
+    "completeSocialSignup",
+    {
+      file: "app/signup/actions.ts",
+      why: "pré-conta: o cookie da pendência social (token de 32 bytes, 15 min, uso único) é a autorização; papel só candidato ou recrutador; limite por IP na transação",
+    },
+  ],
+  [
+    "confirmSignupCode",
+    {
+      file: "app/signup/actions.ts",
+      why: "pré-conta: cookie da pendência + código de uso único (HMAC, 15 min, trava em 5 erros) autorizam; limite por IP na transação",
+    },
+  ],
+  [
+    "resendSignupCode",
+    {
+      file: "app/signup/actions.ts",
+      why: "pré-conta: só reenvia para o e-mail da pendência do próprio cookie; 60 s entre envios e cinco por hora",
+    },
+  ],
+  [
+    // Convite de recrutador (#465, ADR-018): quem o recebeu ainda não tem conta.
+    "startInvitedSignup",
+    {
+      file: "app/signup/invite/actions.ts",
+      why: "pré-conta: token de uso único por hash (32 bytes, 7 dias, conferido antes de gravar); só grava o cookie httpOnly do convite, que não concede nada sem a conta de recrutador com o e-mail convidado provado",
+    },
+  ],
   [
     "setLocaleAction",
     {
@@ -233,6 +270,35 @@ export const UNGUARDED_BY_DESIGN = new Map<string, { file: string; why: string }
     {
       file: "app/theme-action.ts",
       why: "preferência de interface em cookie próprio; não lê nem escreve dado de ninguém e precisa valer no /login",
+    },
+  ],
+]);
+
+/**
+ * As actions que leem um id de candidato da entrada, e por quê (G40).
+ *
+ * A regra 15 diz que nenhuma action aceita `candidateId` da entrada. Estas o
+ * aceitam só como SELETOR dentro de `session.linkedCandidateIds` — a lista que
+ * a sessão resolveu das concessões vigentes —, com o mesmo 404 de um
+ * candidato inexistente fora dela, e a política (`suggestion:create`) decide
+ * antes de qualquer efeito. O id escolhe entre o que a sessão já pode; não
+ * amplia nada. `tests/entry-denial.test.ts` cobre o id fora da lista (IT-143).
+ */
+export const SELECTOR_ID_BY_DESIGN = new Map<string, { file: string; field: string; why: string }>([
+  [
+    "suggestJobAction",
+    {
+      file: "app/recruiter/[candidateId]/suggest/actions.ts",
+      field: "candidateId",
+      why: "recrutador sugere vaga a um candidato acompanhado: o id só escolhe dentro de `linkedCandidateIds`, fora dela é 404, e `suggestion:create` decide",
+    },
+  ],
+  [
+    "createRecruiterJobAction",
+    {
+      file: "app/jobs/new/actions.ts",
+      field: "suggestFor",
+      why: "a vaga cadastrada também é sugerida: `suggestFor` só escolhe dentro de `linkedCandidateIds`, fora dela é 404 antes de a vaga nascer",
     },
   ],
 ]);

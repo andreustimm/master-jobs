@@ -4,12 +4,15 @@
 //   exatamente as áreas que `tests/e2e/ui/index.mjs` roda; caminho transversal
 //   ou não mapeado pede a suíte inteira; e o que um módulo de área cita como
 //   rota está nas rotas da área, para o mapa não ficar para trás do teste.
-// Boundary IN: config/e2e-spec-map.json, scripts/gates/e2e-selection.ts,
+// Boundary IN: config/e2e-spec-map.json, config/e2e-spec-map.d/<id>.json (uma
+//   área por arquivo, #531), scripts/gates/e2e-selection.ts,
 //   tests/e2e/ui/index.mjs (seleção e fecho de `requires`)
 // Boundary OUT: se cada área roda sozinha — isso é `pnpm test:e2e --areas`
-import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
-import { commandFor, loadE2EMap, loadImpactMap } from "../scripts/gates/cli.ts";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { commandFor, E2E_AREAS_DIR, E2E_MAP_FILE, loadE2EMap, loadImpactMap, readE2EMapSource } from "../scripts/gates/cli.ts";
 import {
   appRouteOf,
   routeMatches,
@@ -21,10 +24,11 @@ import { planGates } from "../scripts/gates/impact.ts";
 import * as sweeps from "./e2e/routes.mjs";
 import { AREAS, PREFIX, SMOKE, selectAreas } from "./e2e/ui/index.mjs";
 import { discoverEntries } from "./support/entry-inventory.ts";
+import { moduleEdges, resolveLocal } from "./support/module-graph.ts";
 
 const ROOT = process.cwd();
 const MAP = loadE2EMap(ROOT);
-const RAW = JSON.parse(readFileSync("config/e2e-spec-map.json", "utf8")) as Record<string, unknown>;
+const RAW = readE2EMapSource(ROOT);
 
 /** `app/jobs/[id]/page.tsx` → `/jobs/[id]`; grupo `(nome)` some. */
 function routeOfPage(page: string): string {
@@ -44,7 +48,7 @@ describe("mapa de E2E — cobertura", () => {
 
   it("toda página servida pertence a alguma área", () => {
     const orphans = pages.map(routeOfPage).filter((route) => areasServing(route).length === 0);
-    expect(orphans, "página sem área: inclua a rota em config/e2e-spec-map.json").toEqual([]);
+    expect(orphans, "página sem área: inclua a rota em config/e2e-spec-map.d/<área>.json").toEqual([]);
   });
 
   it("toda rota das varreduras de routes.mjs pertence a alguma área", () => {
@@ -55,6 +59,7 @@ describe("mapa de E2E — cobertura", () => {
       ...sweeps.OVERFLOW_SWEEP,
       ...sweeps.OVERFLOW_SEARCHES_SWEEP,
       ...sweeps.AXE_SWEEP.map(([, path]) => String(path)),
+      ...sweeps.RECRUITER_SWEEP,
     ].map((path) => new URL(path.replace("{track}", "1").replace("{term}", "1"), "http://sweep.invalid").pathname);
     const unmeasured = Object.keys(sweeps.UNMEASURED_PAGES).map(routeOfPage);
     const orphans = [...listed, ...unmeasured].filter((route) => areasServing(route).length === 0);
@@ -101,7 +106,8 @@ describe("mapa de E2E — seleção", () => {
   });
 
   it("página seleciona as áreas que visitam a rota dela, com prefixo e segmento dinâmico", () => {
-    expect(selectE2E(MAP, ["app/searches/page.tsx"]).areas).toEqual(["track-selector", "mobile", "searches"]);
+    // Na ordem do mapa, que é a dos ids.
+    expect(selectE2E(MAP, ["app/searches/page.tsx"]).areas).toEqual(["mobile", "searches", "track-selector"]);
     const detail = selectE2E(MAP, ["app/jobs/[id]/page.tsx"]);
     expect(detail.areas).toContain("job-analysis");
     expect(detail.areas).toContain("a11y");
@@ -122,10 +128,35 @@ describe("mapa de E2E — seleção", () => {
     expect(selectE2E(MAP, ["app/joblist.tsx"]).areas).toEqual(selectE2E(MAP, ["app/jobs/(lista)/page.tsx"]).areas);
   });
 
+  it("peça de filtro que o Funil importa de Vagas seleciona as duas telas (#490)", () => {
+    const jobs = selectE2E(MAP, ["app/jobs/(lista)/page.tsx"]).areas;
+    // Fecho transitivo: o Funil carrega `filters.tsx`, que carrega `pay-range.tsx`.
+    const reached = new Set<string>();
+    const queue = ["app/pipeline/pipeline-filters.tsx", "app/pipeline/filter-state.ts"];
+    while (queue.length > 0) {
+      const file = queue.shift()!;
+      for (const edge of moduleEdges(readFileSync(file, "utf8"))) {
+        const target = edge.specifier === null ? null : resolveLocal(file, edge.specifier);
+        if (target === null || !target.startsWith("app/") || target.startsWith("app/pipeline/") || reached.has(target)) continue;
+        reached.add(target);
+        queue.push(target);
+      }
+    }
+    const shared = [...reached].filter((target) => selectE2E(MAP, [target]).mode === "affected");
+    expect(shared).toContain("app/filters.tsx");
+    expect(shared).toContain("app/checkbox-picker.tsx");
+    expect(shared).toContain("app/pay-range.tsx");
+    for (const file of shared) {
+      const areas = selectE2E(MAP, [file]).areas;
+      expect(areas, file).toContain("pipeline-filters");
+      expect(areas, file).toEqual(expect.arrayContaining(jobs));
+    }
+  });
+
   it("pnpm gates passa as áreas ao E2E, ou nada quando a suíte é inteira", () => {
     const impact = loadImpactMap(ROOT);
     const e2e = (paths: string[]) => planGates(impact, paths).gates.find((gate) => gate.id === "e2e")!;
-    expect(commandFor(e2e(["app/searches/page.tsx"]), ROOT, impact)).toEqual(["pnpm", "test:e2e", "--areas", "track-selector,mobile,searches"]);
+    expect(commandFor(e2e(["app/searches/page.tsx"]), ROOT, impact)).toEqual(["pnpm", "test:e2e", "--areas", "mobile,searches,track-selector"]);
     expect(commandFor(e2e(["app/layout.tsx"]), ROOT, impact)).toEqual(["pnpm", "test:e2e"]);
   });
 });
@@ -187,5 +218,52 @@ describe("mapa de E2E — validação falha fechado", () => {
     ["rota com query", broken((map) => { areas(map)[0]!.routes = ["/jobs?x=1"]; }), "rotas"],
   ])("%s", (_name, run, message) => {
     expect(run).toThrow(message);
+  });
+});
+
+describe("mapa de E2E — áreas em fragmentos (#531)", () => {
+  const BASE = Object.fromEntries(Object.entries(RAW).filter(([key]) => key !== "areas"));
+  const roots: string[] = [];
+  afterEach(() => {
+    for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  });
+
+  /** Raiz de mentira: o arquivo-base e as áreas que o caso pedir, uma por arquivo. */
+  function rootWith(files: Record<string, unknown>, base: Record<string, unknown> = BASE): string {
+    const root = mkdtempSync(join(tmpdir(), "e2e-map-"));
+    roots.push(root);
+    mkdirSync(join(root, E2E_AREAS_DIR), { recursive: true });
+    writeFileSync(join(root, E2E_MAP_FILE), JSON.stringify(base));
+    for (const [name, content] of Object.entries(files)) {
+      writeFileSync(join(root, E2E_AREAS_DIR, name), typeof content === "string" ? content : JSON.stringify(content));
+    }
+    return root;
+  }
+  const area = (id: string) => ({ id, modules: [`tests/e2e/ui/${id}.mjs`], patterns: [], routes: ["/"] });
+
+  it("junta um arquivo por área, em ordem de id (o id que é prefixo de outro vem antes)", () => {
+    const root = rootWith({ "jobs-new.json": area("jobs-new"), "jobs.json": area("jobs"), "auth.json": area("auth") });
+    expect(loadE2EMap(root).areas.map((item) => item.id)).toEqual(["auth", "jobs", "jobs-new"]);
+  });
+
+  it("ignora arquivo oculto, como o .DS_Store que o macOS cria", () => {
+    const root = rootWith({ "auth.json": area("auth"), ".DS_Store": "lixo" });
+    expect(loadE2EMap(root).areas.map((item) => item.id)).toEqual(["auth"]);
+  });
+
+  it("recusa o arquivo cujo nome não é o id da área", () => {
+    expect(() => readE2EMapSource(rootWith({ "outra.json": area("auth") }))).toThrow("precisa se chamar auth.json");
+  });
+
+  it("recusa o que não é um <id>.json", () => {
+    expect(() => readE2EMapSource(rootWith({ "auth.md": "# nota" }))).toThrow("não é um <id>.json");
+  });
+
+  it("recusa área que ficou no arquivo-base", () => {
+    expect(() => readE2EMapSource(rootWith({ "auth.json": area("auth") }, { ...BASE, areas: [area("jobs")] }))).toThrow("moram em");
+  });
+
+  it("sem nenhuma área o mapa falha fechado", () => {
+    expect(() => loadE2EMap(rootWith({}))).toThrow("areas ausentes");
   });
 });

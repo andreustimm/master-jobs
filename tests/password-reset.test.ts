@@ -425,6 +425,82 @@ describe("resgatar o link", () => {
   });
 });
 
+describe("recuperação por e-mail localizado (#464, US-020, ADR-011)", () => {
+  it("IT-088 conta existente e habilitada recebe o e-mail no idioma da conta, com link de uso único", async () => {
+    const id = await seedUser("en@local.test");
+    await db.update(authUser).set({ locale: "en" }).where(eq(authUser.id, id));
+    await seedUser("pt@local.test");
+
+    // O idioma da conta vence o da tela; sem idioma na conta, vale o da tela.
+    await requestPasswordReset("en@local.test", deps(), "pt-BR");
+    await requestPasswordReset("pt@local.test", deps(), "en");
+    await requestPasswordReset("pt@local.test", deps());
+
+    expect(enviados.map((mail) => [mail.to, mail.subject])).toEqual([
+      ["en@local.test", "Recover access to Master Jobs"],
+      ["pt@local.test", "Recover access to Master Jobs"],
+      ["pt@local.test", "Recuperar o acesso ao Master Jobs"],
+    ]);
+    expect(enviados[0]!.text).toContain("https://exemplo.test/login/reset?token=token-0");
+    expect(enviados[0]!.text).toContain(`valid for ${RESET_MINUTES} minutes and works only once`);
+    expect(enviados[2]!.text).toContain(`vale ${RESET_MINUTES} minutos e serve uma vez só`);
+
+    const token = tokensEmitidos[0]!;
+    expect((await redeemPasswordReset(token, SENHA_NOVA, hashToken, deps())).ok).toBe(true);
+    expect((await redeemPasswordReset(token, SENHA_NOVA, hashToken, deps())).ok).toBe(false);
+  });
+
+  it("IT-089 concluir a recuperação encerra as outras sessões", async () => {
+    const id = await seedUser("pessoa@local.test");
+    for (const tokenHash of ["sessao-a", "sessao-b"]) {
+      await db.insert(authSession).values({ tokenHash, userId: id, expiresAt: "2026-09-20T12:00:00.000Z" });
+    }
+    await requestPasswordReset("pessoa@local.test", deps());
+    expect((await redeemPasswordReset(tokensEmitidos[0]!, SENHA_NOVA, hashToken, deps())).ok).toBe(true);
+    expect(await db.select().from(authSession).where(eq(authSession.userId, id))).toHaveLength(0);
+  });
+
+  it("IT-090 conta só social (sem senha) usa a recuperação para definir a primeira senha", async () => {
+    const [row] = await db
+      .insert(authUser)
+      .values({ email: "social@local.test", roles: ["candidate"], passwordHash: null })
+      .returning({ id: authUser.id });
+    await requestPasswordReset("social@local.test", deps());
+    expect(enviados).toHaveLength(1);
+    expect((await redeemPasswordReset(tokensEmitidos[0]!, SENHA_NOVA, hashToken, deps())).ok).toBe(true);
+    const [user] = await db.select().from(authUser).where(eq(authUser.id, row!.id));
+    expect(await verifyPassword(SENHA_NOVA, user!.passwordHash)).toBe(true);
+  });
+
+  it("IT-091 conta desabilitada: a mesma resposta neutra e nenhum e-mail", async () => {
+    await seedUser("bloqueada@local.test", true);
+    expect(await requestPasswordReset("bloqueada@local.test", deps(), "en")).toEqual({ sent: true });
+    expect(enviados).toHaveLength(0);
+    expect(tokensEmitidos).toHaveLength(0);
+  });
+
+  it("IT-092 acima do limite por hora: resposta neutra e nenhum e-mail a mais", async () => {
+    await seedUser("alvo@local.test");
+    for (let i = 0; i < RESET_MAX_PER_HOUR; i++) await requestPasswordReset("alvo@local.test", deps());
+    expect(enviados).toHaveLength(RESET_MAX_PER_HOUR);
+    expect(await requestPasswordReset("alvo@local.test", deps(), "en")).toEqual({ sent: true });
+    expect(enviados).toHaveLength(RESET_MAX_PER_HOUR);
+  });
+
+  it("IT-093 link reusado ou vencido: a mesma recusa de link inválido", async () => {
+    await seedUser("pessoa@local.test");
+    await requestPasswordReset("pessoa@local.test", deps());
+    await requestPasswordReset("pessoa@local.test", deps());
+    const [usado, vencido] = tokensEmitidos;
+    expect((await redeemPasswordReset(usado!, SENHA_NOVA, hashToken, deps())).ok).toBe(true);
+    expect(await redeemPasswordReset(usado!, SENHA_NOVA, hashToken, deps())).toEqual({ ok: false, reason: "invalid" });
+
+    setClock(fixedClock("2026-08-20T13:00:01.000Z"));
+    expect(await isResetTokenLive(vencido!, hashToken)).toBe(false);
+    expect(await redeemPasswordReset(vencido!, SENHA_NOVA, hashToken, deps())).toEqual({ ok: false, reason: "invalid" });
+  });
+});
+
 describe("MAJOR M1 (revisão da PR #373) — sem origem pública, o pedido ainda é auditado", () => {
   it("grava reset_send_failed sem consultar se a conta existe", async () => {
     // `recordResetSendFailure` é chamada quando `resolvePublicOrigin` devolve

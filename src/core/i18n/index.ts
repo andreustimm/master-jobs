@@ -78,11 +78,18 @@ export function formatNumber(value: number, locale: LocaleId): string {
   return new Intl.NumberFormat(locale).format(value);
 }
 
-/** Data curta no formato do idioma. */
-export function formatDate(iso: string, locale: LocaleId): string {
+/**
+ * Data curta no formato do idioma.
+ *
+ * Sem `timeZone`, o dia é o do fuso do processo (UTC na Vercel). Instante que
+ * representa um dia escolhido em outro fuso — o fim do acesso de recrutador,
+ * 23:59:59.999 no fuso de quem escolheu — precisa do fuso gravado com ele, ou
+ * aparece um dia depois.
+ */
+export function formatDate(iso: string, locale: LocaleId, timeZone?: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(date);
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", ...(timeZone ? { timeZone } : {}) }).format(date);
 }
 
 export { renderScoreMessage } from "./score-message.ts";

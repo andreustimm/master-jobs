@@ -34,7 +34,54 @@ o defeito exato que cada correção fecha — veja `CHANGELOG.md`.
 
 <!-- sem-nota-usuario: 1.33.2 - 2026-10-05T17:47:35.000Z -->
 
+<!-- sem-nota-usuario: 1.36.0 - 2026-11-03T20:40:02.000Z -->
+
 ## [Unreleased]
+
+## [1.35.0] - 2026-11-03T19:11:15.000Z
+
+### Corrigido
+
+- Sua rede de contatos antiga volta a aparecer em Indicações. Ela tinha sumido quando separamos a rede de cada conta.
+- Duas contas podem cadastrar a mesma pessoa pelo endereço do LinkedIn, cada uma na própria rede.
+- O botão principal ("Buscar", "Aplicar" e os demais) deixa de ficar com o texto difícil de ler quando o ponteiro passa por cima, nos três temas e nos modos claro e escuro. No tema claro, o botão agora escurece no hover em vez de clarear.
+- No detalhe da vaga, o "visto em", o "conferido em" e a data de cada passo do histórico da candidatura agora aparecem no seu fuso, como no Funil: o que você registrou às 23:45 em São Paulo não vira mais o dia seguinte, e as duas telas concordam. A data passa a ser escrita por extenso ("7 de out. de 2026").
+- Em Vagas, filtrar só pelo teto salarial deixa a URL limpa, sem um mínimo vazio.
+- No Funil, o estágio escolhido agora fica marcado, a data de "aplicado em" sai no seu fuso (às 23:45 não vira o dia seguinte) e o canal aparece em português ("indicação", "direto"). O histórico que o recrutador vê também mostra a data no fuso de quem lê.
+- No tema escuro, o texto dos botões principais ficou mais legível.
+- Um score inválido no link agora mostra aviso, no Funil e em Vagas, e aplicar só o mínimo do score não deixa mais um "fitMax=" vazio no link.
+- No Funil, voltar pelo navegador ou "limpar" empresa e canal agora desmarca as caixas, e o próximo Aplicar não traz de volta o filtro desfeito. A faixa de score digitada ao contrário passa a aparecer nos campos já na ordem certa.
+- No Funil, a explicação de "ampliar busca" deixa de prometer sinônimos quando eles não estão ligados.
+- Em Minha conta, o histórico de acesso mostra a data de fim no dia que você escolheu, e não um dia depois.
+- Quem recebe um convite ou um aviso de acesso de uma pessoa que ainda não escolheu nome vê "Candidato", e não o e-mail dela.
+- O administrador que assume a identidade de um recrutador não sugere mais vagas em nome dele.
+- Trocar o e-mail de uma conta na administração passa a exigir nova confirmação do endereço antes de um convite pendente a ele valer.
+
+### Adicionado
+
+- O Funil ganhou filtros: busque por palavra no cargo e na descrição, escolha empresas e canais, defina a faixa de score e combine tudo com o estágio. "Ampliar busca" também acha sinônimos em português e inglês e cargos com grafia parecida. Os números de cada estágio acompanham os filtros, e o link guarda a visão filtrada.
+- O recrutador que você convidar por e-mail agora consegue aceitar: o link do convite abre o cadastro já como Recrutador, e quem se cadastra com o endereço que você digitou cai direto no seu perfil. Outro e-mail não ganha acesso.
+- Recrutadores ganham um diretório de perfis: buscam por nome, headline ou skill entre os candidatos que escolheram Recrutadores ou Público, filtram por localização, modelo de trabalho e nível, e leem só o que o perfil público mostra.
+
+### Novidades
+
+- A tela de entrada pode oferecer "Continuar com Google" e "Continuar com LinkedIn" onde o login social estiver ligado. Uma conta existente é reconhecida pelo e-mail que o provedor confirma, e você recebe um aviso por e-mail quando o provedor é ligado.
+- Quem já entrou e abre a tela de entrada vai direto para a sua tela.
+- Agora dá para criar a própria conta em "Criar conta", como candidato ou como recrutador, pelo Google, pelo LinkedIn ou com e-mail e senha confirmados por um código enviado ao e-mail.
+- O candidato sai do cadastro com o perfil e o currículo já guardados, e as vagas passam a ser pontuadas contra ele. O recrutador vê uma explicação de como o acesso aos candidatos chega.
+- Os Termos de Uso e a Política de Privacidade podem ser lidos sem conta, em português e em inglês.
+- Em Minha conta, a seção "Formas de entrar" mostra se a conta tem senha e se o Google e o LinkedIn estão ligados, com a data do vínculo e do último uso. Dá para conectar ou desligar cada provedor; a última forma de entrar nunca pode ser desligada.
+- Conta que entra só pelo Google ou pelo LinkedIn pode definir uma senha na própria tela da conta.
+- Você recebe um e-mail sempre que um provedor é ligado ou desligado da sua conta.
+- O e-mail de recuperação de senha chega no seu idioma.
+- Em Minha conta, a seção "Acesso de recrutadores" deixa você dar a um recrutador com conta acesso de leitura ao seu funil e ao currículo atual, com data de fim opcional. Você vê quem tem acesso, revoga quando quiser e acompanha o histórico de tudo o que foi compartilhado.
+- O recrutador a quem você deu acesso agora vê o seu currículo atual, além do funil, e pode sugerir vagas para você. As sugestões chegam em "Sugestões", no menu, com a nota dele; só você decide: aceitar põe a vaga no seu funil, recusar deixa tudo como está.
+- Para recrutadores: a lista de candidatos mostra desde quando você tem acesso e até quando, e a página de cada pessoa traz o currículo para ler ou baixar e a lista das vagas que você sugeriu, com a resposta dela.
+
+### Alterado
+
+- Em "Quem vê este perfil", cada opção explica quem encontra e lê o perfil; Recrutadores alcança também quem se cadastrou sozinho como recrutador.
+- O consentimento do texto do currículo vale para Recrutadores e Público. E-mail, telefone e pretensão salarial escritos no currículo continuam fora.
 
 ## [1.34.0] - 2026-10-05T18:11:37.000Z
 

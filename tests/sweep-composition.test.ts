@@ -50,6 +50,7 @@ const { candidate, scoreCursor, sourceRun, sweepLease, sweepRun, targetTrack } =
 const { releaseTestDb, useTestDb } = await import("./support/db.ts");
 
 const alarm = vi.fn(async () => {});
+const recruiterAccess = vi.fn(async () => ({}));
 
 beforeEach(async () => {
   await useTestDb();
@@ -68,14 +69,14 @@ describe("sync", () => {
   it("fatia morta no meio não trava a fonte: a execução sem batimento é interrompida e a fonte roda", async () => {
     loadSources.mockResolvedValue([{ kind: "greenhouse", handle: "acme", label: "Acme" }]);
     syncSource.mockResolvedValue({ ok: true, fetched: 3 });
-    await runSweep("sync", { alarm });
+    await runSweep("sync", { alarm, recruiterAccess });
     const [primeira] = await getDb().select().from(sourceRun);
     // Uma fatia anterior foi morta pela Vercel: a linha ficou `running`, velha.
     await getDb().update(sourceRun).set({ status: "running", heartbeatAt: "2026-01-01T00:00:00.000Z" }).where(eq(sourceRun.id, primeira!.id));
     await getDb().delete(sweepRun);
     await getDb().delete(sweepLease);
 
-    const report = await runSweep("sync", { alarm });
+    const report = await runSweep("sync", { alarm, recruiterAccess });
 
     expect(report.units.map((u) => [u.unit, u.ok])).toEqual([["sync:greenhouse:acme", true]]);
     const execucoes = await getDb().select().from(sourceRun).orderBy(sourceRun.id);
@@ -86,7 +87,7 @@ describe("sync", () => {
   it("execução viva de outro processo fica com ele: a fatia cede sem erro e não sincroniza", async () => {
     loadSources.mockResolvedValue([{ kind: "greenhouse", handle: "acme", label: "Acme" }]);
     syncSource.mockResolvedValue({ ok: true, fetched: 3 });
-    await runSweep("sync", { alarm });
+    await runSweep("sync", { alarm, recruiterAccess });
     const [primeira] = await getDb().select().from(sourceRun);
     // A tela pediu "Buscar agora" e o GitHub está rodando: batimento fresco.
     await getDb().update(sourceRun).set({ status: "running", heartbeatAt: new Date().toISOString() }).where(eq(sourceRun.id, primeira!.id));
@@ -94,7 +95,7 @@ describe("sync", () => {
     await getDb().delete(sweepLease);
     syncSource.mockClear();
 
-    const report = await runSweep("sync", { alarm });
+    const report = await runSweep("sync", { alarm, recruiterAccess });
 
     expect(report.units.map((u) => [u.unit, u.ok, u.items])).toEqual([["sync:greenhouse:acme", true, 0]]);
     expect(syncSource).not.toHaveBeenCalled();
@@ -111,7 +112,7 @@ describe("sync", () => {
       config.handle === "acme" ? { ok: true, fetched: 12 } : { ok: false, fetched: 0, error: "HTTP 500" },
     );
 
-    const report = await runSweep("sync", { alarm });
+    const report = await runSweep("sync", { alarm, recruiterAccess });
 
     expect(syncSource).toHaveBeenCalledTimes(2);
     expect(report.units.map((u) => [u.unit, u.ok, u.items])).toEqual([
@@ -133,7 +134,7 @@ describe("sync", () => {
   it("onde a ingestão é bloqueada, nenhuma fonte é tocada", async () => {
     process.env.JHO_ENV = "staging";
     loadSources.mockResolvedValue([{ kind: "greenhouse", handle: "acme", label: "Acme" }]);
-    await expect(runSweep("sync", { alarm })).rejects.toThrow(/Ingestion blocked/);
+    await expect(runSweep("sync", { alarm, recruiterAccess })).rejects.toThrow(/Ingestion blocked/);
     expect(syncSource).not.toHaveBeenCalled();
     expect(loadSources).not.toHaveBeenCalled();
   });
@@ -153,7 +154,7 @@ describe("filas de pontuação", () => {
     );
 
     const before = Date.now();
-    const report = await runSweep("sem-nota", { alarm });
+    const report = await runSweep("sem-nota", { alarm, recruiterAccess });
     expect(report.items).toBe(1);
     expect(report.errors).toBe(1);
     expect(report.units[1]).toMatchObject({ ok: false, error: "perfil ilegível" });
@@ -184,8 +185,8 @@ describe("filas de pontuação", () => {
     });
     scoreCandidate.mockResolvedValue({ perfil: "ja-tinha", scored: 1, topFit: 50 });
 
-    const semNota = await runSweep("sem-nota", { alarm });
-    const manutencao = await runSweep("manutencao", { alarm });
+    const semNota = await runSweep("sem-nota", { alarm, recruiterAccess });
+    const manutencao = await runSweep("manutencao", { alarm, recruiterAccess });
 
     expect(semNota.units.map((u) => u.unit)).toEqual([`pontuacao:${novo!.id}`]);
     expect(manutencao.units.map((u) => u.unit)).toEqual([`pontuacao:${antigo!.id}`]);
@@ -197,7 +198,7 @@ describe("fatias de fila", () => {
     runScoreQueue.mockResolvedValue({ processadas: 2, pontuadas: 80, falhas: 1, adiadas: 1, interrompida: true });
     scoreQueueStatus.mockResolvedValue({ pending: 3, done: 5 });
 
-    const report = await runSweep("repontuar", { alarm });
+    const report = await runSweep("repontuar", { alarm, recruiterAccess });
 
     const opts = runScoreQueue.mock.calls[0]![0] as { budgetMs: number; worker: string };
     expect(opts.budgetMs).toBeGreaterThan(0);
@@ -212,8 +213,8 @@ describe("fatias de fila", () => {
     enqueueStale.mockResolvedValue(7);
     runVerifyQueue.mockResolvedValue({ checked: 5, gone: 1, alive: 3, inconclusive: 1 });
 
-    const first = await runSweep("reconferencia", { alarm });
-    const second = await runSweep("reconferencia", { alarm });
+    const first = await runSweep("reconferencia", { alarm, recruiterAccess });
+    const second = await runSweep("reconferencia", { alarm, recruiterAccess });
 
     expect(enqueueStale).toHaveBeenCalledTimes(1);
     expect(first.detail).toMatchObject({ queued: 7, gone: 1 });
@@ -228,7 +229,7 @@ describe("fatias de fila", () => {
     runFetchStage.mockResolvedValue({ processed: 4, stored: 3, blocked: 0, failed: 1 });
     runParseStage.mockResolvedValue({ processed: 3, parsed: 2, failed: 1, rescored: 0 });
 
-    const report = await runSweep("captura", { alarm });
+    const report = await runSweep("captura", { alarm, recruiterAccess });
 
     expect(runFetchStage).toHaveBeenCalledWith({ concurrency: 4, limit: 4, timeoutMs: 10_000 });
     expect(report).toMatchObject({ items: 5, errors: 2, detail: { queued: 3, stored: 3, parsed: 2 } });
@@ -242,7 +243,7 @@ describe("fatias de fila", () => {
       himalayas: { claimed: 1, succeeded: 0, waiting: 1, failed: 0, created: 0, known: 0 },
     });
 
-    const report = await runSweep("termos", { alarm });
+    const report = await runSweep("termos", { alarm, recruiterAccess });
 
     expect(requestTermCaptures).toHaveBeenCalledWith(expect.objectContaining({ termKey: "k1", origin: "sweep" }));
     expect(report).toMatchObject({ items: 1, errors: 1, detail: { claimed: 3, waiting: 1, created: 4 } });

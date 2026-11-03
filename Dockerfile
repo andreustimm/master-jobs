@@ -6,19 +6,25 @@
 # continua o destino padrão; esta imagem só serve quando o dono decide o
 # failover (docs/engineering/deploy.md, "Plano B: Fly.io").
 
-# `node:24-slim` (multi-arch), pinada pelo digest do índice em 2026-09-29 —
-# o mesmo padrão de `docker-compose.local.yml` (imagens locais fixadas por
-# tag e digest). O índice resolve para a arquitetura certa em cada `docker
-# build`; atualizar exige trocar o digest de propósito, não puxar o que a
-# tag `24-slim` apontar no dia.
-ARG NODE_IMAGE=node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
+# `node:24-trixie-slim` (multi-arch; Debian 13, a estável mais nova), pinada
+# pelo digest do índice em 2026-10-06 — o mesmo padrão de
+# `docker-compose.local.yml` (imagens locais fixadas por tag e digest). O
+# índice resolve para a arquitetura certa em cada `docker build`; quem troca o
+# digest é o Renovate, numa PR que passa pelo CI (docs/engineering/versions.md),
+# nunca o que a tag apontar no dia do build. A major do Node acompanha
+# `engines.node` (tests/deploy-fly.test.ts confere).
+ARG NODE_IMAGE=node:24-trixie-slim@sha256:173f125896c3b47ddf056734c7ea789d04595a6a08769a8f78e0df642781fb66
 
 # ---- deps: só o lockfile, para o cache de camada sobreviver a mudança de
 # código sem reinstalar o mundo -----------------------------------------------
 FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
-RUN corepack enable && corepack prepare pnpm@10.28.0 --activate
-COPY package.json pnpm-lock.yaml ./
+# `pnpm-workspace.yaml` carrega as overrides e a lista `allowBuilds`: sem ele,
+# o `--frozen-lockfile` resolveria com outra configuração e reprovaria.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# `corepack install` lê a versão do pnpm de `packageManager` — um número só,
+# no package.json, em vez de outro repetido aqui.
+RUN corepack enable && corepack install
 # --ignore-scripts: nesta camada só existem package.json e o lockfile, então
 # o `prepare` do próprio repositório (configura git hooks) não tem
 # `scripts/` para achar, e o `postinstall` do Playwright baixaria browsers
@@ -35,7 +41,8 @@ RUN pnpm install --frozen-lockfile --ignore-scripts
 # funciona no build da Vercel.
 FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
-RUN corepack enable && corepack prepare pnpm@10.28.0 --activate
+COPY package.json ./
+RUN corepack enable && corepack install
 ENV NEXT_TELEMETRY_DISABLED=1
 # `scripts/sw-version.mjs` (o marcador de versão do service worker) lê
 # `VERCEL_GIT_COMMIT_SHA` quando presente e, na falta, tenta `git

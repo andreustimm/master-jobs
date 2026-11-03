@@ -42,6 +42,7 @@ import {
   candidateDocument,
   job,
   jobScore,
+  recruiterSuggestion,
   source,
   company,
   type ApplicationStatus,
@@ -659,12 +660,16 @@ const inLocation = (pattern: string) => sql`coalesce(${job.locationRaw}, '') ~* 
  * o texto longo, descomprimido linha a linha: ali o índice trigrama corta antes
  * o que nunca casaria, e o `~*` continua decidindo (#214). Todo termo e toda
  * frase precisam casar, cada um em algum campo.
+ *
+ * `prefilter: false` dispensa o corte trigrama: ele só enxerga vaga aberta, e o
+ * funil guarda candidatura de vaga fechada. Lá o conjunto é o de uma pessoa, e
+ * o `~*` linha a linha custa pouco.
  */
-function queryCondition(parts: readonly QueryPart[]): SQL | undefined {
+function queryCondition(parts: readonly QueryPart[], { prefilter = true } = {}): SQL | undefined {
   if (parts.length === 0) return undefined;
   const anywhere = ({ pattern, like }: QueryAlternative) =>
     sql`(${job.title} ~* ${pattern} or ${job.companyName} ~* ${pattern} or ${inLocation(pattern)} or ${
-      like ? sql`(${job.id} = any(${termTextCandidates(like)}) and ${inText(pattern)})` : inText(pattern)
+      like && prefilter ? sql`(${job.id} = any(${termTextCandidates(like)}) and ${inText(pattern)})` : inText(pattern)
     })`;
   // Termo e sinônimos se juntam por `or` dentro do grupo; entre grupos continua
   // `and`. Com uma alternativa só, o SQL é o de antes da lista.
@@ -1608,27 +1613,121 @@ export function inFunnel(): SQL {
   return ne(application.status, OUT_OF_FUNNEL);
 }
 
-/** Funnel counts for the dashboard header. */
-export async function pipelineCounts(candidateId: number): Promise<Record<string, number>> {
+/**
+ * Os filtros do funil (#478), além do estágio. Lista, total e contador por
+ * estágio passam pelo mesmo `pipelineConditions`, então nunca discordam.
+ */
+export type PipelineFilters = {
+  /** A consulta de `/jobs`, já validada: as mesmas palavras inteiras e frases. */
+  query?: SearchQuery;
+  /** Sinônimos da lista curada, como em `BoardFilters.synonyms`. */
+  synonyms?: SynonymMap;
+  /** Título de grafia parecida (trigrama, `NEAR_THRESHOLD`) também casa a consulta. */
+  proximity?: boolean;
+  /** Nome exato da empresa da vaga; vazio é todas. */
+  companies?: readonly string[];
+  /** Canal gravado na candidatura; vazio é todos. */
+  channels?: readonly string[];
+  /** Faixa do score da trilha principal. Candidatura sem nota passa (#279, regra 8). */
+  minFit?: number;
+  maxFit?: number;
+};
+
+function pipelineConditions(candidateId: number, filters: PipelineFilters): SQL[] {
+  const conditions: SQL[] = [eq(application.candidateId, candidateId)];
+  const parts = queryParts(filters);
+  const matched = queryCondition(parts, { prefilter: false });
+  if (matched) {
+    const needle = nearNeedle(filters);
+    conditions.push(
+      filters.proximity
+        ? sql`(${matched} or word_similarity(${needle}, ${job.title}) >= ${NEAR_THRESHOLD})`
+        : matched,
+    );
+  }
+  if (filters.companies && filters.companies.length > 0) conditions.push(inArray(job.companyName, [...filters.companies]));
+  if (filters.channels && filters.channels.length > 0) conditions.push(inArray(application.channel, [...filters.channels]));
+  if (filters.minFit !== undefined) conditions.push(or(isNull(jobScore.fit), gte(jobScore.fit, filters.minFit))!);
+  if (filters.maxFit !== undefined) conditions.push(or(isNull(jobScore.fit), lte(jobScore.fit, filters.maxFit))!);
+  return conditions;
+}
+
+/**
+ * Funnel counts for the dashboard header, under the funnel filters when given.
+ *
+ * Sem filtro, as junções ficam mesmo sem uso, e isso é barato (#490): medido
+ * com 20 mil vagas (cada uma com `job_page` de ~14 KB e nota) e 3 mil
+ * candidaturas do candidato, 1,8 ms por consulta contra 0,9 ms da contagem só
+ * em `application`. O planner descarta a junção com `job_page` (chave única,
+ * nenhuma coluna lida) e faz merge join pelos índices de `job` e `job_score`.
+ * Montar a consulta sem as junções economizaria menos de 1 ms e criaria um
+ * segundo caminho que pode divergir de `pipelineRows`.
+ */
+export async function pipelineCounts(
+  candidateId: number,
+  filters: PipelineFilters = {},
+): Promise<Record<string, number>> {
   const db = getDb();
   const rows = await db
     .select({ status: application.status, n: sql<number>`count(*)` })
     .from(application)
-    .where(and(eq(application.candidateId, candidateId), inFunnel()))
+    .innerJoin(job, eq(job.id, application.jobId))
+    .leftJoin(jobScore, scoreJoin(candidateId))
+    .leftJoin(jobPage, eq(jobPage.jobId, job.id))
+    .where(and(...pipelineConditions(candidateId, filters), inFunnel()))
     .groupBy(application.status);
   return Object.fromEntries(rows.map((r) => [r.status, Number(r.n)]));
 }
 
+/**
+ * Empresas e canais das candidaturas no funil, para as opções dos filtros.
+ * Sem filtro nenhum: a opção marcada não some da lista quando outro filtro a
+ * zera.
+ */
+export async function pipelineFacets(candidateId: number): Promise<{ companies: string[]; channels: string[] }> {
+  const db = getDb();
+  const scope = and(eq(application.candidateId, candidateId), inFunnel());
+  // Em série: quem chama já pode ter outra leitura em voo, e o pool é pequeno.
+  const companies = await db
+    .selectDistinct({ value: job.companyName })
+    .from(application)
+    .innerJoin(job, eq(job.id, application.jobId))
+    .where(scope)
+    .orderBy(asc(job.companyName));
+  const channels = await db
+    .selectDistinct({ value: application.channel })
+    .from(application)
+    .where(and(scope, sql`coalesce(${application.channel}, '') <> ''`))
+    .orderBy(asc(application.channel));
+  return {
+    companies: companies.map((row) => row.value),
+    channels: channels.map((row) => row.value).filter((value): value is string => value !== null),
+  };
+}
+
+/** Uma concessão vigente, como a lista do recrutador a recebe da autenticação. */
+export type RecruiterGrantScope = {
+  candidateId: number;
+  since: string;
+  until: string | null;
+  untilTz: string | null;
+};
+
 export type RecruiterCandidateSummary = {
   candidateId: number;
   name: string;
-  slug: string;
+  /** Só para o rótulo de quem não escolheu nome (US-013.EC-2); nunca o e-mail. */
+  headline: string | null;
+  since: string;
+  until: string | null;
+  untilTz: string | null;
   counts: Record<string, number>;
   total: number;
 };
 
 /**
- * Resumo do funil de cada candidato que o recrutador acompanha.
+ * Uma página dos candidatos que o recrutador acompanha, por nome e depois por
+ * id, com o resumo do funil de cada um (US-005.EC-4, US-013).
  *
  * O escopo entra em SQL, como `inArray`, e não como filtro sobre um resultado
  * global: o banco nunca chega a ler linha de quem não está na lista. Filtrar
@@ -1640,27 +1739,32 @@ export type RecruiterCandidateSummary = {
  * tem o que ver, e `inArray` com lista vazia é SQL inválido em alguns dialetos.
  */
 export async function recruiterCandidateSummaries(
-  candidateIds: readonly number[],
+  grants: readonly RecruiterGrantScope[],
+  page: { page: number; pageSize: number },
 ): Promise<RecruiterCandidateSummary[]> {
-  if (candidateIds.length === 0) return [];
+  if (grants.length === 0) return [];
   const db = getDb();
-  const scope = [...candidateIds];
+  const byGrant = new Map(grants.map((grant) => [grant.candidateId, grant]));
+  const scope = [...byGrant.keys()];
 
-  const [people, counted] = await Promise.all([
-    db
-      .select({ id: candidate.id, name: candidate.name, slug: candidate.slug })
-      .from(candidate)
-      .where(inArray(candidate.id, scope)),
-    db
-      .select({
-        candidateId: application.candidateId,
-        status: application.status,
-        n: sql<number>`count(*)`,
-      })
-      .from(application)
-      .where(and(inArray(application.candidateId, scope), inFunnel()))
-      .groupBy(application.candidateId, application.status),
-  ]);
+  // Em série: a contagem só lê os candidatos desta página.
+  const people = await db
+    .select({ id: candidate.id, name: candidate.name, headline: candidate.headline })
+    .from(candidate)
+    .where(inArray(candidate.id, scope))
+    .orderBy(asc(candidate.name), asc(candidate.id))
+    .limit(page.pageSize)
+    .offset((page.page - 1) * page.pageSize);
+  if (people.length === 0) return [];
+  const counted = await db
+    .select({
+      candidateId: application.candidateId,
+      status: application.status,
+      n: sql<number>`count(*)`,
+    })
+    .from(application)
+    .where(and(inArray(application.candidateId, people.map((person) => person.id)), inFunnel()))
+    .groupBy(application.candidateId, application.status);
 
   const byCandidate = new Map<number, Record<string, number>>();
   for (const row of counted) {
@@ -1669,18 +1773,45 @@ export async function recruiterCandidateSummaries(
     byCandidate.set(row.candidateId, counts);
   }
 
-  return people
-    .map((person) => {
-      const counts = byCandidate.get(person.id) ?? {};
-      return {
-        candidateId: person.id,
-        name: person.name,
-        slug: person.slug,
-        counts,
-        total: Object.values(counts).reduce((sum, n) => sum + n, 0),
-      };
+  return people.map((person) => {
+    const counts = byCandidate.get(person.id) ?? {};
+    const grant = byGrant.get(person.id)!;
+    return {
+      candidateId: person.id,
+      name: person.name,
+      headline: person.headline,
+      since: grant.since,
+      until: grant.until,
+      untilTz: grant.untilTz,
+      counts,
+      total: Object.values(counts).reduce((sum, n) => sum + n, 0),
+    };
+  });
+}
+
+/**
+ * O funil de um candidato como o recrutador com acesso o lê (ADR-002): título,
+ * empresa, estágio, data de envio e o estado da vaga — e nenhuma coluna além
+ * dessas. Nota, próximo passo, canal e nota de fit ficam fora da consulta, não
+ * só da tela. Mesma ordem de `/pipeline`.
+ */
+export async function recruiterFunnelRows(candidateId: number, query: { limit: number; offset: number }) {
+  return getDb()
+    .select({
+      jobId: job.id,
+      title: job.title,
+      companyName: job.companyName,
+      status: application.status,
+      appliedAt: application.appliedAt,
+      jobClosedAt: job.closedAt,
+      jobArchivedAt: job.archivedAt,
     })
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .from(application)
+    .innerJoin(job, eq(job.id, application.jobId))
+    .where(and(eq(application.candidateId, candidateId), inFunnel()))
+    .orderBy(desc(application.updatedAt), desc(application.id))
+    .limit(query.limit)
+    .offset(query.offset);
 }
 
 /**
@@ -1857,7 +1988,7 @@ export async function clusterBreakdown(candidateId: number, minFit = 45) {
 /** Teto de linhas por página. Histórico grande não vira consulta sem fim. */
 export const PIPELINE_PAGE_SIZE = 25;
 
-export type PipelineQuery = {
+export type PipelineQuery = PipelineFilters & {
   /** Já validado pela borda; `null` é "todos os estágios". */
   status?: ApplicationStatus | null;
   limit?: number;
@@ -1868,9 +1999,10 @@ export async function pipelineRows(candidateId: number, query: PipelineQuery = {
   const db = getDb();
   const limit = query.limit ?? PIPELINE_PAGE_SIZE;
   const offset = query.offset ?? 0;
-  const scope = query.status
-    ? and(eq(application.candidateId, candidateId), eq(application.status, query.status))
-    : and(eq(application.candidateId, candidateId), inFunnel());
+  const scope = and(
+    ...pipelineConditions(candidateId, query),
+    query.status ? eq(application.status, query.status) : inFunnel(),
+  );
 
   return db
     .select({
@@ -1889,10 +2021,14 @@ export async function pipelineRows(candidateId: number, query: PipelineQuery = {
       // candidatura só muda por decisão do usuário.
       jobClosedAt: job.closedAt,
       jobArchivedAt: job.archivedAt,
+      // O marcador "sugerida por recrutador" mora na sugestão aceita, não na
+      // candidatura (ADR-015): a que já existia antes do aceite também o ganha.
+      suggestedByRecruiter: sql<boolean>`exists (select 1 from ${recruiterSuggestion} rs where rs.application_id = ${application.id} and rs.status = 'accepted')`,
     })
     .from(application)
     .innerJoin(job, eq(job.id, application.jobId))
     .leftJoin(jobScore, scoreJoin(candidateId))
+    .leftJoin(jobPage, eq(jobPage.jobId, job.id))
     .where(scope)
     // `id` desempata: sem ele, duas candidaturas salvas no mesmo instante podem
     // trocar de lugar entre páginas e uma delas some da listagem.

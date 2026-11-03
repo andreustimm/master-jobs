@@ -105,6 +105,7 @@ importam:
 | Largura de 320 a 1024 px e conteúdo cortado | `OVERFLOW_SWEEP` |
 | Largura em 375, 768 e 1024 px com as trilhas | `OVERFLOW_SEARCHES_SWEEP` |
 | axe WCAG 2.2 AA a 1280 px | `AXE_SWEEP` |
+| Inglês, 375 px e axe como recrutador (#465) | `RECRUITER_SWEEP` |
 
 `tests/e2e-route-coverage.test.ts`, dentro do `pnpm check`, cruza a união
 dessas listas com o inventário de páginas de `tests/support/entry-inventory.ts`
@@ -112,7 +113,9 @@ dessas listas com o inventário de páginas de `tests/support/entry-inventory.ts
 nem em `UNMEASURED_PAGES` reprova.** Exceção precisa de motivo, precisa apontar
 para página que existe, e sai quando a página passa a ser medida. Hoje ficam
 fora, com o porquê escrito: a fixture `/transition-test`, as duas telas de
-recrutador e `/p/[slug]`.
+recrutador, o perfil do diretório (`/recruiter/directory/[id]`, medido pela
+área `recruiter-directory`) e `/p/[slug]`. A lista do diretório entra em
+`RECRUITER_SWEEP`, varrida com a sessão do recrutador da fixture.
 
 E as varreduras deixaram de aprovar o login no lugar da tela pedida:
 `gotoMeasured` confere resposta 2xx e **destino igual ao pedido**. Uma sessão
@@ -147,12 +150,14 @@ São perguntas diferentes, e nenhuma das quatro camadas responde a da outra.
 |---|---|---|---|
 | `pnpm check` (Vitest, cobertura, inventário de rotas) | jobs `contratos`, `testes` e `cobertura`, obrigatórios via `qualidade` | regra pura, contrato de banco, autorização de toda entrada, que toda página tem varredura ou exceção | que a tela renderiza, cabe ou fala inglês |
 | Fronteira PWA (`pnpm test:pwa-browser`) | job `pwa-browser`, obrigatório via `qualidade` | service worker sem nada autenticado, num Chromium real | o resto da interface |
-| `pnpm test:e2e` (`ui.mjs` com as áreas de `ui/`, e `a11y.mjs`) | job `e2e-navegador`, **ainda não obrigatório**, sempre a suíte inteira | build de produção, PostgreSQL descartável, login real por papel; as varreduras de `routes.mjs`; temas, contraste do editor, WebKit no histórico de novidades | que uma pessoa consegue cumprir o objetivo; texto literal sem acento; telas em `UNMEASURED_PAGES` |
+| `pnpm test:e2e` (`ui.mjs` com as áreas de `ui/`, e `a11y.mjs`) | job `e2e-navegador`, **ainda não obrigatório**, sempre a suíte inteira quando roda — em PR para `dev`, só quando a tabela de impacto pede (G57) | build de produção, PostgreSQL descartável, login real por papel; as varreduras de `routes.mjs`; temas, contraste do editor, WebKit no histórico de novidades | que uma pessoa consegue cumprir o objetivo; texto literal sem acento; telas em `UNMEASURED_PAGES` |
 | QA de jornada (`qa-execution`) | só local, com gente ou agente dirigindo | que a persona chega ao estado final pela interface pública, e que ele sobrevive a refresh e a leitura independente | nada que o CI já reprova — ela não substitui nenhuma das linhas acima |
 
-O job `e2e-navegador` roda em todo PR e push das três branches, sem segredo
-nenhum: o próprio harness sobe um `postgres:17` descartável no loopback do
-runner, com senha aleatória, e `database-guard.mjs` recusa qualquer outro banco.
+O job `e2e-navegador` roda no push das três branches e em PR — para `dev`, só
+quando a tabela de impacto pede o gate `e2e` para o diff (decisão do dono,
+13/10/2026; o job `plano` do `ci.yml` decide) —, sem segredo nenhum: o próprio harness sobe um PostgreSQL descartável na major `latest`
+de `config/postgres-majors.json` no loopback do runner,
+com senha aleatória, e `database-guard.mjs` recusa qualquer outro banco.
 `pnpm test:e2e:external` passa pela mesma guarda: banco e `E2E_BASE` só no
 loopback, nunca o site publicado.
 O build descartável também não recebe nenhum `.env*` além do molde
@@ -172,8 +177,8 @@ reexecutar até passar, e isso é pior do que não ter portão.
 Na máquina local, `pnpm gates` roda só as áreas do E2E que o diff afeta
 (`pnpm test:e2e --areas <ids>`), e a suíte inteira quando o diff é transversal
 ou toca caminho sem área — o mapa e as regras estão em
-[workflow.md](../engineering/workflow.md#validar-pelo-risco). O CI não seleciona:
-roda sempre a suíte inteira.
+[workflow.md](../engineering/workflow.md#validar-pelo-risco). O CI não seleciona
+áreas: quando o E2E roda, é a suíte inteira.
 
 ## Uma espera frágil apaga o relatório de todos os outros cenários
 

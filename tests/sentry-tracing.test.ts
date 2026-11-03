@@ -24,6 +24,7 @@ import {
   tracesSampleRate,
   type ScrubbableTransaction,
 } from "../src/core/observability.ts";
+import { dataCollectionDoCliente, naoColetaNada } from "./support/sentry-client.ts";
 
 /**
  * Tudo o que não pode sair, com um marcador por dado. O teste procura cada um
@@ -41,7 +42,7 @@ const PRIVADO = {
   telefone: "+55 11 98765-4321",
 };
 
-/** Uma transação no formato que o `@sentry/nextjs` 10 monta para `GET /jobs`. */
+/** Uma transação no formato que o `@sentry/nextjs` monta para `GET /jobs` no ciclo estático (10, e 11 com `traceLifecycle: "static"`). */
 function transacaoDeVerdade(): ScrubbableTransaction {
   const url = `https://jobs.mastertimm.com.br/jobs?q=${PRIVADO.termo}&${PRIVADO.piso}`;
   return {
@@ -283,8 +284,15 @@ describe("sentryServerOptions", () => {
     tracesSampleRate: "0.2",
   });
 
-  it("nunca manda PII padrão nem propaga trace para terceiro", () => {
-    expect(opcoes.sendDefaultPii).toBe(false);
+  it("um cliente real do SDK resolve toda coleta automática como desligada", async () => {
+    // No SDK 11 `sendDefaultPii` deixou de existir e a coleta passou a
+    // `dataCollection`, com padrões permissivos (usuário, cookies, cabeçalhos,
+    // corpos, query string, dados de consulta, variáveis de pilha). Quem decide
+    // é o cliente, então o teste pergunta a ele, e não ao objeto de opções.
+    naoColetaNada(await dataCollectionDoCliente(opcoes));
+  });
+
+  it("nunca propaga trace para terceiro", () => {
     // `baggage` leva chave pública, release e nome da transação para cada
     // board que a sincronização consulta.
     expect(opcoes.tracePropagationTargets).toEqual([]);
@@ -297,6 +305,12 @@ describe("sentryServerOptions", () => {
     naoVaza(opcoes.beforeSendTransaction(transacaoDeVerdade()));
     naoVaza(opcoes.beforeSend({ request: { url: `/jobs?q=${PRIVADO.termo}`, cookies: PRIVADO.sessao }, user: { email: PRIVADO.email } }));
     naoVaza(opcoes.beforeSendSpan({ description: `GET /jobs?q=${PRIVADO.termo}`, data: { "url.full": PRIVADO.termo } }));
+  });
+
+  it("o ciclo de trace é estático, o único em que as peneiras de transação e de span rodam", () => {
+    // No SDK 11 o padrão virou `stream`, que ignora `beforeSendTransaction` e
+    // entrega span em outro formato: a peneira testada acima ficaria de fora.
+    expect(opcoes.traceLifecycle).toBe("static");
   });
 
   it("a taxa configurada vence a decisão que chega no cabeçalho sentry-trace", () => {

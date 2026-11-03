@@ -9,7 +9,11 @@
  * conta porque não há provedor de e-mail configurado seria transformar um
  * detalhe de infraestrutura em bloqueio de produto.
  */
-import { isLocalProcess } from "../domain/open-mode.ts";
+import { randomUUID } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { mailDelivery, mailSinkDir } from "../domain/oidc-config.ts";
+import type { AuthEnvironment } from "../domain/open-mode.ts";
 import type { Mailer, MailResult, OutgoingMail } from "../ports-mailer.ts";
 
 const ENDPOINT = "https://api.resend.com/emails";
@@ -101,8 +105,51 @@ export const withheldMailer: Mailer = {
   },
 };
 
+/** Desempate de arquivos gravados no mesmo milissegundo pelo mesmo processo. */
+let sinkSequence = 0;
+
+/**
+ * Sink em arquivo: cada mensagem vira um JSON em `dir` (ADR-011).
+ *
+ * Existe para o E2E ler o código do cadastro e o link de recuperação sem caixa
+ * de entrada real. Não imprime nada: o arquivo é o único lugar onde o corpo
+ * aparece. O nome começa pelo instante e por uma sequência, então a ordem
+ * alfabética é a ordem de envio.
+ *
+ * Só `configuredMailer` o escolhe, e só onde `mailSinkDir` deixa — `JHO_ENV`
+ * `local` ou `e2e`, nunca na Vercel.
+ */
+export function fileMailer(dir: string): Mailer {
+  return {
+    name: "file",
+    async send(mail: OutgoingMail): Promise<MailResult> {
+      const at = new Date().toISOString();
+      sinkSequence += 1;
+      const id = `${at.replace(/[:.]/g, "-")}-${String(sinkSequence).padStart(6, "0")}-${randomUUID()}`;
+      try {
+        await mkdir(dir, { recursive: true });
+        await writeFile(
+          join(dir, `${id}.json`),
+          JSON.stringify({ id, at, to: mail.to, subject: mail.subject, text: mail.text }, null, 2),
+          { encoding: "utf8", flag: "wx" },
+        );
+        return { ok: true, id };
+      } catch (error) {
+        // A mensagem do Node cita o caminho, que é configuração do teste, não
+        // dado de ninguém; o corpo nunca vai junto.
+        return { ok: false, error: error instanceof Error ? error.message : "falha ao gravar no sink" };
+      }
+    },
+  };
+}
+
 /**
  * O mailer configurado; sem configuração, o de terminal ou o que omite.
+ *
+ * O sink em arquivo vence tudo onde é aceito (`JHO_MAIL_SINK` com `JHO_ENV`
+ * `local` ou `e2e`, fora da Vercel): uma suíte com chave do Resend no ambiente
+ * não pode mandar e-mail de verdade. Em qualquer outro ambiente a variável é
+ * ignorada.
  *
  * O terminal só é aceitável onde o log é a tela de quem opera: sem chave
  * nenhuma, num processo local. Chave presente com remetente faltando
@@ -113,14 +160,20 @@ export const withheldMailer: Mailer = {
  * a variável entre casos, e um valor capturado na importação tornaria isso
  * impossível de exercitar.
  */
-export function configuredMailer(env = process.env): Mailer {
-  const key = env.RESEND_API_KEY?.trim();
-  const from = env.RESEND_FROM?.trim();
-  if (key && from) return resendMailer(key, from);
+export function configuredMailer(env: AuthEnvironment = process.env): Mailer {
+  // A escolha é de `mailDelivery`, pura e testada; aqui só se monta o adapter.
   // Lista de permissão: o terminal só vale onde o processo se declara local
   // (`JHO_ENV=local`, via `isLocalProcess`, a mesma regra do modo aberto).
   // Produção, preview, `JHO_ENV` desconhecido, `VERCEL=1` e processo que não
   // declara nada omitem o corpo — valor inventado depois cai no lado seguro.
-  if (key || !isLocalProcess(env)) return withheldMailer;
-  return consoleMailer;
+  switch (mailDelivery(env)) {
+    case "file":
+      return fileMailer(mailSinkDir(env)!);
+    case "resend":
+      return resendMailer(env.RESEND_API_KEY!.trim(), env.RESEND_FROM!.trim());
+    case "console":
+      return consoleMailer;
+    case "withheld":
+      return withheldMailer;
+  }
 }

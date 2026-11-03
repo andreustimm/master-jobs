@@ -1,0 +1,20 @@
+{
+  "id": "design",
+  "modules": [
+    "tests/e2e/ui/design.mjs"
+  ],
+  "patterns": [
+    "app/changelog-content.tsx",
+    "app/changelog-modal.tsx"
+  ],
+  "routes": [
+    "/",
+    "/api/export",
+    "/candidate",
+    "/compare",
+    "/jobs",
+    "/login",
+    "/pipeline",
+    "/referrals"
+  ]
+}

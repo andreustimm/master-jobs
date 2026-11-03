@@ -23,7 +23,20 @@ const SESSION_COOKIE = "jho_session";
 // `/offline.html` é gerado sem layout ou sessão e instalado sem credenciais.
 // Exigir sessão aqui transformaria a entrada segura num redirect autenticado.
 const PUBLIC = [
+  // Inclui `/login/oauth/<provedor>` e `/login/oauth/<provedor>/callback`, o
+  // início e o retorno do login social (#464): a autorização ali é o fluxo
+  // OIDC (cookie cifrado, `state`, PKCE), e o `intent=link` resolve a sessão
+  // na própria rota.
   "/login",
+  // Cadastro aberto (#464, ADR-012): a tela, a etapa do código e as Server
+  // Actions delas, que respondem no mesmo caminho. O que protege é o cookie do
+  // cadastro, o código de uso único e os limites por e-mail e por IP.
+  // Inclui `/signup/invite` (#465, ADR-018), o link do convite de recrutador:
+  // o token de uso único é a autorização, e "Aceitar e abrir" chama `guard`.
+  "/signup",
+  // Termos e Política: quem decide se aceita ainda não tem conta (US-021).
+  "/terms",
+  "/privacy",
   "/p",
   "/offline.html",
   "/manifest.json",
@@ -106,6 +119,12 @@ export function proxy(request: NextRequest) {
   const url = request.nextUrl.clone();
   url.pathname = "/login";
   url.search = "";
+  // O endereço pedido viaja como `next`, para o login social devolver a pessoa
+  // a ele (US-001.EC-8). Só página navegada: API não tem para onde voltar. Quem
+  // segue o `next` o confere de novo com `safeNext` — aqui ele é só recado.
+  if (request.method === "GET" && !pathname.startsWith("/api/") && pathname !== "/") {
+    url.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
+  }
   return NextResponse.redirect(url);
 }
 

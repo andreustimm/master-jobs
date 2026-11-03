@@ -1,0 +1,12 @@
+{
+  "id": "work-mode",
+  "modules": [
+    "tests/e2e/ui/work-mode.mjs",
+    "tests/e2e/work-mode.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/",
+    "/jobs"
+  ]
+}

@@ -92,6 +92,7 @@ export function MobileNav({
   canCreateProfile,
   isAdmin,
   isRecruiter,
+  pendingSuggestions,
   rotulo,
   locale,
 }: {
@@ -99,6 +100,7 @@ export function MobileNav({
   canCreateProfile: boolean;
   isAdmin: boolean;
   isRecruiter: boolean;
+  pendingSuggestions: number | null;
   rotulo: string;
   locale: LocaleId;
 }) {
@@ -193,6 +195,7 @@ export function MobileNav({
             canCreateProfile={canCreateProfile}
             isAdmin={isAdmin}
             isRecruiter={isRecruiter}
+            pendingSuggestions={pendingSuggestions}
             // Linha inteira clicável, e não só o texto: num menu vertical o alvo
             // é a linha, e um `py-3` generoso é o que separa item de item no
             // toque.

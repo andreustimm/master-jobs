@@ -76,8 +76,15 @@ vale para `config/search-synonyms.yaml` (lido por caminho só com
 | `DATABASE_CA_CERT` | CI/Vercel | o PEM da CA **ou** o caminho de um arquivo |
 | `SEARCH_SYNONYMS_ENABLED` | Vercel (opcional; **desligada por padrão**) | `1` ou `true` liga os sinônimos bilíngues da busca de Vagas (`config/search-synonyms.yaml`, #370, Fase 0). Ligar em Preview ou Production é decisão do dono depois de revisar a lista; desligar devolve exatamente a busca de antes. Não é segredo |
 | `SUPABASE_CRAWL_ENABLED` | Actions produção | `true` somente após os gates de quota/retensão |
-| `RESEND_API_KEY` | Vercel | e-mail transacional; sem ela ou sem `RESEND_FROM`, nada é enviado e o log só alerta |
+| `RESEND_API_KEY` | Vercel | e-mail transacional; sem ela ou sem `RESEND_FROM`, nada é enviado e o log só alerta. Também decide o cadastro manual com código (`/signup`, #464): onde o e-mail não sai (Preview, deployment sem Resend), a tela avisa que o cadastro com e-mail e senha não está disponível (`manualSignupAvailable`, ADR-011) |
 | `RESEND_FROM` | Vercel | remetente de domínio verificado |
+| `GOOGLE_OIDC_CLIENT_ID`, `GOOGLE_OIDC_CLIENT_SECRET` | Vercel **só Production**; `.env` local | login com Google (#464 — ver abaixo). Sem as duas, o Google fica fora; só uma das duas é configuração inválida e também o deixa fora. URLs de retorno a cadastrar no Google Cloud: `https://jobs.mastertimm.com.br/login/oauth/google/callback` e `http://127.0.0.1:3000/login/oauth/google/callback` |
+| `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` | Vercel **só Production**; `.env` local | login com LinkedIn pelo produto "Sign In with LinkedIn using OpenID Connect", só os escopos `openid profile email` (ADR-003 da #464). Mesmas regras do Google; URLs de retorno em `/login/oauth/linkedin/callback` |
+| `JHO_SESSION_SECRET` | Vercel **só Production**; `.env` local | segredo (32+ caracteres aleatórios) de onde sai, por HKDF, a chave do cookie cifrado do fluxo OIDC (`src/contexts/auth/infra/flow-cookie.ts`). Sem ele, ou com menos de 32 caracteres, nenhum provedor social é oferecido (`availableProviders`). Trocar o valor só invalida logins sociais em andamento (10 minutos) |
+| `JHO_SIGNUP_IP_SECRET` | Vercel (Production **e** Preview); `.env` local | chave do HMAC do IP no cadastro aberto (ADR-009 da #464): o IP nunca é gravado cru, só o HMAC, usado no limite por IP, e chave do HMAC do código de 6 dígitos do cadastro manual. **Obrigatória para o cadastro:** sem ela, quem volta do Google/LinkedIn com e-mail verificado e sem conta recebe "não disponível aqui", `/signup` não oferece o formulário manual, e nada é gravado (fecha por omissão). Trocar o valor invalida os códigos já enviados |
+| `JHO_SIGNUP_MAX_PER_IP_HOUR` | Vercel (opcional) | contas criadas pelo próprio cadastro por IP numa janela de 60 minutos; padrão `3`. Vazio, zero, negativo ou texto caem no padrão (`parseSignupLimits`) |
+| `JHO_MAIL_SINK` | **nunca em deployment**; E2E e `.env` local | diretório onde `fileMailer` grava cada e-mail como JSON (vence o Resend onde é aceita), para o E2E ler o código do cadastro e o link de recuperação. Só vale com `JHO_ENV` declarado `local` ou `e2e`, fora da Vercel; ausente, desconhecido ou qualquer deployment da Vercel a ignora (`mailSinkDir`, lista de permissão G27) |
+| `JHO_OIDC_ISSUER_GOOGLE`, `JHO_OIDC_ISSUER_LINKEDIN` | **nunca em deployment**; só E2E | emissor OIDC falso de loopback (ADR-010 da #464). Só valem com `JHO_ENV` declarado `local` ou `e2e`, fora da Vercel; em qualquer outro ambiente são ignoradas (`issuerFor`, lista de permissão G27). Onde valem, valor que não é URL http(s) invalida o provedor em vez de cair no emissor real |
 | `CRON_SECRET` | Vercel **e** Supabase Vault (`jho_cron_secret`) | protege toda rota de `/api/cron/` (`authorization: Bearer <segredo>`); o `pg_cron` o lê do Vault para chamar `/api/cron/varredura`. Os dois valores precisam ser iguais |
 | `JHO_SOURCE_ALLOWLIST` | Vercel produção **e** Actions | declaração exigida pela política de ingestão (ADR 0021); sem ela as fatias de rede respondem 503 |
 | `VARREDURA_AGENDADOR` | variável de repositório (Actions) | `supabase` depois da troca de agendador: o disparo agendado de `varredura.yml` deixa de rodar ([ADR 0025](../adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md)) |
@@ -91,6 +98,17 @@ vale para `config/search-synonyms.yaml` (lido por caminho só com
 | `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE` | local (MinIO) ou futuro AWS S3 | só com `JHO_STORAGE_DRIVER=s3`; `S3_ENDPOINT` ausente é a AWS ([local-storage.md](local-storage.md)) |
 | `JHO_ENV` | todo deployment (Vercel Production `production`, Preview `preview`; plano B no Fly em `fly.toml` **e** `Dockerfile`); na máquina do dono, `local` | declara o ambiente para `isLocalProcess()` (`src/contexts/auth/domain/open-mode.ts`) e para a guarda de ingestão (`src/core/ingest/guard.ts`). Só `JHO_ENV=local` (sem `VERCEL`/`VERCEL_ENV`) conta como máquina do dono — o sinal é positivo (G27, #378): ausente ou vazia, o processo **não** é local, então o modo aberto é recusado, o mailer omite o link (G18), `resolvePublicOrigin` não usa o `Host` (G17) e a varredura recusa. `pnpm dev` declara `JHO_ENV=local` sozinho (`scripts/dev.ts`) só quando nem o shell nem os `.env*` que o Next carrega em dev a declaram — um `JHO_ENV` do `.env` vence; `pnpm jho` e `pnpm start` locais leem do `.env` e precisam da linha lá para o modo aberto e o mailer de terminal |
 | `JHO_PUBLIC_URL` | **só em Production** na Vercel; obrigatória no plano B no Fly (já fixada em `fly.toml`) | origem confiável (`https://host`) para o link de recuperação de senha (`src/contexts/auth/domain/public-origin.ts`), nunca o `Host` da requisição (G17/G18, host poisoning). **Na Vercel Production não precisa ser cadastrada**: sem ela, a função usa `VERCEL_PROJECT_PRODUCTION_URL` — variável de sistema da própria plataforma, não controlada pelo cliente. `VERCEL_PROJECT_PRODUCTION_URL` deve resolver para `jobs.mastertimm.com.br` (o domínio próprio tem precedência sobre o `*.vercel.app` gerado, quando o projeto tem um domínio de produção configurado) — confirmar isso é o item novo do checklist pós-deploy, abaixo. Cadastrar `JHO_PUBLIC_URL=https://jobs.mastertimm.com.br` em Production elimina a dúvida por completo, sem depender de nenhuma variável de sistema. **Nunca cadastrar em Preview**: um valor fixo enviaria o token de recuperação de qualquer branch de preview para o domínio de produção — Preview precisa continuar resolvendo por `VERCEL_BRANCH_URL`/`VERCEL_URL` (variáveis por branch/deployment). Fora da Vercel e da máquina do dono (o plano B no Fly), a ausência falha fechado |
+
+**Login social (#464).** Com as credenciais do provedor e `JHO_SESSION_SECRET`
+cadastrados, `/login` mostra "Continuar com Google/LinkedIn"
+(`app/login/oauth/[provider]/route.ts` inicia, `…/callback/route.ts` conclui).
+O login social só existe onde a origem é fixa (ADR-005): na máquina do dono, na
+Vercel **Production** e fora da Vercel com `JHO_PUBLIC_URL` válida;
+`JHO_ENV=preview` ou `staging` recusa sempre, e o botão some. A tela de
+cadastro (`/signup`), para quem volta do provedor sem conta, ainda está em
+construção (task_03 da #464): até ela chegar, esse caso grava a pendência e
+para numa rota que não existe. Antes de ligar em produção, o dono registra os
+apps OAuth com as URLs de retorno acima e cadastra as variáveis.
 
 **Dependência silenciosa: "Automatically expose System Environment
 Variables".** A documentação da Vercel condiciona o acesso, em runtime de
@@ -428,6 +446,17 @@ copia só `.next/standalone`, `.next/static` e `public/`, e roda como o usuário
 `nextjs`, uid 1101, nunca root). `.dockerignore` exclui `.env*` e todo
 diretório operacional (`.claude/`, `.compozy/`, `tests/`, `docs/` etc.) do
 contexto de build — regra 16: nenhum valor de ambiente entra numa camada.
+Como `next build` checa tipos de todo `**/*.ts` do contexto, voltam só os
+arquivos que código do contexto importa: `.claude/hooks/` (a política de
+shell que `scripts/harness/` usa) e o leitor do grafo de módulos
+(`tests/support/module-graph.ts` e `entry-inventory.ts`, usados por
+`scripts/versions/`). Os padrões de segredo e de banco local (`**/.env*`,
+`**/*.token.json`, `**/*.db` etc.) ficam no fim do arquivo, com `**/`: valem
+em qualquer profundidade e nenhuma reinclusão acima os reabre.
+`tests/dockerignore-imports.test.ts` reprova import de arquivo excluído
+([#470](https://github.com/andreustimm/master-jobs/issues/470)) e segredo
+dentro de diretório reincluído
+([#490](https://github.com/andreustimm/master-jobs/issues/490)).
 `fly.toml` fixa `primary_region = "gru"` (São Paulo, a região Fly mais
 próxima do Supabase de produção em `sa-east-1`, preservando o raciocínio de
 round-trip curto descrito em "Os três ambientes") e um health check HTTP
@@ -606,12 +635,15 @@ no push das três branches. Os gates correm em jobs paralelos:
 
 | Job | O que prova |
 |---|---|
-| `contratos` | changelogs prontos, tracker de QA, tipos, contratos das skills de QA |
+| `escopo` | o recorte do PR: só documentação (lista de permissão em `scripts/github/pr-scope.ts`) ou suíte completa; fora de `pull_request`, sempre completa |
+| `plano` | o recorte do E2E (pela tabela de impacto) e do banco nas majors em PR para `dev` (abaixo); fora disso, o plano completo |
+| `contratos` | changelogs prontos, versões explícitas ([política de versões](versions.md)), tracker de QA, tipos, contratos das skills de QA |
 | `testes` (4 fatias) | a suíte Vitest, cada fatia num runner com o próprio PostgreSQL em Docker |
 | `cobertura` | mescla os blobs das fatias e aplica o piso de `vitest.config.ts` sobre o total |
 | `pwa-browser` | a fronteira de privacidade do service worker num Chromium real |
 | `build` | `next build`, com `.next/cache` reaproveitado entre execuções |
-| `schema-e-migracao` | `schema.ts` e `drizzle/` em sincronia |
+| `banco-nas-majors` (major × 2 fatias) | todo teste que usa PostgreSQL real, nas majors `production` e `latest` de `config/postgres-majors.json` ([política de versões](versions.md)) |
+| `schema-e-migracao` | `schema.ts` e `drizzle/` em sincronia, e `banco-nas-majors` aprovado (depende dele, com `if: always()`) |
 | `qualidade` | agregador: só passa quando todos os anteriores passaram |
 
 `qualidade` e `schema-e-migracao` são os nomes que a promoção e a proteção de
@@ -621,6 +653,16 @@ anterior vermelho faria `qualidade` ser pulado, e a PR ficaria mesclável. Job
 novo no CI entra em `qualidade.needs`; `tests/ci-pipeline.test.ts` reprova quem
 esquecer. A fatia de teste zera os limiares de cobertura porque a cobertura de
 um quarto da suíte não mede nada; o piso vale sobre a soma, em `cobertura`.
+
+**PR só de documentação (#528).** Quando todo arquivo do PR é Markdown na lista
+de permissão — `docs/` (menos `docs/prompts/`), `changelog.d/`, `.compozy/`,
+`.claude/`, `.github/` e a raiz, menos `CHANGELOG.md` e `USER_CHANGELOG*` —,
+`pwa-browser` fica pulado, e `qualidade` aceita esse pulo **só** com `escopo`
+verde dizendo `completo=false`. `contratos` e o Vitest com cobertura continuam,
+porque leem documentos; `build` também, porque o Tailwind varre os `.md` do
+repositório e Markdown pode mudar o CSS. Push em `dev`, a chamada da promoção e
+o dispatch rodam sempre a suíte completa. `banco-nas-majors` e `e2e-navegador`
+são recortados pelo `plano`, abaixo — documentação não pede nenhum dos dois.
 
 O job `e2e-navegador` roda ao lado a suíte `pnpm test:e2e` inteira, sem
 segredo e com PostgreSQL descartável no loopback do runner. Ele é a única
@@ -641,11 +683,39 @@ Não bloqueante vale nas três portas, e não só no agregador:
   produção: o job também não roda. Ali só contam os checks que o ruleset de
   `main` exige, e `staging` recebe o SHA cujo push em `dev` já rodou o E2E.
 
-Não há atalho para PR só de documentação: cerca de quarenta arquivos de teste
-leem `docs/`, os changelogs e `.claude/skills/`, e o build compila os
-changelogs. Pular a suíte nesses casos deixaria passar exatamente a quebra de
-contrato documental que ela existe para pegar. O ganho para essas PRs vem do
-paralelismo, que já vale para todas.
+**O plano do CI de PR** (decisão do dono, 13/10/2026, G57;
+[#535](https://github.com/andreustimm/master-jobs/issues/535)). Medido em
+14 dias, o E2E era 41,6% dos minutos do `ci.yml`, a 15,3 min por execução, e
+`banco-nas-majors` 13%. O job `plano` (`scripts/github/ci-plan.ts`) lê o diff do
+commit de merge da PR contra a base e publica uma saída por job que recorta:
+
+- `e2e`: `planGates` (`scripts/gates/impact.ts`) sobre o diff pede o gate
+  `e2e`. `e2e-navegador` só espera o `plano` e só roda com `e2e=true`.
+- `banco`: o diff toca a lista do banco (`DATABASE_PATTERNS`: `drizzle/`,
+  `src/core/db/`, `supabase/`, `tests/support/`, `config/postgres-majors.json`,
+  dependências, a configuração do `drizzle-kit` e o runner do job).
+  `banco-nas-majors` só roda com `banco=true`, e `qualidade` e
+  `schema-e-migracao` aceitam o pulo **só** com `plano` verde dizendo
+  `banco=false`.
+
+O recorte vale só em `pull_request` com base `dev`. Falha fechada para o resto:
+push (em `dev`, `staging` e `main`), dispatch, chamada da promoção, PR de
+produção (base `main`), diff vazio ou ilegível, caminho que a tabela não
+reconhece e PR que edita `ci.yml`, `ci-plan.ts`, `impact.ts` ou
+`validation-impact.json` — o plano não relaxa a si mesmo — recebem o plano
+completo (no dispatch e na chamada da promoção, o `if:` do `e2e-navegador`
+continua excluindo o job, como antes). O push em `dev` roda tudo, e é ele que a
+promoção lê. `plano` entra em `qualidade.needs`; plano vermelho reprova o
+portão. O E2E não escolhe áreas no CI: quando roda, é a suíte inteira. Recorte
+novo entra como uma chave em `DECISIONS` (`ci-plan.ts`), a saída de mesmo nome
+no job e o pulo dela em `$pulavel` do agregador.
+
+A decisão de 13/10 também pulava `testes`, `cobertura` e `build` em PR só de
+documentação. Isso **não** vale: cerca de quarenta arquivos de teste leem
+`docs/`, os changelogs e `.claude/skills/`, e o Tailwind varre os `.md` (#528);
+pular a suíte deixaria passar a quebra de contrato documental que ela existe
+para pegar. Vale a fonte mais protetora (G62). O ganho dessas PRs vem do
+paralelismo, de não pagar o E2E e de pular `pwa-browser` e `banco-nas-majors`.
 
 Medido em 23/09/2026: o job único levava 6 min 53 s (run 35803388420, em `dev`);
 os jobs paralelos, 2 min 41 s do disparo ao `qualidade` (run 35850357880, PR
@@ -687,16 +757,16 @@ o resultado no log. A porta 6543 (transação) continua recusada.
 Fase 2 da contingência de CI/deploy ([issue #367](https://github.com/andreustimm/master-jobs/issues/367),
 [ADR 0030](../adr/0030-contingencia-de-ci-e-deploy.md)). O `runs-on:` de todo
 job de `ci.yml` é uma única expressão, nunca um literal
-(`tests/ci-runner-selection.test.ts` reprova quem adicionar `runs-on:
-ubuntu-latest` de novo):
+(`tests/ci-runner-selection.test.ts` reprova quem adicionar um `runs-on:`
+literal de novo):
 
 ```yaml
 runs-on: ${{ github.event_name == 'pull_request' &&
   github.event.pull_request.head.repo.full_name != github.repository &&
-  'ubuntu-latest' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+  'ubuntu-26.04' || fromJSON(vars.CI_RUNS_ON || '"ubuntu-26.04"') }}
 ```
 
-- **Ausente ou vazia** (padrão): `ubuntu-latest`, o runner hospedado de hoje —
+- **Ausente ou vazia** (padrão): `ubuntu-26.04`, o runner hospedado de hoje —
   nada muda sem ação do dono (princípio 1/2 da ADR).
 - **Setada** com **JSON válido** (`gh variable set CI_RUNS_ON --body
   '["self-hosted","linux","master-jobs"]'`): todo job passa a rodar no runner
@@ -848,10 +918,13 @@ contêiner:
 **Voltar ao hospedado**, a qualquer momento e sem tocar na VPS:
 
 ```bash
-gh variable set CI_RUNS_ON --body '"ubuntu-latest"'   # ou: gh variable delete CI_RUNS_ON
+gh variable delete CI_RUNS_ON
 ```
 
-O próximo push já roda em `ubuntu-latest`. **Se havia execução do CI em fila
+Sem a variável, o próximo push já roda no runner hospedado padrão de `ci.yml`
+(hoje `ubuntu-26.04`). Apagar, em vez de gravar a etiqueta, é de propósito: a
+etiqueta muda quando o Renovate sobe a versão do Ubuntu, e um valor gravado na
+variável ficaria para trás. **Se havia execução do CI em fila
 ou em andamento esperando o runner próprio** no momento da troca, ela fica
 presa (nenhum runner com aquele label vai aparecer para pegá-la). Restrinja a
 `--workflow ci.yml` — cancelar um workflow alheio (`varredura.yml`,
@@ -918,7 +991,9 @@ por ele ter mudado).
 
 O job automático para vermelho com `Migração pendente exige execução manual`,
 e a promoção `dev → staging` já tinha parado antes, pedindo
-`confirmar-migracao=true` ([promotion.md](promotion.md)). Quem revisa escolhe a
+`confirmar-migracao=true` ([promotion.md](promotion.md)); no agendamento e no
+evento de CI ela para como aviso amarelo (run verde, motivo no resumo), não
+como vermelho. Quem revisa escolhe a
 ordem, porque nenhuma é segura sozinha:
 
 - **Contrair o que o código novo já não usa** (remover coluna, índice ou
@@ -974,7 +1049,9 @@ nota por trilha na leitura e falha na gravação, e a 0005 apaga notas sem trilh
 Correção desta versão vai para frente, numa versão nova.
 
 Para o snapshot legado, `scripts/migration/select-production.ts` aplica a
-allowlist de tabelas e exclui sessões, tokens, filas e HTML de crawler. O
+allowlist de tabelas e exclui sessões, tokens, filas, HTML de crawler e a rede
+de contatos (`target_account` tem dono obrigatório, e o snapshot não diz de
+quem é cada contato). O
 `scripts/migration/import-production.ts` importa somente a seleção verificada,
 exige destino vazio, mantém as FKs ativas e aborta acima de 400 MiB. Não há
 comando de reset destrutivo implícito: uma nova carga deve usar uma instância
@@ -1127,7 +1204,16 @@ atualização de dependência e teste não.
 | **`authorization`** | **não** | é a credencial |
 | **`x-forwarded-for`, `x-real-ip`** | **não** | IP é dado pessoal |
 | Corpo da requisição | não | carrega CV, nota de funil e senha |
-| Identidade do usuário | não | `sendDefaultPii: false`, e `event.user` é apagado |
+| Identidade do usuário | não | `dataCollection.userInfo: false`, e `event.user` é apagado |
+
+Desde o SDK 11, a coleta automática é decidida por `dataCollection` (o antigo
+`sendDefaultPii` não existe mais) e cada campo omitido vale **ligado**.
+`sentryServerOptions` desliga todos: usuário, cookies, cabeçalhos, corpos,
+query string, GraphQL, IA generativa, dados de consulta, filas e variáveis de
+pilha; só `frameContextLines` fica no padrão, porque são linhas do nosso
+código. As peneiras `beforeSend*` continuam como segunda linha. O teste
+(`tests/support/sentry-client.ts`) entrega as opções a um `NodeClient` real e
+lê `getDataCollectionOptions()`; chave nova que o SDK resolver ligada reprova.
 
 A lista de cabeçalhos é de **permissão**: cabeçalho novo não vai até alguém
 decidir que pode. Cabeçalho fora da lista some por inteiro, em vez de aparecer
@@ -1178,6 +1264,15 @@ banco (`server.address`). Por isso a peneira é outra lista de permissão:
 `tracePropagationTargets: []` impede o SDK de anexar `sentry-trace` e
 `baggage` às requisições de saída — o `baggage` levaria a chave pública, o
 release e o nome da transação a cada board consultado.
+
+**Ciclo de trace estático.** Desde o `@sentry/nextjs` 11 o padrão é
+`traceLifecycle: 'stream'`, que manda cada span em fluxo (`name`/`attributes`)
+e **ignora** `beforeSendTransaction`. As peneiras acima foram escritas para o
+formato estático, então `sentryServerOptions` fixa `traceLifecycle: 'static'`
+e `instrumentation.ts` marca a peneira de span com `Sentry.withStaticSpan` —
+sem a marca, o SDK nunca a chamaria. `tests/instrumentation-guard.test.ts`
+reprova se uma das duas sumir. O SDK 12 remove `beforeSendTransaction`: subir
+para ele exige reescrever a peneira para o formato em fluxo antes.
 
 A organização no Sentry está com a limpeza do lado do servidor **desligada**
 (`dataScrubber: false`, `scrubIPAddresses: false`, lido em 22/09/2026), então a

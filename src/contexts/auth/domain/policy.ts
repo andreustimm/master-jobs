@@ -112,6 +112,15 @@ export function can(
       if (borrowed) return deny("sessão emprestada não altera a conta do alvo");
       return isAdmin || isCandidate || isRecruiter ? ALLOW : deny("requer sessão válida");
 
+    case "account:manage-methods":
+      // Como se entra na conta é da dona dela (G24): ligar um provedor numa
+      // sessão emprestada daria ao admin uma porta permanente na conta do
+      // alvo, e desligar trancaria a pessoa para fora com a cara dela. O admin
+      // desliga pela administração (`user:manage`), em nome próprio, e nunca
+      // liga — não há ação para isso.
+      if (borrowed) return deny("sessão emprestada não mexe nas formas de entrar do alvo");
+      return isAdmin || isCandidate || isRecruiter ? ALLOW : deny("requer sessão válida");
+
     case "candidate:write":
     case "application:write":
       // Escrita em dado de candidato é só de quem é aquele candidato. Um
@@ -136,6 +145,37 @@ export function can(
       if (resource.kind !== "global") return deny("criação não tem escopo de candidato");
       if (session.candidateId !== null) return deny("conta já tem candidato");
       return ALLOW;
+
+    case "access:manage":
+    case "suggestion:decide":
+      // Consentimento é ato do próprio candidato (G24, G25, ADR-008): conceder,
+      // revogar, convidar e decidir sugestão ficam fora da sessão emprestada,
+      // que só vê. O admin revoga pela administração, com o nome dele, por
+      // `user:manage` — nunca por esta ação.
+      if (!isCandidate) return deny("requer papel candidate");
+      if (borrowed) return deny("sessão emprestada não decide pelo candidato");
+      if (resource.kind !== "candidate") return deny("requer escopo de candidato");
+      if (!ownsCandidate) return deny("recurso de outro candidato");
+      return ALLOW;
+
+    case "suggestion:create":
+      // Só para quem a sessão diz que tem concessão ativa: o id do candidato é
+      // seletor dentro de `linkedCandidateIds`, nunca prova de acesso (G40).
+      //
+      // Sessão emprestada vê, não sugere: a sugestão chega ao candidato com o
+      // nome do recrutador, e o admin que assume a identidade falaria por ele
+      // (G24). O diretório (`candidate:discover`) segue aberto, porque só lê.
+      if (!isRecruiter) return deny("requer papel recruiter");
+      if (borrowed) return deny("sessão emprestada não sugere em nome do recrutador");
+      if (resource.kind !== "candidate") return deny("requer escopo de candidato");
+      if (!followsCandidate) return deny("candidato sem acesso concedido");
+      return ALLOW;
+
+    case "candidate:discover":
+      // O diretório lista perfis Recrutadores e Público só para recrutador
+      // (ADR-013). Sessão emprestada de recrutador vê o que ele vê; candidato e
+      // admin sem o papel não listam ninguém.
+      return isRecruiter ? ALLOW : deny("requer papel recruiter");
 
     case "candidate:read":
       // Um recurso global nunca é atalho para dado privado: todo chamador

@@ -35,8 +35,10 @@ const config: NextConfig = {
   // it inside the function, and a missing file there is a sweep that does nothing.
   // `search-synonyms.yaml` is read by path when SEARCH_SYNONYMS_ENABLED is on
   // (#370); without it in the trace the list would silently stay empty.
+  // `content/legal/` is read by path (`src/core/legal.ts`, #464): the terms
+  // pages render it and sign-up records its version on the account.
   outputFileTracingIncludes: {
-    "/**": ["./config/certs/supabase-ca.crt", "./config/search-synonyms.yaml"],
+    "/**": ["./config/certs/supabase-ca.crt", "./config/search-synonyms.yaml", "./content/legal/*.md"],
     "/api/cron/varredura": ["./config/sources.yaml"],
   },
 

@@ -17,9 +17,21 @@ exceções e prova de cada regra estão em
 ## Como trabalhar
 
 - Leve a tarefa até a entrega exigida na issue; decisões rotineiras são suas.
-  Pergunte ao dono só antes de ação irreversível fora do fluxo (force-push,
-  `reset --hard`, apagar branch permanente ou dado), escrita no banco de
-  produção, afrouxar uma regra ou aceitar `FIX_BEFORE_SHIP` remanescente.
+  Pergunte ao dono só antes de ação irreversível fora do fluxo (apagar branch
+  em `main`/`staging`/`dev`, `reset --hard`/`clean`/descarte na checkout
+  principal, apagar dado), escrita no banco de produção, afrouxar uma regra
+  ou aceitar `FIX_BEFORE_SHIP` remanescente. Em worktree de trabalho, todo
+  `git` é rotina, inclusive o destrutivo (decisão do dono, 07/10/2026).
+  [[G85](docs/engineering/rules/delivery.md#g85)]
+- A rotina nunca pede autorização ao dono: criar e editar arquivo (`.mjs`
+  inclusive), qualquer `git` (push e force-push em branch de trabalho própria
+  inclusive) e qualquer `gh` passam sem pergunta; só destino
+  `main`/`staging`/`dev`, escrita no banco de produção, segredo e afrouxar
+  regra continuam com o dono. O `git` passa ou nega, nunca pergunta: o que
+  nega (destino protegido, descarte na checkout principal) traz a instrução
+  do que fazer, e o agente corrige sozinho. O que ainda perguntar é defeito de
+  configuração, a corrigir na política (`shell-policy.mjs`), não na lista
+  `allow` (decisão do dono, 11/10/2026). [[G85](docs/engineering/rules/delivery.md#g85)]
 - Entregue o pedido, no escopo pedido; melhoria fora dele vira uma frase na PR
   ou uma issue.
 - Relate só o que um comando desta sessão mostrou; o resto é "não verificado".
@@ -36,7 +48,9 @@ A numeração é estável: código e testes citam "regra N".
 1. **Não adquira dados do LinkedIn:** nada de `li_at`, sessão autenticada, HTML
    raspado (mesmo deslogado) ou "LinkedIn MCP" não oficial — viola a §8.2 do
    User Agreement e arrisca a conta do dono. Permitidos: job alert por e-mail
-   (ADR 0008), API oficial (`w_member_social`), comentário e conexão
+   (ADR 0008), API oficial (`w_member_social`) para publicar, login por OpenID
+   Connect só para autenticar (`openid profile email`, sem `w_member_social`,
+   guardando só sujeito e e-mail verificado), comentário e conexão
    assistidos. Leia [linkedin-policy.md](docs/linkedin-policy.md) antes.
    [[G01](docs/engineering/rules/security.md#g01)]
 2. **Ingestão escreve só em `job`, nunca em `application`.** Sync, import,
@@ -86,8 +100,10 @@ A numeração é estável: código e testes citam "regra N".
     `jho auth set-password <email>`. [[G38](docs/engineering/rules/security.md#g38)]
 15. **Autorização por `can()`, escopo da sessão:** Server Action chama
     `guard(...)` antes de qualquer efeito, página chama `requirePage(...)`, e
-    nenhuma action aceita `candidateId` da entrada. Entrada sem guarda só como
-    exceção registrada no inventário.
+    nenhuma action aceita `candidateId` da entrada. Exceção registrada: na
+    sugestão de vaga do recrutador (#465), o id do candidato é seletor dentro
+    de `session.linkedCandidateIds`, com 404 fora dela antes de gravar.
+    Entrada sem guarda só como exceção registrada no inventário.
     [[G39](docs/engineering/rules/security.md#g39), [G40](docs/engineering/rules/security.md#g40)]
 16. **Chave de API não vai para banco nem log:** grave o nome da variável.
     [[G41](docs/engineering/rules/security.md#g41)]
@@ -179,9 +195,11 @@ Comandos: [docs/cli.md](docs/cli.md). Índice: [docs/README.md](docs/README.md).
    `git status` e `pnpm worktrees`; preserve WIP antes de reconciliar a raiz.
    [[G44](docs/engineering/rules/delivery.md#g44)]
 2. Valide local e enxuto: `pnpm typecheck` + `vitest related` do diff, E2E
-   afetado se toca navegador; a suíte completa é do CI. Só Markdown:
-   `pnpm check:instructions`, `check:release-ready`, `check:qa-tracker`. Gate
-   estourou o teto (check 10 min, E2E 8, L1 10, L2 30): registre e siga.
+   afetado se toca navegador; a suíte completa é do CI, que em PR para `dev`
+   só roda o E2E e o banco nas majors quando o diff pede (dono, 13/10/2026). Só
+   Markdown: `pnpm check:instructions`, `check:release-ready`,
+   `check:qa-tracker`. Gate estourou o teto (check 10 min, E2E 8, L1 10, L2
+   30): registre e siga.
    [[G57](docs/engineering/rules/delivery.md#g57)]
 3. Abra PR draft para `dev` logo no primeiro verde, com assignee
    `andreustimm`. Um commit leva `Closes #N` (ou `Refs #N`) na mensagem, que é
@@ -192,6 +210,14 @@ Comandos: [docs/cli.md](docs/cli.md). Índice: [docs/README.md](docs/README.md).
    `deep-review`. [[G84](docs/engineering/rules/delivery.md#g84)]
 5. PR pronta após SHIP (ou validadores, em L0). Mesclada, a branch sai local e
    remota. [[G50](docs/engineering/rules/delivery.md#g50)]
+6. **Puxar, não empurrar.** Antes de começar, conte por REST os PRs abertos
+   para `dev` e a fila de CI: mais de 8 PRs, ou fila acima de 2 runs por
+   runner, congela trabalho novo. No máximo 5 implementações e 2 de alto
+   risco; PR com até ~400 linhas. Prioridade: aliviar CI/merge > desbloquear >
+   mesclar o verde > começar. PR verde e revisada é mesclada na hora com
+   `--match-head-commit`; acumulou, um lote de integração com uma CI só; um
+   vigia de merge via REST, sem polling de GraphQL por agente.
+   [[G88](docs/engineering/rules/delivery.md#g88)]
 
 ## Produção
 
@@ -241,13 +267,19 @@ commit. [[G62](docs/engineering/rules/delivery.md#g62)]
   Claude Code, um hook reescreve); sem ele, rode o comando puro. Um comando por
   chamada de shell, sem `&&`, `||` ou `;`; pipe só quando todo estágio é
   leitura (`git log | head`); laço `for`/`while`/`until`/`if`/`case` aceito,
-  com cada comando do corpo julgado. A lista de permissão casa pelo prefixo, e
-  composto cairia em aprovação manual. Uma função recusa o composto nos três
-  harnesses — `.claude/hooks/shell-policy.mjs`, chamada pelo hook do Claude
-  Code, pela guarda do Codex e pelo plugin `.opencode/plugins/shell-guard.js`
-  —, e o mesmo módulo classifica o risco: `gh` não pergunta; produção, perda
-  de trabalho e apagamento em massa perguntam (no Codex e no OpenCode, viram
-  bloqueio). Heredoc e `$(...)` são recusados mesmo em mensagem de commit:
+  com cada comando do corpo julgado. A lista de permissão libera o shell
+  (`Bash` sem padrão) e a política decide o risco: uma função recusa o
+  composto nos três harnesses — `.claude/hooks/shell-policy.mjs`, chamada
+  pelo hook do Claude Code, pela guarda do Codex e pelo plugin
+  `.opencode/plugins/shell-guard.js` —, e o mesmo módulo classifica o risco
+  por uma lista do que é proibido (o que ela não reconhece passa): `gh` não
+  pergunta; produção, perda de trabalho, apagamento, escrita fora do projeto,
+  sistema e ambiente impresso perguntam; arquivo de segredo, Keychain, `sudo`
+  e push protegido são negados, e o push nunca pergunta: passa para branch de
+  trabalho (forçado inclusive) ou nega, com a instrução de explicitar o
+  destino quando o texto não o resolve (no Codex e no OpenCode, pergunta vira
+  bloqueio; o OpenCode depende do plugin carregado). Famílias cobertas e
+  limites conhecidos: G85. Heredoc e `$(...)` são recusados mesmo em mensagem de commit:
   escreva a mensagem com a ferramenta de arquivo e rode `git commit -F
   <arquivo>` (ou vários `-m`).
   [[G63](docs/engineering/rules/delivery.md#g63), [G85](docs/engineering/rules/delivery.md#g85)]

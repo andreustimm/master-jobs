@@ -1,0 +1,10 @@
+{
+  "id": "jobs-density",
+  "modules": [
+    "tests/e2e/ui/jobs-density.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/jobs"
+  ]
+}

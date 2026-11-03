@@ -1,0 +1,10 @@
+{
+  "id": "recheck",
+  "modules": [
+    "tests/e2e/ui/recheck.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/jobs"
+  ]
+}

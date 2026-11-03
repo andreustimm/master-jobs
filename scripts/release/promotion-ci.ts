@@ -42,6 +42,9 @@ export function requireSha(value: string): string {
 /** The CI answered and refused by job verdict; an API failure is never this. */
 export class CIVerdictRefusal extends Error {}
 
+/** The API answered that the SHA has no push run at all; nothing refused it, nothing ran yet. */
+export class CIAbsent extends Error {}
+
 const isNonBlocking = (job: Job) => Object.hasOwn(NON_BLOCKING_CI_JOBS, job.name);
 const settled = (job: Job) => job.status === "completed" && job.conclusion === "success";
 
@@ -82,7 +85,7 @@ export function requireSourceCI(repository: string, sha: string, eventRunId?: nu
   );
   const runs = pages.flatMap((page) => page.workflow_runs).sort((a, b) => b.id - a.id);
   const run = runs[0];
-  if (!run) throw new Error(`CI de dev ausente para ${sha}.`);
+  if (!run) throw new CIAbsent(`CI de dev ausente para ${sha}.`);
   if (
     run.head_sha !== sha || run.head_branch !== "dev" || run.event !== "push" ||
     run.path.split("@")[0] !== ".github/workflows/ci.yml" ||

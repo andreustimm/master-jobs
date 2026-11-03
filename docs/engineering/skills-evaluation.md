@@ -19,7 +19,7 @@ contradizer as regras locais não entra só porque compartilha o stack.
 |---|---|---|
 | `qa-report` | Mantém personas, jornadas, cenários, charters e bugs como documentos vivos. | Fonte de verdade em `docs/qa/`. |
 | `qa-execution` | Percorre o produto pela interface pública e grava evidências e vereditos. | Usa o mesmo `docs/qa/` e o CLI local de navegador. |
-| `agent-browser` | Fornece o driver real exigido por `qa-execution`. | `agent-browser@0.26.0` está fixado como dependência de desenvolvimento; `rtk pnpm qa:browser:install` instala o Chrome. A versão é a última anterior à exigência de pnpm 11, pois o projeto fixa pnpm 10.28. |
+| `agent-browser` | Fornece o driver real exigido por `qa-execution`. | `agent-browser` é dependência de desenvolvimento com versão exata, que o Renovate sobe ([política de versões](versions.md)); `rtk pnpm qa:browser:install` instala o Chrome. |
 | `ship-pr` | Fecha o trabalho com impacto, descrição, commit e PR. | Regras locais têm precedência: worktree desde `dev`, `deep-review` antes da PR e base `dev`. |
 | `drizzle-safe-migrations` | Ordena backfill e alteração de schema com revisão explícita. | Adaptada a pnpm, PostgreSQL/Supabase, `rtk pnpm db:generate` e à suspensão da promoção automática. A adaptação só ficou completa com [#199](https://github.com/andreustimm/master-jobs/issues/199): até ali o procedimento ainda trazia passos de SQLite/libSQL e `pragma`, que hoje aparecem só como histórico rotulado. |
 | `a11y-testing` | Acrescenta o gate automatizado de WCAG ao browser E2E. | `@axe-core/playwright` roda dentro do runner isolado existente, sem criar outra infraestrutura. |

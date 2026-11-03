@@ -232,6 +232,8 @@ rtk compozy reviews watch \
   --provider coderabbit
 ```
 
+> **master-jobs:** com `subscriptionMode: "claude_only"` em `config/model-routing.json`, use só runtimes Claude: troque `--ide codex --model gpt-5.4` por `--ide claude --model opus`.
+
 **STOP. Read `references/coderabbit-watch.md` in full before invoking the command.** It documents every flag, the alternative `--until-clean` mode, the attach-mode options, and the failure paths (missing `compozy`, missing `.compozy/tasks/<slug>/`, provider auth missing).
 
 ## When NOT to use

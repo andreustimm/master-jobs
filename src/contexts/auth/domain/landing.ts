@@ -1,0 +1,98 @@
+/**
+ * Para onde a pessoa vai depois de entrar (#464, ADR-012).
+ *
+ * Puro. Duas regras principais:
+ *
+ * 1. **`next` só aceita caminho relativo do próprio site.** Um `next` absoluto
+ *    — ou que o navegador lê como absoluto — transforma o login num
+ *    redirecionador aberto: o link "entre no Master Jobs" sai do nosso domínio,
+ *    a pessoa entra de verdade, e cai numa página de quem atacou que imita a
+ *    nossa. `//evil.test` e `/\evil.test` são absolutos para o navegador, apesar
+ *    de começarem com barra; por isso a checagem não é só "começa com /".
+ * 2. **Sem `next` válido, cada papel vai para a sua tela**, a mesma regra do
+ *    login por senha (`app/login/actions.ts`): candidato no cockpit, o resto em
+ *    Vagas — mandar um recrutador para `/` era o que o fazia cair em 403.
+ */
+
+/** Maior `next` aceito. Caminho do produto não chega perto; maior é lixo ou ataque. */
+const MAX_NEXT_LENGTH = 2048;
+
+/** Base fictícia só para o parser resolver o relativo e mostrar se ele escapa. */
+const PROBE_ORIGIN = "http://next.invalid";
+
+/**
+ * O `next` como caminho relativo seguro, ou `null`.
+ *
+ * Devolve o caminho normalizado pelo parser de URL (o mesmo algoritmo que o
+ * navegador usa), não o texto recebido: o que é conferido é o que é seguido.
+ * Por isso a saída passa de novo pela checagem de barra dupla: segmentos de
+ * ponto (`/..//evil.test`, `/%2e%2e//evil.test`) somem na normalização e
+ * deixam `//evil.test`, que o navegador lê como outro host.
+ */
+export function safeNext(next: string | null | undefined): string | null {
+  if (typeof next !== "string" || next.length === 0 || next.length > MAX_NEXT_LENGTH) return null;
+  if (!next.startsWith("/") || next.startsWith("//")) return null;
+  // Barra invertida vira barra no parser de URL especial; `/\host` é `//host`.
+  // Caractere de controle (tab, quebra de linha) o parser descarta em silêncio,
+  // e `/\t/evil.test` viraria `//evil.test`.
+  if (/[\\\u0000-\u001f\u007f]/.test(next)) return null;
+  let url: URL;
+  try {
+    url = new URL(next, PROBE_ORIGIN);
+  } catch {
+    return null;
+  }
+  if (url.origin !== PROBE_ORIGIN) return null;
+  const path = `${url.pathname}${url.search}${url.hash}`;
+  if (!path.startsWith("/") || path.startsWith("//") || path.startsWith("/\\")) return null;
+  return path;
+}
+
+/**
+ * Destino depois do login: o `next` seguro, ou a tela do papel.
+ *
+ * Se o papel pode ver o `next`, quem decide é a própria página, que chama
+ * `requirePage` (regra 15): aqui só se garante que o destino é deste site.
+ */
+export function landingFor(roles: readonly string[], next: string | null | undefined): string {
+  const safe = safeNext(next);
+  if (safe !== null) return safe;
+  return roles.includes("candidate") ? "/" : "/jobs";
+}
+
+/**
+ * O destino de uma sessão aberta: como `landingFor`, mas o cockpit só para
+ * quem tem o PRÓPRIO candidato — a mesma regra de `passwordLoginAction`. Um
+ * papel candidato sem perfil iria a uma tela que lhe responde 403.
+ */
+export function landingForSession(
+  session: { roles: readonly string[]; candidateId: number | null },
+  next: string | null | undefined,
+): string {
+  const roles = session.candidateId === null ? session.roles.filter((role) => role !== "candidate") : session.roles;
+  return landingFor(roles, next);
+}
+
+/**
+ * O recrutador ainda não acompanha ninguém? (US-015)
+ *
+ * Só candidato concede acesso (G25, #465), e até lá a conta de recrutador não
+ * vê nada de candidato nenhum. A tela de acompanhados explica isso no lugar da
+ * lista vazia; com um vínculo, a lista de sempre volta (US-015.EC-1). Admin
+ * fica de fora: tem as telas de administração, não é recrutador sem trabalho.
+ */
+export function showsRecruiterEmptyState(session: {
+  roles: readonly string[];
+  linkedCandidateIds: readonly number[];
+}): boolean {
+  return session.roles.includes("recruiter") && !session.roles.includes("admin") && session.linkedCandidateIds.length === 0;
+}
+
+/**
+ * Para onde vai quem acabou de se cadastrar (US-004.AC-2, US-005.AC-1): o
+ * candidato, que já tem perfil e currículo, para o cockpit; o recrutador, que
+ * nasce sem candidatos, para a explicação de como o acesso chega.
+ */
+export function landingAfterSignup(role: "candidate" | "recruiter"): string {
+  return role === "candidate" ? "/" : "/recruiter";
+}

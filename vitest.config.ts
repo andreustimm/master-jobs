@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 // `node:sqlite` is still marked experimental by the Node 23 runner used in
@@ -6,6 +7,10 @@ import { defineConfig } from "vitest/config";
 process.env.NODE_NO_WARNINGS ??= "1";
 
 export default defineConfig({
+  // O mesmo `@/*` do `tsconfig.json`: teste que renderiza uma tela de verdade
+  // (o diretório de recrutadores, #465) importa `@/components/ui/*` sem dublar
+  // cada peça.
+  resolve: { alias: [{ find: /^@\//, replacement: fileURLToPath(new URL("./", import.meta.url)) }] },
   test: {
     include: ["tests/**/*.test.ts"],
     environment: "node",

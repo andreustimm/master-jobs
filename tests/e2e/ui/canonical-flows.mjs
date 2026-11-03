@@ -30,7 +30,12 @@ export async function run(ctx) {
     softStatuses.push(evidence.status);
     return evidence.phase;
   };
-  contextualPhases.push((await observeNavigation(page, () => firstJobLink.click(), '[data-testid="route-job-detail"]')).phase);
+  // A primeira fase que o MutationObserver testemunhou, não a do instante em
+  // que o `waitFor` do Playwright achou o overlay: num detalhe que responde
+  // rápido, o commit já levou o overlay de `loading` a `leaving` quando o
+  // locator o vê (#535, CI de 13/10/2026: 676/677 só com `leaving` aqui).
+  const detailNavigation = await observeNavigation(page, () => firstJobLink.click(), '[data-testid="route-job-detail"]');
+  contextualPhases.push(detailNavigation.transitionEvidence[0]?.phase ?? detailNavigation.phase);
   await page.goto(`${BASE}/jobs`, { waitUntil: "networkidle" });
   await page.locator('[data-testid="filters-query"]').fill("Task 04 typical fixture");
   contextualPhases.push(softOf(await observeSoftNavigation(

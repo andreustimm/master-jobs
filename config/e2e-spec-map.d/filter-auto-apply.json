@@ -1,0 +1,12 @@
+{
+  "id": "filter-auto-apply",
+  "modules": [
+    "tests/e2e/ui/filter-auto-apply.mjs",
+    "tests/e2e/filter-auto-apply.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/jobs",
+    "/login"
+  ]
+}

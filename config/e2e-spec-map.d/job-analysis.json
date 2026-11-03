@@ -1,0 +1,12 @@
+{
+  "id": "job-analysis",
+  "modules": [
+    "tests/e2e/ui/job-analysis.mjs",
+    "tests/e2e/job-analysis.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/jobs/[id]",
+    "/login"
+  ]
+}

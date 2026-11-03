@@ -33,6 +33,7 @@ humano executa. Zero scraping.**
 | Capacidade | Regra: o único jeito permitido | Estado hoje | Risco |
 |---|---|---|---|
 | Publicar post no próprio perfil | API oficial, escopo `w_member_social` | **Não implementado** — só a tabela `post` e as variáveis do `.env.example` existem | Nenhum |
+| Entrar no Master Jobs com a conta do LinkedIn | OpenID Connect oficial ("Sign In with LinkedIn using OpenID Connect"), escopos exatamente `openid profile email`, **sem** `w_member_social`; guarda só sujeito e e-mail verificado (§6.1) | **Implementado (#464)** — o botão só aparece onde as credenciais estão configuradas, em produção e local | Nenhum |
 | Comentar, conectar, seguir, mandar mensagem | **Assistido**: rascunho enfileirado na tabela `engagement`; o humano abre a `target_url` e age | **Não implementado** — só a tabela `engagement` existe | Nenhum |
 | Buscar vagas | **Não vem do LinkedIn.** Vem de APIs públicas e não autenticadas de ATS e agregadores (ver `config/sources.yaml` e ADR 0003) | **Operante** — 12 fontes configuradas | Nenhum |
 | Métricas (SSI, impressões, profile views) | Anotadas à mão em `metric_snapshot` | Só o baseline de 2026-07-27, gravado por `jho db seed` | Nenhum |
@@ -277,10 +278,12 @@ esses, os itens 1 a 8 acima são a única barreira, e cabe a quem opera cumpri-l
 
 ## 6. Setup OAuth do caminho oficial de publicação
 
-Estas são as variáveis reais declaradas em `.env.example`. **Nenhuma delas é
-lida por código hoje** (`grep -rn "process.env" src` não retorna nenhuma
-`LINKEDIN_*`) — o setup abaixo é o contrato para quando o publisher for
-implementado, e não descreve funcionalidade existente.
+Estas são as variáveis reais declaradas em `.env.example`. Para **publicar**,
+nenhuma delas é lida por código hoje — o setup abaixo é o contrato para quando
+o publisher for implementado, e não descreve funcionalidade existente.
+`LINKEDIN_CLIENT_ID` e `LINKEDIN_CLIENT_SECRET` já são lidas, mas só pelo login
+(§6.1); `LINKEDIN_REDIRECT_URI` não, porque o login monta a URL de retorno da
+origem pública configurada.
 
 | Variável | Papel | Default no `.env.example` |
 |---|---|---|
@@ -316,10 +319,42 @@ cp .env.example .env.local
 6. Publicar grava o URN devolvido pela Posts API em `post.linkedin_urn` e move
    `post.status` para `published`, carimbando `published_at`.
 
-> **Invariante:** O escopo pedido é exatamente `openid profile w_member_social`.
-> Pedir mais escopo do que se usa é como se acaba caindo em partner review — e
-> nenhum escopo adicional habilita comentar, conectar ou buscar vagas de
-> qualquer forma. Não existe escopo que resolva a Camada 3.
+> **Invariante:** Para publicar, o escopo pedido é exatamente
+> `openid profile w_member_social`. Pedir mais escopo do que se usa é como se
+> acaba caindo em partner review — e nenhum escopo adicional habilita comentar,
+> conectar ou buscar vagas de qualquer forma. Não existe escopo que resolva a
+> Camada 3.
+
+### 6.1 Login com LinkedIn: só autenticação (#464)
+
+Entrar no Master Jobs com a conta do LinkedIn usa o mesmo app de
+developer.linkedin.com, pelo produto **Sign In with LinkedIn using OpenID
+Connect**, e nada além de autenticar ([ADR-003 da tarefa
+`login-social`](../.compozy/tasks/login-social/adrs/adr-003.md)):
+
+- **Escopos exatamente `openid profile email`**, sem `w_member_social`.
+  `profile` está ali só porque o LinkedIn exige para devolver o e-mail no ID
+  token. Fixado em `src/contexts/auth/infra/oidc/linkedin.ts` e provado por
+  `tests/auth-oidc-adapters.test.ts` (UT-047).
+- **O que fica:** por identidade ligada, o provedor, o sujeito (`sub`), o
+  e-mail afirmado no vínculo, a data do vínculo e a do último uso
+  (`auth_identity`). **Nada mais:** nome, foto, título, URL de perfil e os
+  tokens do provedor não são gravados nem logados — o adapter descarta tudo
+  menos `sub`, `email` e `email_verified`.
+- **Nunca alimenta outra coisa:** dado do provedor não entra no perfil do
+  candidato, no portfólio público `/p/<slug>`, em sourcing nem em score.
+- **Desligar apaga:** desvincular o provedor remove a linha de
+  `auth_identity`.
+- **E-mail sem verificação não liga sozinho:** o LinkedIn às vezes omite
+  `email_verified`; aí a pessoa entra de outro jeito e liga o LinkedIn pela
+  página da conta.
+- **URL de retorno:** `https://jobs.mastertimm.com.br/login/oauth/linkedin/callback`
+  e `http://127.0.0.1:3000/login/oauth/linkedin/callback`, cadastradas na aba
+  **Auth** do app.
+
+> **Invariante:** Para entrar, o escopo pedido é exatamente
+> `openid profile email`. Login e publicação são usos distintos do mesmo app;
+> nenhum dos dois pede o escopo do outro.
 
 > **Invariante:** Token de LinkedIn nunca entra em `data/jobs.db`, nunca é
 > logado, nunca é commitado. O comentário do topo de `src/core/db/schema.ts` é

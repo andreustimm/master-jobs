@@ -77,7 +77,14 @@ describe("App Router transition integration", () => {
     );
     const config = readFileSync("next.config.ts", "utf8");
 
-    expect(nextPackage.version).toBe("16.3.2");
+    // A prova é o contrato do gancho no Next INSTALADO (documentação e
+    // runtime, abaixo), não um número exato: com o Renovate subindo cada
+    // patch, fixar a versão aqui reprovaria toda atualização sem dizer se o
+    // gancho mudou. A major continua amarrada à declarada no package.json.
+    const declared = (JSON.parse(readFileSync("package.json", "utf8")) as {
+      dependencies: Record<string, string>;
+    }).dependencies.next!;
+    expect(nextPackage.version.split(".")[0]).toBe(/\d+/.exec(declared)![0]);
     expect(docs).toContain("url: string,\n  navigationType: 'push' | 'replace' | 'traverse'");
     expect(runtime).toContain("onRouterTransitionStart?.(url, type, null)");
     expect(config).not.toContain("instrumentationClientRouterTransitionEvents");

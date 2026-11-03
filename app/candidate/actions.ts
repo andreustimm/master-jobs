@@ -163,6 +163,8 @@ export async function readVersionAction(
 /* Visibilidade do perfil                                                      */
 /* -------------------------------------------------------------------------- */
 
+export type VisibilityResult = { ok: true } | { ok: false; code: "invalidVisibility" };
+
 /**
  * Muda quem alcança o perfil: privado, recrutadores ou público.
  *
@@ -170,20 +172,27 @@ export async function readVersionAction(
  * É o que impede alguém de mudar a visibilidade do perfil de outra pessoa
  * mandando um id à mão, que aqui seria especialmente grave: a mudança é para
  * MAIS exposição, e a vítima não teria como perceber.
+ *
+ * Exige também `access:manage` (#465, ADR-014): quem descobre e lê o perfil é
+ * consentimento da pessoa, como conceder acesso, e a sessão emprestada de um
+ * admin não muda nem a visibilidade nem o consentimento do currículo.
  */
-export async function setVisibilityAction(formData: FormData) {
+export async function setVisibilityAction(formData: FormData): Promise<VisibilityResult> {
   const { candidateId } = await guardOwnCandidate("candidate:write");
+  await guard("access:manage", { kind: "candidate", candidateId });
 
   const result = await setVisibility(candidateId, String(formData.get("visibility") ?? ""));
-  if (!result.ok) throw new Error("Visibilidade inválida.");
+  if (!result.ok) return { ok: false, code: "invalidVisibility" };
 
-  // O currículo só é publicado quando as DUAS coisas são verdade. Sem esta
-  // segunda condição, alguém que marcou "público" uma vez e depois voltou para
-  // privado deixaria o consentimento do CV pendurado, pronto para reabrir na
-  // próxima vez que marcasse público de novo.
-  await setPublicCv(candidateId, result.visibility === "public" && formData.get("publicCv") === "on");
+  // O segundo consentimento vale para Recrutadores e Público (ADR-014): os
+  // dois mostram o texto do currículo fora de uma concessão, sempre filtrado
+  // por `publicCvMarkdown()`. Voltar para Privado o apaga — sem isto, o
+  // consentimento ficaria pendurado, pronto para reabrir na próxima vez que a
+  // pessoa abrisse o perfil de novo.
+  await setPublicCv(candidateId, result.visibility !== "private" && formData.get("publicCv") === "on");
 
   revalidatePath("/candidate");
+  return { ok: true };
 }
 
 /* -------------------------------------------------------------------------- */

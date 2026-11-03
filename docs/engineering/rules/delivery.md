@@ -259,6 +259,46 @@ reprova o passo sem atribuição da PR criada **e** da reaproveitada, ou com bas
 fora das exceções nomeadas (`staging → main`, `main → dev`); a execução com `gh`
 falso está em `tests/promotion-provenance.test.ts`.
 
+<a id="g88"></a>
+### G88 — Puxar, não empurrar: a vazão é a do merge
+
+Obrigação posterior à auditoria ([#526](https://github.com/andreustimm/master-jobs/issues/526)),
+aplicação da regra global de fluxo de entrega do dono (`~/.claude/ENTREGA.md`).
+
+**Por quê.** A vazão do projeto é a vazão de **merge** — CI, revisão e
+conflitos —, não a de agentes. Trabalho começado sem vaga na CI só alonga a
+fila e o tempo de cada entrega. No diagnóstico de 2026-10-12 (60 PRs em `dev`,
+API REST): lead time mediano de 1,53 h e p90 de 49 h; 24 % dos runs de CI
+cancelados pela `concurrency` (17 % dos runner-min); 57 % dos PRs acima de 400
+linhas; 168 runner-min por PR mesclado.
+
+**Obrigação.**
+
+1. **Antes de começar trabalho novo**, conte os PRs abertos para `dev` e os runs
+   de CI em fila (REST: `repos/<repo>/pulls?state=open&base=dev`,
+   `repos/<repo>/actions/runs?status=queued`). Com **mais de 8 PRs abertos**, ou
+   fila maior que 2 runs por runner, não comece nada: use o tempo para terminar.
+2. **WIP:** no máximo 5 implementações simultâneas, e 2 de alto risco (nível L2
+   de G53, mais regras, CI e workflows). Alvo de PR: até ~400 linhas.
+3. **Prioridade fixa:** primeiro o que alivia a CI ou o merge; depois
+   desbloquear PR existente; depois mesclar o que está verde; por último,
+   começar trabalho novo.
+4. **Mesclar na hora:** PR verde, sem conflito e com a revisão do seu nível
+   (G53) é mesclada assim que fica pronta, com o head fixado
+   (`gh pr merge <n> --merge --match-head-commit <sha>`), para que um push
+   atrasado não entre sem CI. `main` e produção seguem G46.
+5. **Lote quando acumular:** muitos PRs aprovados em conflito no mesmo arquivo
+   viram **um** branch de integração com os heads exatos, conflitos resolvidos
+   uma vez, validação completa local e **uma** rodada de CI.
+6. **Um vigia só:** um único observador de merge, por REST, a cada 5 min ou
+   mais. Agente não faz polling do GitHub — muitos consultando GraphQL estouram
+   o limite secundário.
+7. **Push acumulado:** cada push num PR cancela a CI anterior; junte os commits
+   da rodada antes de enviar.
+
+Ao relatar ao dono, diga PRs abertos, fila e lead time, não só o que foi feito.
+O alarme é "muita coisa feita e nada mesclado": pare de começar.
+
 ---
 
 ## Revisão, QA e documentação antes da PR
@@ -434,10 +474,31 @@ A validação estrutural de Markdown e metadados usa os validadores únicos que 
 existem, sem cópia: `pnpm check:instructions` (symlinks, links, âncoras e IDs de
 regra), `pnpm check:release-ready` (changelogs e fragmentos) e
 `pnpm check:qa-tracker` (esquema dos cenários). A proporcionalidade é de quem
-valida antes da PR; o CI roda o portão inteiro em toda PR de propósito, porque
-`qualidade` é check obrigatório, e check obrigatório filtrado por caminho fica
-pendente ou pulado — e pulado conta como aprovado. A seleção por caminho que
-existe é a do deploy (`scripts/vercel-ignore-build.sh`, provada por
+valida antes da PR. No CI, os checks obrigatórios (`qualidade`,
+`schema-e-migracao`) **nunca** são filtrados por caminho, porque check
+obrigatório pulado conta como aprovado; eles rodam em toda PR com `always()`.
+O recorte é dentro deles, só em PR, e cada pulo só passa quando o job que o
+declara terminou verde:
+
+- **PR só de documentação** ([#528](https://github.com/andreustimm/master-jobs/issues/528)):
+  lista de permissão em `scripts/github/pr-scope.ts`; o job `escopo` responde
+  `completo=false` e `pwa-browser` fica pulado. `contratos`, o Vitest com
+  cobertura e o `build` rodam sempre (o Vitest lê documentos, e o Tailwind varre
+  os `.md`, então Markdown pode mudar o CSS).
+- **Plano do diff, por decisão do dono, de 13/10/2026**
+  ([#535](https://github.com/andreustimm/master-jobs/issues/535)): em
+  `pull_request` com base `dev`, o job `plano` (`scripts/github/ci-plan.ts`,
+  provado por `tests/ci-plan.test.ts`) roda o `e2e-navegador` só quando a tabela
+  de impacto (`config/validation-impact.json`) pede o gate `e2e`, e o
+  `banco-nas-majors` só quando o diff toca o banco. Falha fechada: push em
+  `dev`, `staging` e `main`, `workflow_dispatch`, a chamada da promoção
+  (`validar`), a PR de produção, diff vazio ou ilegível, caminho desconhecido e
+  a PR que muda o próprio plano recebem o plano completo. O item da decisão que
+  pulava `testes`, `cobertura` e `build` em PR só de documentação não vale:
+  colide com a evidência da #528, e vale a fonte mais protetora (G62).
+
+O que a PR deixa de rodar, o push em `dev` roda. A outra seleção por caminho é
+a do deploy (`scripts/vercel-ignore-build.sh`, provada por
 `tests/vercel-ignore-build.test.ts`): só documentação, testes e automação não
 publicam versão nova.
 
@@ -626,7 +687,7 @@ formato chega por espelho **gerado** — nunca escrito à mão.
 | Comandos | `.claude/commands/` | nativo | sem suporte de projeto — peça pelo nome e leia o arquivo | `.opencode/commands` (symlink) |
 | Agentes | `.claude/agents/*.md` | nativo | `.codex/agents/*.toml` (gerado) | `.opencode/agents/*.md` (gerado) |
 | Permissões | `.claude/settings.json` | nativo | `.codex/hooks.json` (gerado) → `scripts/harness/codex-guard.ts` | `opencode.json > permission` (gerado) |
-| Política de shell (composto e risco) | `.claude/hooks/shell-policy.mjs` | `.claude/hooks/no-compound-bash.mjs` (hook `PreToolUse`) | `scripts/harness/codex-guard.ts` (importa) | `.opencode/plugins/shell-guard.js` (plugin, conferido) |
+| Política de shell (composto e risco) | `.claude/hooks/shell-policy.mjs` (pura) + `.claude/hooks/push-target.mjs` (contexto do git) | `.claude/hooks/no-compound-bash.mjs` (hook `PreToolUse`) | `scripts/harness/codex-guard.ts` (importa) | `.opencode/plugins/shell-guard.js` (plugin, conferido) |
 
 Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
 
@@ -644,6 +705,19 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
 - **Comando** tem só `description` no frontmatter: o OpenCode lê o mesmo
   arquivo e ignora o que só o Claude Code entende (`allowed-tools` ficaria
   mais largo do outro lado).
+- **A rotina nunca pede autorização ao dono (11/10/2026).** Criar e editar
+  arquivo (`.mjs` inclusive), qualquer `git` — push e force-push em branch de
+  trabalho própria inclusive — e qualquer `gh` passam sem pergunta nos três
+  harnesses; só destino `main`/`staging`/`dev`, escrita no banco de
+  produção, segredo e afrouxar regra continuam com o dono. O que ainda
+  perguntar na rotina é defeito de configuração, a corrigir na política
+  (`shell-policy.mjs`, junto do teste que o prova), nunca remendado na lista
+  `allow` de `.claude/settings.json`. O `git` — o push inclusive — é o caso
+  fechado: passa ou nega, nunca pergunta (bullets "Git" e "Push" na política
+  de shell abaixo); o descarte na checkout principal (G44) e o destino
+  protegido negam com a instrução do que fazer, e o agente corrige sozinho.
+  O que a shell ainda pergunta fora do git — `rm` recursivo, escrita fora do
+  projeto, produção, ambiente impresso — é do classificador geral.
 - **Permissões** não são reescritas por harness. No OpenCode, a tradução
   mantém a precedência do Claude Code (deny > ask > allow) dentro da regra do
   OpenCode (a última que casa vence) e alarga padrão de arquivo em vez de
@@ -662,7 +736,13 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   liberado por uma regra
   `allow` (ou é `cd`), e o que nenhuma regra libera é `ask` — isso fecha
   de uma vez invólucro, shell aninhado, `eval`, palavra reservada e aspas
-  `$'…'`, porque o que a leitura não reconhece como liberado pergunta. Edição
+  `$'…'`, porque o que a leitura não reconhece como liberado pergunta. Com a
+  lista real (#481), `Bash` sem padrão libera todo comando simples que `deny`
+  não pega, e esse fechamento deixa de valer: a lista libera o shell, e quem
+  decide o risco é a política (`judgeShell`), que roda antes da lista nos
+  três e é uma lista do que é proibido — o que ela não reconhece passa
+  (famílias cobertas e limites conhecidos em "O classificador" e
+  "Limites conhecidos", abaixo). Edição
   por `apply_patch` fora das regras de caminho é a exceção: fica com o sandbox
   e a aprovação que a pessoa escolheu no Codex (recomendado: `workspace-write`
   com `on-request`, ou mais estrito); o projeto não fixa esses valores, porque
@@ -677,14 +757,29 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   `tool.execute.before`, lançar `Error` bloqueia). Ele exporta
   `findCompound` (G63), `classifyRisk` e `judgeShell`, que junta os dois e,
   em laço, julga cada comando do corpo contra o `allow` do
-  `.claude/settings.json` — `Bash(for:*)` libera a forma, não o corpo. O
+  `.claude/settings.json` — a forma do laço não libera o corpo; com `Bash`
+  liberado, decidem o classificador e o `deny`. O
   `pnpm check:harness` reprova o plugin ausente ou que não importa a
-  política; ele não é gerado, porque não há o que traduzir.
+  política; ele não é gerado, porque não há o que traduzir. O OpenCode
+  depende do plugin carregado: sem ele, só valem os `deny` ancorados de
+  `opencode.json`. O hook do Claude Code é registrado com `|| exit 2`, como a
+  guarda do Codex: processo que falha bloqueia em vez de deixar passar.
 - **O classificador é a fonte do risco de shell.** `classifyRisk` julga por
   token, não por texto: corta em todo separador fora de aspas (inclusive
   corpo de laço, `$(…)`, crase e `sh -c '…'`), tira `rtk`/`rtk proxy`,
   atribuição, invólucro (`env`, `command`, `nohup`, `time`, `nice`,
-  `timeout`, `env -`, `script`…), lançador (`npx`, `npm exec`, `pnpm`,
+  `timeout`, `env -`, `script`, e desde a #485 `arch`, `coproc`, `noglob`,
+  `nocorrect`, `unbuffer`, `setsid`, `flock`, `chronic`, `entr`, `parallel`,
+  `hyperfine`, `sandbox-exec`, `taskpolicy`, `xcrun`, `uv run`,
+  `poetry run`, `bundle exec`, `direnv exec`, `mise exec`, `op run`,
+  `doppler run`, `dotenv` — com o texto entre aspas de `hyperfine`,
+  `parallel`, `entr` e `flock` julgado como shell), a busca de sufixo (#485:
+  em comando que a política não conhece, todo sufixo do argv que começa por
+  executável conhecido — `git`, `rm`, `sudo`, `vercel`, `supabase`, `psql`,
+  `docker`, `kubectl`, `aws`, shells, `node`/`pnpm`/`npx`, `curl`, `cp`… —
+  é julgado como comando, e vale a decisão mais forte; quem não executa o
+  argv, como `echo`, `grep`, `rg`, `gh` e `jho`, fica de fora, para
+  `grep -n sudo f` não virar `sudo`), lançador (`npx`, `npm exec`, `pnpm`,
   `pnpm exec`, `pnpm dlx`, `yarn`, `bun`, `bunx`, `node --run`,
   `node node_modules/…` — sem lista fechada de opções: a opção desconhecida
   sem `=` é lida como flag **e** como opção com valor, cada leitura é julgada
@@ -702,86 +797,261 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   `git -C .claude/worktrees/x commit -m "chore: restore foo"` não é
   `restore`. A rotina passa direto: leitura, edição no projeto, `git`, todo
   `gh` (decisão do dono: nenhum `gh` pergunta), `pnpm`/`npm`/`npx`, `rm` sem
-  recursão, `chmod`, `kill` e utilitários de texto e arquivo. Reescrever
+  recursão, `chmod`, `kill`, `docker ps/build/logs`, `make`, `uv run`,
+  `node`, `python3`, `psql` local, `curl` para `127.0.0.1` e utilitários de
+  texto e arquivo. Reescrever
   commit local (`commit --amend`, `rebase`, `rebase -i` em branch de
   trabalho) também é rotina, por decisão do dono: o portão da reescrita é o
-  push forçado, que pergunta.
-  - **Pergunta (`ask`):** perda de trabalho (push forçado ou `+ref`,
-    `--mirror`, `--all`, `--prune`, `--no-verify`, push sem refspec ou com
-    refspec variável; `reset --hard/--merge`; `clean`; `checkout -- <caminho>`,
-    `checkout .`, `checkout <ref> <caminho>`, `checkout -f/-B`;
-    `switch -f/--discard-changes/-C`; `restore` fora de `--staged`;
-    `stash drop/clear`; `worktree remove --force`; `git rm -r/-f`), reescrita de
-    histórico (`filter-branch`, `filter-repo`, `update-ref -d`,
-    `reflog expire`, `gc --prune`, `prune`, `replace`), escrita de ref
-    local por uma checagem única — `HEAD`, `main`/`staging`/`dev` (também
-    `refs/heads/…`, `heads/…`), qualquer tag e destino por variável ou
-    curinga fora de `refs/remotes/` —, valendo para `fetch`/`pull` com
-    `src:dst` (com `+`, `-f` ou `--update-head-ok`) ou `--refmap`,
-    `update-ref`, `branch -f/-M/-m/-D/-d/--force`, `symbolic-ref HEAD <ref>`,
-    criar protegida por `checkout -b/--orphan`, `switch -c/--create/--orphan`
-    e `worktree add -b`, recriar qualquer branch por cima (`checkout -B`,
+  push para branch protegida.
+  - **Git em worktree de trabalho (#476).** Por decisão do dono
+    (07/10/2026), todo `git` numa worktree de trabalho passa sem pergunta,
+    inclusive o destrutivo: push sem refspec, forçado (`-f`, `+ref`,
+    `--force-with-lease`) e `--no-verify`, `push --delete` de branch de
+    trabalho, `reset --hard`, `clean`, `checkout`/`switch` com descarte,
+    `checkout -B`/`switch -C` de branch de trabalho, `restore`, `rm -r/-f`
+    e `commit --no-verify`. Olhar o caminho não basta (a primeira versão,
+    revertida, caiu em quatro Critical), então o contexto vem do próprio
+    git: `.claude/hooks/push-target.mjs` (`resolveGitTarget`), chamado pelos
+    três chamadores, roda `git rev-parse` (raiz, diretório comum, branch),
+    `git worktree list` e, no push, `rev-parse @{push}` e a configuração
+    (`push.default` de um branch só, sem `remote.*.push`, `remote.*.mirror`,
+    `push.followTags`, `remote.pushDefault`, `branch.<b>.pushRemote`,
+    `url.*.pushInsteadOf` nem `remote.<r>.fetch` fora do padrão), com teto de
+    1,5 s; erro ou estouro devolvem `null`. A política (`shell-policy.mjs`)
+    só usa o resultado quando o comando é um `git` simples
+    (`plainGitCommand`: um comando, sem laço, pipe, substituição, curinga,
+    atribuição, invólucro nem shell aninhado; opções globais só `-C`
+    encadeado, `--no-pager` e `-P`) e o resultado é deste comando, deste
+    `cwd` e deste diretório efetivo; dentro de `xargs`, `find -exec`,
+    `sh -c` ou lançador ele não vale. A worktree conta como de trabalho
+    quando é registrada, diferente da checkout principal e fora de
+    `main`/`staging`/`dev`. O que descarta trabalho fora dela nega (G44, com a
+    instrução de rodar numa worktree) e o resto da lista abaixo também (reescrita
+    de histórico, poda de objetos, ref protegida local, git que executa
+    programa); o git não pergunta (bullet "Git"). O diretório é o `workdir` do
+    comando quando o Codex ou o OpenCode o informa.
+  - **Push: passa ou nega, nunca pergunta (11/10/2026).** Decisão do dono:
+    "git push não precisa de autorização". `judgePush` só devolve `deny` ou
+    nada, nos três harnesses (`pnpm check:harness`; no Codex e no OpenCode
+    `deny` é bloqueio, como sempre). **Passa:** push para branch de
+    trabalho `<tipo>/<slug>`, forçado (`-f`, `--force`, `--force-with-lease`,
+    `--force-if-includes`, `+ref`) ou não, `--no-verify`, `--prune`, apagar
+    branch de trabalho (`--delete`, `-d`, `:ref`), tag nova, `--tags`;
+    também a partir da checkout principal e em repositório fora do projeto
+    (o push só move ref remota; o destino protegido nega por nome em
+    qualquer repositório). **Nega:** destino `main`/`staging`/`dev` por
+    qualquer refspec (`HEAD:main`, `refs/heads/main`, `:main`, `+dev`) ou
+    pelo destino real que o git resolve — o push sem refspec vai para o
+    `@{push}`, `HEAD` para o branch atual, `push.default=upstream` para o
+    upstream, e a configuração persistida entra nesse cálculo; `--all`,
+    `--mirror`, `--branches` e o push "matching" (`:`); destino em `refs/remotes/*`
+    (`feat/x:refs/remotes/origin/dev`, `remotes/…`) ou em outro namespace fora de
+    `heads` e `tags` (`refs/notes/…`, `refs/stash`); tag apagada ou
+    sobrescrita à força (regra 22) e ref sem `/` apagada ou forçada
+    (`--delete v1.0.0`, `-f origin v1.0.0`, `HEAD:v1.0.0`); `--tags`
+    forçado ou com `--delete`; `-c`/`--config-env`/`GIT_CONFIG_KEY_n`/
+    `GIT_CONFIG_PARAMETERS` de `push.*`, `remote.*`, `branch.*`, `url.*` ou
+    `include.path`, que o texto não resolve; e `send-pack --stdin`. **O
+    destino que não dá para resolver também nega** — variável ou curinga no
+    refspec, `HEAD` sem o contexto do git, ref simbólica
+    (`main-worktree/HEAD`, `worktrees/<n>/HEAD`, branch que é symref),
+    `push.default=upstream` com upstream que não resolve, push sem refspec
+    cujo `@{push}` o git não resolve ou cuja configuração desvia o destino
+    — e a mensagem manda o agente corrigir sozinho: "explicite o destino
+    (`git push origin <branch>`)", ou `<branch>:<branch>` quando a
+    configuração desvia o refspec sem `:`, porque o `:` explícito a
+    configuração não troca. `-c alias.<sub>=<valor>` sem `!` vale como o
+    que ele expande (`git -c alias.p=push p origin main` é push para
+    `main`); o interno de mesmo nome também é julgado, porque o git não
+    deixa alias sobrescrevê-lo, e o alias gravado em configuração segue
+    fora da vista (limite abaixo). Provado com git de verdade e `--dry-run`
+    (`tests/git-target.test.ts`).
+  - **Configuração persistida do push (#505).** A mesma troca de destino
+    vale gravada, e o texto do `git push` não a vê fora do contexto conferido
+    (`-c`, `--git-dir`, `sh -c`, `-C "$PWD"`, alias): por isso **gravar a
+    chave nega**, em qualquer forma e nos três harnesses — `git config`
+    (também `--add`, `--unset`, `--replace-all`, `set`/`unset`, `--file` do
+    projeto, `alias` de `-c`) de `remote.<r>.push`, `remote.<r>.mirror`,
+    `remote.pushDefault`, `push.*`, `url.*.pushInsteadOf`,
+    `branch.<b>.pushRemote` e `include.path`/`includeIf.*.path` (que carrega
+    outro arquivo com elas) —, com a instrução de passar o destino no comando
+    (`git push origin <branch>:<branch>`). Escrever o arquivo por fora do `git
+    config` (`echo … >> .git/config`, `sed -i`, `tee`, `cp`, `mv`, `rm` em
+    `.git/config`, `config.worktree`) também nega. Passam: ler (`--get`,
+    `--list`), o que o git grava sozinho (`git push -u`, `git branch -u`, `git
+    remote add`) e o que não desvia nada (`branch.<b>.merge`/`.remote`,
+    `remote.<r>.url`, `url.*.insteadOf`, `branch.<b>.description`/`rebase`).
+    Com a configuração já gravada por outro meio (a ferramenta de edição,
+    outra ferramenta, o dono), o contexto conferido a lê (`git config
+    --get-regexp` de `push`, `remote`, `branch` e `url`, todas as origens e
+    arquivos incluídos): `remote.*.push`, `push.default` de mais de um branch,
+    `remote.pushDefault`, `branch.<b>.pushRemote` e `url.*.pushInsteadOf`
+    fazem o refspec sem `:` e o push sem refspec negarem, e
+    `push.default=upstream` leva o destino ao `@{push}`. `git push -u origin
+    <tipo>/<slug>` e `git push` numa branch de trabalho seguem passando.
+    Limite que sobra, só para a configuração que não passou pela guarda:
+    fora do contexto conferido (forma que `plainGitCommand` recusa, tempo
+    estourado, erro do git) o refspec sem `:` vale como "mesmo nome" — negar
+    sempre faria o `push -u` da rotina negar. Provado com git de verdade e
+    `--dry-run` (`tests/git-target.test.ts`, "juiz da #521").
+  - **Opção longa abreviada (#475).** O git aceita o prefixo único de uma
+    opção longa: `reset --har`, `switch --discard`, `checkout --forc`,
+    `worktree remove --forc`, `tag --dele`, `gc --prun`, `rebase --exe`,
+    `restore --work`, `config --glo` agem como a forma completa. O
+    classificador troca a abreviada pela completa, por subcomando, antes de
+    julgar (`expandGitOptions`, tabela `GIT_LONG_OPTIONS` de `push`,
+    `send-pack`, `http-push`, `worktree`, `reset`, `clean`, `checkout`,
+    `switch`, `restore`, `rm`, `tag`, `branch`, `fetch`, `pull`, `gc`,
+    `commit`, `rebase`, `difftool`, `symbolic-ref`, `update-ref`, `config`),
+    nas duas direções: o que escreve (`--har` → `--hard`) e o que libera
+    (`clean --dr`, `rm --cac`, `restore --stag`). A forma exata vence a
+    abreviação (`fetch --prune` continua `--prune`), o valor depois de `=` e
+    tudo depois de `--` ficam como estão, e prefixo que casa mais de uma
+    opção (o git o recusa como ambíguo) vale como a mais perigosa. Não se
+    abreviam as opções globais (`--git-dir`, `--no-pager`) nem as do analisador
+    de diff (`--output`, `--ext-diff`, `--textconv`), que o git não aceita
+    abreviadas. Opção nova de um subcomando que o classificador passe a ler
+    entra na tabela no mesmo commit.
+  - **Git: passa ou nega, nunca pergunta (11/10/2026).** Decisão do dono, depois
+    de reclamação formal: nenhum `git` devolve `ask`, nos três harnesses
+    (`tests/shell-policy.test.ts` roda todo comando `git` das tabelas, em toda
+    forma de invólucro, e `gitNeverAsks` converte em `deny` qualquer `ask` que
+    venha de dentro do comando `git`, como o programa de `rebase -x`,
+    `submodule foreach`, `bisect run` ou `GIT_EDITOR`). **Passa:** o que é
+    rotina, inclusive em repositório fora do projeto (`-C`, `--git-dir`,
+    `--work-tree`, `GIT_DIR=`), `stash drop/clear` e `-c` de chave do push
+    fora do push. **Nega**, com a razão e o que fazer em vez disso:
+    descarte fora de worktree de trabalho conferida (G44) — `reset
+    --hard/--merge`, `clean`, `checkout -- <caminho>`/`.`/`<ref> <caminho>`/
+    `-f`/`-B`, `switch -f/--discard-changes/-C`, `restore` fora de
+    `--staged`, `rm -r/-f`, `commit --no-verify/-n` —, e a mensagem manda
+    "rode isso numa worktree de trabalho (`git worktree add -b <tipo>/<slug>
+    .claude/worktrees/<nome> origin/dev`)"; `worktree remove --force` fora de
+    worktree de trabalho (em `.claude/worktrees/<nome>` ou
+    `~/.codex/worktrees/<id>/<nome>` passa, por autorização do dono de
+    06/10/2026, porque é a limpeza de rotina depois do merge), `-ff`, alvo
+    com variável, curinga ou `..`, alvo montado por `xargs`/`find -exec` e
+    comando sem alvo; `worktree add` fora do projeto e do temporário;
+    reescrita de histórico (`filter-branch`, `filter-repo`, `update-ref
+    -d/--stdin`, `reflog expire/delete`, `gc --prune`, `prune`, `replace`);
+    escrita de ref local por uma checagem única — `HEAD`,
+    `main`/`staging`/`dev` (também `refs/heads/…`, `heads/…`), qualquer tag e
+    destino por variável ou curinga fora de `refs/remotes/` —, valendo para
+    `fetch`/`pull` com `src:dst` (com `+`, `-f` ou `--update-head-ok`) ou
+    `--refmap`, `update-ref`, `branch -f/-M/-m/-D/-d/--force`, `symbolic-ref`,
+    criar protegida por `checkout -b/--orphan`, `switch -c/--create/--orphan` e
+    `worktree add -b`, recriar qualquer branch por cima (`checkout -B`,
     `switch -C/--force-create`, `worktree add -B`, inclusive colado ou
-    agrupado: `-Bmain`, `-fB`), `tag -f/-d/--force/--delete`,
-    `fetch --prune-tags`/`-P` e `fetch --force --tags` (regra 22; criar tag
-    nova passa), encanamento do push (`send-pack` e `http-push` com o
-    julgamento de `push`, `send-pack --stdin`, `receive-pack`), escrita fora
+    agrupado: `-Bmain`, `-fB`), `tag -f/-d/--force/--delete`, `fetch
+    --prune-tags`/`-P` e `fetch --force --tags` (regra 22; criar tag nova
+    passa), `receive-pack` e `checkout`/`switch --ignore-other-worktrees` para
+    branch protegida; git que executa programa ou pula hook (`-c`,
+    `GIT_CONFIG_KEY_n` ou `git config` com `core.pager`, `core.editor`,
+    `core.sshCommand`, `core.fsmonitor`, `core.hooksPath`, `diff.external`,
+    `*.textconv`, `sequence.editor`, `credential.helper`, `gpg.program`;
+    alias `!`; `GIT_EXTERNAL_DIFF`; `GIT_SSH_COMMAND` com `ssh` que roda
+    comando local; `GIT_CONFIG_PARAMETERS`, que o texto não lê; `GIT_CONFIG_KEY_n=alias.*`, com
+    ou sem `!`; `push --receive-pack`/`--exec`, `fetch|pull|clone|ls-remote
+    --upload-pack` e `archive --exec`, que rodam o programa indicado no
+    repositório local); `git config`
+    que grava a configuração pessoal ou do sistema (`--global`, `--system`,
+    `--file` fora do projeto), `--edit`, `alias.*` e a chave que desvia o destino
+    do push (#505, acima); escrita de arquivo fora do
+    projeto ou na lista de permissões pelas opções do git (`diff|log|show
+    --output`, `format-patch -o/--output-directory`, `archive -o`); e alias de
+    `-c` encadeado demais. Fica de fora do git, e ainda pergunta, o que a
+    shell faz em volta dele: redirecionamento (`git log > /etc/x`) e
+    substituição (`git commit -m "$(rm -rf x)"`), que são do classificador
+    geral, e os limites de profundidade e tamanho do julgamento.
+  - **Pergunta (`ask`), fora do git:** escrita fora
     da árvore do projeto ou na configuração pessoal — redirecionamento
     (`>`, `>>`, `>|`, `>&`), destino de `tee`, `cp`/`ln`/`install`, `mv`,
     `dd of=`, saída de `uniq` e `tar` (`-f` ao criar, `-C` ao extrair) e a
     tabela única de opções que escrevem arquivo (`curl -o/--output/
     --output-dir/-D/-c`, `wget -O/-o/-a/-P`, `sort -o/--output`,
-    `openssl -out/-keyout`, `git diff|log|show --output`,
-    `git format-patch -o/--output-directory`, `git archive -o`), também
+    `openssl -out/-keyout`), também
     agrupadas (`curl -sSo x`) ou coladas (`-ox`, `--output=x`), para `~`,
     `$HOME`, `/etc`, `~/.zshrc`, `~/.ssh`, `~/.claude`, `~/.codex`,
-    `~/.config` ou caminho que sai do projeto —, e o git apontado para
-    repositório fora do projeto (`-C`, encadeado; `--git-dir`,
-    `--work-tree`, `GIT_DIR=`/`GIT_WORK_TREE=`) em subcomando que não só lê
-    (`commit`, `checkout`, `reset`, `add`, `rm`, `merge`, `rebase`, `stash`,
-    `clean`, `push`…; `status`, `log`, `diff` passam), além do caminho de
-    `worktree add`. `/tmp`, `/private/tmp`, `$TMPDIR` e `/var/folders`
-    passam. O chamador passa a raiz — `$CLAUDE_PROJECT_DIR`, o `cwd` do
+    `~/.config` ou caminho que sai do projeto —. `/tmp`, `/private/tmp`, `$TMPDIR` e `/var/folders`
+    passam, e a saída redirecionada de um comando que só lê (`git log`,
+    `git diff`, `cat`…) passa também para a home fora da configuração pessoal
+    (`git log > ~/x.txt`; `git log > ~/.zshrc` e `git log > /etc/x` perguntam). O chamador passa a raiz — `$CLAUDE_PROJECT_DIR`, o `cwd` do
     Codex, o `worktree` do OpenCode —, e a raiz dentro de
     `<repo>/.claude/worktrees/<wt>` vale como o repositório inteiro (os
     outros worktrees são o projeto); sem raiz, absoluto fora do temporário
     pergunta,
-    git que executa programa ou
-    pula hook (`-c` ou `git config` com `core.pager`, `core.editor`,
-    `core.sshCommand`, `core.fsmonitor`, `core.hooksPath`, `diff.external`,
-    `*.textconv`, `sequence.editor`, `credential.helper`, `gpg.program`;
-    `git config alias.*`; alias `!` em `-c`; `commit --no-verify/-n`), tag
-    remota apagada (`push :refs/tags/v1`, `push --delete origin v1.0.0` —
-    apagar branch `<tipo>/<slug>` passa),
     apagamento em massa (`rm` recursivo em qualquer ordem de flags,
     `find -delete`, `rm` atrás de `xargs`/`find -exec`), saída do projeto
-    (`ssh`, `scp`, `sftp`, `rsync`, `brew`, `chown`), edição da própria
-    política pela shell e **produção** por qualquer lançador: `vercel --prod`
+    (`ssh`, `scp`, `sftp`, `rsync`, `brew`, `chown`), edição da lista de
+    permissões (`.claude/settings.json`) pela shell e **produção** por qualquer lançador: `vercel --prod`
     (`--prod=<qualquer valor>`, `--target production` em qualquer caixa),
     `promote`, `rollback`, `remove`, `redeploy`, `alias`, `domains`, `dns`,
     `env add/rm/update`, `blob del/rm`; `supabase db push/reset`,
     `db query`/`migration up` com `--linked`/`--db-url`, `migration repair`,
     `secrets`, `functions deploy/delete`, `projects delete`, `storage rm`,
-    `branches delete`; e os scripts
+    `branches delete`, `config push`; e os scripts
     `db:import-production*` e `perf:producao*` (por `pnpm`, `npm run` ou o
     arquivo direto no `node`, inclusive `pnpm node`, `yarn node`,
-    `pnpm exec node` e `npx node`).
+    `pnpm exec node` e `npx node`). Desde a #485, ferramentas fora do
+    catálogo do projeto: **banco** — `psql` em banco remoto (host ou URL
+    fora de `localhost`/`127.0.0.1`/socket, ou destino por variável como
+    `$DATABASE_URL`/`$POSTGRES_URL`) com `-c` de DDL/DML ou meta-comando que
+    escreve (`\!`, `\i`, `\copy`, `\o`, `\gexec`…), `-f`, entrada
+    redirecionada ou sessão sem `-c`, `pg_dump`/`pg_dumpall` e `pg_restore`
+    remotos, `drizzle-kit push` (banco local passa); **deploy e nuvem** —
+    `vercel api` com `DELETE`/`POST`/`PATCH`/`PUT` (ou campo, que vira
+    POST), `vercel teams rm`, `vercel git disconnect`,
+    `vercel integration remove`, `fly`/`flyctl` `deploy`, `secrets`, `scale`,
+    `destroy` e `apps|machine|volumes destroy`, `terraform`/`tofu` `destroy`
+    e `apply -auto-approve` ou com plano salvo, `kubectl delete`,
+    `aws … delete-*/terminate-*`, `aws s3 rm --recursive`,
+    `s3 rb --force` e `s3 sync --delete`, `gcloud … delete`; **Docker**
+    (#488) — `docker rm`, `rmi`, `container|image|volume|network|system|
+    builder rm|prune` e `compose rm`, `compose down -v/--volumes/--rmi`
+    (`ps`, `logs`, `build`, `compose up` passam, e o comando dentro de
+    `run`/`exec` é julgado pela busca de sufixo); **apagamento** —
+    `diskutil erase*`/`zeroDisk`/`partitionDisk`/`apfs delete*`,
+    `mkfs*`/`newfs*`, `shred`, `unlink`, `rimraf` (também por
+    `npx`/`pnpm dlx`), `trash -r`, `truncate -s 0` (ou tamanho negativo),
+    `tmutil delete*`; **sistema** — `crontab` que não seja `-l`,
+    `launchctl load|bootstrap|submit|enable`,
+    `defaults write|delete|import|rename`, `osascript`, `csrutil` fora de
+    `status`, `spctl --master-disable` e afins, `shutdown`, `reboot`,
+    `halt`, `poweroff`, e escrita fora do projeto por `unzip -d`, `ditto` e
+    `patch` (original, `-o`, `-r`, `-d`); **segredo** — `printenv`, `env` e
+    `set` sem argumento, `export`/`export -p`, `declare -x`/`typeset` sem
+    nome (imprimem o ambiente) e `vercel env pull`/`vercel pull` em
+    qualquer destino (gravam segredo em arquivo).
   - **Nega (`deny`):** push para `main`/`staging`/`dev` por qualquer refspec
-    (`HEAD:main`, `refs/heads/main`, `heads/main`, `:main`, `$'\x6dain'`),
+    (`HEAD:main`, `refs/heads/main`, `heads/main`, `:main`, `$'\x6dain'`) ou
+    pelo destino real, e o push cujo destino o texto não resolve (bullet
+    "Push", acima),
     `.env*` e `.linkedin.token.json` em qualquer palavra (`cat .env*`,
     `curl -d @.env`, `-F f=@.env`, `--env-file=.env`, `< .env`, cabeçalho de
     laço) ou por curinga fora de aspas que o shell pode expandir para eles
     (`.en?`, `./.en[v]`, `.e*`), `sudo`/
     `doas`/`su`, `chmod` que deixa gravável por todos (`777`, `0777`,
-    `a+rwx`, `o+w`) e `rm` recursivo na raiz, num diretório de sistema de
-    primeiro nível (`/usr`, `/etc`, `/Users`…) ou no diretório pessoal;
-    subdiretório (`rm -rf /tmp/cache`, `rm -rf ~/www`) pergunta.
-- **O que fica no `.claude/settings.json`.** `allow` da rotina (com
-  `Bash(for:*)`, `while`, `until`, `if`, `case`); `ask` só para editar a
-  própria política (`.claude/settings.json`, `.claude/hooks/**`,
-  `scripts/harness/**`, `opencode.json`, `.codex/**`, `.opencode/plugins/**`,
-  com `**/` à frente para valer também dentro de `.claude/worktrees/<wt>/`),
-  que o classificador de shell não vê; e `deny` ancorado de reserva — push
+    `a+rwx`, `o+w`), `rm` recursivo na raiz, num diretório de sistema de
+    primeiro nível (`/usr`, `/etc`, `/Users`…) ou no diretório pessoal —
+    subdiretório (`rm -rf /tmp/cache`, `rm -rf ~/www`) pergunta — e senha do
+    Keychain (#485: `security find-*-password -w/-g`, `dump-keychain`,
+    `export`).
+- **O que fica no `.claude/settings.json`.** `allow` com `Bash` sem padrão
+  (#481, pedido do dono): a lista libera o shell, e a política decide o
+  risco nos três harnesses — o hook do Claude Code devolve `ask`/`deny`, a
+  guarda do Codex bloqueia `ask` e `deny`, o plugin do OpenCode lança
+  `Error`. Antes, todo comando fora de uma lista de prefixos (`docker`,
+  `codex exec`, `opencode run`, script novo) caía em aprovação manual, e a
+  lista nunca cobria tudo; as entradas `Bash(...)` de `allow` saíram por
+  redundantes. No OpenCode a tradução vira `bash: { "*": "allow", …deny }`,
+  sem padrão `allow` além do `*`. `ask` só para editar a
+  lista de permissões (`Edit/Write(**/.claude/settings.json)`, com `**/` à
+  frente para valer também dentro de `.claude/worktrees/<wt>/`; a mesma
+  edição pela shell é do classificador). Hooks, `scripts/harness/`,
+  `opencode.json`, `.codex/` e `.opencode/plugins/` eram `ask` e deixaram de
+  ser em 11/10/2026, por decisão do dono: a rotina nunca pede autorização,
+  e editar um `.mjs` é rotina (os espelhos saem de `pnpm harness:sync`, e
+  `pnpm check:harness` confere). Fica `deny` ancorado de reserva — push
   protegido, `.env`, `sudo`, `chmod 777`, `rm -rf /`, `rm -rf / *`,
   `rm -rf ~`, `rm -rf ~/`, `rm -rf $HOME` (sem curinga depois de `/` ou `~`,
   que negaria `rm -rf /tmp/cache`) — escrito também como
@@ -806,18 +1076,34 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   tradução recusa em vez de perder o deny, e a guarda do Codex só julga shell e
   patch) são diferenças do harness, não da política. O classificador não vê
   alias do git definido em config, script de shell chamado por arquivo
-  (`bash x.sh`), código passado a `node -e`/`python -c`, programa apontado por
-  variável de ambiente (`GIT_SSH_COMMAND`, `PAGER`, `GIT_EDITOR`) nem
+  (`bash x.sh`), código passado a `node -e`/`python -c` nem
   `git checkout <arquivo>` sem extensão e sem `/` (`git checkout Makefile`):
   separar arquivo de branch ali exige olhar o disco, e a política é pura —
   só `.`, `..`, `./x`, `x/` e `:x`, que nenhum ref aceita, perguntam.
-  Escrita fora do projeto, limites aceitos pelo dono (#462): `touch`,
+  Programa apontado por variável na atribuição do próprio comando
+  (`NOME=valor` ou `NOME+=valor`), ou por `export`/`declare`/`typeset`/
+  `local`/`readonly` com `NOME=valor` no mesmo comando (corpo de laço ou
+  `if`) — `GIT_SSH_COMMAND`, `GIT_SSH`, `GIT_PROXY_COMMAND`,
+  `GIT_EXTERNAL_DIFF`, `GIT_EDITOR`, `GIT_SEQUENCE_EDITOR`, `GIT_ASKPASS`,
+  `SSH_ASKPASS`, `GIT_PAGER`, `PAGER`, `MANPAGER`, `GH_PAGER`, `EDITOR`,
+  `VISUAL`, `GH_EDITOR`, `BROWSER`, `GH_BROWSER` — tem o valor julgado como
+  comando que recebe argumentos do git (o arquivo a editar, o host), como em
+  `xargs`: `EDITOR=rm git commit` pergunta, `EDITOR="code --wait"` passa.
+  `GIT_EXTERNAL_DIFF` sempre pergunta, como `diff.external`: o git passa o
+  arquivo do projeto ao programa. `GIT_CONFIG_KEY_n` com chave que executa
+  (inclusive `core.gitProxy`) vale como `git -c`, e `GIT_CONFIG_PARAMETERS`
+  pergunta. `GIT_SSH_COMMAND="ssh -i chave"` passa; com `ProxyCommand`,
+  `LocalCommand`, `KnownHostsCommand`, `PKCS11Provider`,
+  `SecurityKeyProvider` ou `-F`/`-E`/`-I` (também em grupo, `-qF`),
+  pergunta. `env -S '…'` é lido com as aspas, como o `env` faz; com `\`
+  (escape do `env`, não do shell), pergunta.
+  Escrita fora do projeto, limites conhecidos (#462): `touch`,
   `mkdir` e `rmdir` fora do projeto passam, porque não perdem dado
   existente; link simbólico não é resolvido — `ln -s ~/.zshrc ./link` e
   depois `echo x > ./link` passam, porque seguir o link exige olhar o disco
   e a política é pura (o sandbox do harness é a camada que vê o disco);
-  opção de saída de programa fora da tabela (`zip`, `unzip -d`, `rsync` já
-  pergunta) não é vista; `GIT_DIR=` vale para o `git` do mesmo comando, não
+  opção de saída de programa fora da tabela (`zip`; `unzip -d` entrou na
+  #485, `rsync` já pergunta) não é vista; `GIT_DIR=` vale para o `git` do mesmo comando, não
   para o de dentro de `sh -c`. Configuração pessoal: `git config -f<arq>`
   com o caminho colado na opção não é lido como fora do projeto, e config
   redirecionada ao projeto por variável (`GIT_CONFIG_GLOBAL=./x`,
@@ -826,9 +1112,48 @@ Mudou uma fonte, rode `pnpm harness:sync` e commite fonte e espelhos juntos.
   `git notes --ref refs/heads/main` não é
   vetor: o git prefixa `refs/notes/` (grava `refs/notes/refs/heads/main`, e
   `main` fica intacta), por isso não pergunta.
-  `Bash(node:*)`,
-  `Bash(npx:*)` e `Bash(rtk proxy:*)` liberam código arbitrário por desenho, e
-  o classificador só pega neles o risco que reconhece.
+  `Bash` liberado inteiro (#481) faz da política uma lista do que é
+  proibido: o que ela não reconhece passa. Limites conhecidos:
+  - **Código passado a interpretador** — `node -e`, `python3 -c`,
+    `perl -e`, `ruby -e`, `php -r`, `lua -e`, `awk 'BEGIN{system(…)}'`,
+    `sed 'e …'`, `ts-node`, `deno run`, `bun x.ts` — e **script por
+    arquivo** (`bash x.sh`, `source ./x.sh`, `make`, `just`, `task`): o
+    conteúdo não é lido.
+  - **Ferramenta fora das famílias acima**: outro cliente git (`hub`, `jj`),
+    `vercel link`, `supabase` fora dos subcomandos listados
+    (`db dump --linked`, `link`, `sql --linked`), instalação
+    de pacote fora do `brew` (`pip`, `cargo`, `gem`, `uv tool`,
+    `code --install-extension`), atributo e ACL de arquivo (`xattr`,
+    `chflags`, `setfacl`), rede e máquina (`nc`, `open -a`, `killall`,
+    `pmset`, `networksetup`), `fd -X`, e `pnpm db:push` (o script do
+    projeto que roda `drizzle-kit push`: a política não lê o
+    `package.json`).
+  - **Segredo fora de `.env*`**: `cat ~/.ssh/id_*`, `~/.aws/credentials`,
+    `~/.netrc`, `~/.npmrc`, `gh auth token`, `printenv VAR`/`echo $VAR` e
+    arquivo que um `vercel env pull` gravou com outro nome — só `.env*` e
+    `.linkedin.token.json` são negados por nome; `dotenv -- …` carrega o
+    `.env` como o `pnpm jho` (`--env-file-if-exists=.env`) faz na rotina.
+  - **Host do Postgres pelo ambiente**: `PGHOST` fora do prefixo do próprio
+    `psql` (exportado em outra chamada, ou por `export` antes do `psql` no
+    mesmo laço) não é visto; `psql` remoto com `-c` de `select` passa.
+  - **Postgres remoto fora das formas lidas**: URL colada na opção
+    (`psql -dpostgresql://…`), `service=` do `pg_service.conf` e
+    `select … into` (grava com cara de leitura) passam.
+  - **Segredo fora do Keychain**: `op read`, `doppler secrets get --plain`,
+    `security delete-generic-password` e `ps eww` (ambiente dos processos)
+    passam.
+  - **Comando remoto do Fly**: `fly ssh console -C "…"` roda na máquina
+    remota sem que o texto seja julgado.
+  - **Variável que a política não lê**: programa por variável fora da lista
+    acima (`BASH_ENV`, `NODE_OPTIONS=--require`) e variável exportada em
+    outra chamada passam: a política não guarda estado entre comandos.
+    `NOME=valor` solto ou com `export` no mesmo comando é julgado.
+  - **Busca de sufixo por palavra**: só o argv é lido; texto entre aspas só
+    é julgado como shell em `sh -c`, `eval`, `watch` e nos invólucros
+    `hyperfine`, `parallel`, `entr` e `flock` (`tmux new "…"` não é).
+  - **OpenCode sem o plugin**: `pnpm check:harness` reprova o plugin
+    ausente ou que não importa a política, mas uma sessão que não o carrega
+    fica só com os `deny` ancorados de `opencode.json`.
 - **Instruções.** Os três carregam só o `AGENTS.md`; as regras por domínio são
   lidas sob demanda pelo roteador da entrada. Carregar os seis arquivos de
   `docs/engineering/rules/` em `opencode.json > instructions` custaria ~26 mil
@@ -845,9 +1170,34 @@ prova, sobre o `.claude/settings.json` real, que Codex (guarda) e OpenCode
 (`opencode.json` + plugin) decidem igual ou mais forte que o Claude Code em
 todos os achados da revisão da #462 — com e sem `rtk`/`rtk proxy` —, que a
 rotina passa sem pergunta nos três e que o composto é recusado nos três com a
-mesma mensagem. `tests/shell-policy.test.ts` cobre o classificador em cada
+mesma mensagem; desde a #481, também que ferramenta fora da antiga lista
+(`docker ps`, `codex exec`, `opencode run`) passa nos três e que `rm -rf`,
+`vercel --prod`, `.env`, `sudo` e push protegido dão a mesma decisão (`ask`
+ou `deny`) nos três, enquanto o push forçado de branch de trabalho passa nos
+três e o push sem destino resolvível nega nos três, com a mensagem de
+explicitar o destino; desde a #485, que os comandos
+dos achados da revisão L2 da #485 (invólucro desconhecido, ferramenta fora
+do catálogo, segredo, Docker da #488 e programa por variável de ambiente)
+que a política passou a cobrir dão `ask` ou `deny` nos três — o resto está
+nos limites conhecidos —, e que a
+rotina (`git -C <wt> commit`, `gh`, `pnpm`, `docker ps/build/logs`, `node`,
+`python3`, `make`, `uv run pytest`, `curl` local) continua passando.
+`tests/no-compound-bash.test.ts` prova que o registro do hook do Claude Code
+termina em `|| exit 2` e que o processo que falha sai com 2.
+`tests/shell-policy.test.ts` cobre o classificador em cada
 forma (pura, `rtk`, `git -C`, `git -c`, laço, `sh -c`, `xargs`,
-`find -exec`, invólucro e lançador). O plugin foi carregado no runtime do
+`find -exec`, invólucro e lançador). `tests/git-target.test.ts` monta um
+repositório descartável de verdade (remoto bare com `main`, `staging` e
+`dev`; worktrees criadas de `origin/dev`), prova com `git push --dry-run`
+real que as formas dos quatro Critical da primeira versão empurrariam
+`dev` ou `main`, que elas negam nos três chamadores (o push não pergunta), que o git
+destrutivo passa na worktree de trabalho e nega na checkout principal (com a
+instrução de rodar numa worktree), que o push forçado de branch de trabalho
+passa, que gravar a configuração que desvia o push (#505) nega em toda forma
+(`-c`, `--git-dir`, `sh -c`, `-C "$PWD"`, alias) e que, gravada de outro modo,
+ela leva `dev` e o push seguinte nega, com a forma explícita que a mensagem
+manda usar passando, e que o
+`git -C <wt> push` liberado atualiza só o branch de trabalho no remoto. O plugin foi carregado no runtime do
 OpenCode (Bun 1.3.14) e `opencode debug config` o lista entre os plugins do
 projeto.
 
@@ -863,9 +1213,12 @@ economia de saída, não proteção. `rtk proxy <comando>` só quando a saída b
 leia o log bruto quando o resultado importa.
 
 **Um comando de shell por chamada**, sem `&&`, `||` ou `;`. A lista de
-permissão do Claude Code (`.claude/settings.json`) casa pelo prefixo do
-comando: um composto não casa com o `allow` e cai em aprovação manual, e o dono
-vira fila. Duas exceções (#461):
+permissão (`.claude/settings.json`) libera o shell (`Bash` sem padrão, #481)
+e a política de shell, uma lista do que é proibido, decide o risco comando a
+comando (G85): o composto é
+recusado antes, porque juntar comandos esconde um atrás do outro, e o que a
+política não consegue separar cairia em aprovação manual — o dono vira fila.
+Duas exceções (#461):
 
 - **Pipe em que todo estágio só lê** — `cat`, `head`, `tail`, `wc`, `grep`,
   `rg`, `jq`, `sort`, `uniq`, `cut`, `tr`, `column`, `nl`, `ls`, e
@@ -884,9 +1237,9 @@ vira fila. Duas exceções (#461):
   continua julgado comando a comando — `&&`, `||`, `&`, subshell, heredoc,
   substituição, pipe fora da leitura e qualquer comando depois do `done`
   (salvo pipe de leitura: `for …; done | grep a`) seguem recusados, o
-  classificador de risco vê cada comando do corpo, e cada um precisa estar no
-  `allow` como se rodasse sozinho (`Bash(for:*)` libera a forma, não o
-  corpo); os embutidos `[`, `[[`, `:`, `true`, `false`, `read`, `test`,
+  classificador de risco vê cada comando do corpo, e cada um é conferido
+  contra a lista como se rodasse sozinho (a forma do laço não libera o
+  corpo; com `Bash` liberado, decidem o classificador e o `deny`); os embutidos `[`, `[[`, `:`, `true`, `false`, `read`, `test`,
   `break` e `continue` passam sem regra.
 
 Filtre saída com a flag do próprio programa (`--jq`, `--format`) e ponha
@@ -900,8 +1253,12 @@ mesma mensagem (`compoundMessage`):
   `.claude/settings.json` → `hooks.PreToolUse` com matcher `Bash` e caminho
   relativo ao projeto (`$CLAUDE_PROJECT_DIR`), recusa com saída 2 — fecha o
   composto ANTES da aprovação manual, sem depender de hook global do usuário.
+  O comando registrado termina em `|| exit 2`: se o processo do hook falhar,
+  o comando é bloqueado, não liberado.
   O mesmo hook devolve o risco do classificador (G85) como JSON de
-  `PreToolUse` com `permissionDecision` `ask` ou `deny`.
+  `PreToolUse` com `permissionDecision` `ask` ou `deny`; para `git` simples,
+  antes de julgar, resolve o contexto real com o próprio git
+  (`push-target.mjs`, #476), como a guarda do Codex e o plugin do OpenCode.
 - **Codex:** `scripts/harness/codex-guard.ts` (G85) recusa o composto antes de
   olhar a lista — antes, ele liberava o composto quando todo trecho era
   `allow` (`git ls-files | xargs wc -l`) e tratava heredoc de commit como

@@ -1,0 +1,11 @@
+{
+  "id": "slow-filters",
+  "modules": [
+    "tests/e2e/ui/slow-filters.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/jobs",
+    "/transition-test"
+  ]
+}

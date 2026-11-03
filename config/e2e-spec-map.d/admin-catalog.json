@@ -1,0 +1,18 @@
+{
+  "id": "admin-catalog",
+  "modules": [
+    "tests/e2e/ui/admin-catalog.mjs",
+    "tests/e2e/admin-catalog.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/",
+    "/admin/execucoes",
+    "/admin/execucoes/[id]",
+    "/admin/plataformas",
+    "/admin/plataformas/[id]",
+    "/admin/users",
+    "/jobs",
+    "/login"
+  ]
+}

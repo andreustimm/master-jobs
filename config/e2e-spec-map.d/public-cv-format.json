@@ -1,0 +1,11 @@
+{
+  "id": "public-cv-format",
+  "modules": [
+    "tests/e2e/ui/public-cv-format.mjs",
+    "tests/e2e/public-cv-format.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/p/[slug]"
+  ]
+}

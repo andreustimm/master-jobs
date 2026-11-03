@@ -517,7 +517,12 @@ que seguram o núcleo determinístico.
 | `JHO_VAULT_PATH` | `report/markdown.ts` | Raiz do vault Obsidian; ausente e sem `--out`, `buildReport()` retorna `path: null` e nada é escrito. |
 | `JHO_REPORT_DIR` | `report/markdown.ts` | Subdiretório dentro do vault; default `05_Interviews/LinkedIn`. |
 | `CRON_SECRET` | `app/api/cron/authorize.ts` | Segredo das rotas de `/api/cron/` (`recheck`, `varredura`, `watchdog` — checagem manual do vigia de cota, ADR 0030); sem ele respondem 503. |
-| `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `LINKEDIN_REDIRECT_URI` | — | Declaradas em `.env.example`, **nenhum código as lê hoje**. |
+| `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` | `contexts/auth/domain/oidc-config.ts` | Credenciais do login com LinkedIn (#464). Lidas pelo parser de configuração; o fluxo OIDC que as usa ainda não existe. `LINKEDIN_REDIRECT_URI` continua sem leitor: a URL de retorno sai da origem pública (G17). |
+| `GOOGLE_OIDC_CLIENT_ID`, `GOOGLE_OIDC_CLIENT_SECRET` | `contexts/auth/domain/oidc-config.ts` | Credenciais do login com Google (#464), no mesmo estado das do LinkedIn. |
+| `JHO_SESSION_SECRET` | `contexts/auth/domain/oidc-config.ts` | Segredo da chave do cookie do fluxo OIDC; sem ele, nenhum provedor social é oferecido. |
+| `JHO_SIGNUP_MAX_PER_IP_HOUR` | `contexts/auth/domain/oidc-config.ts` | Limite de cadastros por IP por hora; padrão 3. |
+| `JHO_MAIL_SINK` | `contexts/auth/domain/oidc-config.ts`, `contexts/auth/infra/resend-mailer.ts` | Sink de e-mail em arquivo, só com `JHO_ENV` `local` ou `e2e` e fora da Vercel. |
+| `JHO_OIDC_ISSUER_GOOGLE`, `JHO_OIDC_ISSUER_LINKEDIN` | `contexts/auth/domain/oidc-config.ts` | Emissor OIDC falso do E2E, só com `JHO_ENV` `local` ou `e2e` e fora da Vercel. |
 
 ---
 

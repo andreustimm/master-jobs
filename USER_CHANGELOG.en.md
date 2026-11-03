@@ -34,7 +34,57 @@ the exact defect addressed by each fix—see `CHANGELOG.md`.
 
 <!-- sem-nota-usuario: 1.33.2 - 2026-10-05T17:47:35.000Z -->
 
+<!-- sem-nota-usuario: 1.36.0 - 2026-11-03T20:40:02.000Z -->
+
 ## [Unreleased]
+
+## [1.35.0] - 2026-11-03T19:11:15.000Z
+
+### Fixed
+
+- Your earlier network of contacts shows up again in Referrals. It had disappeared when each account got its own network.
+- Two accounts can add the same person by LinkedIn address, each in its own network.
+- The primary button ("Search", "Apply" and the rest) no longer becomes hard to read when the pointer hovers it, in all three themes and in light and dark modes. In the light theme the button now darkens on hover instead of lightening.
+- On the job page, the "first seen" date, the "checked on" date and the date of each step in the application history now show in your time zone, like the Pipeline: what you logged at 11:45 pm in São Paulo no longer becomes the next day, and the two screens agree. The date is now written out ("Oct 7, 2026").
+- In Jobs, filtering by a salary cap alone keeps the URL clean, without an empty minimum.
+- In the Pipeline, the chosen stage is now marked, the "applied on" date shows in your time zone (11:45 pm no longer becomes the next day), and the channel shows in your language. The history a recruiter sees also shows the date in the reader's time zone.
+- In the dark theme, the text on primary buttons is easier to read.
+- An invalid score in the link now shows a notice, in the Pipeline and in Jobs, and applying only the minimum score no longer leaves an empty "fitMax=" in the link.
+- In the Pipeline, going back in the browser or clearing companies and channels now unticks the boxes, and the next Apply no longer brings the removed filter back. A score range typed the wrong way round now shows in the fields in the right order.
+- In the Pipeline, the "broaden search" explanation no longer promises synonyms when they are turned off.
+- In My account, the access history shows the end date on the day you chose, not one day later.
+- Someone who gets an invite or an access notice from a person who has not chosen a name yet sees "Candidate", not their email address.
+- An administrator who takes over a recruiter's identity can no longer suggest jobs on their behalf.
+- Changing an account's email in administration now requires the new address to be confirmed again before a pending invite to it takes effect.
+
+### Added
+
+- The Pipeline now has filters: search words in the title and description, pick companies and channels, set a score range, and combine them with the stage. "Broaden search" also finds Portuguese and English synonyms and titles with similar spelling. Each stage's count follows the filters, and the link keeps the filtered view.
+- A recruiter you invite by email can now accept: the invitation link opens sign-up as a Recruiter, and whoever signs up with the address you typed lands right on your profile. Any other email gets no access.
+- Recruiters get a profile directory: they search by name, headline or skill among candidates who chose Recruiters or Public, filter by location, work model and level, and read only what the public profile shows.
+
+### What's new
+
+- The sign-in page can offer "Continue with Google" and "Continue with LinkedIn" wherever social sign-in is enabled. An existing account is recognized by the email the provider confirms, and you get an email notice when the provider is linked.
+- If you are already signed in, opening the sign-in page takes you straight to your page.
+- You can now create your own account from "Create account", as a candidate or as a recruiter, with Google, LinkedIn, or email and password confirmed by a code sent to your email.
+- Candidates finish sign-up with their profile and CV already saved, and jobs start being scored against it. Recruiters see an explanation of how access to candidates arrives.
+- The Terms of Use and Privacy Policy can be read without an account, in Portuguese and English.
+- In My account, the "Sign-in methods" section shows whether the account has a password and whether Google and LinkedIn are connected, with the connection and last-use dates. You can connect or disconnect each provider; the last way to sign in can never be removed.
+- An account that signs in only with Google or LinkedIn can set a password on the account page.
+- You get an email whenever a provider is connected to or disconnected from your account.
+- The password-recovery email arrives in your language.
+
+### New
+
+- In My account, the "Recruiter access" section lets you give a recruiter who has an account read access to your funnel and current CV, with an optional end date. You see who has access, revoke it whenever you want and follow the history of everything you shared.
+- A recruiter you gave access to now sees your current CV as well as your pipeline, and can suggest jobs to you. Suggestions arrive under "Suggestions" in the menu, with the recruiter's note; only you decide: accepting adds the job to your pipeline, declining leaves everything as it is.
+- For recruiters: the candidate list shows since when and until when you have access, and each person's page has their CV to read or download and the list of jobs you suggested, with their answer.
+
+### Changed
+
+- Under "Who sees this profile", each option explains who finds and reads the profile; Recruiters also reaches people who signed up as recruiters on their own.
+- Consent to the CV text now applies to Recruiters and Public. Email, phone and salary expectations written in the CV still stay out.
 
 ## [1.34.0] - 2026-10-05T18:11:37.000Z
 

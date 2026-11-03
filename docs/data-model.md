@@ -195,9 +195,9 @@ erDiagram
     }
     target_account {
         INTEGER id PK
-        INTEGER candidate_id FK "dono da rede, ON DELETE CASCADE; nulo = oculto"
+        INTEGER candidate_id FK "dono da rede, NOT NULL, ON DELETE CASCADE"
         TEXT name
-        TEXT linkedin_url UK
+        TEXT linkedin_url UK "única por candidato"
         TEXT category "recruiter, ai-leader, peer, company"
         TEXT company
         TEXT role
@@ -855,7 +855,7 @@ escreve hoje**. A única leitura é `repo.openTasks()`, sobre `positioning_task`
 |---|---|---|
 | `post` | Rascunhos de conteúdo. *"Published through the official `w_member_social` API only."* | `slug` (UNIQUE), `pillar`, `status` (`draft \| ready \| published \| archived`), `linkedin_urn` (ex. `urn:li:share:123`), métricas `impressions` / `reactions` / `comment_count` |
 | `engagement` | Fila de engajamento **assistido** | `kind` (`comment \| connect \| follow \| message \| endorse`), `target_url`, `draft`, `status` (`queued \| done \| skipped`), índice `(status, queued_for)` |
-| `target_account` | A rede de contatos de um candidato (nasceu das 30 contas-alvo da §2.2 do audit) | `candidate_id` (anulável até a #405, `ON DELETE CASCADE`; nulo não aparece para ninguém), `linkedin_url` (UNIQUE), `category` (`recruiter \| ai-leader \| peer \| company`), `status` (`identified \| following \| engaged \| connected \| conversing`) |
+| `target_account` | A rede de contatos de um candidato (nasceu das 30 contas-alvo da §2.2 do audit) | `candidate_id` (NOT NULL, `ON DELETE CASCADE`), `linkedin_url` (UNIQUE com `candidate_id`), `category` (`recruiter \| ai-leader \| peer \| company`), `status` (`identified \| following \| engaged \| connected \| conversing`) |
 | `metric_snapshot` | Métricas de funil registradas à mão — SSI, search appearances, profile views | UNIQUE `(at, key)`, `value REAL` |
 | `positioning_task` | O plano de ação da §14 do audit como linhas executáveis | `id TEXT` no formato `PT-0001`, `horizon` (`24h \| week \| 30d \| 60d \| 90d`), `priority` (`P0 \| P1 \| P2 \| P3`), `source_ref` apontando de volta pro audit |
 
@@ -1345,11 +1345,107 @@ candidato, e apagar o candidato apaga a rede dele. Toda leitura e escrita em
 tinha dono e `/referrals` mostrava a rede do dono, com nomes, para qualquer
 conta.
 
-A coluna ainda é **anulável**: a migration `0031_contatos_por_candidato` é só
-aditiva e não atribui as linhas antigas. Linha sem dono não aparece para
-ninguém, então a rede gravada antes da 0031 fica oculta, inclusive para o dono,
-até o lote da #405 (backfill para o candidato `default`, URL única por
-candidato, drop do índice global e NOT NULL, com revisão humana da migration).
-Até lá a URL do LinkedIn continua única no banco inteiro
-(`target_account_url_idx`): se duas contas cadastram a mesma pessoa, a segunda
-é recusada.
+A coluna é **obrigatória** desde a `0034_contatos_candidato_obrigatorio`
+(#405). A `0031_contatos_por_candidato`, só aditiva, criou a coluna anulável;
+entre as duas, a rede gravada antes da 0031 ficava sem dono e oculta para
+todos, inclusive o dono. A 0034, numa transação só:
+
+1. apaga a linha sem dono e sem `linkedin_url` que tem gêmea já atribuída ao
+   candidato de slug `default` — mesmo `name`, mesma `category` e mesma
+   `company`, com nulo casando com nulo (`IS NOT DISTINCT FROM`). Fica a linha
+   com dono, que é a mais recente e a que `jho contacts seed` atualiza; as
+   notas da órfã não são fundidas. Órfã com URL nunca é apagada;
+2. atribui o resto ao candidato de slug `default` (o slug, não `is_default`,
+   que um defeito antigo gravou `true` em convidado);
+3. cria `target_account_candidate_url_idx`, único em
+   `(candidate_id, linkedin_url)`, e remove o índice global
+   `target_account_url_idx`;
+4. torna `candidate_id` NOT NULL.
+
+Sem candidato `default` e com linha sem dono, o passo 4 falha (23502) e o lote
+inteiro volta atrás. A URL do LinkedIn é única **dentro da rede**: duas contas
+podem cadastrar a mesma pessoa, cada uma com a própria linha, e
+`addContact` casa pela URL só dentro do candidato. Contato sem URL não colide.
+A importação do snapshot legado não transfere `target_account`
+(`exclude-unowned`): o snapshot não diz de quem é cada contato.
+
+### Login social e cadastro — `auth_identity`, `auth_signup` (#464)
+
+Do contexto `auth`, pela ADR-009 de `.compozy/tasks/login-social/`. A
+`0035_login_social` só acrescenta: as duas tabelas e seis colunas anuláveis em
+`auth_user`. As rotas e o cadastro que escrevem nelas chegam em tarefas
+seguintes da #464; hoje só a retenção mexe em `auth_signup`.
+
+| Tabela | Chave | O que guarda |
+|---|---|---|
+| `auth_identity` | `id`; únicos `(provider, subject)` e `(user_id, provider)`; `user_id` com `ON DELETE cascade` | identidade de Google ou LinkedIn ligada a uma conta: `subject` do provedor, `email_at_link` (o que o provedor afirmou no vínculo), `origin` (`automatic` \| `manual`), `linked_at`, `last_used_at`. Nada de perfil nem token (ADR-003). `CHECK` em `provider` e `origin` |
+| `auth_signup` | `id`; único `token_hash`; índices `(ip_hmac, completed_at)` e `(email, completed_at)`; `user_id` com `ON DELETE set null` | cadastro pendente (`kind` `manual` \| `social`) até a conclusão: e-mail normalizado, idioma, papel (`CHECK`: nulo, `candidate` ou `recruiter` — nunca `admin`), nome, título, texto do CV, hash da senha (manual), `provider`/`subject` (social), HMAC do código e tentativas, HMAC do IP, versões de termos, `expires_at`, `completed_at` |
+
+Colunas novas de `auth_user`, todas anuláveis e nulas nas contas anteriores:
+`email_verified_at`, `terms_version`, `privacy_version`, `terms_accepted_at`,
+`signup_origin` (`admin` \| `manual` \| `google` \| `linkedin`) e `locale`.
+
+**Retenção.** `jho db cleanup --apply` (o job semanal `manutencao-banco.yml`)
+apaga de `auth_signup` o pendente criado há mais de 24 h e o concluído há mais
+de 30 dias (`src/core/db/retention.ts`); a conta em `auth_user` fica. A
+importação do snapshot legado não transfere as duas tabelas (nascem vazias) e
+grava nulo nas colunas novas de `auth_user`.
+
+### Acesso do recrutador — `recruiter_grant`, `recruiter_invite`, `recruiter_access_event`, `recruiter_suggestion`, `recruiter_suggestion_by`, `recruiter_directory_query` (#465)
+
+Pela ADR-011 e pela ADR-012 de `.compozy/tasks/recrutador-acesso/`. A
+`0036_recrutador_acesso` só acrescenta: seis tabelas e uma etapa de dados que
+copia cada linha de `recruiter_candidate` para uma concessão `active` sem fim
+(e-mail atual da conta, `created_by` e `created_at` preservados) com um evento
+`grant_created` de ator `system`. `recruiter_candidate` fica **congelada**: sem
+leitura nem escrita no código (`tests/architecture.test.ts`), e a remoção é
+migração não aditiva, numa issue própria, com revisão humana.
+
+| Tabela | Chave e restrições | O que guarda |
+|---|---|---|
+| `recruiter_grant` | `id`; único parcial `(candidate_id, recruiter_user_id) WHERE status = 'active'`; `CHECK` de status e de "ativa tem recrutador"; candidato `cascade`, recrutador, convite, `created_by` e `revoked_by` `set null` | uma concessão do candidato a um recrutador: `recruiter_email` normalizado, `status` (`active` \| `revoked` \| `expired` \| `ended_account_removed`), `expires_at` (fim do dia escolhido, em UTC; nulo = sem fim) e `expiry_tz`, `ended_at`, `last_accessed_at`. Conceder de novo cria outra linha |
+| `recruiter_invite` | `id`; único `token_hash`; único parcial `(candidate_id, email) WHERE status = 'pending'`; `CHECK` de status; candidato `cascade`, contas `set null` | convite a quem não tem conta de recrutador: hash SHA-256 do token (nunca o token), validade de 7 dias, prazo escolhido para o acesso (`access_expires_at`, `expiry_tz`), quem criou, cancelou e aceitou, falha de entrega |
+| `recruiter_access_event` | `id`; índice `(candidate_id, at desc, id desc)`; `CHECK` de `kind` e `actor`; candidato `cascade`, o resto `set null` | histórico só de acréscimo de cada evento de compartilhamento, com o e-mail do recrutador copiado e, quando é o admin, o nome dele (`actor_name`). Nenhum código atualiza nem apaga linha |
+| `recruiter_suggestion` | `id`; único parcial `(candidate_id, job_id) WHERE status = 'pending'`; `CHECK` de status; candidato e vaga `cascade`, `application_id` `set null` | vaga sugerida a um candidato, `pending` \| `accepted` \| `declined`; a candidatura só nasce no aceite do candidato |
+| `recruiter_suggestion_by` | `id`; único `(suggestion_id, recruiter_user_id)`; `CHECK char_length(note) <= 500`; sugestão `cascade`, recrutador e concessão `set null` | quem sugeriu, com a nota e quando entrou num aviso por e-mail |
+| `recruiter_directory_query` | `id`; índice `(recruiter_user_id, at)`; recrutador `cascade` | um instante por busca no diretório, só para o limite por recrutador |
+
+**Quem tem acesso.** `linkedCandidatesFor` (`drizzle-store.ts`) é o único
+leitor de acesso: conta só concessão `active` com `expires_at` nulo ou depois
+de `clock()`, e só para conta com papel de recrutador. As telas do admin
+(`linkedCandidates`, `linksOf`) usam o mesmo predicado. Revogar é UPDATE
+condicional em `status = 'active'` com o evento na mesma transação — o segundo
+de dois pedidos simultâneos recebe `already_ended` —, e apagar a conta de um
+recrutador encerra antes as concessões ativas como `ended_account_removed`. A
+importação do snapshot legado não transfere as seis tabelas (nascem vazias).
+
+**Quem escreve.** Só o candidato concede e convida, pela seção "Acesso de
+recrutadores" de `/account` (`app/recruiter-access.ts` + o store
+`drizzle-recruiter-access.ts`). Conceder, convidar e reenviar tomam
+`pg_advisory_xact_lock(hashtext('recruiter-access'), candidate_id)` antes de
+contar: no máximo 10 eventos `grant_created`/`invite_sent`/`invite_resent` de
+ator `candidate` em 24 h móveis e 20 convites pendentes com link válido
+(ADR-017). Revogação, cancelamento, recusa e ato do admin não contam.
+O link do convite abre `/signup/invite?token=…`, que procura o convite pelo
+hash; o token cru vive só no e-mail e no cookie `httpOnly` `jho_invite`.
+**Conclusão** (`completeInvitesForAccount`, ADR-018): no fim do cadastro de
+recrutador e depois de todo login de conta com o papel, uma transação toma a
+mesma trava de cada candidato envolvido e, para a conta habilitada de
+recrutador com `email_verified_at`, marca `accepted` (com `accepted_user_id`)
+cada convite `pending` de link no prazo ao e-mail normalizado dela, de
+candidato com conta habilitada, **antes** de gravar a concessão — que copia
+`access_expires_at`/`expiry_tz` e leva `invite_id` —, com `invite_accepted`
+(ator `recruiter`) e `grant_created` (ator `system`, fora do limite). Convite
+com o prazo de acesso já vencido vira `expired` sem concessão. "Aceitar e
+abrir" com sessão prova a caixa com o token e grava `email_verified_at` quando
+falta. Link aberto com outro e-mail deixa o convite `pending` e grava
+`auth_event(invite_mismatch)` sem dado do candidato. O `detail` de
+`end_date_changed` guarda o instante e o fuso da escolha separados por espaço
+(`endDateEventDetail`), para o histórico mostrar o dia escolhido, e não o dia
+em UTC. O admin
+revoga e cancela por `/admin/users`, com `actor = 'admin'` e o nome dele; não
+há caminho de admin nem verbo de CLI para conceder. A varredura horária
+(`manutencao:recruiter-access`) marca `expired` a concessão vencida e o convite
+de link vencido, com o evento do sistema; a limpeza semanal (`jho db cleanup
+--apply`) apaga convites `expired`/`cancelled`/`superseded` decididos há mais
+de 30 dias e buscas do diretório com mais de um dia.

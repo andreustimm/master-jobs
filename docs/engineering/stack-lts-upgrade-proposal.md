@@ -1,8 +1,10 @@
 # Proposta: upgrade LTS e paridade de runtime
 
-**Status:** proposta para decomposição em PRD, TechSpec e tarefas Compozy
-(`stack-lts-upgrade-and-runtime-parity`). Nenhum upgrade de dependência ou
-mudança de produção é feito por este documento.
+**Status:** substituída pela [política de versões](versions.md) (diretiva do
+dono de 06/10/2026, issue [#468](https://github.com/andreustimm/master-jobs/issues/468)):
+em vez de patches dentro das majors atuais, tudo sobe para a versão mais nova,
+inclusive major, e o Renovate mantém assim. Fica como registro histórico do
+baseline de antes.
 
 ## Por que agora
 

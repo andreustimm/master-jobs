@@ -23,6 +23,7 @@ import { describe, expect, it } from "vitest";
 import { isForkPullRequest, type WorkflowEvent } from "../scripts/github/fork-guard.ts";
 import {
   CANONICAL_RUNS_ON,
+  HOSTED_RUNNER,
   ciWorkflow,
   ciWorkflowFrom,
   resolveCanonicalRunsOn,
@@ -75,7 +76,9 @@ describe("F2-01 — runs-on só pela variável, sem literal novo", () => {
   });
 
   it("a expressão cai no hospedado quando CI_RUNS_ON está ausente/vazia", () => {
-    expect(CANONICAL_RUNS_ON).toContain("fromJSON(vars.CI_RUNS_ON || '\"ubuntu-latest\"')");
+    expect(CANONICAL_RUNS_ON).toContain(`fromJSON(vars.CI_RUNS_ON || '"${HOSTED_RUNNER}"')`);
+    // Versão do Ubuntu escrita: `ubuntu-latest` troca de SO por fora do CI (#468).
+    expect(HOSTED_RUNNER).toMatch(/^ubuntu-\d+\.\d+$/);
   });
 });
 
@@ -122,7 +125,7 @@ describe("F2-04 — a guarda de F2-03 está embutida em todo runs-on que pode re
     // `&&`/`||` que decide "fork cai no hospedado, senão lê a variável" está
     // na ordem certa, não só que as palavras aparecem em algum lugar
     // (revisão L2 da PR #376, minor F2-04).
-    expect(CANONICAL_RUNS_ON).toContain("!= github.repository && 'ubuntu-latest' ||");
+    expect(CANONICAL_RUNS_ON).toContain(`!= github.repository && '${HOSTED_RUNNER}' ||`);
     // A guarda decide ANTES do fromJSON: uma PR de fork nunca alcança
     // `vars.CI_RUNS_ON`, mesmo que ela aponte para o runner próprio.
     const guardIndex = CANONICAL_RUNS_ON.indexOf("head.repo.full_name != github.repository");
@@ -148,14 +151,14 @@ describe("F2-04 — a guarda de F2-03 está embutida em todo runs-on que pode re
       const isFork = isForkPullRequest(event);
 
       const resolvedWithSelfHosted = resolveCanonicalRunsOn(event, selfHosted);
-      expect(resolvedWithSelfHosted === "ubuntu-latest", description).toBe(isFork);
+      expect(resolvedWithSelfHosted === HOSTED_RUNNER, description).toBe(isFork);
       if (!isFork) {
         expect(resolvedWithSelfHosted, description).toEqual(["self-hosted", "linux", "master-jobs"]);
       }
 
       // Sem CI_RUNS_ON, todo mundo cai no hospedado de qualquer forma — a
-      // guarda de fork nunca é o único motivo de ver ubuntu-latest aqui.
-      expect(resolveCanonicalRunsOn(event, undefined), description).toBe("ubuntu-latest");
+      // guarda de fork nunca é o único motivo de ver o hospedado aqui.
+      expect(resolveCanonicalRunsOn(event, undefined), description).toBe(HOSTED_RUNNER);
     }
   });
 });

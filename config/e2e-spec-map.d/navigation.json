@@ -1,0 +1,16 @@
+{
+  "id": "navigation",
+  "modules": [
+    "tests/e2e/ui/navigation.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/",
+    "/candidate",
+    "/compare",
+    "/jobs",
+    "/login",
+    "/pipeline",
+    "/referrals"
+  ]
+}

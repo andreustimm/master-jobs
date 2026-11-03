@@ -70,7 +70,105 @@ import { changeOwnPassword, type ChangePasswordResult } from "./infra/password-l
 import { AuthorizationError } from "./domain/policy.ts";
 import { SESSION_DAYS } from "./app/session.ts";
 import { clock } from "../../core/clock.ts";
+import type { LocaleId } from "../../core/i18n/index.ts";
+import { beginSocial, finishSocial, type SocialConfig, type SocialDeps } from "./app/oidc-login.ts";
+import {
+  availableProviders,
+  manualSignupAvailable,
+  parseSessionSecret,
+  parseSignupIpSecret,
+  parseSignupLimits,
+  type OidcProviderId,
+} from "./domain/oidc-config.ts";
+import type { AuthEnvironment } from "./domain/open-mode.ts";
+import { inviteLanding, type InvitePageState } from "./domain/recruiter-access.ts";
+import { resolvePublicOrigin, type RequestOrigin } from "./domain/public-origin.ts";
+import {
+  accountContact,
+  consumeFlowState,
+  findLinkedUser,
+  findUserByEmail,
+  identityOfUser,
+  linkIdentity,
+  touchIdentity,
+  userHasProvider,
+} from "./infra/drizzle-identities.ts";
+import {
+  accountMethods,
+  providersByUser,
+  setFirstPassword as storeFirstPassword,
+  unlinkIdentityChecked,
+  userIdByEmail,
+} from "./infra/drizzle-identities.ts";
+import {
+  disconnectProvider,
+  listMethods,
+  setFirstPassword,
+  type AccountAccess,
+  type DisconnectResult,
+  type FirstPasswordResult,
+  type MethodsDeps,
+} from "./app/account-methods.ts";
+import { hashPassword } from "./domain/password.ts";
+import { authorize } from "./domain/policy.ts";
+import {
+  completeSocialSignup,
+  confirmManualSignup,
+  createSocialSignup,
+  findPending,
+  generateSignupCode,
+  newSignupToken,
+  resendSignupCode,
+  signupIpHmac,
+  signupTokenHash,
+  startManualSignup,
+} from "./infra/drizzle-signups.ts";
+import {
+  completeSocial,
+  confirmCode,
+  resendCode,
+  signupScreen,
+  startManual,
+  verifyScreen,
+  type ManualStartForm,
+  type SignupConfig,
+  type SignupDeps,
+  type SocialForm,
+} from "./app/signup.ts";
+import { currentLegalVersions } from "../../core/legal.ts";
+import { checkCallbackState, flowKey, openFlow, sealFlow } from "./infra/flow-cookie.ts";
+import { configuredOidcProvider } from "./infra/oidc/providers.ts";
+import { MAX_ATTEMPTS, recentFailures } from "./infra/password-login.ts";
 export { MAX_CHANGE_ATTEMPTS } from "./infra/password-login.ts";
+import { randomBytes } from "node:crypto";
+import { candidateScope } from "./domain/policy.ts";
+import {
+  activeGrantIdFor,
+  activeGrantIdsOfCandidate,
+  activeGrantSummaries,
+  drizzleRecruiterAccess,
+  touchGrantAccess,
+  type RecruiterGrantSummary,
+} from "./infra/drizzle-recruiter-access.ts";
+import type { DB, DbTransaction } from "../../core/db/client.ts";
+import {
+  candidateAccessView,
+  cancelInvite,
+  changeEndDate,
+  completeInvitesForAccount,
+  dismissInvite,
+  expireRecruiterAccess,
+  grantAccess,
+  inviteCookieFor,
+  invitedSignupBanner,
+  invitePage,
+  resendInvite,
+  revokeAccess,
+  type CandidateAccessView,
+  type GrantResult,
+  type RecruiterAccessDeps,
+  type SimpleResult,
+} from "./app/recruiter-access.ts";
 
 const deps: AuthDeps = {
   sessions: drizzleSessions,
@@ -158,24 +256,291 @@ export function setUserDisabled(userId: number, disabled: boolean) {
   return drizzleUserDirectory.setDisabled(userId, disabled);
 }
 
-/** Vínculos de um recrutador, com id. Para a tela listar e remover. */
+/** Concessões ativas de um recrutador, com id. Para a tela listar e revogar. */
 export function recruiterLinks(recruiterUserId: number) {
   return drizzleUserDirectory.linksOf(recruiterUserId);
 }
 
 /**
- * Vincula um recrutador ao candidato.
+ * Grava uma concessão ativa do recrutador ao candidato, com evento `system`.
  *
- * Só o próprio candidato chama — o vínculo dá leitura de currículo e funil, e
- * admin criando um leria dado alheio por procuração.
+ * **Só fixture** (`tests/e2e/setup.mjs` e testes): concessão nasce do
+ * consentimento do candidato (#465). Nenhuma tela nem verbo da CLI chama isto
+ * — admin criando uma leria dado alheio por procuração.
  */
 export function linkRecruiterToCandidate(recruiterUserId: number, candidateId: number, by: number) {
   return drizzleUserDirectory.linkCandidate(recruiterUserId, candidateId, by);
 }
 
-/** Remove um vínculo. Revogar acesso é seguro vindo de admin ou do candidato. */
-export function removeRecruiterLink(linkId: number) {
-  return drizzleUserDirectory.unlinkById(linkId);
+/**
+ * O administrador `by` revoga uma concessão (ADR-008): fica `revoked`, com o
+ * nome dele no histórico do candidato. Revogar só reduz exposição; conceder,
+ * o admin nunca concede.
+ */
+export function revokeRecruiterGrant(grantId: number, by: number) {
+  return drizzleUserDirectory.revokeGrant(grantId, by);
+}
+
+/* -------------------------- Acesso de recrutador --------------------------- */
+
+export { HISTORY_PAGE_SIZE, historyPageOf } from "./app/recruiter-access.ts";
+export { readEndDateEventDetail } from "./domain/recruiter-access.ts";
+export type { CandidateAccessView, GrantResult, SimpleResult as AccessResultSimple } from "./app/recruiter-access.ts";
+export type { AdminCandidateAccess, GrantRow, HistoryRow, InviteRow } from "./ports-recruiter-access.ts";
+
+/**
+ * `env` decide o mailer: o cadastro passa o mesmo ambiente que decidiu se ele
+ * está disponível, para o e-mail de acesso concedido sair por onde saiu o
+ * código (`signupDepsFor`).
+ */
+function accessDeps(origin: string | null = null, env: AuthEnvironment = process.env): RecruiterAccessDeps {
+  return {
+    store: drizzleRecruiterAccess,
+    mailer: () => configuredMailer(env),
+    audit: drizzleAuthRepository,
+    now: () => clock().now(),
+    origin,
+    newToken: () => {
+      const token = randomBytes(32).toString("base64url");
+      return { token, hash: hashToken(token) };
+    },
+    hashToken,
+  };
+}
+
+/**
+ * O candidato cujo acesso esta sessão administra — o DELA, e só fora de
+ * empréstimo (G24, G40). Segunda barreira além do `guard` da action, como
+ * `assertOwnSession`: estas funções recebem a sessão e podem ser chamadas de
+ * outro lugar amanhã.
+ */
+function ownAccessScope(session: Session): number {
+  const candidateId = candidateScope(session);
+  authorize(session, "access:manage", candidateId === null ? { kind: "global" } : { kind: "candidate", candidateId });
+  return candidateId as number;
+}
+
+/** Concede ou convida pelo e-mail (US-001, US-002). `origin` monta os links (G17). */
+export function grantRecruiterAccess(
+  session: Session,
+  input: { email: string; endDate: string; tz: string },
+  origin: string | null,
+): Promise<GrantResult> {
+  const candidateId = ownAccessScope(session);
+  return grantAccess({ candidateId, actorUserId: session.userId, ...input }, accessDeps(origin));
+}
+
+/** O candidato revoga (US-008). Id de concessão de outro candidato é `not_found`. */
+export function revokeRecruiterAccess(session: Session, grantId: number): Promise<SimpleResult> {
+  const candidateId = ownAccessScope(session);
+  return revokeAccess({ grantId, candidateId, actor: "candidate", actorUserId: session.userId }, accessDeps());
+}
+
+/** Põe, move ou tira a data de fim de uma concessão (US-006.AC-3). */
+export function setRecruiterGrantEndDate(
+  session: Session,
+  input: { grantId: number; endDate: string; tz: string },
+  origin: string | null,
+): Promise<SimpleResult> {
+  const candidateId = ownAccessScope(session);
+  return changeEndDate({ candidateId, actorUserId: session.userId, ...input }, accessDeps(origin));
+}
+
+export function resendRecruiterInvite(session: Session, inviteId: number, origin: string | null): Promise<SimpleResult> {
+  const candidateId = ownAccessScope(session);
+  return resendInvite({ inviteId, candidateId, actorUserId: session.userId }, accessDeps(origin));
+}
+
+export function cancelRecruiterInvite(session: Session, inviteId: number): Promise<SimpleResult> {
+  const candidateId = ownAccessScope(session);
+  return cancelInvite({ inviteId, candidateId, actor: "candidate", actorUserId: session.userId }, accessDeps());
+}
+
+export function dismissRecruiterInvite(session: Session, inviteId: number): Promise<SimpleResult> {
+  const candidateId = ownAccessScope(session);
+  return dismissInvite({ inviteId, candidateId }, accessDeps());
+}
+
+/**
+ * O admin revoga (ADR-008, US-023): o recrutador é avisado de que a
+ * administração encerrou, e o histórico do candidato leva o nome do admin.
+ * Não conta no limite do candidato. Conceder, o admin nunca concede.
+ */
+export function adminRevokeRecruiterGrant(session: Session | null, grantId: number): Promise<SimpleResult> {
+  authorize(session, "user:manage");
+  const admin = session as Session;
+  return revokeAccess({ grantId, candidateId: null, actor: "admin", actorUserId: admin.userId }, accessDeps());
+}
+
+/** O admin cancela um convite pendente, em nome próprio (US-023.AC-3). */
+export function adminCancelRecruiterInvite(session: Session | null, inviteId: number): Promise<SimpleResult> {
+  authorize(session, "user:manage");
+  const admin = session as Session;
+  return cancelInvite({ inviteId, candidateId: null, actor: "admin", actorUserId: admin.userId }, accessDeps());
+}
+
+/**
+ * A seção de acesso de `/account`: concessões, convites e histórico do
+ * candidato da sessão. Sessão emprestada lê (US-012.EC-5); escrever, não.
+ */
+export function recruiterAccessView(session: Session, historyPage: number): Promise<CandidateAccessView> {
+  const candidateId = candidateScope(session);
+  authorize(session, "candidate:read", candidateId === null ? { kind: "global" } : { kind: "candidate", candidateId });
+  return candidateAccessView({ candidateId: candidateId as number, historyPage }, accessDeps());
+}
+
+/** Concessões ativas e convites pendentes por candidato, para `/admin/users` (US-023.AC-1). */
+export function adminRecruiterAccess(session: Session | null, candidateIds: readonly number[]) {
+  authorize(session, "user:manage");
+  return drizzleRecruiterAccess.adminOverview(candidateIds, clock().iso());
+}
+
+/** O trabalho horário da varredura: expira concessões e convites vencidos (ADR-016). */
+export function runRecruiterAccessMaintenance(): Promise<{ expired: number; invitesExpired: number }> {
+  return expireRecruiterAccess(accessDeps());
+}
+
+/* ------------- O lado do recrutador e as sugestões de vaga (task_04) ------------ */
+
+export { capDecision } from "./domain/recruiter-access.ts";
+export { suggestionsDigestEmail } from "./app/recruiter-emails.ts";
+export type { RecruiterGrantSummary } from "./infra/drizzle-recruiter-access.ts";
+export {
+  appendHistory as appendRecruiterHistory,
+  lockCandidateAccess as lockRecruiterAccess,
+} from "./infra/drizzle-recruiter-access.ts";
+
+/**
+ * As concessões vigentes DESTA sessão de recrutador, com desde e até. A lista
+ * de `/recruiter` cruza com `linkedCandidateIds`, que a sessão resolveu na
+ * carga: o que a sessão não vê não entra, mesmo que a concessão exista.
+ */
+export async function recruiterGrantSummaries(session: Session): Promise<RecruiterGrantSummary[]> {
+  if (!session.roles.includes("recruiter")) return [];
+  const rows = await activeGrantSummaries(session.userId, clock().iso());
+  return rows.filter((row) => session.linkedCandidateIds.includes(row.candidateId));
+}
+
+/** A concessão vigente do par em `nowIso`, na transação de quem chama (a sugestão grava o id dela). */
+export function currentRecruiterGrantId(
+  db: DB | DbTransaction,
+  recruiterUserId: number,
+  candidateId: number,
+  nowIso: string = clock().iso(),
+): Promise<number | null> {
+  return activeGrantIdFor(db, recruiterUserId, candidateId, nowIso);
+}
+
+/** Quem ainda tem acesso ao candidato: as concessões vigentes dele. */
+export function activeRecruiterGrantIds(candidateId: number): Promise<number[]> {
+  return activeGrantIdsOfCandidate(candidateId, clock().iso());
+}
+
+/** Intervalo mínimo entre duas gravações do último acesso (US-014.AC-3). */
+const ACCESS_TOUCH_MS = 60_000;
+
+/**
+ * O recrutador desta sessão abriu a página ou o currículo do candidato: grava
+ * o último acesso que o candidato vê em Minha conta, no máximo uma vez por
+ * minuto. O UPDATE é escopado à concessão vigente do usuário DA SESSÃO com
+ * este candidato: sem ela, não grava nada.
+ */
+export async function touchRecruiterAccess(session: Session, candidateId: number): Promise<boolean> {
+  const now = clock().now();
+  return touchGrantAccess({
+    recruiterUserId: session.userId,
+    candidateId,
+    nowIso: new Date(now).toISOString(),
+    notAfterIso: new Date(now - ACCESS_TOUCH_MS).toISOString(),
+  });
+}
+
+/**
+ * Falha de envio de um aviso, para o operador (`auth_event`): só o tipo da
+ * mensagem, nem destinatário nem dado do candidato — o mesmo registro que os
+ * e-mails de acesso gravam.
+ */
+export async function recordEmailSendFailure(userId: number | null, detail: string): Promise<void> {
+  await drizzleAuthRepository.record({ kind: "email_send_failed", userId, detail });
+}
+
+/* -------------------------- Convite de recrutador -------------------------- */
+
+export {
+  candidateDisplayName,
+  INVITE_COOKIE,
+  inviteNoticeOf,
+  type ArrivalNotice,
+  type InvitePageState,
+} from "./domain/recruiter-access.ts";
+
+/**
+ * O que `/signup/invite` mostra (ADR-018). A sessão emprestada conta como
+ * nenhuma conta de recrutador: o admin que assume alguém não aceita convite
+ * em nome dele.
+ */
+export function recruiterInvitePage(token: string | null, session: Session | null): Promise<InvitePageState> {
+  const viewer =
+    session === null
+      ? null
+      : { userId: session.userId, email: session.email, roles: session.impersonatedBy === null ? session.roles : [] };
+  return invitePage({ token, session: viewer }, accessDeps());
+}
+
+/** Validade em segundos do cookie `jho_invite` para este token, ou nulo quando o link não serve. */
+export function recruiterInviteCookie(token: string | null): Promise<{ maxAge: number } | null> {
+  return inviteCookieFor(token, accessDeps());
+}
+
+/** A linha "Convidado por" de `/signup` para o cookie desta visita. */
+export function recruiterInviteBanner(token: string | null): Promise<{ candidateName: string; maskedEmail: string } | null> {
+  return invitedSignupBanner(token, accessDeps());
+}
+
+/**
+ * O destino de quem acabou de entrar (senha, link mágico ou provedor), depois
+ * de concluir os convites ao e-mail da conta e o do cookie (ADR-018). Só conta
+ * com papel de recrutador e sessão própria conclui; as outras seguem para
+ * `fallback`.
+ */
+export async function recruiterLandingAfterSignIn(
+  session: Session,
+  inviteToken: string | null,
+  fallback: string,
+  request: RequestOrigin,
+  env: AuthEnvironment = process.env,
+): Promise<string> {
+  if (!session.roles.includes("recruiter") || session.impersonatedBy !== null) return fallback;
+  const arrival = await completeInvitesForAccount(
+    { userId: session.userId, token: inviteToken },
+    accessDeps(resolvePublicOrigin(env, request), env),
+  );
+  return inviteLanding(arrival.outcome, arrival.candidateId, fallback);
+}
+
+/**
+ * "Aceitar e abrir" (US-003.AC-5): a conta DA SESSÃO, com o papel de
+ * recrutador, conclui o convite do token. O token válido ao mesmo e-mail
+ * prova a caixa e grava `email_verified_at` (ADR-018). Sessão emprestada e
+ * conta sem o papel são recusadas antes de qualquer efeito.
+ */
+export async function acceptRecruiterInvite(
+  session: Session | null,
+  token: string | null,
+  request: RequestOrigin,
+  env: AuthEnvironment = process.env,
+): Promise<string> {
+  authorize(session, "account:read");
+  const own = session as Session;
+  if (own.impersonatedBy !== null) {
+    throw new AuthorizationError("account:read", "sessão emprestada não aceita convite em nome do alvo");
+  }
+  if (!own.roles.includes("recruiter")) throw new AuthorizationError("account:read", "requer papel recruiter");
+  const arrival = await completeInvitesForAccount(
+    { userId: own.userId, token, proveMailbox: true },
+    accessDeps(resolvePublicOrigin(env, request), env),
+  );
+  return inviteLanding(arrival.outcome ?? "invalid", arrival.candidateId, "/recruiter");
 }
 
 /**
@@ -292,8 +657,8 @@ function resetDeps(baseUrl: string): ResetDeps {
  * formulário que responde "não encontramos esta conta" é um oráculo de
  * enumeração aberto ao mundo.
  */
-export function askPasswordReset(email: string, baseUrl: string) {
-  return requestPasswordReset(email, resetDeps(baseUrl));
+export function askPasswordReset(email: string, baseUrl: string, locale?: LocaleId) {
+  return requestPasswordReset(email, resetDeps(baseUrl), locale);
 }
 
 /**
@@ -326,6 +691,276 @@ export function beginImpersonation(actor: Session | null, targetUserId: number) 
 
 export function endImpersonation(borrowed: Session | null, token: string) {
   return stopImpersonation(borrowed, token, directoryDeps);
+}
+
+/* ------------------------------ Login social ------------------------------ */
+
+export { FLOW_COOKIE, FLOW_TTL_MS } from "./infra/flow-cookie.ts";
+export { SIGNUP_COOKIE, SOCIAL_SIGNUP_MINUTES } from "./infra/drizzle-signups.ts";
+export { isOidcProvider, type OidcProviderId } from "./domain/oidc-config.ts";
+export { landingFor, landingForSession, safeNext } from "./domain/landing.ts";
+export type { SocialError } from "./app/oidc-login.ts";
+
+/**
+ * O que o login social precisa do ambiente, lido a cada requisição — o mesmo
+ * motivo de `configuredMailer`: o teste troca a variável entre casos.
+ */
+function socialConfig(env: AuthEnvironment, request: RequestOrigin): SocialConfig {
+  const secret = parseSessionSecret(env);
+  const key = secret.status === "configured" ? flowKey(secret.secret) : null;
+  const now = () => new Date(clock().now());
+  return {
+    available: availableProviders(env),
+    origin: resolvePublicOrigin(env, request),
+    provider: (id) => configuredOidcProvider(id, env, { now }),
+    sealFlow: key === null ? null : (flow) => sealFlow(flow, key),
+    readFlow: (sealed, callbackState) => {
+      if (key === null) return null;
+      const check = checkCallbackState(openFlow(sealed, key, now()), callbackState);
+      return check.ok ? check.flow : null;
+    },
+    signupIpSecret: parseSignupIpSecret(env),
+  };
+}
+
+const socialDeps: SocialDeps = {
+  sessions: drizzleSessions,
+  repository: drizzleAuthRepository,
+  identities: {
+    findLinkedUser,
+    findUserByEmail,
+    userHasProvider,
+    linkIdentity,
+    touchIdentity,
+    identityOfUser,
+    accountContact,
+    consumeFlowState,
+  },
+  signups: { createSocialSignup, ipHmac: signupIpHmac },
+  attempts: { recentFailures, max: MAX_ATTEMPTS },
+  mailer: () => configuredMailer(),
+  now: () => new Date(clock().now()),
+};
+
+/**
+ * Os provedores que a tela de login mostra, nesta ordem (ADR-005). Vazio fora
+ * de produção e local, sem segredo do fluxo ou sem credencial.
+ */
+export function socialProviders(env: AuthEnvironment = process.env): OidcProviderId[] {
+  return availableProviders(env);
+}
+
+/** `GET /login/oauth/[provider]`. Ver `app/oidc-login.ts`. */
+export function startSocialSignIn(
+  input: { provider: string; intent: string | null; next: string | null; session: Session | null; request: RequestOrigin },
+  env: AuthEnvironment = process.env,
+) {
+  return beginSocial(input, socialConfig(env, input.request), socialDeps);
+}
+
+/** `GET /login/oauth/[provider]/callback`. Ver `app/oidc-login.ts`. */
+export function finishSocialSignIn(
+  input: {
+    provider: string;
+    callbackUrl: URL;
+    sealedFlow: string | null;
+    session: Session | null;
+    clientIp: string;
+    locale: LocaleId;
+    request: RequestOrigin;
+  },
+  env: AuthEnvironment = process.env,
+) {
+  return finishSocial(input, socialConfig(env, input.request), socialDeps);
+}
+
+/* ----------------------------- Cadastro aberto ---------------------------- */
+
+export type { SignupError, SignupScreen, VerifyScreen } from "./app/signup.ts";
+export { landingAfterSignup, showsRecruiterEmptyState } from "./domain/landing.ts";
+export { CODE_DIGITS, CODE_MAX_ATTEMPTS, CODE_MINUTES, RESEND_SECONDS } from "./domain/signup-rules.ts";
+
+/** O que o cadastro precisa do ambiente, lido a cada requisição (como `socialConfig`). */
+function signupConfig(env: AuthEnvironment, request: RequestOrigin): SignupConfig {
+  return {
+    manualAvailable: manualSignupAvailable(env),
+    origin: resolvePublicOrigin(env, request),
+    ipSecret: parseSignupIpSecret(env),
+    maxPerIpHour: parseSignupLimits(env).maxPerIpHour,
+    legalVersions: () => currentLegalVersions(),
+  };
+}
+
+const signupDeps: SignupDeps = {
+  store: {
+    startManual: startManualSignup,
+    resend: resendSignupCode,
+    confirmManual: confirmManualSignup,
+    completeSocial: completeSocialSignup,
+    findPending,
+  },
+  tokens: { create: newSignupToken, hash: signupTokenHash },
+  ipHmac: signupIpHmac,
+  hashPassword,
+  generateCode: generateSignupCode,
+  // O extrator de PDF é pesado: só carrega quando alguém manda um.
+  readPdf: async (entry) => (await import("../../core/pdf.ts")).readCvPdf(entry),
+  sessions: drizzleSessions,
+  repository: drizzleAuthRepository,
+  identityOfUser,
+  mailer: () => configuredMailer(),
+  // Na hora do uso, como o extrator: a composição não carrega a fila de score.
+  afterCandidateCreated: async (candidateId) => (await import("../../core/candidate.ts")).requestCvRescore(candidateId),
+  afterRecruiterCreated: ({ userId, inviteToken, origin }) =>
+    completeInvitesForAccount({ userId, token: inviteToken }, accessDeps(origin)),
+  now: () => new Date(clock().now()),
+};
+
+/**
+ * As dependências para um ambiente: o mailer sai do MESMO ambiente que decidiu
+ * se o cadastro manual está disponível — decidir por um e enviar por outro
+ * aceitaria um cadastro cujo código não chega.
+ */
+function signupDepsFor(env: AuthEnvironment): SignupDeps {
+  return {
+    ...signupDeps,
+    mailer: () => configuredMailer(env),
+    afterRecruiterCreated: ({ userId, inviteToken, origin }) =>
+      completeInvitesForAccount({ userId, token: inviteToken }, accessDeps(origin, env)),
+  };
+}
+
+/** O cadastro manual funciona neste ambiente? No Preview, não (ADR-011). */
+export function manualSignupOpen(env: AuthEnvironment = process.env): boolean {
+  return manualSignupAvailable(env);
+}
+
+/** Envio do formulário manual: pendência e código (US-016). Ver `app/signup.ts`. */
+export function beginManualSignup(
+  form: ManualStartForm,
+  request: RequestOrigin,
+  env: AuthEnvironment = process.env,
+) {
+  return startManual(form, signupConfig(env, request), signupDepsFor(env));
+}
+
+/** "Reenviar código" (US-017.EC-8). */
+export function resendManualSignupCode(token: string | null, request: RequestOrigin, env: AuthEnvironment = process.env) {
+  return resendCode({ token }, signupConfig(env, request), signupDepsFor(env));
+}
+
+/** O código digitado: cria a conta e abre a sessão (US-017). */
+export function confirmManualSignupCode(
+  input: { token: string | null; code: string; clientIp: string; inviteToken?: string | null },
+  request: RequestOrigin,
+  env: AuthEnvironment = process.env,
+) {
+  return confirmCode(input, signupConfig(env, request), signupDepsFor(env));
+}
+
+/** O envio da tela no modo social (US-004, US-005). */
+export function finishSocialSignup(form: SocialForm, request: RequestOrigin, env: AuthEnvironment = process.env) {
+  return completeSocial(form, signupConfig(env, request), signupDepsFor(env));
+}
+
+/** O estado de `/signup` para o cookie desta visita. */
+export function signupScreenFor(token: string | null) {
+  return signupScreen(token, signupDeps);
+}
+
+/** O estado de `/signup/verify` para o cookie desta visita. */
+export function verifyScreenFor(token: string | null) {
+  return verifyScreen(token, signupDeps);
+}
+
+/* ---------------------------- Formas de entrar ---------------------------- */
+
+export type { AccountAccess, DisconnectResult, FirstPasswordResult } from "./app/account-methods.ts";
+export type { MethodsView, ProviderMethod } from "./domain/methods.ts";
+export { OIDC_PROVIDERS } from "./domain/oidc-config.ts";
+
+function methodsDeps(env: AuthEnvironment = process.env): MethodsDeps {
+  return {
+    store: { accountMethods, unlinkIdentityChecked, setFirstPassword: storeFirstPassword },
+    repository: drizzleAuthRepository,
+    mailer: () => configuredMailer(env),
+    hashPassword,
+    available: () => availableProviders(env),
+    now: () => new Date(clock().now()),
+  };
+}
+
+/** As formas de entrar e os termos aceitos da conta DA SESSÃO (US-010, US-021.AC-3). */
+export function accountAccess(session: Session, env: AuthEnvironment = process.env): Promise<AccountAccess | null> {
+  return listMethods(session.userId, methodsDeps(env));
+}
+
+/**
+ * Desliga um provedor da conta DA SESSÃO (US-008).
+ *
+ * Segunda barreira além do `guard` da action, como `assertOwnSession`: a
+ * função recebe a sessão e pode ser chamada de outro lugar amanhã.
+ */
+export function disconnectOwnProvider(
+  session: Session,
+  provider: OidcProviderId,
+  env: AuthEnvironment = process.env,
+): Promise<DisconnectResult> {
+  authorize(session, "account:manage-methods");
+  return disconnectProvider({ userId: session.userId, provider, actor: { by: "self" } }, methodsDeps(env));
+}
+
+/** Primeira senha da conta DA SESSÃO, que até aqui só entrava por provedor (US-009). */
+export function setFirstPasswordForSession(session: Session, password: string): Promise<FirstPasswordResult> {
+  authorize(session, "account:manage-methods");
+  return setFirstPassword({ userId: session.userId, email: session.email, password }, methodsDeps());
+}
+
+/**
+ * O admin desliga o provedor de OUTRA conta (US-011.AC-2), com a mesma
+ * proteção do último método. Não existe o inverso: admin não liga provedor em
+ * conta de ninguém (US-011.AC-3).
+ */
+export function adminDisconnectProvider(
+  actor: Session | null,
+  targetUserId: number,
+  provider: OidcProviderId,
+  env: AuthEnvironment = process.env,
+): Promise<DisconnectResult> {
+  authorize(actor, "user:manage");
+  const admin = actor as Session;
+  return disconnectProvider(
+    { userId: targetUserId, provider, actor: { by: "admin", adminUserId: admin.userId, adminEmail: admin.email } },
+    methodsDeps(env),
+  );
+}
+
+/** As contas com os provedores ligados de cada uma, para `/admin/users` (US-011.AC-1). */
+export async function listUsersWithMethods() {
+  const [users, providers] = await Promise.all([drizzleUserDirectory.list(), providersByUser()]);
+  return users.map((user) => ({ ...user, providers: providers.get(user.id) ?? [] }));
+}
+
+/** `jho auth methods <email>`: `null` quando não há conta (US-013). */
+export async function methodsForEmail(
+  email: string,
+  env: AuthEnvironment = process.env,
+): Promise<(AccountAccess & { email: string }) | null> {
+  const userId = await userIdByEmail(email);
+  if (userId === null) return null;
+  const access = await listMethods(userId, methodsDeps(env));
+  return access === null ? null : { ...access, email: email.trim().toLowerCase() };
+}
+
+/** `jho auth unlink <email> <provider>`: mesma proteção e auditoria da tela (US-013.AC-2). */
+export async function cliUnlinkProvider(
+  email: string,
+  provider: OidcProviderId,
+  env: AuthEnvironment = process.env,
+): Promise<DisconnectResult> {
+  const userId = await userIdByEmail(email);
+  if (userId === null) return { ok: false, error: "no_account" };
+  return disconnectProvider({ userId, provider, actor: { by: "cli" } }, methodsDeps(env));
 }
 
 /**

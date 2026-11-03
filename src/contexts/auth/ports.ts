@@ -12,6 +12,72 @@
  * correct implementation and the clock already has `src/core/clock.ts`.
  */
 import type { Role, Session } from "./domain/types.ts";
+import type { OidcProviderId } from "./domain/oidc-config.ts";
+
+export type { OidcProviderId };
+
+/**
+ * O que o fluxo OIDC precisa lembrar entre o início e o retorno (#464).
+ *
+ * Vive só no cookie cifrado do fluxo (`infra/flow-cookie.ts`), por 10 minutos.
+ * `codeVerifier` é o segredo do PKCE: quem o tivesse trocaria o código do
+ * retorno por um token — por isso o cookie é cifrado, e não só assinado.
+ */
+export type OidcFlowState = {
+  provider: OidcProviderId;
+  state: string;
+  nonce: string;
+  codeVerifier: string;
+  intent: "signin" | "link";
+  /** Já passado por `safeNext` no início; conferido de novo no retorno. */
+  next: string | null;
+  /** ISO 8601. A validade de 10 minutos conta a partir daqui. */
+  createdAt: string;
+};
+
+/**
+ * O que sai de um provedor OIDC depois de validado o ID token (ADR-008).
+ *
+ * Só isto, e de propósito (ADR-003, regra 1): o par `(provider, subject)` é a
+ * identidade; o e-mail e a afirmação de verificação servem só para o vínculo
+ * automático (ADR-001). Nome, foto, título, URL de perfil e os tokens do
+ * provedor nunca saem do adapter — não há campo onde caberiam.
+ */
+export type VerifiedIdentity = {
+  provider: OidcProviderId;
+  subject: string;
+  /** Normalizado; `null` quando o provedor não mandou e-mail. */
+  email: string | null;
+  /** `true` só quando o provedor afirma, no token, que verificou o e-mail. */
+  emailVerified: boolean;
+};
+
+export type OidcStart = { url: string; flow: OidcFlowState };
+
+/**
+ * Por que o retorno do provedor não virou identidade.
+ *
+ * - `cancelled`: a pessoa recusou no consentimento (`access_denied`);
+ * - `provider_error`: o provedor respondeu erro ou não respondeu (descoberta,
+ *   token, JWKS) — "não conseguimos falar com o Google";
+ * - `invalid_response`: respondeu, mas o ID token não passou na validação
+ *   (assinatura, `iss`, `aud`, `exp`, `nonce`).
+ */
+export type OidcFailure = "cancelled" | "provider_error" | "invalid_response";
+
+export type OidcCompletion = { ok: true; identity: VerifiedIdentity } | { ok: false; reason: OidcFailure };
+
+/**
+ * Porta do login social (ADR-008): Google e LinkedIn diferem só em emissor,
+ * escopos e leitura das afirmações; o resto do contexto não sabe qual.
+ */
+export type OidcProvider = {
+  readonly id: OidcProviderId;
+  /** URL de autorização com PKCE S256, `state` e `nonce`, e o estado a guardar no cookie. */
+  start(input: { redirectUri: string; intent: OidcFlowState["intent"]; next: string | null }): Promise<OidcStart>;
+  /** Troca o código e valida o ID token. Erro de provedor é valor, nunca exceção. */
+  complete(input: { redirectUri: string; callbackUrl: URL; flow: OidcFlowState }): Promise<OidcCompletion>;
+};
 
 export type NewSession = {
   userId: number;
@@ -119,21 +185,30 @@ export type UserDirectory = {
    * ocorrido e não deixam de ter ocorrido. O candidato NÃO é apagado: conta e
    * candidato são coisas distintas, e apagar o currículo de alguém por causa
    * de uma conta removida seria dano colateral silencioso.
+   *
+   * As concessões ativas de recrutador da conta terminam como
+   * `ended_account_removed`, com histórico, na mesma transação (#465).
    */
   remove(userId: number): Promise<void>;
-  /** Candidatos que um recrutador acompanha. */
+  /** Candidatos que um recrutador acessa agora — o mesmo predicado da sessão. */
   linkedCandidates(recruiterUserId: number): Promise<number[]>;
-  /** Vínculos com id, para a tela poder removê-los sem citar o candidato. */
+  /** Concessões que valem agora, com o id, para a tela revogá-las sem citar o candidato. */
   linksOf(recruiterUserId: number): Promise<{ id: number; candidateId: number }[]>;
   /**
-   * Cria o vínculo.
+   * Grava concessão ativa com evento `system`. Só para fixture.
    *
    * `candidateId` vem de quem CONSENTE, nunca do admin: ver a nota em
-   * `drizzle-directory.ts` sobre por que admin não vincula.
+   * `drizzle-directory.ts` sobre por que admin não concede.
    */
   linkCandidate(recruiterUserId: number, candidateId: number, by: number): Promise<void>;
-  /** Remove pelo id do vínculo. Revogar acesso é seguro em qualquer direção. */
-  unlinkById(linkId: number): Promise<void>;
+  /**
+   * O administrador `by` revoga uma concessão pelo id: UPDATE condicional com
+   * histórico, nunca DELETE (ADR-008, ADR-012).
+   */
+  revokeGrant(
+    grantId: number,
+    by: number,
+  ): Promise<{ ok: true } | { ok: false; error: "already_ended" | "not_found" }>;
 };
 
 export type PasswordResult =

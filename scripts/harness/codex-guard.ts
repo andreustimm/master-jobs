@@ -15,12 +15,13 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { resolveGitTarget, workingDirectory } from "../../.claude/hooks/push-target.mjs";
 import { blockMessage, judgeShell } from "../../.claude/hooks/shell-policy.mjs";
 import { bashRules, decideCommand, decidePath, parseRules, type Decision, type Rule } from "./permissions.ts";
 
 export type HookInput = {
   tool_name?: unknown;
-  tool_input?: { command?: unknown } | null;
+  tool_input?: { command?: unknown; workdir?: unknown } | null;
   cwd?: unknown;
 };
 
@@ -56,7 +57,12 @@ export function judge(input: HookInput, rules: readonly Rule[], context: { root:
     }
     return { decision: worst, target };
   }
-  const shell = judgeShell(command, bashRules(rules), { root: context.root, cwd, home: context.home });
+  // O shell do Codex roda em `tool_input.workdir` quando ele vem (relativo ao
+  // `cwd` da sessão): é ali que o comando age.
+  const shellCwd = workingDirectory(cwd, input.tool_input?.workdir);
+  // Contexto real do git (#476): checkout principal ou worktree, destino do push.
+  const gitTarget = resolveGitTarget(command, { cwd: shellCwd });
+  const shell = judgeShell(command, bashRules(rules), { root: context.root, cwd: shellCwd, home: context.home, gitTarget });
   if (shell?.kind === "compound") return { decision: "deny", target: command, message: blockMessage(shell, "Codex") };
   const listed = decideCommand(rules, command);
   if (shell && STRENGTH[shell.decision] > STRENGTH[listed]) {

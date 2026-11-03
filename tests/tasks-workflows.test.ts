@@ -7,7 +7,13 @@ const gate = parse(readFileSync(new URL("../.github/workflows/tasks-check.yml", 
 describe("trusted task automation", () => {
   it("serializes every writer trigger without canceling active work", () => {
     expect(writer.concurrency).toEqual({ group: "tasks-project-PVT_kwHOAAxgXs4Bj8-V", queue: "max", "cancel-in-progress": false });
-    expect(Object.keys(writer.on)).toEqual(expect.arrayContaining(["issue_comment", "issues", "pull_request_target", "workflow_run", "deployment_status", "schedule", "workflow_dispatch"]));
+    expect(Object.keys(writer.on)).toEqual(expect.arrayContaining(["issue_comment", "issues", "pull_request_target", "workflow_run", "deployment_status", "workflow_dispatch"]));
+  });
+  // O job já se pula sem `TASKS_WRITER_ENABLED`, mas a agenda ainda criava um run
+  // `skipped` a cada 10 min. Quem cria a variável devolve o `schedule` (ver o
+  // comentário do workflow) e troca esta asserção.
+  it("has no schedule while the writer is disabled, so no skipped run is created every ten minutes", () => {
+    expect(writer.on.schedule).toBeUndefined();
   });
   it("keeps automatic writers off until enabled and permits explicit bootstrap dispatches", () => {
     expect(writer.jobs.writer.if.trim()).toBe([

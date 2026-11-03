@@ -1,0 +1,10 @@
+{
+  "id": "card-actions",
+  "modules": [
+    "tests/e2e/ui/card-actions.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/jobs"
+  ]
+}

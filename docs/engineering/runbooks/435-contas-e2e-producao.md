@@ -100,6 +100,10 @@ UNION ALL SELECT 'saved_term (cascade)', count(*) FROM production.saved_term WHE
 UNION ALL SELECT 'saved_term_request (cascade)', count(*) FROM production.saved_term_request WHERE candidate_id IN (SELECT id FROM e2e)
 UNION ALL SELECT 'candidate_skill (cascade)', count(*) FROM production.candidate_skill WHERE candidate_id IN (SELECT id FROM e2e)
 UNION ALL SELECT 'recruiter_candidate (cascade)', count(*) FROM production.recruiter_candidate WHERE candidate_id IN (SELECT id FROM e2e)
+UNION ALL SELECT 'recruiter_grant (cascade)', count(*) FROM production.recruiter_grant WHERE candidate_id IN (SELECT id FROM e2e)
+UNION ALL SELECT 'recruiter_invite (cascade)', count(*) FROM production.recruiter_invite WHERE candidate_id IN (SELECT id FROM e2e)
+UNION ALL SELECT 'recruiter_access_event (cascade)', count(*) FROM production.recruiter_access_event WHERE candidate_id IN (SELECT id FROM e2e)
+UNION ALL SELECT 'recruiter_suggestion (cascade, leva recruiter_suggestion_by)', count(*) FROM production.recruiter_suggestion WHERE candidate_id IN (SELECT id FROM e2e)
 UNION ALL SELECT 'auth_user (set null)', count(*) FROM production.auth_user WHERE candidate_id IN (SELECT id FROM e2e);
 
 -- 1.6 O que muda ao apagar as contas @local.test.
@@ -107,6 +111,12 @@ WITH e2e AS (SELECT id FROM production.auth_user WHERE lower(email) LIKE '%@loca
 SELECT 'auth_session (cascade)' AS tabela, count(*) FROM production.auth_session WHERE user_id IN (SELECT id FROM e2e) OR impersonated_by IN (SELECT id FROM e2e)
 UNION ALL SELECT 'recruiter_candidate.recruiter_user_id (cascade)', count(*) FROM production.recruiter_candidate WHERE recruiter_user_id IN (SELECT id FROM e2e)
 UNION ALL SELECT 'recruiter_candidate.created_by (set null)', count(*) FROM production.recruiter_candidate WHERE created_by IN (SELECT id FROM e2e)
+UNION ALL SELECT 'recruiter_grant.recruiter_user_id ATIVA (encerrada em 3.2a)', count(*) FROM production.recruiter_grant WHERE status = 'active' AND recruiter_user_id IN (SELECT id FROM e2e)
+UNION ALL SELECT 'recruiter_grant.recruiter_user_id/created_by/revoked_by (set null)', count(*) FROM production.recruiter_grant WHERE recruiter_user_id IN (SELECT id FROM e2e) OR created_by IN (SELECT id FROM e2e) OR revoked_by IN (SELECT id FROM e2e)
+UNION ALL SELECT 'recruiter_invite.created_by/cancelled_by/accepted_user_id (set null)', count(*) FROM production.recruiter_invite WHERE created_by IN (SELECT id FROM e2e) OR cancelled_by IN (SELECT id FROM e2e) OR accepted_user_id IN (SELECT id FROM e2e)
+UNION ALL SELECT 'recruiter_access_event.actor_user_id (set null)', count(*) FROM production.recruiter_access_event WHERE actor_user_id IN (SELECT id FROM e2e)
+UNION ALL SELECT 'recruiter_suggestion_by.recruiter_user_id (set null)', count(*) FROM production.recruiter_suggestion_by WHERE recruiter_user_id IN (SELECT id FROM e2e)
+UNION ALL SELECT 'recruiter_directory_query (cascade)', count(*) FROM production.recruiter_directory_query WHERE recruiter_user_id IN (SELECT id FROM e2e)
 UNION ALL SELECT 'auth_event (set null, auditoria preservada)', count(*) FROM production.auth_event WHERE user_id IN (SELECT id FROM e2e)
 UNION ALL SELECT 'job.posted_by_user_id (set null)', count(*) FROM production.job WHERE posted_by_user_id IN (SELECT id FROM e2e)
 UNION ALL SELECT 'source_run.actor_user_id (set null)', count(*) FROM production.source_run WHERE actor_user_id IN (SELECT id FROM e2e)
@@ -198,6 +208,20 @@ SET is_default = false,
 WHERE is_default
   AND slug <> 'default'
   AND EXISTS (SELECT 1 FROM production.candidate WHERE slug = 'default' AND is_default);
+
+-- 3.2a Concessão ativa de recrutador do E2E termina antes da conta, como faz
+-- `UserDirectory.remove`: o CHECK de recruiter_grant recusa concessão ativa
+-- sem recrutador, e 3.2 abortaria a transação. O histórico guarda o e-mail.
+WITH ended AS (
+  UPDATE production.recruiter_grant g
+  SET status = 'ended_account_removed',
+      ended_at = to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+  WHERE g.status = 'active'
+    AND g.recruiter_user_id IN (SELECT id FROM production.auth_user WHERE lower(email) LIKE '%@local.test')
+  RETURNING g.id, g.candidate_id, g.recruiter_email, g.ended_at
+)
+INSERT INTO production.recruiter_access_event (candidate_id, grant_id, recruiter_email, kind, actor, at)
+SELECT candidate_id, id, recruiter_email, 'access_ended_account_removed', 'system', ended_at FROM ended;
 
 -- 3.2 Toda conta do E2E, inclusive a do recrutador (sem candidato) e a ligada
 -- ao `default`. As sessões caem em cascata; auth_event fica, com user_id nulo.

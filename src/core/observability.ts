@@ -220,8 +220,8 @@ export function scrubEvent<T extends ScrubbableEvent>(event: T): T | null {
 
     for (const crumb of Array.isArray(event.breadcrumbs) ? event.breadcrumbs : []) scrubBreadcrumb(crumb);
 
-    // Identidade nunca acompanha o erro, mesmo que `sendDefaultPii` mude de
-    // padrão numa atualização do SDK.
+    // Identidade nunca acompanha o erro, mesmo que `dataCollection.userInfo`
+    // mude de padrão ou de nome numa atualização do SDK.
     delete event.user;
     return event;
   } catch {
@@ -435,13 +435,37 @@ export function sentryServerOptions(env: SentryServerEnv) {
     dsn: env.dsn,
     environment: env.environment,
     release: env.release,
-    sendDefaultPii: false,
+    // No SDK 11 `sendDefaultPii` não existe mais: a coleta automática é
+    // `dataCollection`, e cada campo omitido vale LIGADO (usuário, cookies,
+    // cabeçalhos, corpos, query string, dados de consulta, variáveis de pilha).
+    // Tudo desligado aqui; as peneiras abaixo continuam como segunda linha.
+    // `frameContextLines` fica no padrão: são linhas do nosso código-fonte.
+    dataCollection: {
+      userInfo: false,
+      cookies: false,
+      httpHeaders: { request: false, response: false },
+      httpBodies: [] as never[],
+      urlQueryParams: false,
+      graphQL: { document: false, variables: false },
+      genAI: { inputs: false, outputs: false },
+      databaseQueryData: false,
+      queues: false,
+      stackFrameVariables: false,
+    },
     tracesSampleRate: rate,
     // Sem `tracesSampler`, o SDK obedece ao `sentry-trace: …-1` que chega no
     // pedido ANTES da taxa configurada: qualquer cliente, sem sessão, forçaria
     // 100% de amostragem — e o `0` deixaria de desligar. A taxa é nossa.
     tracesSampler: (_contexto?: unknown) => rate,
     tracePropagationTargets: [] as string[],
+    // Desde o SDK 11 o padrão é `stream`: spans saem em fluxo, cada um com
+    // `name`/`attributes`, e o SDK IGNORA `beforeSendTransaction`. As peneiras
+    // abaixo foram escritas e testadas para o formato estático (transação +
+    // `description`/`data`), então o ciclo fica estático de propósito. Quem
+    // chama `Sentry.init` marca `beforeSendSpan` com `withStaticSpan`, senão o
+    // SDK não a chama. Migrar para `stream` exige peneira nova para o formato
+    // em fluxo, antes do SDK 12 (que remove `beforeSendTransaction`).
+    traceLifecycle: "static" as const,
     beforeSend: scrubEvent,
     beforeSendTransaction: scrubTransaction,
     beforeSendSpan: scrubSpan,

@@ -38,10 +38,24 @@ persona:
 persona:
   name: Recrutadora convidada
   base: Casual User
-  goal: acessar somente os candidatos vinculados e encontrar evidências relevantes sem ver dados privados indevidos
+  goal: seguir o link do convite do e-mail, criar a conta de recrutador com o endereço convidado (Google, LinkedIn ou código) e cair direto no candidato que convidou; depois, acessar somente os candidatos que deram acesso, sem ver dados privados indevidos
   device: laptop
   network: wifi-fast
   modality: mouse-keyboard
+  locale: en-US
+  patience_seconds: 8
+```
+
+## Recrutador do diretório
+
+```yaml
+persona:
+  name: Recrutador do diretório
+  base: Casual User
+  goal: achar, sem convite, candidatos que escolheram ser encontrados e ler só o que eles publicaram, inclusive no celular
+  device: phone-small
+  network: 4g
+  modality: touch
   locale: en-US
   patience_seconds: 8
 ```
@@ -128,6 +142,20 @@ persona:
   modality: mouse-keyboard
   locale: pt-BR
   patience_seconds: 5
+```
+
+## Pessoa nova que se cadastra sozinha
+
+```yaml
+persona:
+  name: Pessoa nova que se cadastra sozinha
+  base: First-Time User
+  goal: criar a própria conta de candidato ou recrutador sem pedir nada ao admin e sair do cadastro sabendo o que fazer
+  device: phone-small
+  network: 4g
+  modality: touch
+  locale: pt-BR
+  patience_seconds: 8
 ```
 
 ## Candidato convidado sem perfil

@@ -85,7 +85,7 @@ jobs:
       vars.SUPABASE_CRAWL_ENABLED == 'true' &&
       (github.event_name == 'workflow_dispatch' || vars.VARREDURA_AGENDADOR != 'supabase')
     environment: production
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Generoso mas limitado. O runner fica nos EUA e o banco em São Paulo, e a
     # 1.15.0 mostrou o que isso custa: com uma consulta por vaga, o sync sozinho
     # passou de uma hora e a execução foi cancelada antes de buscar os termos e

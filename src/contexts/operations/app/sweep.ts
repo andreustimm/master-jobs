@@ -83,7 +83,17 @@ export type SweepDeps = {
   /** A fila `score_task`: currículo salvo, trilha editada (ADR 0026). */
   rescore(budgetMs: number): Promise<QueueOutcome>;
   alarm(report: { kind: "fonte_sem_sync"; sources: string[] }): Promise<void>;
+  /**
+   * O trabalho horário do acesso de recrutador (#465, ADR-016): expira
+   * concessões e convites vencidos e manda os avisos. Devolve só contagens,
+   * que entram no `detail` da fatia.
+   */
+  recruiterAccess(nowMs: number): Promise<Record<string, number>>;
 };
+
+/** Chave e intervalo do trabalho de acesso de recrutador: uma vez por hora, em qualquer fatia. */
+export const RECRUITER_ACCESS_KEY = "manutencao:recruiter-access";
+export const RECRUITER_ACCESS_INTERVAL_MS = 3_600_000;
 
 /**
  * A mensagem de erro que pode sair na métrica e na resposta HTTP.
@@ -249,6 +259,18 @@ export async function runSweepSlice(slice: SweepSlice, deps: SweepDeps): Promise
     failure = safeError(error);
   }
 
+  // Depois do trabalho da fatia, e mesmo quando ele falhou: o fim de um acesso
+  // já vale na requisição do recrutador (ADR-012), mas o status, o histórico e
+  // o aviso esperam por aqui, e uma fonte quebrada não pode segurá-los.
+  let access: Record<string, number> = {};
+  try {
+    await atMostEvery(deps, RECRUITER_ACCESS_KEY, RECRUITER_ACCESS_INTERVAL_MS, async () => {
+      access = await deps.recruiterAccess(deps.now());
+    });
+  } catch (error) {
+    failure ??= safeError(error);
+  }
+
   const durationMs = deps.now() - started;
   const items = queue ? queue.items : units.filter((unit) => unit.ok).length;
   const errors = (queue ? queue.errors : units.filter((unit) => !unit.ok).length) + (failure ? 1 : 0);
@@ -277,7 +299,7 @@ export async function runSweepSlice(slice: SweepSlice, deps: SweepDeps): Promise
     items,
     errors,
     units,
-    detail: queue?.detail ?? {},
+    detail: { ...(queue?.detail ?? {}), ...access },
     staleSources: stale,
   };
 }

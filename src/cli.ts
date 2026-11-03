@@ -22,7 +22,6 @@ import { ageInDays, loadRates, refreshRates, STALE_AFTER_DAYS } from "./contexts
 import { importJobs, parseFile } from "./core/ingest/import.ts";
 import {
   CONTACT_CATEGORIES,
-  ContactUrlTaken,
   addContact,
   companiesWithContacts,
   listContacts,
@@ -274,6 +273,8 @@ db.command("cleanup")
           `  ${result.candidates.onlineJobs} online job payload(s) compactable\n` +
           `  ${result.candidates.parsedPages} parsed page HTML payload(s) removable\n` +
           `  ${result.candidates.closedJobs} closed untracked job(s) prunable\n` +
+          `  ${result.candidates.expiredSignups} expired sign-up record(s) purgeable\n` +
+          `  ${result.candidates.deadInvites} dead recruiter invitation(s) purgeable\n` +
           `  ${mib} MiB of reconstructable payload identified`,
       );
       if (!result.applied) {
@@ -283,7 +284,10 @@ db.command("cleanup")
       console.log(
         `${c.green("✓")} compacted ${result.applied.compactedJobs} job(s), ` +
           `cleared ${result.applied.clearedPages} page(s), ` +
-          `pruned ${result.applied.prunedJobs} job(s)`,
+          `pruned ${result.applied.prunedJobs} job(s), ` +
+          `purged ${result.applied.purgedSignups} sign-up record(s), ` +
+          `${result.applied.purgedInvites} recruiter invitation(s) and ` +
+          `${result.applied.purgedDirectoryQueries} directory search record(s)`,
       );
     });
   });
@@ -1509,30 +1513,15 @@ contacts
     }
     await withDb(async () => {
       const candidateId = await activeCandidateId();
-      let r: { id: number; created: boolean };
-      try {
-        r = await addContact(candidateId, {
-          name,
-          company: opts.company,
-          role: opts.role,
-          linkedinUrl: opts.url,
-          category,
-          country: opts.country,
-          notes: opts.notes,
-        });
-      } catch (error) {
-        if (!(error instanceof ContactUrlTaken)) throw error;
-        console.error(c.red(`Recusado: ${error.linkedinUrl} já está cadastrada fora da sua rede.`));
-        console.log(
-          c.dim(
-            "  A URL do LinkedIn ainda é única no banco inteiro, e contatos gravados antes da\n" +
-            "  separação por candidato (#379) ficam sem dono até o backfill da #405.\n" +
-            "  Cadastre sem -u por enquanto, ou aguarde a #405.",
-          ),
-        );
-        process.exitCode = 1;
-        return;
-      }
+      const r = await addContact(candidateId, {
+        name,
+        company: opts.company,
+        role: opts.role,
+        linkedinUrl: opts.url,
+        category,
+        country: opts.country,
+        notes: opts.notes,
+      });
       console.log(
         `${c.green("\u2713")} ${r.created ? "adicionado" : "atualizado"}: ${c.bold(name)} ` +
         c.dim(`@ ${opts.company} · ${opts.category} · #${r.id}`),
@@ -2452,6 +2441,67 @@ auth
         return;
       }
       console.log(`${c.green("\u2713")} ${revoked} sessão(ões) encerrada(s)\n`);
+    });
+  });
+
+// Formas de entrar (#464, US-013). Só listar e desligar: ligar um provedor
+// exige o navegador da dona da conta passando pelo provedor, e por isso não
+// existe `jho auth link`.
+auth
+  .command("methods <email>")
+  .description("Formas de entrar de uma conta: senha e provedores ligados")
+  .action(async (email: string) => {
+    await withDb(async () => {
+      const { methodsForEmail } = await import("./contexts/auth/index.ts");
+      const access = await methodsForEmail(email);
+      if (access === null) {
+        console.error(c.red(`\n  Conta ${email} não existe.\n`));
+        process.exitCode = 1;
+        return;
+      }
+      console.log(`\n${c.bold("Formas de entrar")} ${c.dim(access.email)}`);
+      console.log(`  ${"senha".padEnd(10)} ${access.methods.password ? c.green("definida") : c.dim("não definida")}`);
+      for (const method of access.methods.providers) {
+        if (!method.linked) {
+          console.log(`  ${method.provider.padEnd(10)} ${c.dim("não ligado")}`);
+          continue;
+        }
+        const origin = method.origin === "automatic" ? "automático" : "manual";
+        const lastUsed = method.lastUsed === "never" ? "nunca" : method.lastUsed.slice(0, 16).replace("T", " ");
+        console.log(
+          `  ${method.provider.padEnd(10)} ${c.green("ligado")} em ${method.linkedAt.slice(0, 10)} ` +
+            c.dim(`(${origin}) · último uso: ${lastUsed}`) +
+            (method.availableHere ? "" : c.yellow(" · não disponível neste ambiente")),
+        );
+      }
+      console.log();
+    });
+  });
+
+auth
+  .command("unlink <email> <provider>")
+  .description("Desligar o Google ou o LinkedIn de uma conta (nunca o último método)")
+  .action(async (email: string, provider: string) => {
+    await withDb(async () => {
+      const { cliUnlinkProvider, isOidcProvider, OIDC_PROVIDERS } = await import("./contexts/auth/index.ts");
+      if (!isOidcProvider(provider)) {
+        console.error(c.red(`\n  Provedor inválido: ${provider}. Use ${OIDC_PROVIDERS.join(" ou ")}.\n`));
+        process.exitCode = 1;
+        return;
+      }
+      const result = await cliUnlinkProvider(email, provider);
+      if (result.ok) {
+        console.log(`${c.green("✓")} ${provider} desligado de ${email}`);
+        console.log(c.dim("  Registrado como identity_unlinked (cli); a conta recebe o aviso por e-mail.\n"));
+        return;
+      }
+      const message = {
+        no_account: `Conta ${email} não existe.`,
+        not_linked: `Nada a desligar: ${provider} não está ligado a ${email}.`,
+        last_method: `${provider} é a última forma de entrar de ${email}. Defina uma senha (jho auth set-password) antes de desligar.`,
+      }[result.error];
+      console.error(c.red(`\n  ${message}\n`));
+      process.exitCode = 1;
     });
   });
 

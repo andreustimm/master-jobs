@@ -46,6 +46,8 @@ rtk compozy reviews watch \
   --provider coderabbit
 ```
 
+> **master-jobs:** com `subscriptionMode: "claude_only"` em `config/model-routing.json`, use só runtimes Claude: troque `--ide codex --model gpt-5.4` por `--ide claude --model opus`.
+
 `${PR_NUMBER}` is the integer captured from `rtk gh pr create`'s output in operating-loop step 7 (e.g., the `123` in `https://github.com/owner/repo/pull/123`). The slug is the value resolved in section 2.
 
 Run the command in a foreground terminal where you can watch the cockpit UI, OR pass `--attach detach` to let it run in the background; both are valid for the end-of-feature flow.

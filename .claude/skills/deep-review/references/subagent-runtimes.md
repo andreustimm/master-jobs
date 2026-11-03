@@ -10,6 +10,8 @@ How Step 3 review agents (defect cohorts, polish cohorts, sweeps) execute. `nati
 | `grok` | `compozy exec --ide cursor-agent --model 'grok-4.5[effort=high,fast=true]'` — effort/fast ride inside the model value (no reasoning flag); requesting `grok-4.5` resolves to the same advertised variant |
 | `codex` | `compozy exec --ide codex --model gpt-5.6-sol --reasoning-effort xhigh` |
 
+> **master-jobs:** com `subscriptionMode: "claude_only"` em `config/model-routing.json`, use só os runtimes Claude (`native` ou `claude-opus`); as lanes `codex` e `grok` ficam fora do modo vigente.
+
 ## Invocation shape (per stage)
 
 The stage scripts already materialized every prompt (schema + output contract embedded — external runtimes have no schema-enforcement layer, so the output-file contract replaces it). Execute a stage's jobs with the bundled runner from the repo root:
@@ -30,4 +32,4 @@ The runner owns bounded concurrency (`--workers`, default 4 — each invocation 
 
 ## Cost
 
-Every external invocation spends `compozy exec` credit — a large PR fans out dozens of agents. `native` fits exploratory runs; external runtimes earn their spend on gate rounds (e.g. loop Phase D's `codex` lane).
+Every external invocation spends `compozy exec` credit — a large PR fans out dozens of agents. `native` fits exploratory runs; external runtimes earn their spend on gate rounds (e.g. loop Phase D's `codex` lane — fora de `claude_only`; nesse modo, a lane externa é `claude-opus`).

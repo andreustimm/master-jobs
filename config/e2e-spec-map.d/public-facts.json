@@ -1,0 +1,10 @@
+{
+  "id": "public-facts",
+  "modules": [
+    "tests/e2e/ui/public-facts.mjs"
+  ],
+  "patterns": [],
+  "routes": [
+    "/candidate"
+  ]
+}

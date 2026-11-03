@@ -6,10 +6,18 @@
  * conta longe do caminho de autenticação é higiene barata — o arquivo que
  * resolve um token não deveria ter uma função capaz de criar um admin.
  */
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, sql, type SQL } from "drizzle-orm";
 import { getDb } from "../../../core/db/client.ts";
-import { authUser, recruiterCandidate } from "../../../core/db/schema.ts";
+import { clock } from "../../../core/clock.ts";
+import { authUser } from "../../../core/db/schema.ts";
 import { insertOwnCandidate, type OwnCandidateInput } from "../../../core/candidate.ts";
+import {
+  activeGrantsOf,
+  actorNameOf,
+  endGrant,
+  endGrantsOfRemovedAccount,
+  insertActiveGrant,
+} from "./drizzle-recruiter-access.ts";
 import type { UserDirectory, UserSummary } from "../ports.ts";
 import type { Role } from "../domain/types.ts";
 
@@ -99,8 +107,16 @@ export const drizzleUserDirectory: UserDirectory = {
   },
 
   async update(userId, patch) {
-    const set: { email?: string; fullName?: string | null; roles?: Role[] } = {};
-    if (patch.email !== undefined) set.email = patch.email.trim().toLowerCase();
+    const set: { email?: string; emailVerifiedAt?: SQL; fullName?: string | null; roles?: Role[] } = {};
+    if (patch.email !== undefined) {
+      const email = patch.email.trim().toLowerCase();
+      set.email = email;
+      // A prova da caixa é do endereço, não da conta: trocar o e-mail a zera,
+      // para que um convite pendente ao endereço novo não conclua sem que
+      // alguém prove que lê aquela caixa (ADR-018). Reenviar o mesmo endereço
+      // não a zera. O CASE lê o valor de antes do UPDATE, na mesma instrução.
+      set.emailVerifiedAt = sql`case when ${authUser.email} = ${email} then ${authUser.emailVerifiedAt} else null end`;
+    }
     if (patch.fullName !== undefined) set.fullName = normalizarNome(patch.fullName);
     if (patch.roles !== undefined) set.roles = patch.roles;
 
@@ -113,7 +129,14 @@ export const drizzleUserDirectory: UserDirectory = {
   },
 
   async remove(userId) {
-    await getDb().delete(authUser).where(eq(authUser.id, userId));
+    // Concessões ativas da conta terminam como `ended_account_removed` ANTES do
+    // DELETE e na mesma transação (ADR-012): depois dele a FK zera o
+    // recrutador, e o histórico precisa registrar por que o acesso acabou.
+    const at = clock().iso();
+    await getDb().transaction(async (tx) => {
+      await endGrantsOfRemovedAccount(tx, userId, at);
+      await tx.delete(authUser).where(eq(authUser.id, userId));
+    });
   },
 
   async setDisabled(userId, disabled) {
@@ -123,45 +146,67 @@ export const drizzleUserDirectory: UserDirectory = {
       .where(eq(authUser.id, userId));
   },
 
+  // As leituras do admin usam o MESMO predicado da sessão (ADR-012): a tela de
+  // administração não pode listar como ativo um acesso que o recrutador já
+  // perdeu, nem o contrário.
   async linkedCandidates(recruiterUserId) {
-    const rows = await getDb()
-      .select({ candidateId: recruiterCandidate.candidateId })
-      .from(recruiterCandidate)
-      .where(eq(recruiterCandidate.recruiterUserId, recruiterUserId));
+    const rows = await activeGrantsOf(getDb(), recruiterUserId, clock().iso());
     return rows.map((r) => r.candidateId);
   },
 
   async linksOf(recruiterUserId) {
-    return getDb()
-      .select({ id: recruiterCandidate.id, candidateId: recruiterCandidate.candidateId })
-      .from(recruiterCandidate)
-      .where(eq(recruiterCandidate.recruiterUserId, recruiterUserId));
+    return activeGrantsOf(getDb(), recruiterUserId, clock().iso());
   },
 
   /**
-   * Cria o vínculo recrutador↔candidato.
+   * Grava uma concessão ativa, com evento `system` no histórico.
    *
-   * **Quem chama isto precisa ser o candidato.** Não é detalhe de implementação:
-   * o vínculo dá ao recrutador acesso de leitura ao currículo e ao funil, e se
-   * um admin pudesse criá-lo ele leria dado alheio por procuração — bastaria
-   * vincular a si mesmo como recrutador. Seria um desvio silencioso da
-   * impersonação auditada, que é justamente o único caminho previsto.
+   * **Só fixture.** Concessão nasce do consentimento do candidato, pela área
+   * dele (#465, ADR-001); esta função existe para o E2E e os testes semearem o
+   * estado, e não aparece em tela nem na CLI. Um admin capaz de chamá-la leria
+   * dado alheio por procuração — bastaria se conceder acesso como recrutador.
    *
-   * Por isso a ação que expõe esta função vive na área do candidato e usa
-   * `guardOwnCandidate`, que não aceita id por parâmetro.
+   * Idempotente pelo índice único parcial: chamar duas vezes deixa uma
+   * concessão ativa e um evento.
    */
   async linkCandidate(recruiterUserId, candidateId, by) {
-    // Idempotente pelo índice único: vincular duas vezes não cria dois.
-    await getDb()
-      .insert(recruiterCandidate)
-      .values({ recruiterUserId, candidateId, createdBy: by })
-      .onConflictDoNothing();
+    const [recruiter] = await getDb()
+      .select({ email: authUser.email })
+      .from(authUser)
+      .where(eq(authUser.id, recruiterUserId))
+      .limit(1);
+    if (!recruiter) throw new Error(`Conta ${recruiterUserId} não existe`);
+    const at = clock().iso();
+    await getDb().transaction(async (tx) => {
+      await insertActiveGrant(tx, {
+        candidateId,
+        recruiterUserId,
+        recruiterEmail: recruiter.email.trim().toLowerCase(),
+        createdBy: by,
+        actor: "system",
+        at,
+      });
+    });
   },
 
-  async unlinkById(linkId) {
-    // Pelo id do vínculo, e não pelo par: revogar acesso é seguro vindo de
-    // qualquer lado, e assim nenhuma tela precisa passar um id de candidato.
-    await getDb().delete(recruiterCandidate).where(eq(recruiterCandidate.id, linkId));
+  /**
+   * Revogação pelo administrador (ADR-008): UPDATE condicional, nunca DELETE,
+   * com `revoked_by` e o nome do administrador no histórico. Pelo id da
+   * concessão, e não pelo par: nenhuma tela precisa passar id de candidato.
+   * Repetir devolve `already_ended`; id inexistente, `not_found`.
+   */
+  async revokeGrant(grantId, by) {
+    const db = getDb();
+    return endGrant(db, {
+      grantId,
+      status: "revoked",
+      kind: "access_revoked",
+      actor: "admin",
+      actorUserId: by,
+      actorName: await actorNameOf(db, by),
+      revokedBy: by,
+      at: clock().iso(),
+    });
   },
 };
 

@@ -543,8 +543,10 @@ async function cacheAudit(page: Page) {
 const browserGateRequested = process.env.npm_lifecycle_event === "test:pwa-browser"
   || process.env.JHO_PWA_BROWSER_TESTS === "1";
 
+// Um Chromium só, um teste por vez: o Vitest 5 trocou `describe.sequential`
+// pela opção `concurrent: false`.
 const describeBrowser = browserGateRequested
-  ? describe.sequential
+  ? (name: string, fn: () => void) => describe(name, { concurrent: false }, fn)
   : describe.skip;
 
 let browserSuiteStarted = false;

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_QUOTA_THRESHOLDS,
@@ -150,6 +151,16 @@ describe("F3-05 — toda ação recomendada carrega o comando de reversão", () 
       expect(decision.reversalCommand.length).toBeGreaterThan(0);
       expect(decision.reversalCommand).not.toContain("<");
     }
+  });
+
+  it("gatilho actions: a reversão apaga CI_RUNS_ON em vez de copiar uma etiqueta de runner que envelhece", () => {
+    const decision = decideQuotaWatch({ ...OK, actionsStatus: "critical" });
+    expect(decision.state).toBe("acao-recomendada");
+    if (decision.state === "acao-recomendada") {
+      expect(decision.reversalCommand).toBe("gh variable delete CI_RUNS_ON");
+    }
+    // O vigia em SQL (aplicado à mão no Supabase) diz o mesmo (G62).
+    expect(readFileSync("supabase/cron/watchdog.sql", "utf8")).toContain("reversao := 'gh variable delete CI_RUNS_ON';");
   });
 
   it("nenhuma decisão fora de acao-recomendada carrega reversalCommand", () => {

@@ -133,6 +133,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // ainda não foi autorizado por ninguém: a ausência ali é explicada na tela.
   const isRecruiter = session?.roles.includes("recruiter") === true;
   const borrowedAs = session && session.impersonatedBy !== null ? session.email : null;
+  // Sugestões de recrutador esperando o candidato desta sessão (US-020.AC-3).
+  // Sem escopo de candidato, nada a consultar; sem sugestão nenhuma, o link
+  // não ocupa a barra, que já está no limite da largura do desktop.
+  const pendingSuggestions = hasCandidateScope
+    ? await (await import("../src/contexts/pursuit/index.ts")).pendingSuggestionCount(session)
+    : null;
 
   // Escolha gravada primeiro; sem ela, negocia pelo Accept-Language. Servir
   // português a quem pediu inglês no navegador é ignorar informação que já
@@ -277,6 +283,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   canCreateProfile={canCreateProfile}
                   isAdmin={isAdmin}
                   isRecruiter={isRecruiter}
+                  pendingSuggestions={pendingSuggestions}
                   linkClass={navClass}
                   t={t}
                 />
@@ -292,6 +299,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   canCreateProfile={canCreateProfile}
                   isAdmin={isAdmin}
                   isRecruiter={isRecruiter}
+                  pendingSuggestions={pendingSuggestions}
                   rotulo={t("nav.menu")}
                   locale={locale}
                 />

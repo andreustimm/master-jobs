@@ -10,7 +10,7 @@ import {
 import { FRAGMENT_DIRECTORY } from "../../src/core/changelog-fragments.ts";
 import { describeFindings, reviewMigrationChanges } from "../../src/core/db/migration-review.ts";
 import { commitSubjectsSince, mostRecentVersionTag } from "./git-context.ts";
-import { CIVerdictRefusal, ghApi, requireSha, requireSourceCI } from "./promotion-ci.ts";
+import { CIAbsent, CIVerdictRefusal, ghApi, requireSha, requireSourceCI } from "./promotion-ci.ts";
 import { versionar } from "./versionar.ts";
 
 const CHANGELOGS = {
@@ -94,6 +94,53 @@ export function automaticSkip(directory: string, repository: string, input: Inpu
   return null;
 }
 
+/** The interval holds a migration no automatic entry may promote; a person confirms by dispatch. */
+export class MigrationNeedsConfirmation extends Error {}
+
+/** Why a preparation ended without promoting, and how loudly the run says so. */
+type Skip = { level: "notice" | "warning"; reason: string };
+
+/**
+ * An automatic entry that stops on something only a person can lift ends as a
+ * visible skip, not a red run: a red that repeats on every dev push hides the
+ * next red that means something. The refusal itself is unchanged —
+ * `skip=true` runs no CI and writes nothing, so G51 still bars the promotion.
+ * Two causes: a non-additive migration nobody confirmed (neither automatic
+ * event can), and a scheduled tip with no push CI to prove it. A dispatch
+ * never gets here — a person asked for that SHA, so the failure stays red —
+ * and neither does a CI event whose own run the API cannot find.
+ */
+export function awaitingPerson(error: unknown, input: Input): Skip | null {
+  if (!input.automatic) return null;
+  if (error instanceof MigrationNeedsConfirmation) {
+    return {
+      level: "warning",
+      // A may no longer be the tip, and a dispatch of a stale A that needs a release commit is refused.
+      reason: `${error.message}\nPara promover: revise a migração e dispare "Promover para staging" com o target-sha da ponta de dev com CI verde (este run viu ${input.source}) e confirmar-migracao=true.`,
+    };
+  }
+  if (error instanceof CIAbsent && input.runId === undefined) {
+    return {
+      level: "warning",
+      reason: `${error.message}\nSem run de push do CI neste SHA não há o que provar (ainda não começou, ou o push do commit de release não o dispara). A promoção segue com o CI do próximo push em dev.`,
+    };
+  }
+  return null;
+}
+
+/** Workflow commands end at a newline, so a multi-line reason is escaped (`%0A`). */
+function annotation({ level, reason }: Skip): string {
+  return `::${level}::${reason.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A")}`;
+}
+
+/** The skip reaches the annotation list and the run summary; the summary is what stays readable. */
+export function announceSkip(skip: Skip, summaryPath = process.env.GITHUB_STEP_SUMMARY): void {
+  console.log(annotation(skip));
+  if (!summaryPath) return;
+  const heading = skip.level === "warning" ? "Promoção parada: precisa de uma pessoa" : "Nada a promover";
+  appendFileSync(summaryPath, `### ${heading}\n\n\`\`\`text\n${skip.reason}\n\`\`\`\n`);
+}
+
 function isAncestor(directory: string, ancestor: string, descendant: string): boolean {
   const result = spawnSync("git", ["merge-base", "--is-ancestor", ancestor, descendant], { cwd: directory });
   if (result.error) throw result.error;
@@ -129,7 +176,7 @@ export function requirePromotionRange(directory: string, target: string, confirm
   for (let i = 0; i + 1 < changes.length; i += 2) files.push({ status: changes[i]!, path: changes[i + 1]! });
   const review = reviewMigrationChanges(files, (path) => readAt(directory, target, path));
   if (!review.automatic && !confirmMigration) {
-    throw new Error(`Migração exige confirmação humana para o alvo ${target}:\n${describeFindings(review.findings)}`);
+    throw new MigrationNeedsConfirmation(`Migração exige confirmação humana para o alvo ${target}:\n${describeFindings(review.findings)}`);
   }
   return "ready";
 }
@@ -265,14 +312,20 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       refresh(directory);
       return git(directory, "rev-parse", "origin/dev");
     });
-    const skip = automaticSkip(directory, repository, input);
-    if (skip) {
-      console.log(`::notice::${skip}`);
-      output = `source=${input.source}\ntarget=${input.source}\nskip=true\n`;
-    } else {
-      const target = preparePromotion(directory, repository, input);
-      output = `source=${input.source}\ntarget=${target}\nskip=false\n`;
+    const quiet = automaticSkip(directory, repository, input);
+    let skip: Skip | null = quiet ? { level: "notice", reason: quiet } : null;
+    let target = input.source;
+    if (!skip) {
+      try {
+        target = preparePromotion(directory, repository, input);
+      } catch (error) {
+        // Both refusals come before any write, so skipping here leaves the remote untouched.
+        skip = awaitingPerson(error, input);
+        if (!skip) throw error;
+      }
     }
+    if (skip) announceSkip(skip);
+    output = `source=${input.source}\ntarget=${skip ? input.source : target}\nskip=${skip ? "true" : "false"}\n`;
   } else if (phase === "complete") {
     // Publication never re-reads dev: the source is the one preparation fixed.
     const source = requireSha(process.env.PROMOTION_SOURCE ?? "");

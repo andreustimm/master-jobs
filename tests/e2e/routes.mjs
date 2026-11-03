@@ -28,6 +28,9 @@ export const ENGLISH_OWNER_SWEEP = [
   "/candidate/vocabulary",
   // Minha conta (#236): e-mail da sessão marcado como dado do usuário.
   "/account",
+  // Sugestões de recrutador (#465, task_04): o dono não tem nenhuma, e a
+  // varredura mede o estado vazio.
+  "/suggestions",
   "/jobs/new",
   "/admin/operacoes",
   // Catálogo e execuções (#223, tarefa 03).
@@ -57,6 +60,16 @@ export const ENGLISH_ANONYMOUS_SWEEP = [
   // headline, localização e skills marcados `data-user-content` — só o rótulo
   // do CTA, das seções e das categorias vem do dicionário.
   "/p/e2e-cv-formatado",
+  // Cadastro aberto (#464): sem cookie, `/signup` é o formulário manual e
+  // `/signup/verify` explica o cadastro vencido. Termos e Política: o corpo
+  // declara `lang`, e a varredura confere título, versão e navegação.
+  "/signup",
+  "/signup/verify",
+  // Convite de recrutador (#465): token que nunca existiu dá a página neutra.
+  // Os estados com convite válido são medidos em `recruiter-invite.mjs`.
+  "/signup/invite?token=nunca-existiu-varredura",
+  "/terms",
+  "/privacy",
 ];
 
 /** Interface em inglês depois de a suíte criar trilhas e termos (task_05 de term-search). */
@@ -81,6 +94,7 @@ export const OVERFLOW_SWEEP = [
   "/candidate",
   "/candidate/skills",
   "/pipeline",
+  "/suggestions",
   // Perfil público (#326): hero, duas colunas e skills agrupadas — o mesmo
   // candidato fixo de `public-cv-format.mjs`.
   "/p/e2e-cv-formatado",
@@ -109,6 +123,7 @@ export const AXE_SWEEP = [
   ["referrals", "/referrals"],
   ["admin users", "/admin/users"],
   ["account", "/account"],
+  ["suggestions", "/suggestions"],
   ["new job", "/jobs/new"],
   ["admin operations", "/admin/operacoes"],
   ["job countries hub", "/jobs/904000101/paises"],
@@ -118,7 +133,27 @@ export const AXE_SWEEP = [
   // Perfil público (#326): a varredura roda autenticada como dono, mas a
   // página ignora sessão — o mesmo candidato fixo de `public-cv-format.mjs`.
   ["public profile", "/p/e2e-cv-formatado"],
+  // Cadastro aberto (#464, E2E-024): varridas numa aba anônima — com sessão,
+  // `/signup` manda para a tela do papel.
+  ["signup", "/signup"],
+  ["signup verify", "/signup/verify"],
+  ["terms", "/terms"],
+  ["privacy", "/privacy"],
 ];
+
+/**
+ * Telas que só abrem com papel de recrutador (#465): as varreduras acima rodam
+ * como dono, que não tem o papel e recebe 403. A área `recruiter-directory`
+ * percorre esta lista com a sessão do recrutador da fixture e mede, em cada
+ * rota, inglês sem português, 375 px sem estouro e axe WCAG 2.2 AA.
+ */
+export const RECRUITER_SWEEP = ["/recruiter/directory"];
+
+/**
+ * As páginas do AXE_SWEEP que só existem sem sessão: `a11y.mjs` varre `/login`
+ * antes de entrar e as outras numa aba anônima, depois do percurso do dono.
+ */
+export const AXE_PRE_SESSION = ["/login", "/signup", "/signup/verify"];
 
 /**
  * Páginas fora das varreduras transversais, cada uma com o porquê.
@@ -136,5 +171,11 @@ export const UNMEASURED_PAGES = {
   "app/recruiter/page.tsx":
     "só abre com papel de recrutador; ui.mjs a exercita por papel (ROLE_SCENARIOS), mas as varreduras rodam como dono",
   "app/recruiter/[candidateId]/page.tsx":
-    "exige vínculo recrutador↔candidato; ui.mjs confere a negação por sonda (1, 999999, abc), sem varredura de idioma, largura ou axe",
+    "exige concessão vigente do candidato; ui.mjs confere a negação por sonda (1, 999999, abc), e recruiter-suggestions.mjs abre com o recrutador da fixture e mede 375 px e o funil só de leitura",
+  "app/recruiter/[candidateId]/cv/page.tsx":
+    "exige concessão vigente do candidato; recruiter-suggestions.mjs abre o currículo da Ana da fixture com o Rui e mede 375 px e axe (E2E-022)",
+  "app/recruiter/[candidateId]/suggest/page.tsx":
+    "exige concessão vigente do candidato; recruiter-suggestions.mjs busca e sugere uma vaga com o Rui da fixture e mede 375 px e axe (E2E-022)",
+  "app/recruiter/directory/[id]/page.tsx":
+    "o id é de um candidato da fixture (Paula Pública, Rita Recrutadores), descoberto pela própria busca; recruiter-directory.mjs abre o perfil e mede 375 px, axe, inglês e a ausência dos campos privados",
 };

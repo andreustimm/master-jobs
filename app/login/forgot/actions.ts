@@ -7,6 +7,7 @@ import {
   recordResetSendFailure,
   resolvePublicOrigin,
 } from "../../../src/contexts/auth/index.ts";
+import { getLocale } from "../../i18n";
 import { setMutationFeedbackCookie } from "../../mutation-feedback-server";
 
 /**
@@ -30,7 +31,8 @@ export async function requestResetAction(formData: FormData) {
   });
 
   if (origin) {
-    await askPasswordReset(email, origin);
+    // O e-mail sai no idioma da conta; sem ele, no desta tela (US-020).
+    await askPasswordReset(email, origin, await getLocale());
   } else {
     // Falha fechada (host poisoning, G17/G18): sem `JHO_PUBLIC_URL` num
     // deployment, o `Host` do cliente não é confiável para montar o link —

@@ -55,7 +55,7 @@ jobs:
       (github.event.workflow_run.event == 'push' &&
        (github.event.workflow_run.conclusion == 'success' ||
         github.event.workflow_run.conclusion == 'failure'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: write
@@ -98,7 +98,7 @@ jobs:
 
   promover:
     needs: [preparar, validar]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: write

@@ -72,6 +72,8 @@ rtk pnpm jho auth status         # modo e contas
 rtk pnpm jho auth add-user <email> --role admin,candidate
 rtk pnpm jho auth set-password <email>   # senha (entrada escondida ou --stdin)
 rtk pnpm jho auth login <email>          # link de uso único → /login/callback
+rtk pnpm jho auth methods <email>        # senha e provedores (Google, LinkedIn) ligados
+rtk pnpm jho auth unlink <email> google  # desliga um provedor (nunca o último método)
 
 # LLM opcional (BYOK — sua chave, seu custo)
 rtk pnpm jho llm seed            # cadastra provedores conhecidos (sem os modelos desligados)
@@ -143,7 +145,7 @@ rtk pnpm jho profile             # valida profile.yaml
 rtk pnpm check                   # changelogs, tracker de QA, typecheck, testes — verde antes de qualquer entrega
 rtk pnpm test:qa-skills          # contratos dos conversores do tracker QA
 rtk pnpm gates                   # só os gates que o diff exige (config/validation-impact.json), com recibo
-rtk pnpm test:e2e                # browser real isolado: build, PostgreSQL e porta temporários
+rtk pnpm test:e2e                # browser real isolado: build, PostgreSQL e porta temporários; Ctrl+C/kill limpa tudo, e cópias .jho-e2e-* de execução morta somem na seguinte
 rtk pnpm test:e2e --areas searches,a11y   # só a fumaça, essas áreas e o que elas exigem
 rtk pnpm db:generate             # gera migration após editar schema.ts
 ```
@@ -264,7 +266,9 @@ pnpm jho db cleanup --apply
 O comando compacta `job.raw` e `job.description_html` apenas para fontes de
 rede, preservando o `workplaceType` mínimo quando existe. Ele limpa
 `job_page.html` apenas após extração bem-sucedida e protege toda vaga ligada a
-`application`. Turso não oferece `VACUUM`; a medição de storage
+`application`. Também apaga convites de recrutador `expired`, `cancelled` ou
+`superseded` decididos há mais de 30 dias (o histórico do candidato guarda o
+e-mail) e o registro de buscas do diretório com mais de um dia (#465). Turso não oferece `VACUUM`; a medição de storage
 usa páginas ocupadas via `dbstat`, que são liberadas pela atualização.
 
 ---
@@ -1294,8 +1298,10 @@ A rede é do candidato ativo da CLI (o de slug `default`): `contacts`,
 `referrals` e `engage targets` leem e gravam só nela, e sem esse candidato
 recusam com "Candidato padrão não cadastrado" (`jho db seed` o cria). No
 dashboard, `/referrals` mostra só a rede do candidato da sessão (#379).
-Contatos gravados antes dessa mudança ficam sem dono e ocultos até o backfill
-da #405.
+Contatos gravados antes dessa mudança foram atribuídos ao candidato `default`
+pela migration 0034 (#405). A URL do LinkedIn identifica o contato dentro da
+rede: `contacts add -u <url>` com uma URL que a rede já tem atualiza o
+contato, e a mesma URL na rede de outra conta não interfere.
 
 ### `jho contacts seed`
 
@@ -1348,6 +1354,11 @@ de vaga aberta. Silêncio seria indistinguível de defeito.
 
 ## Área `auth` — contas
 
+Contas de **candidato** e **recrutador** também nascem pelo cadastro aberto
+em `/signup` (#464): Google, LinkedIn ou e-mail e senha confirmados por
+código, com o currículo do candidato já no perfil. O primeiro acesso de uma
+instalação vazia e qualquer conta **admin** continuam só por aqui, pela CLI.
+
 ### `jho auth add-user <email> [--role <papéis>]`
 
 Cria ou atualiza uma conta. `--role` aceita `admin`, `candidate` e
@@ -1378,6 +1389,27 @@ Um candidato tem no máximo uma conta (índice `auth_user_candidate_idx`).
 Cria a conta do dono (admin + candidato `default`) com senha gerada, mostrada
 uma vez. Recusa um e-mail diferente quando o candidato `default` já pertence a
 outra conta.
+
+### `jho auth methods <email>`
+
+Lista as formas de entrar da conta (#464, US-013): senha definida ou não e, para
+Google e LinkedIn, se está ligado, a data do vínculo, a origem (`automático`,
+pelo e-mail verificado, ou `manual`, pela tela da conta), o último uso (ou
+`nunca`) e, se for o caso, "não disponível neste ambiente". Nunca mostra o
+sujeito, o e-mail, o nome ou a foto do provedor. E-mail sem conta sai com
+"Conta … não existe." e código 1 — a CLI é ferramenta de operador e pode dizer.
+
+### `jho auth unlink <email> <provider>`
+
+Desliga `google` ou `linkedin` da conta, com a mesma regra da tela: recusa a
+última forma de entrar (conta sem senha e sem outro provedor; o link mágico não
+conta). Grava `identity_unlinked` com o detalhe `<provedor>: cli` e manda à
+conta o aviso por e-mail (que diz "um administrador"). Sai com código 1 para
+conta inexistente, provedor inválido, provedor não ligado ("Nada a desligar")
+e último método.
+
+Não existe `jho auth link`: ligar um provedor exige o navegador da dona da
+conta passando pelo provedor, em `/account` (US-013.EC-3).
 
 ## Área `analysis` — análise estruturada da vaga
 

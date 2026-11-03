@@ -155,6 +155,9 @@ A correção:
   primeira conta da instalação (tabela vazia), nunca troca
   vínculo gravado e perdeu
   `--candidate`. `seedOwner` recusa um segundo e-mail sobre o candidato do dono.
+  O cadastro aberto (`/signup`, #464) cria o candidato pelo mesmo
+  `insertOwnCandidate`, na transação que cria a conta: sempre linha nova,
+  privada, nunca a de outra pessoa; o papel admin nunca sai dele.
 - **E2E:** `tests/e2e/database-guard.mjs` recusa `setup.mjs`, `ui.mjs` e
   `a11y.mjs` se qualquer URL de banco que `src/core/db/config.ts` consulta
   (`DATABASE_URL`, `DATABASE_MIGRATION_URL`, `POSTGRES_URL`,
@@ -191,12 +194,15 @@ where candidate_id is not null
 ```
 
 Enquanto a conta errada resolvia para o candidato do dono, ela podia vincular
-recrutadores a ele. Confira também os vínculos e remova os que o dono não criou:
+recrutadores a ele. Confira também os acessos e revogue pela administração os
+que o dono não criou. Desde a 0036 (#465) os vínculos antigos são concessões em
+`recruiter_grant`, e `recruiter_candidate` está congelada:
 
 ```sql
-select id, recruiter_user_id, created_by, created_at
-from production.recruiter_candidate
-where candidate_id = (select id from production.candidate where slug = 'default');
+select id, recruiter_user_id, recruiter_email, created_by, created_at
+from production.recruiter_grant
+where status = 'active'
+  and candidate_id = (select id from production.candidate where slug = 'default');
 ```
 
 O deploy do código pode vir antes da limpeza: a leitura já nega o candidato às
@@ -226,11 +232,37 @@ candidate` dá à conta desvinculada um candidato próprio.
 
 A tela existe para qualquer papel e age sempre sobre `session.userId`; nenhum
 id vem da URL nem do formulário (`account:read` para ver, `account:write` para
-mudar, em `src/contexts/auth/domain/policy.ts`).
+mudar nome e senha, `account:manage-methods` para as formas de entrar, em
+`src/contexts/auth/domain/policy.ts`).
 
 - **Trocar a senha exige a senha atual.** Sem ela, um cookie roubado viraria
-  posse permanente da conta. Conta que entra só por link não define a primeira
-  senha por aqui — usa a recuperação.
+  posse permanente da conta.
+- **Primeira senha sem senha atual (#464, US-009).** Conta sem senha — a que
+  entra só por Google/LinkedIn ou por link — define a primeira senha na própria
+  tela, com as regras de sempre (mínimo de 12). É decisão do dono no PRD da
+  #464: a pessoa que se cadastrou pelo provedor precisa de uma porta que não
+  dependa dele. O risco aceito é o que a regra acima evita para quem já tem
+  senha: uma sessão roubada de conta sem senha pode criar uma. Contém o risco:
+  a gravação só vale com `password_hash` nulo (`WHERE password_hash IS NULL`),
+  então não substitui senha existente; fica `password_set` na auditoria; e a
+  sessão emprestada não chega aqui. Definir a primeira senha **não** derruba
+  sessões; trocar uma existente continua derrubando.
+- **Formas de entrar (#464, ADR-004).** A tela lista senha (definida ou não) e
+  cada provedor com data de vínculo, último uso, origem (`automatic` pelo
+  e-mail verificado ou `manual` pela tela) e "não disponível aqui" — nunca
+  sujeito, e-mail, nome ou foto do provedor. "Conectar" é o GET
+  `/login/oauth/<provedor>?intent=link`; "Desligar" recusa a última forma de
+  entrar (sem senha e sem outro provedor; o link mágico não conta, porque só a
+  CLI o emite). A conferência e a remoção rodam numa transação com a linha de
+  `auth_user` travada (`FOR UPDATE`): dois desligamentos simultâneos não deixam
+  a conta sem porta. Cada vínculo e desvínculo grava `identity_linked` /
+  `identity_unlinked` (`self`, `admin <e-mail> (#id)` ou `cli`) e manda o aviso
+  por e-mail à conta; falha de envio vira `email_send_failed` e não desfaz nada.
+- **Admin só desliga** provedor de outra conta (`/admin/users`, `user:manage`),
+  com a mesma proteção do último método — para conta comprometida sem outra
+  porta, a saída é desabilitar. Não existe ação, função nem comando que ligue
+  provedor na conta de outra pessoa; a CLI (`jho auth unlink`) também só
+  desliga.
 - **Limite de tentativas: 5 por conta em 15 minutos**, certas ou erradas. A
   tentativa é gravada em `auth_event` (`password_change_attempt`) ANTES de ser
   contada, então uma rajada concorrente não passa junta pelo limite. Senha nova
@@ -241,10 +273,11 @@ mudar, em `src/contexts/auth/domain/policy.ts`).
   continuo dentro", e um cookie copiado antes da troca também morre. Fica
   registrado `password_changed` com o número de sessões encerradas.
 - **Sessão emprestada não escreve na conta do alvo** — nem senha, nem nome,
-  mesmo quando o alvo é admin. A política nega `account:write` por
-  `impersonatedBy !== null` antes de olhar papel, e a composição
-  (`changePasswordForSession`, `renameForSession`) nega de novo. A tela abre
-  para leitura, sem formulário.
+  nem formas de entrar, mesmo quando o alvo é admin. A política nega
+  `account:write` e `account:manage-methods` por `impersonatedBy !== null`
+  antes de olhar papel, e a composição (`changePasswordForSession`,
+  `renameForSession`, `disconnectOwnProvider`, `setFirstPasswordForSession`)
+  nega de novo. A tela abre para leitura, sem formulário nem botão.
 - **Nome de exibição** é editável e registra `profile_updated`.
 
 **Decisão: troca de e-mail fica só com admin (`/admin/users`).** O e-mail é o
@@ -290,8 +323,10 @@ As exceções, e o que substitui a sessão em cada uma:
 | `requestResetAction`, `submitResetAction` | resposta uniforme; token de uso único queimado antes de gravar |
 | `logoutAction`, `stopImpersonatingAction` | só revogam/restauram o que está no próprio cookie |
 | `setLocaleAction`, `setAppearanceAction` | preferência de interface em cookie próprio, sem dado de ninguém |
-| `/login`, `/login/forgot`, `/login/reset` | pré-sessão; `/login` só pergunta se existe alguma conta |
+| `/login`, `/login/forgot`, `/login/reset` | pré-sessão; `/login` só pergunta se existe alguma conta e, com sessão válida, manda à tela do papel |
 | `/login/callback` | link mágico de uso único |
+| `/login/oauth/[provider]` | pré-sessão: só redireciona ao provedor com o cookie cifrado do fluxo (AES-256-GCM, 10 min, escopo `/login/oauth`); provedor fora da lista do ambiente recusa (ADR-005 da #464); `intent=link` exige `account:manage-methods`, que nega sessão emprestada |
+| `/login/oauth/[provider]/callback` | `state` do cookie conferido em tempo constante e queimado no servidor (vale uma vez), PKCE S256, ID token validado no JWKS (`iss`, `aud`, `exp`, `nonce`, assinatura); vínculo automático só com e-mail verificado; recusas neutras e na mesma janela de tentativas da senha |
 | `/api/cron/recheck` | `CRON_SECRET` em tempo constante; 503 sem ele |
 | `/api/cron/watchdog` | `CRON_SECRET` em tempo constante; 503 sem ele — checagem manual/de teste do vigia de cota (ADR 0030); o agendador de produção é `supabase/cron/watchdog.sql`, que nunca chama esta rota |
 | `/p/[slug]` | lista de permissão de `publicProfile()`, 404 para não público, limite por IP |
@@ -480,6 +515,32 @@ headline, localização e links por `containsContact()` e esvazia o que traz
 e-mail ou telefone, venha de onde vier; e a pessoa edita o nome em `/candidate`.
 A migração `0014` limpa os nomes já gravados. Detecção por padrão, com o mesmo
 limite declarado de `publicCvText()`, mais sequência de dez dígitos.
+
+**Diretório de perfis para recrutadores (#465).** `/recruiter/directory` e o
+perfil `/recruiter/directory/[id]` exigem sessão de recrutador
+(`candidate:discover`) e leem os perfis Recrutadores e Público pelo mesmo
+montador de `/p/` (`toAllowlistedProfile()`): nenhum campo sai ali que o perfil
+público não mostraria, e o texto do CV só com o segundo consentimento,
+filtrado. A busca casa só nome, headline e skill confirmada; perfil Privado
+não aparece nem responde (404 igual ao de id inexistente). Contra colheita em
+massa: 60 buscas ou perfis abertos por recrutador em 10 minutos, contados no
+banco (vale entre instâncias), e 20 cartões por página. A linha do limite
+guarda só quem buscou e quando. Ver G21–G23 em
+[rules/security.md](engineering/rules/security.md#g21).
+
+**Área do recrutador com acesso concedido (#465).** `/recruiter/[id]`, o
+currículo atual (`/cv`), o download (`/cv/download`) e sugerir
+(`/suggest`) conferem o id contra `linkedCandidateIds` da sessão antes de
+qualquer leitura e respondem o mesmo 404 para quem não deu acesso, id
+malformado e acesso encerrado; depois, a política decide (`candidate:read`,
+`suggestion:create`). O funil sai por uma consulta própria, sem nota, canal nem
+fit; o currículo é só o documento corrente, nunca a lista de versões; a tela da
+vaga lê com o escopo de candidato da sessão, que no recrutador é nulo, e não
+mostra nota nem análise de quem ele acompanha. Sugestão é proposta: só o aceite
+do próprio candidato (`suggestion:decide`, negado à sessão emprestada) cria a
+candidatura; sugerir (`suggestion:create`) também é negado à sessão emprestada,
+porque a sugestão chega ao candidato com o nome do recrutador. O id que o recrutador manda nas duas actions de sugerir é seletor
+registrado (G40).
 
 **Sem criptografia em repouso feita por este código.** Localmente, o
 PostgreSQL em Docker é legível por quem tem acesso à conta da máquina;

@@ -6,14 +6,18 @@
  * belong to this run and are removed when it finishes.
  */
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { createServer } from "node:net";
+import { rmSync } from "node:fs";
 import { access, cp, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline/promises";
 import { TASK04_FIXTURES } from "./task04-fixtures.mjs";
 import { copiedToHarness } from "./database-guard.mjs";
+import { FAKE_CLIENTS, startFakeOidc } from "./fake-oidc.mjs";
 import { SMOKE, selectAreas } from "./ui/index.mjs";
+import { claim, removeOrphans } from "./orphans.mjs";
 import setupPostgres from "../support/postgres-global.ts";
 import { startMinio } from "../support/minio.ts";
 import { provisionTestDatabase } from "../support/db.ts";
@@ -42,9 +46,14 @@ const runA11y = fullSuite || requested.includes("a11y");
 const uiAreaList = fullSuite ? "" : (uiAreas.length > 0 ? uiAreas : SMOKE).join(",");
 if (!fullSuite) console.log(`E2E seletivo: ${selectAreas(uiAreaList).map((area) => area.id).join(", ")}${runA11y ? ", a11y" : ""}`);
 
+/** Filhos vivos de `run`: o sinal os encerra antes de apagar a cópia em que escrevem. */
+const children = new Set();
+
 function run(command, args, options) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { ...options, stdio: "inherit" });
+    children.add(child);
+    child.once("exit", () => children.delete(child));
     child.once("error", reject);
     child.once("exit", (code, signal) => {
       if (code === 0) resolve();
@@ -195,7 +204,11 @@ const TECHNICAL_CHANGELOG_FIXTURE = `# Changelog
 `;
 
 const tracingRoot = dirname(ROOT);
+// Cópias de execuções interrompidas, cujo dono não vive mais (#527).
+const removedOrphans = await removeOrphans(tracingRoot);
+if (removedOrphans.length > 0) console.log(`E2E: ${removedOrphans.length} cópia(s) órfã(s) removida(s) de ${tracingRoot}`);
 const temporaryRoot = await mkdtemp(join(tracingRoot, ".jho-e2e-"));
+await claim(temporaryRoot);
 const appRoot = join(temporaryRoot, "app");
 const nextCli = join(ROOT, "node_modules", "next", "dist", "bin", "next");
 let server;
@@ -203,6 +216,38 @@ let stopPostgres;
 let stopMinio;
 let testDatabase;
 let runtimeLogin;
+let fakeOidc;
+
+/**
+ * Desfaz tudo o que esta execução criou. Roda no `finally` e também no sinal:
+ * Ctrl+C ou `kill` encerram o processo sem passar pelo `finally`, e era assim
+ * que a cópia, o banco e os contêineres ficavam para trás (#527).
+ */
+let cleaning;
+function cleanup() {
+  cleaning ??= (async () => {
+    // O build e o setup escrevem dentro da cópia: param antes de ela ser apagada.
+    await Promise.all([...children].map((child) => stop(child)));
+    await stop(server);
+    await fakeOidc?.close();
+    try { await runtimeLogin?.drop(); await testDatabase?.drop(); }
+    finally {
+      stopMinio?.();
+      stopPostgres?.();
+      await rm(temporaryRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    }
+  })();
+  return cleaning;
+}
+// Última rede: no `exit` nada assíncrono escreve mais — uma cópia de arquivos
+// ainda em andamento no sinal não recria a pasta depois de apagada.
+process.once("exit", () => rmSync(temporaryRoot, { recursive: true, force: true }));
+for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) {
+  process.once(signal, () => {
+    console.error(`E2E: ${signal}, limpando a execução isolada…`);
+    cleanup().finally(() => process.exit(code));
+  });
+}
 
 try {
   stopPostgres = await setupPostgres();
@@ -237,6 +282,12 @@ try {
       }
     : { E2E_STORAGE: "off", JHO_STORAGE_DRIVER: "" };
 
+  // Emissor OIDC falso do login social (#464, ADR-010), só em loopback: o fluxo
+  // inteiro roda — redirecionamento, PKCE, ID token assinado — sem Google nem
+  // LinkedIn. O app só aceita o desvio porque `JHO_ENV` se declara `e2e`.
+  fakeOidc = await startFakeOidc();
+  const mailSink = join(temporaryRoot, "mail-sink");
+
   const port = await availablePort();
   const base = `http://127.0.0.1:${port}`;
   const env = {
@@ -250,9 +301,24 @@ try {
     JHO_PUBLIC_URL: base,
     // No `--manual`, quem opera precisa do link de recuperação no terminal
     // (AUTH-recovery-same-answer): só o mailer de console o imprime, e ele só
-    // vale num processo que se declara local. A suíte automática fica sem,
-    // como um deployment: o link nunca vai para o log do CI.
-    ...(manual ? { JHO_ENV: "local" } : {}),
+    // vale num processo que se declara local. A suíte automática se declara
+    // `e2e` (#464): não é local — nada de modo aberto nem de mailer de
+    // terminal, o link nunca vai para o log do CI —, mas é o único outro
+    // ambiente em que os desvios de teste valem (`testOverridesAllowed`): o
+    // emissor OIDC falso e o sink de e-mail em arquivo, declarados junto.
+    JHO_ENV: manual ? "local" : "e2e",
+    GOOGLE_OIDC_CLIENT_ID: FAKE_CLIENTS.google.id,
+    GOOGLE_OIDC_CLIENT_SECRET: FAKE_CLIENTS.google.secret,
+    LINKEDIN_CLIENT_ID: FAKE_CLIENTS.linkedin.id,
+    LINKEDIN_CLIENT_SECRET: FAKE_CLIENTS.linkedin.secret,
+    JHO_OIDC_ISSUER_GOOGLE: fakeOidc.issuer("google"),
+    JHO_OIDC_ISSUER_LINKEDIN: fakeOidc.issuer("linkedin"),
+    // Segredos descartáveis desta execução: nascem e morrem com ela.
+    JHO_SESSION_SECRET: randomBytes(32).toString("hex"),
+    JHO_SIGNUP_IP_SECRET: randomBytes(32).toString("hex"),
+    JHO_MAIL_SINK: mailSink,
+    E2E_FAKE_OIDC: fakeOidc.url,
+    E2E_MAIL_SINK: mailSink,
     DATABASE_URL: testDatabase.url,
     DATABASE_MIGRATION_URL: testDatabase.url,
     JHO_TEST_DATABASE_URL: testDatabase.url,
@@ -316,15 +382,14 @@ try {
     try { await terminal.question("Press Enter to stop and remove this isolated QA environment.\n"); }
     finally { terminal.close(); }
   } else {
-    await run(process.execPath, ["tests/e2e/ui.mjs"], { cwd: appRoot, env: { ...env, E2E_AREAS: uiAreaList } });
+    // A área `social-sign-in` sobe outra instância do mesmo build com outra
+    // configuração de provedores (E2E-022, E2E-023).
+    await run(process.execPath, ["tests/e2e/ui.mjs"], {
+      cwd: appRoot,
+      env: { ...env, E2E_AREAS: uiAreaList, E2E_STANDALONE_SERVER: join(standaloneAppRoot, "server.js") },
+    });
     if (runA11y) await run(process.execPath, ["tests/e2e/a11y.mjs"], { cwd: appRoot, env });
   }
 } finally {
-  await stop(server);
-  try { await runtimeLogin?.drop(); await testDatabase?.drop(); }
-  finally {
-    stopMinio?.();
-    stopPostgres?.();
-    await rm(temporaryRoot, { recursive: true, force: true });
-  }
+  await cleanup();
 }

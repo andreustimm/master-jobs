@@ -53,7 +53,9 @@ function stripNoise(code: string): string {
 
 // SDK de armazenamento (#327) conta como transporte: abre conexão com o
 // provedor por dentro, sem `fetch` visível no arquivo que o importa.
-const TRANSPORT_MODULE_NAMES = "http|https|http2|net|tls|dgram|child_process|undici|axios|got|node-fetch|ky|ws|@vercel/blob|@aws-sdk/client-s3";
+// O cliente OIDC (#464) também: a descoberta, o token e o JWKS saem por dentro
+// de `oauth4webapi`.
+const TRANSPORT_MODULE_NAMES = "http|https|http2|net|tls|dgram|child_process|undici|axios|got|node-fetch|ky|ws|@vercel/blob|@aws-sdk/client-s3|oauth4webapi";
 const TRANSPORT_MODULES = new RegExp(
   [
     `\\bfrom\\s+["'](node:)?(${TRANSPORT_MODULE_NAMES})["']`,
@@ -101,6 +103,8 @@ const ALLOWED: Record<string, string> = {
   "src/core/llm/providers.ts": "BYOK: leitura qualitativa de vaga, com confirmação antes de enviar",
   "src/core/mail/gmail.ts": "Gmail somente leitura (ADR 0008) e callback OAuth em loopback",
   "src/contexts/auth/infra/resend-mailer.ts": "e-mail transacional da própria conta (recuperar senha)",
+  "src/contexts/auth/infra/oidc/client.ts":
+    "login social (#464): descoberta, token e JWKS do Google e do LinkedIn OIDC — só autenticação, sem dado de perfil (regra 1, ADR-003)",
   "src/contexts/operations/infra/github-dispatch.ts": "dispara workflow do próprio repositório",
   "src/contexts/operations/infra/quota-watch-metrics.ts": "vigia de cota (ADR 0030): leitura de deployments/fila em APIs da Vercel e do GitHub, e do status público",
   "src/contexts/operations/infra/quota-watch-issue.ts": "vigia de cota (ADR 0030): abre issue no próprio repositório ao decidir aviso ou ação automática",
@@ -127,6 +131,7 @@ describe("detector de transporte de saída", () => {
       // Os SDKs de armazenamento (#327) falam com o provedor por dentro.
       ['import { put, get } from "@vercel/blob";', "module:@vercel/blob"],
       ['import { S3Client } from "@aws-sdk/client-s3";', "module:@aws-sdk/client-s3"],
+      ['import * as oauth from "oauth4webapi";', "module:oauth4webapi"],
       ["const ws = new WebSocket(url);", "xhr/ws"],
       ["navigator.sendBeacon(url, body);", "beacon"],
       ['  fetch(applyUrl, { method: "POST" });', "fetch"],
@@ -193,13 +198,15 @@ describe("preparar candidatura não abre transporte (regra 13)", () => {
     // O grafo estático é mais largo do que o comportamento, por causa dos
     // barris de contexto: matching → câmbio → porta HTTP dos adapters (para
     // atualizar cotações) e matching → candidato → auth → mailer (para
-    // recuperar senha). Os dois caminhos estão FIXADOS aqui para que um
+    // recuperar senha; e, desde a #464, o cliente OIDC do login social, que o
+    // mesmo barril de auth compõe). Os caminhos estão FIXADOS aqui para que um
     // transporte novo no grafo (LLM, Gmail, dispatch, um cliente de ATS)
     // apareça como diferença. A prova de que nada é CHAMADO é de efeito:
     // `cov-apply-dossier.test.ts` instrumenta `fetch` e a porta e conta zero.
     const graph = reachable("src/core/apply/dossier.ts");
     expect(graph.size).toBeGreaterThan(5); // o grafo foi de fato percorrido
     expect([...graph].filter((file) => file in ALLOWED).sort()).toEqual([
+      "src/contexts/auth/infra/oidc/client.ts",
       "src/contexts/auth/infra/resend-mailer.ts",
       "src/core/remote-url.ts",
     ]);

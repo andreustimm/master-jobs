@@ -15,6 +15,8 @@ const estado = { host: null as string | null };
 
 vi.mock("next/headers", () => ({
   headers: async () => new Headers(estado.host ? { host: estado.host } : {}),
+  // O idioma do e-mail vem do cookie da tela (US-020); sem cookie, do cabeçalho.
+  cookies: async () => ({ get: () => undefined }),
 }));
 vi.mock("next/navigation", () => ({
   redirect: (to: string) => {
@@ -26,12 +28,12 @@ vi.mock("../app/mutation-feedback-server", () => ({
 }));
 
 const espioes = {
-  askPasswordReset: vi.fn(async (_email: string, _origem: string) => undefined),
+  askPasswordReset: vi.fn(async (_email: string, _origem: string, _idioma?: string) => undefined),
   recordResetSendFailure: vi.fn(async (_email: string, _detalhe: string) => undefined),
 };
 vi.mock("../src/contexts/auth/index.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/contexts/auth/index.ts")>()),
-  askPasswordReset: (...args: [string, string]) => espioes.askPasswordReset(...args),
+  askPasswordReset: (...args: [string, string, string?]) => espioes.askPasswordReset(...args),
   recordResetSendFailure: (...args: [string, string]) => espioes.recordResetSendFailure(...args),
 }));
 
@@ -83,9 +85,12 @@ describe("requestResetAction — sem origem pública confiável", () => {
     );
 
     expect(espioes.recordResetSendFailure).not.toHaveBeenCalled();
+    // O terceiro argumento é o idioma da tela, usado quando a conta não tem um
+    // (US-020): sem cookie nem `Accept-Language`, o padrão.
     expect(espioes.askPasswordReset).toHaveBeenCalledWith(
       "pessoa@exemplo.test",
       "https://jobs.mastertimm.com.br",
+      "pt-BR",
     );
   });
 });
