@@ -145,7 +145,7 @@ describe("disparo no GitHub", () => {
 
 describe("varredura.yml aceita o pedido", () => {
   const workflow = parse(readFileSync(".github/workflows/varredura.yml", "utf8")) as {
-    on: { workflow_dispatch: { inputs: Record<string, { default?: string; options?: string[] }> } };
+    on: { schedule: { cron: string }[]; workflow_dispatch: { inputs: Record<string, { default?: string; options?: string[] }> } };
     jobs: { varrer: { steps: { name?: string; if?: string; run?: string }[] } };
   };
 
@@ -171,12 +171,18 @@ describe("varredura.yml aceita o pedido", () => {
     for (const [nome, rotina] of esperado) {
       const condicao = porNome.get(nome)?.if ?? "";
       expect(condicao, nome).toContain(`inputs.rotina == '${rotina}'`);
-      // Execução agendada não tem input: ela roda tudo.
-      expect(condicao, nome).toContain("github.event_name != 'workflow_dispatch'");
+      // Rechecagem é diária; coleta, captura e pontuação são semanais.
+      if (rotina === "recheck") expect(condicao, nome).toContain("github.event_name == 'schedule'");
+      else expect(condicao, nome).toContain("github.event.schedule == '0 6 * * 1'");
+      expect(condicao, nome).toContain("github.event_name == 'workflow_dispatch'");
       expect(condicao, nome).toContain("inputs.rotina == 'tudo'");
       // O pedido de uma execução nunca dispara a varredura inteira.
       expect(condicao, nome).not.toContain("execucao");
     }
+  });
+
+  it("agenda a descoberta semanal e a reconferência em separado", () => {
+    expect(workflow.on.schedule.map((item) => item.cron)).toEqual(["0 6 * * 1", "0 7 * * *"]);
   });
 
   it("o pedido de uma execução roda só ela, com insumos fora do script", () => {

@@ -31,10 +31,14 @@ import {
   application,
   authSignup,
   job,
+  jobAnalysis,
   jobPage,
+  mailSuggestion,
   recruiterDirectoryQuery,
   recruiterInvite,
+  recruiterSuggestion,
   source,
+  verifyTask,
 } from "./schema.ts";
 import { MANUAL_SOURCE_KINDS } from "../sources/types.ts";
 
@@ -141,6 +145,24 @@ function payloadNeedsCompaction(descriptionHtml: SQLWrapper, raw: SQLWrapper): S
 type Transaction = Parameters<Parameters<DB["transaction"]>[0]>[0];
 
 /**
+ * User decisions and user-created vacancies survive every prune path.
+ * Protect periodic verification too: an existing task can become user-origin
+ * without changing its job FK, so that update would not lock the parent row.
+ */
+function hasNoHumanInteraction(id: SQLWrapper, sourceId: SQLWrapper, authorId: SQLWrapper): SQL {
+  const manualKinds = sql.join(MANUAL_SOURCE_KINDS.map((kind) => sql`${kind}`), sql`, `);
+  return sql`(
+    ${authorId} is null
+    and not exists (select 1 from ${source} s where s.id = ${sourceId} and s.kind in (${manualKinds}))
+    and not exists (select 1 from ${application} a where a.job_id = ${id})
+    and not exists (select 1 from ${jobAnalysis} a where a.job_id = ${id})
+    and not exists (select 1 from ${mailSuggestion} m where m.job_id = ${id})
+    and not exists (select 1 from ${recruiterSuggestion} r where r.job_id = ${id})
+    and not exists (select 1 from ${verifyTask} v where v.job_id = ${id})
+  )`;
+}
+
+/**
  * The only authorized way to delete a job: closed before `closedBefore` and
  * without any application. Must run inside a transaction.
  *
@@ -165,7 +187,7 @@ export async function deleteClosedJobsWithoutApplication(
 ): Promise<{ id: number }[]> {
   const eligible = and(
     lt(job.closedAt, closedBefore),
-    sql`not exists (select 1 from ${application} a where a.job_id = ${job.id})`,
+    hasNoHumanInteraction(job.id, job.sourceId, job.postedByUserId),
   );
   const locked = await tx
     .select({ id: job.id })
@@ -245,7 +267,7 @@ export async function runDatabaseCleanup(
       (
         select count(*) from production.job j
         where j.closed_at < ${closedBefore}
-        and not exists (select 1 from production.application a where a.job_id = j.id)
+        and ${hasNoHumanInteraction(sql`j.id`, sql`j.source_id`, sql`j.posted_by_user_id`)}
       ) as closed_jobs
   `);
 

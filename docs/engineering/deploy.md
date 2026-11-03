@@ -588,25 +588,25 @@ Vercel. O Fly pode ficar parado (`fly scale count 0`) até o próximo
 incidente — `auto_stop_machines` em `fly.toml` já reduz o custo entre
 failovers.
 
-## A varredura diária
+## A varredura semanal
 
 > **Pausa operacional:** o workflow permanece opt-in até concluir o corte para
 > Supabase, a importação seletiva e os gates de retenção. O incidente Turso de
 > 03/09/2026 é apenas o diagnóstico histórico; consulte os
 > [gates documentados](../operations/turso-quota-incident-2026-09-03.md).
 
-Quando habilitado, `.github/workflows/varredura.yml` roda `jobs sync`, `scrape
-queue`+`run` e `jobs recheck queue`+`run` contra **produção**, todo dia às
-06:00 UTC (03:00 em São Paulo), com `workflow_dispatch` para rodar à mão depois
-de mexer em `config/sources.yaml`.
+Quando habilitado, `.github/workflows/varredura.yml` roda a coleta completa
+contra **produção** às segundas às 06:00 UTC (03:00 em São Paulo), com
+reconferência adicional diária às 07:00 UTC. `workflow_dispatch` permite
+executar cada rotina à mão. `SUPABASE_CRAWL_ENABLED` controla ambos os horários.
 
-**Agora é rede de segurança.** Desde a
-[ADR 0025](../adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md), a
-varredura de verdade roda na Vercel, fatiada e agendada pelo `pg_cron` do
-Supabase — a ~57 minutos por execução daqui (runner nos EUA, banco em São
-Paulo), o Actions não chegaria a "de hora em hora". Até a troca ser ativada
+**Agendador alternativo.** A
+[ADR 0025](../adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md)
+prevê execução fatiada na Vercel, agendada pelo `pg_cron` do Supabase. Até a troca ser ativada
 ([runbook](../operations.md#varredura-horária-ativar-o-agendador)), a execução
-diária continua como sempre. Depois dela, a variável de repositório
+semanal e a reconferência diária ficam no Actions. O SQL do `pg_cron` ainda
+prevê coleta mais frequente: não ativar o agendador alternativo até adaptá-lo e
+validar a política de coleta semanal. Depois da troca, a variável de repositório
 `VARREDURA_AGENDADOR=supabase` faz o disparo agendado não rodar nada; o
 `workflow_dispatch` continua, e é o caminho de volta se a Vercel parar.
 `tests/workflow-environment-isolation.test.ts` exige `crons` vazio no

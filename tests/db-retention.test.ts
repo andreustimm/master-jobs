@@ -5,8 +5,13 @@ import {
   application,
   candidate,
   job,
+  jobAnalysis,
   jobPage,
+  mailMessage,
+  mailSuggestion,
+  recruiterSuggestion,
   source,
+  verifyTask,
 } from "../src/core/db/schema.ts";
 import { runDatabaseCleanup } from "../src/core/db/retention.ts";
 import { observeRawJob } from "../src/core/ingest/observe.ts";
@@ -142,6 +147,35 @@ describe("retenção do banco", () => {
     });
     expect(second.candidates.onlineJobs).toBe(0);
     expect(second.applied).toEqual({ compactedJobs: 0, clearedPages: 0, prunedJobs: 0, purgedSignups: 0, purgedInvites: 0, purgedDirectoryQueries: 0 });
+  });
+
+  it("preserva outras interações e vagas manuais ao descartar vagas fechadas", async () => {
+    const analysisId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "analysis");
+    const mailId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "mail");
+    const verifiedId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "verified");
+    const periodicId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "periodic");
+    const recruiterId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "recruiter");
+    const removableId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "removable");
+    const manualId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "manual");
+    await db.update(job).set({ sourceId: "manual:local" }).where(eq(job.id, manualId));
+    const [owner] = await db.insert(candidate).values({ slug: "owner", name: "Owner", isDefault: true }).returning();
+    const [message] = await db.insert(mailMessage).values({ messageId: "mail-retention" }).returning();
+    await db.insert(jobAnalysis).values({ jobId: analysisId, inputHash: "a", promptVersion: "1", schemaVersion: "1" });
+    await db.insert(mailSuggestion).values({ jobId: mailId, mailId: message!.id });
+    await db.insert(verifyTask).values({ jobId: verifiedId, url: "https://example.test", origin: "user" });
+    await db.insert(verifyTask).values({ jobId: periodicId, url: "https://example.test/periodic", origin: "periodic" });
+    await db.insert(recruiterSuggestion).values({ jobId: recruiterId, candidateId: owner!.id });
+
+    const result = await runDatabaseCleanup({ apply: true, now: new Date("2026-08-29T12:00:00.000Z"), closedJobDays: 90 });
+    expect(result.candidates.closedJobs).toBe(1);
+    expect(result.applied?.prunedJobs).toBe(1);
+    const ids = (await db.select({ id: job.id }).from(job)).map((row) => row.id);
+    expect(ids).toEqual(expect.arrayContaining([analysisId, mailId, verifiedId, periodicId, recruiterId, manualId]));
+    expect(ids).not.toContain(removableId);
+    expect(await db.select().from(jobAnalysis)).toHaveLength(1);
+    expect(await db.select().from(mailSuggestion)).toHaveLength(1);
+    expect(await db.select().from(verifyTask)).toHaveLength(2);
+    expect(await db.select().from(recruiterSuggestion)).toHaveLength(1);
   });
 });
 

@@ -149,6 +149,24 @@ describe("descarte concorrente com candidatura", () => {
     expect(decisions[0]).toMatchObject({ jobId, status: "applied" });
   });
 
+  it("preserva verificação solicitada enquanto o descarte espera o lock", async () => {
+    const jobId = await seedClosedJob("verificacao-concorrente");
+    const tx = await other.reserve();
+    try {
+      await tx`begin`;
+      await tx`insert into production.verify_task (job_id, url, origin) values (${jobId}, 'https://exemplo.test', 'user')`;
+      const discarding = pruneClosed(90);
+      await untilSomeoneWaitsOnALock();
+      await tx`commit`;
+      expect(await discarding).toBe(0);
+      const rows = await other`select job_id, origin from production.verify_task where job_id = ${jobId}`;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ job_id: jobId, origin: "user" });
+    } finally {
+      tx.release();
+    }
+  });
+
   it("quem chega depois do descarte recebe erro, nunca uma candidatura que some em silêncio", async () => {
     // A ordem inversa: o descarte já travou a vaga. A candidatura espera e, com
     // a vaga apagada, a FK recusa o insert. O usuário vê a falha e a decisão
