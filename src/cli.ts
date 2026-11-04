@@ -289,6 +289,9 @@ db.command("retention")
       console.log(`Total expirado nesta execução: ${removed}.`);
       const after = await inventoryOldJobs();
       console.log(`Candidatas estimadas restantes: ${after.potentiallyRemovable}; candidatas com descarte anterior do mesmo fingerprint: ${after.alreadyMarked}.`);
+      if (after.potentiallyRemovable > 0) {
+        throw new Error(`Retenção incompleta: ${after.potentiallyRemovable} candidata(s) restante(s). Confira locks e o limite de lotes antes de retomar com backup válido.`);
+      }
     });
   });
 
