@@ -70,13 +70,21 @@ it("gates every scheduled deletion behind restored, encrypted, remotely verified
   expect(job.environment).toBe("production");
 });
 
+// Five real Node CLI launches plus database setup/teardown share this budget.
+// Each child remains bounded to 5s; the suite-wide 5s default is not a CLI SLA.
 it("checks original protected job and interaction identities while permitting new interactions", async () => {
   const url = process.env.JHO_TEST_POSTGRES_URL!;
   const sql = postgres(url, { max: 1, onnotice: () => {} });
   const directory = await mkdtemp(join(tmpdir(), "backup-protection-test-")); directories.push(directory);
   const path = join(directory, "protection.json");
   const tables = ["application", "application_event", "job_analysis", "mail_suggestion", "recruiter_suggestion", "verify_task", "scrape_task"];
-  const run = (command: string) => spawnSync(process.execPath, ["--no-warnings", "scripts/retention-backup.ts", command, path], { env: { ...process.env, DATABASE_URL: url, DATABASE_CA_CERT: "" }, encoding: "utf8" });
+  const run = (command: string) => {
+    const started = performance.now();
+    const result = spawnSync(process.execPath, ["--no-warnings", "scripts/retention-backup.ts", command, path], { env: { ...process.env, DATABASE_URL: url, DATABASE_CA_CERT: "" }, encoding: "utf8", timeout: 5_000 });
+    console.info(`Backup protection CLI ${command}: ${Math.round(performance.now() - started)}ms`);
+    expect(result.error, command).toBeUndefined();
+    return result;
+  };
   try {
     await sql.unsafe("create schema production; create table production.source(id text primary key,kind text); create table production.job(id int primary key,source_id text,posted_by_user_id int,archived_at text); insert into production.source values('s','greenhouse'); insert into production.job values(1,'s',null,null),(2,'s',null,null)");
     for (const table of tables) await sql.unsafe(`create table production.${table}(id int primary key, job_id int); insert into production.${table} values(1,1)`);
@@ -89,4 +97,4 @@ it("checks original protected job and interaction identities while permitting ne
     await sql.unsafe("insert into production.application_event values(1,1); delete from production.job where id=1");
     expect(run("verify-protection").status).toBe(1);
   } finally { await sql.unsafe("drop schema if exists production cascade"); await sql.end(); }
-});
+}, 30_000);
