@@ -13,6 +13,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  uuid,
   index,
   integer,
   foreignKey,
@@ -229,7 +230,8 @@ export const job = production.table(
 export const jobRetentionTombstone = production.table(
   "job_retention_tombstone",
   {
-    fingerprint: text("fingerprint").primaryKey(),
+    id: uuid("id").primaryKey().defaultRandom(),
+    fingerprint: text("fingerprint").notNull(),
     sourceId: text("source_id").notNull(),
     externalId: text("external_id").notNull(),
     externalUsable: boolean("external_usable").notNull().default(false),
@@ -239,7 +241,10 @@ export const jobRetentionTombstone = production.table(
     originalJobId: integer("original_job_id"),
     batchId: text("batch_id"),
   },
-  (t) => [index("job_retention_tombstone_source_external_idx").on(t.sourceId, t.externalId)],
+  (t) => [
+    index("job_retention_tombstone_source_external_idx").on(t.sourceId, t.externalId),
+    index("job_retention_tombstone_fingerprint_idx").on(t.fingerprint),
+  ],
 );
 
 /* -------------------------------------------------------------------------- */

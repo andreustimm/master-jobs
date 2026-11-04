@@ -1,9 +1,10 @@
 import { eq, sql } from "drizzle-orm";
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import type { DB } from "../src/core/db/client.ts";
 import { application, candidate, job, jobRetentionTombstone, source } from "../src/core/db/schema.ts";
-import { expireOldJobsBatch } from "../src/core/db/retention.ts";
+import { expireOldJobsBatch, inventoryOldJobs } from "../src/core/db/retention.ts";
 import { observeRawJob, observeRawJobs } from "../src/core/ingest/observe.ts";
 import { fingerprint } from "../src/core/ingest/normalize.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
@@ -140,4 +141,63 @@ describe("retenção administrativa de 14 dias", () => {
       await other.end({ timeout: 5 });
     }
   });
+});
+
+it("expira republicações sem perder identidades nem manifestos anteriores", async () => {
+  const publication = { ...raw("old-id"), title: "Engineer" };
+  const first = await observeRawJob(publication, "lever:acme", { observedAt: old });
+  const firstBatch = await expireOldJobsBatch({ now });
+  const [reposted] = await observeRawJobs([{ ...publication, externalId: "new-id" }], "lever:acme", { observedAt: now.toISOString() });
+  expect(reposted?.outcome).toBe("inserted");
+  const later = new Date("2026-09-14T12:00:00.000Z");
+  expect(await inventoryOldJobs(later)).toMatchObject({ potentiallyRemovable: 1, protected: 0, alreadyMarked: 1 });
+  const secondBatch = await expireOldJobsBatch({ now: later });
+  expect(secondBatch.jobs).toHaveLength(1);
+  const markers = await db.select().from(jobRetentionTombstone);
+  expect(markers).toHaveLength(2);
+  expect(markers).toEqual(expect.arrayContaining([
+    expect.objectContaining({ originalJobId: first.jobId, externalId: "old-id", batchId: firstBatch.batchId }),
+    expect.objectContaining({ originalJobId: reposted!.jobId, externalId: "new-id", batchId: secondBatch.batchId }),
+  ]));
+  expect(new Set(markers.map((marker) => marker.id)).size).toBe(2);
+  const repeated = await observeRawJobs([publication, { ...publication, externalId: "new-id" }], "lever:acme", { observedAt: later.toISOString() });
+  expect(repeated.map((observation) => observation.outcome)).toEqual(["retired", "retired"]);
+  expect(await db.select().from(job)).toHaveLength(0);
+});
+
+it("mantém o manifesto anterior quando a nova expiração falha", async () => {
+  const publication = { ...raw("old-id"), title: "Engineer" };
+  await observeRawJob(publication, "lever:acme", { observedAt: old });
+  await expireOldJobsBatch({ now });
+  const previous = await db.select().from(jobRetentionTombstone);
+  await observeRawJobs([{ ...publication, externalId: "new-id" }], "lever:acme", { observedAt: now.toISOString() });
+  await db.execute(sql`create function production.reject_expiry_test() returns trigger language plpgsql as $$ begin raise exception 'test rejection'; end $$`);
+  await db.execute(sql`create trigger reject_expiry_test before delete on production.job for each row execute function production.reject_expiry_test()`);
+  await expect(expireOldJobsBatch({ now: new Date("2026-09-14T12:00:00.000Z") })).rejects.toThrow();
+  expect(await db.select().from(jobRetentionTombstone)).toEqual(previous);
+  expect(await db.select().from(job)).toHaveLength(1);
+});
+
+it("migra marcadores existentes preservando os dados do manifesto", async () => {
+  await observeRawJob(raw("existing"), "lever:acme", { observedAt: old });
+  await expireOldJobsBatch({ now });
+  const [before] = await db.select().from(jobRetentionTombstone);
+  if (!before) throw new Error("manifesto ausente");
+  const { id: previousId, ...previous } = before;
+  expect(previousId).toBeTruthy();
+  // Recreate the key shape from 0038 on this test's isolated database.
+  await db.execute(sql`drop index production.job_retention_tombstone_fingerprint_idx`);
+  await db.execute(sql`alter table production.job_retention_tombstone drop column id`);
+  await db.execute(sql`alter table production.job_retention_tombstone add primary key (fingerprint)`);
+  const migration = readFileSync("drizzle/postgres/0039_retention_publication_history.sql", "utf8");
+  await db.transaction(async (tx) => {
+    for (const statement of migration.split("--> statement-breakpoint")) {
+      await tx.execute(sql.raw(statement));
+    }
+  });
+  const [after] = await db.select().from(jobRetentionTombstone);
+  if (!after) throw new Error("manifesto perdido");
+  const { id, ...preserved } = after;
+  expect(id).toMatch(/^[0-9a-f-]{36}$/);
+  expect(preserved).toEqual(previous);
 });

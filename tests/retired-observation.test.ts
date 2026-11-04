@@ -55,3 +55,9 @@ describe("observação de vaga com identidade expirada", () => {
     expect(stored).toMatchObject({ sourceId: "personal-feed", raw: { notes: "Não perder" } });
   });
 });
+
+it("insere nova publicação com o mesmo fingerprint e outro id confiável", async () => {
+  const [result] = await observeRawJobs([{ ...raw, externalId: "new-42" }], "lever:acme");
+  expect(result).toMatchObject({ outcome: "inserted" });
+  expect(await db.select().from(job)).toHaveLength(1);
+});

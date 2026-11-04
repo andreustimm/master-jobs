@@ -274,7 +274,7 @@ db.command("retention")
     }
     await withDb(async () => {
       const before = await inventoryOldJobs();
-      console.log(`Vagas anteriores a 14 dias: ${before.older}; protegidas: ${before.protected}; candidatas estimadas: ${before.potentiallyRemovable}; marcadas para revisão: ${before.alreadyMarked}.`);
+      console.log(`Vagas anteriores a 14 dias: ${before.older}; protegidas: ${before.protected}; candidatas estimadas: ${before.potentiallyRemovable}; candidatas com descarte anterior do mesmo fingerprint: ${before.alreadyMarked}.`);
       if (!opts.apply) {
         console.log("Somente inventário: nenhum dado foi alterado.");
         return;
@@ -288,7 +288,7 @@ db.command("retention")
       }
       console.log(`Total expirado nesta execução: ${removed}.`);
       const after = await inventoryOldJobs();
-      console.log(`Candidatas estimadas restantes: ${after.potentiallyRemovable}; registros já marcados para revisão: ${after.alreadyMarked}.`);
+      console.log(`Candidatas estimadas restantes: ${after.potentiallyRemovable}; candidatas com descarte anterior do mesmo fingerprint: ${after.alreadyMarked}.`);
     });
   });
 
@@ -299,7 +299,7 @@ db.command("retention-inventory")
       const result = await inventoryOldJobs();
       console.log(`Jobs older than 14 days: ${result.older}`);
       console.log(`Protected by known interactions: ${result.protected}`);
-      console.log(`Already marked and retained for review: ${result.alreadyMarked}`);
+      console.log(`Eligible jobs sharing a fingerprint with an earlier expiry: ${result.alreadyMarked}`);
       console.log(`Potentially removable (estimate only): ${result.potentiallyRemovable}`);
       console.log("No data changed; reimport protection and final validation are required before deletion.");
     });

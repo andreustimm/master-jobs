@@ -604,6 +604,21 @@ tabela e repita a operação. O limite é de 500 vagas por transação e 1.000
 transações por chamada. A rotina existente `db cleanup` continua limitada a
 vagas fechadas.
 
+Cada publicação descartada recebe uma linha própria com UUID no manifesto.
+Uma republicação com o mesmo fingerprint pode expirar novamente após 14 dias,
+preservando os IDs externos e os lotes dos descartes anteriores. No inventário,
+`alreadyMarked` conta as candidatas que compartilham fingerprint com um descarte
+anterior; esse número já está incluído em `potentiallyRemovable`.
+
+A ingestão usa o ID externo confiável dentro da mesma fonte para reconhecer uma
+publicação descartada. Outro ID confiável na mesma fonte permite uma publicação
+nova, assim como uma data de publicação posterior ao descarte, inclusive quando
+a fonte reutiliza o ID. Quando só o fingerprint identifica a vaga, a supressão
+dura 90 dias contados do descarte. Essa janela evita bloquear para sempre novas
+contratações com a mesma empresa, título e local, mas pode readmitir uma listagem
+antiga sem identidade confiável depois do prazo. Vagas com linha viva e inclusões
+de origem humana continuam prevalecendo sobre os marcadores.
+
 Antes do primeiro descarte e após mudanças no banco, crie um backup de esquema e
 dados e restaure-o em banco isolado; registre no relatório o resultado e as
 limitações da verificação. O atestado JSON usado pelo comando tem `version: 1`,

@@ -214,6 +214,7 @@ async function loadTombstones(db: Database, fingerprints: string[], sourceId: st
     sourceId: jobRetentionTombstone.sourceId,
     externalId: jobRetentionTombstone.externalId,
     externalUsable: jobRetentionTombstone.externalUsable,
+    expiredAt: jobRetentionTombstone.expiredAt,
   }).from(jobRetentionTombstone).where(or(byFingerprint, byExternal));
 }
 
@@ -298,9 +299,10 @@ export async function observeRawJob(
     const [sourceRow] = await tx.select({ kind: source.kind }).from(source).where(eq(source.id, sourceId)).limit(1);
     if (!sourceRow) throw new Error(`Fonte inexistente: ${sourceId}`);
     const identity = options.fingerprintOverride ?? fingerprint(raw);
-    const markers = await loadTombstones(tx, [identity], sourceId, [options.externalKey ?? null]);
+    const retiredExternalKey = options.externalKey ?? usableExternalId(raw.externalId, new Set());
+    const markers = await loadTombstones(tx, [identity], sourceId, [retiredExternalKey]);
     // Caller caches may predate the lock and cannot prove current identity.
-    return observeRawJobInTransaction(tx, raw, sourceId, { ...options, companies, known: undefined, byExternal: undefined }, markers, sourceRow.kind);
+    return observeRawJobInTransaction(tx, raw, sourceId, { ...options, companies, known: undefined, byExternal: undefined }, markers, sourceRow.kind, retiredExternalKey);
   });
   if (result.outcome === "retired") throw new Error("A vaga foi descartada pela retenção; importe manualmente para incluí-la novamente.");
   if (options.companies) for (const [slug, id] of companies) options.companies.set(slug, id);
@@ -314,6 +316,7 @@ async function observeRawJobInTransaction(
   options: ObserveRawJobOptions,
   tombstones: RetiredIdentity[],
   sourceKind: string,
+  retiredExternalKey: string | null = options.externalKey ?? null,
 ): Promise<ObservationResult> {
   const observedAt = options.observedAt ?? new Date().toISOString();
   const identity = options.fingerprintOverride ?? fingerprint(raw);
@@ -337,9 +340,11 @@ async function observeRawJobInTransaction(
   if (isRetiredObservation({
     fingerprint: identity,
     sourceId,
-    externalKey: options.externalKey ?? null,
+    externalKey: retiredExternalKey,
     hasLiveMatch: existing !== undefined,
     humanAuthored,
+    observedAt,
+    postedAt: toIsoDate(raw.postedAt),
     tombstones,
   })) {
     return { jobId: null, fingerprint: identity, outcome: "retired", contentChanged: false, invalidatedScores: 0 };

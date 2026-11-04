@@ -45,8 +45,11 @@ fechadas; `expireOldJobsBatch` considera vagas observadas há mais de 14 dias.
 Ambas preservam candidaturas e outras interações conhecidas, vagas arquivadas e
 de origem humana, travam as linhas e conferem novamente o predicado antes do
 descarte. A expiração de 14 dias registra a identidade compacta na mesma
-transação e sincroniza com a observação para impedir reimportação como vaga
-nova. Expiração administrativa não define `closedAt`. Nenhum caminho de
+transação e sincroniza com a observação para impedir reimportação da mesma
+publicação como vaga nova. Cada descarte preserva seu manifesto, mesmo se uma
+nova publicação repetir o fingerprint. Outro ID confiável na mesma fonte ou
+uma data de publicação posterior ao descarte permite republicação; a supressão
+baseada só em fingerprint dura 90 dias. Expiração administrativa não define `closedAt`. Nenhum caminho de
 ingestão apaga `job`.
 
 Origem: regra 3. Detalhes: [data-model.md](../../data-model.md) ("Vaga que some

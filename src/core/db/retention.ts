@@ -176,7 +176,7 @@ async function deleteLockedJobs(tx: Transaction, ids: number[], eligible: SQL): 
     .returning({ id: job.id });
 }
 
-/** Read-only estimate; candidates cannot be deleted until reimport protection exists. */
+/** Read-only estimate. Earlier markers remain history and do not exempt a new publication. */
 export async function inventoryOldJobs(now = new Date()): Promise<{
   older: number;
   potentiallyRemovable: number;
@@ -190,13 +190,13 @@ export async function inventoryOldJobs(now = new Date()): Promise<{
   const hasMarker = sql`exists (select 1 from ${jobRetentionTombstone} t where t.fingerprint = "job"."fingerprint")`;
   const [row] = await getDb().select({
     older: sql<number>`count(*)::int`,
-    potentiallyRemovable: sql<number>`count(*) filter (where ${noInteraction} and not ${hasMarker})::int`,
+    potentiallyRemovable: sql<number>`count(*) filter (where ${noInteraction})::int`,
     alreadyMarked: sql<number>`count(*) filter (where ${noInteraction} and ${hasMarker})::int`,
   }).from(job).where(lt(job.firstSeenAt, before));
   const older = Number(row?.older ?? 0);
   const potentiallyRemovable = Number(row?.potentiallyRemovable ?? 0);
   const alreadyMarked = Number(row?.alreadyMarked ?? 0);
-  return { older, potentiallyRemovable, alreadyMarked, protected: older - potentiallyRemovable - alreadyMarked };
+  return { older, potentiallyRemovable, alreadyMarked, protected: older - potentiallyRemovable };
 }
 
 /**
@@ -218,11 +218,10 @@ export async function expireOldJobsBatch(options: { now?: Date; limit?: number }
     lt(job.firstSeenAt, before),
     hasNoHumanInteraction(job.id, job.sourceId, job.postedByUserId, job.archivedAt),
   );
-  const withoutExistingMarker = sql`not exists (select 1 from ${jobRetentionTombstone} t where t.fingerprint = ${job.fingerprint})`;
   return getDb().transaction(async (tx) => {
     await tx.execute(sql`set local lock_timeout = '5s'`);
     await tx.execute(sql`lock table ${job} in share row exclusive mode`);
-    const locked = await tx.select({ id: job.id }).from(job).where(and(eligible, withoutExistingMarker)).orderBy(job.id).limit(limit).for("update", { skipLocked: true });
+    const locked = await tx.select({ id: job.id }).from(job).where(eligible).orderBy(job.id).limit(limit).for("update", { skipLocked: true });
     if (!locked.length) return { batchId, jobs: [] };
     // A fresh READ COMMITTED snapshot after the row locks observes interactions
     // that committed while selection waited; the predicate is applied again.
@@ -237,7 +236,7 @@ export async function expireOldJobsBatch(options: { now?: Date; limit?: number }
         and not exists (select 1 from ${jobRetentionTombstone} t where t.source_id = "job"."source_id"
           and t.external_id = "job"."external_id" and t.fingerprint <> "job"."fingerprint")
       )`,
-    }).from(job).where(and(inArray(job.id, ids), eligible, withoutExistingMarker));
+    }).from(job).where(and(inArray(job.id, ids), eligible));
     if (!selected.length) return { batchId, jobs: [] };
     // An external id reused by distinct postings must never suppress either
     // solely by that id. Mark older tombstones ambiguous as well.
@@ -247,12 +246,14 @@ export async function expireOldJobsBatch(options: { now?: Date; limit?: number }
         eq(jobRetentionTombstone.sourceId, row.sourceId), eq(jobRetentionTombstone.externalId, row.externalId),
       ))));
     }
+    // Append a manifest row for each removed publication. An older posting
+    // with the same fingerprint keeps its own identity and batch evidence.
     const inserted = await tx.insert(jobRetentionTombstone).values(selected.map((row) => ({
         fingerprint: row.fingerprint, sourceId: row.sourceId, externalId: row.externalId,
         externalUsable: row.externalUsable, firstSeenAt: row.firstSeenAt, expiredAt: now.toISOString(),
         originalJobId: row.id, batchId,
-    }))).onConflictDoNothing().returning({ fingerprint: jobRetentionTombstone.fingerprint });
-    if (inserted.length !== selected.length) throw new Error("Retenção concorrente: marcador duplicado, lote revertido.");
+    }))).returning({ fingerprint: jobRetentionTombstone.fingerprint });
+    if (inserted.length !== selected.length) throw new Error("Retenção: manifesto incompleto, lote revertido.");
     const removed = await deleteLockedJobs(tx, selected.map((row) => row.id), eligible!);
     if (removed.length !== selected.length) throw new Error("Retenção concorrente: lote revertido por mudança de elegibilidade.");
     return { batchId, jobs: selected.map(({ id, fingerprint, sourceId, externalId }) => ({ id, fingerprint, sourceId, externalId })) };

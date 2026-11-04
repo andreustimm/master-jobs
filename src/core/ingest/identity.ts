@@ -109,7 +109,10 @@ export type RetiredIdentity = {
   sourceId: string;
   externalId: string;
   externalUsable: boolean;
+  expiredAt: string;
 };
+
+export const RETIRED_FINGERPRINT_DAYS = 90;
 
 /**
  * A live row wins over a marker: it may contain a person's decisions. External
@@ -123,11 +126,23 @@ export function isRetiredObservation(input: {
   hasLiveMatch: boolean;
   humanAuthored: boolean;
   tombstones: readonly RetiredIdentity[];
+  observedAt: string;
+  postedAt?: string | null;
 }): boolean {
   if (input.hasLiveMatch || input.humanAuthored) return false;
-  return input.tombstones.some((marker) =>
-    marker.fingerprint === input.fingerprint ||
-    (input.externalKey !== null && marker.externalUsable &&
-      marker.sourceId === input.sourceId && marker.externalId === input.externalKey),
-  );
+  const observed = Date.parse(input.observedAt);
+  const posted = Date.parse(input.postedAt ?? "");
+  return input.tombstones.some((marker) => {
+    const expired = Date.parse(marker.expiredAt);
+    // A publication dated after removal is a new posting, including reused IDs.
+    if (Number.isFinite(posted) && posted > expired) return false;
+    const sameSource = marker.sourceId === input.sourceId;
+    const reliableIds = input.externalKey !== null && marker.externalUsable;
+    if (sameSource && reliableIds) return marker.externalId === input.externalKey;
+    // Fingerprints contain only company/title/location. Keep their fallback
+    // suppression bounded so future hiring for the same role can be discovered.
+    const withinWindow = Number.isFinite(observed) && Number.isFinite(expired)
+      && observed >= expired && observed - expired < RETIRED_FINGERPRINT_DAYS * 86_400_000;
+    return marker.fingerprint === input.fingerprint && withinWindow;
+  });
 }
