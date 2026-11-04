@@ -119,6 +119,7 @@ async function ingest(
   let attributed = 0;
   const observations = await observeRawJobs(jobs, sourceId, { keepExistingSource: true });
   for (const [index, observation] of observations.entries()) {
+    if (observation.outcome === "retired") continue;
     if (observation.outcome === "inserted") created++;
     else known++;
     // Do anúncio, não da linha gravada: as tags só existem aqui, a observação

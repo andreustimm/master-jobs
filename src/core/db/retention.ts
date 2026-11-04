@@ -14,13 +14,16 @@
  * audit window, so it goes after 30 days. The account itself lives in
  * `auth_user` and is untouched.
  */
+import { randomUUID } from "node:crypto";
 import {
   and,
+  eq,
   inArray,
   isNotNull,
   lt,
   lte,
   notInArray,
+  or,
   sql,
   type SQL,
   type SQLWrapper,
@@ -32,10 +35,12 @@ import {
   job,
   jobAnalysis,
   jobPage,
+  jobRetentionTombstone,
   mailSuggestion,
   recruiterDirectoryQuery,
   recruiterInvite,
   recruiterSuggestion,
+  scrapeTask,
   source,
   verifyTask,
 } from "./schema.ts";
@@ -160,7 +165,15 @@ function hasNoHumanInteraction(id: SQLWrapper, sourceId: SQLWrapper, authorId: S
     and not exists (select 1 from ${mailSuggestion} m where m.job_id = ${id})
     and not exists (select 1 from ${recruiterSuggestion} r where r.job_id = ${id})
     and not exists (select 1 from ${verifyTask} v where v.job_id = ${id})
+    and not exists (select 1 from ${scrapeTask} q where q.job_id = ${id})
   )`;
+}
+
+/** Called only after row locks; rechecks eligibility in the DELETE statement. */
+async function deleteLockedJobs(tx: Transaction, ids: number[], eligible: SQL): Promise<{ id: number }[]> {
+  return tx.delete(job)
+    .where(and(sql`${job.id} = any(${`{${ids.join(",")}}`}::int[])`, eligible))
+    .returning({ id: job.id });
 }
 
 /** Read-only estimate; candidates cannot be deleted until reimport protection exists. */
@@ -168,16 +181,82 @@ export async function inventoryOldJobs(now = new Date()): Promise<{
   older: number;
   potentiallyRemovable: number;
   protected: number;
+  alreadyMarked: number;
 }> {
   const before = cutoff(now, DEFAULT_JOB_RETENTION_DAYS);
-  const noInteraction = hasNoHumanInteraction(job.id, job.sourceId, job.postedByUserId, job.archivedAt);
+  // Drizzle unqualifies columns in a single-table SELECT projection; explicit
+  // outer aliases keep correlated subqueries bound to the job, not their inner row.
+  const noInteraction = hasNoHumanInteraction(sql`"job"."id"`, sql`"job"."source_id"`, sql`"job"."posted_by_user_id"`, sql`"job"."archived_at"`);
+  const hasMarker = sql`exists (select 1 from ${jobRetentionTombstone} t where t.fingerprint = "job"."fingerprint")`;
   const [row] = await getDb().select({
     older: sql<number>`count(*)::int`,
-    potentiallyRemovable: sql<number>`count(*) filter (where ${noInteraction})::int`,
+    potentiallyRemovable: sql<number>`count(*) filter (where ${noInteraction} and not ${hasMarker})::int`,
+    alreadyMarked: sql<number>`count(*) filter (where ${noInteraction} and ${hasMarker})::int`,
   }).from(job).where(lt(job.firstSeenAt, before));
   const older = Number(row?.older ?? 0);
   const potentiallyRemovable = Number(row?.potentiallyRemovable ?? 0);
-  return { older, potentiallyRemovable, protected: older - potentiallyRemovable };
+  const alreadyMarked = Number(row?.alreadyMarked ?? 0);
+  return { older, potentiallyRemovable, alreadyMarked, protected: older - potentiallyRemovable - alreadyMarked };
+}
+
+/**
+ * Expires one bounded batch and records identities in the same transaction.
+ * The table lock conflicts with observation's lock: ingestion cannot read an
+ * absent tombstone and then insert after this transaction commits. Callers
+ * must separately enforce backup, manifest persistence and operational gates.
+ */
+export async function expireOldJobsBatch(options: { now?: Date; limit?: number } = {}): Promise<{
+  batchId: string;
+  jobs: { id: number; fingerprint: string; sourceId: string; externalId: string }[];
+}> {
+  const limit = options.limit ?? 100;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw new Error("limit deve estar entre 1 e 500.");
+  const now = options.now ?? new Date();
+  const batchId = randomUUID();
+  const before = cutoff(now, DEFAULT_JOB_RETENTION_DAYS);
+  const eligible = and(
+    lt(job.firstSeenAt, before),
+    hasNoHumanInteraction(job.id, job.sourceId, job.postedByUserId, job.archivedAt),
+  );
+  const withoutExistingMarker = sql`not exists (select 1 from ${jobRetentionTombstone} t where t.fingerprint = ${job.fingerprint})`;
+  return getDb().transaction(async (tx) => {
+    await tx.execute(sql`set local lock_timeout = '5s'`);
+    await tx.execute(sql`lock table ${job} in share row exclusive mode`);
+    const locked = await tx.select({ id: job.id }).from(job).where(and(eligible, withoutExistingMarker)).orderBy(job.id).limit(limit).for("update", { skipLocked: true });
+    if (!locked.length) return { batchId, jobs: [] };
+    // A fresh READ COMMITTED snapshot after the row locks observes interactions
+    // that committed while selection waited; the predicate is applied again.
+    const ids = locked.map((row) => row.id);
+    const selected = await tx.select({
+      id: job.id, fingerprint: job.fingerprint, sourceId: job.sourceId,
+      externalId: job.externalId, firstSeenAt: job.firstSeenAt,
+      externalUsable: sql<boolean>`(
+        btrim("job"."external_id") <> '' and "job"."external_id" = btrim("job"."external_id")
+        and not exists (select 1 from ${job} other where other.source_id = "job"."source_id"
+          and other.external_id = "job"."external_id" and other.id <> "job"."id")
+        and not exists (select 1 from ${jobRetentionTombstone} t where t.source_id = "job"."source_id"
+          and t.external_id = "job"."external_id" and t.fingerprint <> "job"."fingerprint")
+      )`,
+    }).from(job).where(and(inArray(job.id, ids), eligible, withoutExistingMarker));
+    if (!selected.length) return { batchId, jobs: [] };
+    // An external id reused by distinct postings must never suppress either
+    // solely by that id. Mark older tombstones ambiguous as well.
+    const ambiguous = selected.filter((row) => !row.externalUsable && row.externalId.trim());
+    if (ambiguous.length) {
+      await tx.update(jobRetentionTombstone).set({ externalUsable: false }).where(or(...ambiguous.map((row) => and(
+        eq(jobRetentionTombstone.sourceId, row.sourceId), eq(jobRetentionTombstone.externalId, row.externalId),
+      ))));
+    }
+    const inserted = await tx.insert(jobRetentionTombstone).values(selected.map((row) => ({
+        fingerprint: row.fingerprint, sourceId: row.sourceId, externalId: row.externalId,
+        externalUsable: row.externalUsable, firstSeenAt: row.firstSeenAt, expiredAt: now.toISOString(),
+        originalJobId: row.id, batchId,
+    }))).onConflictDoNothing().returning({ fingerprint: jobRetentionTombstone.fingerprint });
+    if (inserted.length !== selected.length) throw new Error("Retenção concorrente: marcador duplicado, lote revertido.");
+    const removed = await deleteLockedJobs(tx, selected.map((row) => row.id), eligible!);
+    if (removed.length !== selected.length) throw new Error("Retenção concorrente: lote revertido por mudança de elegibilidade.");
+    return { batchId, jobs: selected.map(({ id, fingerprint, sourceId, externalId }) => ({ id, fingerprint, sourceId, externalId })) };
+  });
 }
 
 /**
@@ -214,12 +293,7 @@ export async function deleteClosedJobsWithoutApplication(
     .orderBy(job.id)
     .for("update");
   if (locked.length === 0) return [];
-  return tx
-    .delete(job)
-    // One array parameter, not one parameter per id: a large prune would
-    // otherwise hit the protocol's 65 535-parameter ceiling.
-    .where(and(sql`${job.id} = any(${`{${locked.map((row) => row.id).join(",")}}`}::int[])`, eligible))
-    .returning({ id: job.id });
+  return deleteLockedJobs(tx, locked.map((row) => row.id), eligible!);
 }
 
 /**

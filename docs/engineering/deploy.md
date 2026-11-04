@@ -595,10 +595,31 @@ failovers.
 > 03/09/2026 é apenas o diagnóstico histórico; consulte os
 > [gates documentados](../operations/turso-quota-incident-2026-09-03.md).
 
-`pnpm jho db retention-inventory` estima vagas com mais de 14 dias e as que
-têm vínculos conhecidos; é somente leitura. A estimativa não autoriza descarte:
-faltam proteção contra reimportação, validação integral das interações e backup
-atualizado. A rotina existente `db cleanup` continua limitada a vagas fechadas.
+`pnpm jho db retention` e `pnpm jho db retention-inventory` estimam vagas com
+mais de 14 dias sem alterar dados. Para expirar um lote, use
+`pnpm jho db retention --apply --backup-attestation <arquivo> --limit 100 --batches 1`.
+Cada lote confirma uma transação e registra seu identificador e as identidades
+removidas em `production.job_retention_tombstone`; em interrupção, consulte a
+tabela e repita a operação. O limite é de 500 vagas por transação e 1.000
+transações por chamada. A rotina existente `db cleanup` continua limitada a
+vagas fechadas.
+
+Antes do primeiro descarte e após mudanças no banco, crie um backup de esquema e
+dados e restaure-o em banco isolado; registre no relatório o resultado e as
+limitações da verificação. O atestado JSON usado pelo comando tem `version: 1`,
+`database` (`supabase:<project-ref>` ou `local:<nome-do-banco>`), `capturedAt`,
+`restoreValidatedAt` e três objetos `data`, `schema`, `restoreEvidence`, cada um
+com `path` e `sha256`. Caminhos relativos partem da pasta do atestado. O comando
+confere o banco, a idade de até 24 horas, a ordem dos horários e os hashes de
+três arquivos distintos. Esses controles comprovam a integridade dos arquivos e
+a declaração do operador; **não executam nem comprovam a restauração**. Guarde
+backup e relatório em diretório privado e nunca os inclua no Git.
+
+Compare contagens de dados protegidos e `pg_database_size` antes e depois. A
+exclusão libera páginas para reuso, mas pode não reduzir imediatamente o
+tamanho físico; qualquer operação de compactação exige avaliar espaço livre e
+locks na cópia restaurada antes de produção. O bloqueio por tráfego excedido é
+independente da redução do tamanho do banco.
 
 Quando habilitado, `.github/workflows/varredura.yml` roda a coleta completa
 contra **produção** às segundas às 06:00 UTC (03:00 em São Paulo), incluindo

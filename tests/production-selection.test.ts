@@ -60,6 +60,10 @@ it("imports the selected snapshot into PostgreSQL and verifies the committed row
   try {
     await migratePostgres(db, { migrationsFolder: "./drizzle/postgres" });
     const selection = selectProduction(path);
+    await client`insert into production.job_retention_tombstone (fingerprint, source_id, external_id, first_seen_at, expired_at) values ('one', 'web', 'one', '2026-01-01', '2026-02-01')`;
+    await expect(importProduction(client, selection)).rejects.toThrow("Target has retention markers");
+    expect(Number((await client`select count(*) n from production.job_retention_tombstone`)[0]!.n)).toBe(1);
+    await client`delete from production.job_retention_tombstone`;
     const corrupt = structuredClone(selection);
     corrupt.manifest[0]!.sha256 = "0".repeat(64);
     await expect(importProduction(client, corrupt)).rejects.toThrow("Target data verification failed");

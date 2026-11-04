@@ -58,7 +58,7 @@ A numeração é estável: código e testes citam "regra N".
    aceita: a decisão dela é o único dado irrecuperável.
    [[G02](docs/engineering/rules/data-and-sourcing.md#g02)]
 3. **Vaga que some é fechada (`closedAt`), não deletada**; o único descarte é a
-   retenção administrativa, que preserva vaga com candidatura.
+   retenção administrativa, que preserva vagas com interação ou origem humana.
    [[G03](docs/engineering/rules/data-and-sourcing.md#g03)]
 4. **Variação real entra por porta; domínio é puro.** Fonte, fila, LLM e
    armazenamento: porta + adapter; porta sem alternativa plausível é cerimônia.

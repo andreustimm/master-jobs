@@ -710,7 +710,8 @@ describe("write-path invariants (ADR 0005)", () => {
     expect(guarded).toContain('.for("update")');
     expect(guarded).toContain("hasNoHumanInteraction(job.id, job.sourceId, job.postedByUserId, job.archivedAt)");
     expect(guarded).toContain(".where(eligible)");
-    expect(guarded).toContain("::int[])`, eligible))");
+    expect(guarded).toContain("deleteLockedJobs(tx, locked.map((row) => row.id), eligible!)");
+    expect(retention).toContain("::int[])`, eligible))");
     expect(retention).toContain("not exists (select 1 from ${application} a where a.job_id = ${id})");
   });
 });

@@ -267,6 +267,13 @@
       "when": 1793748977403,
       "tag": "0037_job_retention_tombstone",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1793750614328,
+      "tag": "0038_retention_batch_manifest",
+      "breakpoints": true
     }
   ]
 }

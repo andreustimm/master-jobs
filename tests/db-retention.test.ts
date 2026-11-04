@@ -11,6 +11,7 @@ import {
   mailMessage,
   mailSuggestion,
   recruiterSuggestion,
+  scrapeTask,
   source,
   verifyTask,
 } from "../src/core/db/schema.ts";
@@ -119,8 +120,19 @@ describe("retenção do banco", () => {
     await db.update(job).set({ firstSeenAt: "2026-08-01T00:00:00.000Z" }).where(eq(job.id, oldId));
     await db.update(job).set({ firstSeenAt: "2026-08-01T00:00:00.000Z", archivedAt: "2026-08-02T00:00:00.000Z" }).where(eq(job.id, protectedId));
     await db.update(job).set({ firstSeenAt: "2026-08-28T00:00:00.000Z" }).where(eq(job.id, recentId));
-    expect(await inventoryOldJobs(new Date("2026-08-29T12:00:00.000Z"))).toEqual({ older: 2, potentiallyRemovable: 1, protected: 1 });
+    expect(await inventoryOldJobs(new Date("2026-08-29T12:00:00.000Z"))).toEqual({ older: 2, potentiallyRemovable: 1, protected: 1, alreadyMarked: 0 });
     expect(await db.select().from(job)).toHaveLength(3);
+  });
+
+  it("inventário relaciona candidatura à vaga, mesmo quando os ids são diferentes", async () => {
+    const oldId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "correlated-unprotected");
+    const trackedId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "correlated-tracked");
+    await db.update(job).set({ firstSeenAt: "2026-08-01T00:00:00.000Z" });
+    const [owner] = await db.insert(candidate).values({ slug: "owner", name: "Owner" }).returning();
+    const [app] = await db.insert(application).values({ candidateId: owner!.id, jobId: trackedId, status: "applied" }).returning();
+    expect(app!.id).not.toBe(trackedId);
+    expect(await inventoryOldJobs(new Date("2026-08-29T12:00:00.000Z"))).toEqual({ older: 2, potentiallyRemovable: 1, protected: 1, alreadyMarked: 0 });
+    expect(await db.select().from(job).where(eq(job.id, oldId))).toHaveLength(1);
   });
 
   it("aplica a limpeza e nunca remove vaga ligada a candidatura", async () => {
@@ -168,6 +180,7 @@ describe("retenção do banco", () => {
     const periodicId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "periodic");
     const archivedId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "archived");
     const authoredId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "authored");
+    const scrapingId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "scraping");
     const untrackedId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "untracked");
     const archivedApplicationId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "archived-application");
     const recruiterId = await seedLegacyWebJob("2020-01-01T00:00:00.000Z", "recruiter");
@@ -187,17 +200,19 @@ describe("retenção do banco", () => {
     await db.insert(mailSuggestion).values({ jobId: mailId, mailId: message!.id });
     await db.insert(verifyTask).values({ jobId: verifiedId, url: "https://example.test", origin: "user" });
     await db.insert(verifyTask).values({ jobId: periodicId, url: "https://example.test/periodic", origin: "periodic" });
+    await db.insert(scrapeTask).values({ jobId: scrapingId, url: "https://example.test/scraping" });
     await db.insert(recruiterSuggestion).values({ jobId: recruiterId, candidateId: owner!.id });
 
     const result = await runDatabaseCleanup({ apply: true, now: new Date("2026-08-29T12:00:00.000Z"), closedJobDays: 90 });
     expect(result.candidates.closedJobs).toBe(1);
     expect(result.applied?.prunedJobs).toBe(1);
     const ids = (await db.select({ id: job.id }).from(job)).map((row) => row.id);
-    expect(ids).toEqual(expect.arrayContaining([analysisId, mailId, verifiedId, periodicId, archivedId, authoredId, untrackedId, archivedApplicationId, recruiterId, manualId]));
+    expect(ids).toEqual(expect.arrayContaining([analysisId, mailId, verifiedId, periodicId, archivedId, authoredId, scrapingId, untrackedId, archivedApplicationId, recruiterId, manualId]));
     expect(ids).not.toContain(removableId);
     expect(await db.select().from(jobAnalysis)).toHaveLength(1);
     expect(await db.select().from(mailSuggestion)).toHaveLength(1);
     expect(await db.select().from(verifyTask)).toHaveLength(2);
+    expect(await db.select().from(scrapeTask)).toHaveLength(1);
     expect(await db.select().from(recruiterSuggestion)).toHaveLength(1);
     expect(await db.select().from(application)).toHaveLength(2);
   });

@@ -236,6 +236,8 @@ export const jobRetentionTombstone = production.table(
     firstSeenAt: text("first_seen_at").notNull(),
     expiredAt: text("expired_at").notNull(),
     policyVersion: integer("policy_version").notNull().default(1),
+    originalJobId: integer("original_job_id"),
+    batchId: text("batch_id"),
   },
   (t) => [index("job_retention_tombstone_source_external_idx").on(t.sourceId, t.externalId)],
 );
