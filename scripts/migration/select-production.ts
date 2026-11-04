@@ -88,6 +88,8 @@ export const postSnapshotColumns: Record<string, Record<string, unknown>> = {
  * e fila, atribuição e cota de captura por termo são estado operacional.
  */
 export const postSnapshotTables = new Set([
+  // Marcadores pertencem ao alvo e nunca vieram do snapshot SQLite legado.
+  "job_retention_tombstone",
   "target_track",
   "saved_term",
   "saved_term_request",

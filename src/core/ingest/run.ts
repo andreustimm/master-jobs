@@ -209,6 +209,7 @@ async function syncOne(config: SourceConfig, companies: Map<string, number>): Pr
 
     const usable = rawJobs.filter((raw) => raw.title && raw.url);
     for (const observation of await observeRawJobs(usable, id, { observedAt: stamp, companies })) {
+      if (observation.outcome === "retired") continue;
       seenIds.add(observation.jobId);
       if (observation.outcome === "inserted") result.inserted++;
       if (observation.outcome === "unchanged") result.unchanged++;

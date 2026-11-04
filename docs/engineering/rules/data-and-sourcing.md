@@ -40,12 +40,17 @@ Prova: `tests/db-decision-integrity.test.ts`, `tests/cov-cli-ingestao.test.ts`,
 key.
 
 **Exceção nomeada** (resolve C04). O único descarte autorizado é a retenção
-administrativa (`jho db prune`, `jho db cleanup --apply`), que passa por
-`deleteClosedJobsWithoutApplication()` em `src/core/db/retention.ts`: só vaga
-fechada e elegível, **sem** candidatura, com `SELECT ... FOR UPDATE` seguido de
-nova conferência do predicado, para que uma candidatura confirmada durante o
-descarte não seja apagada em cascata. Explicitar a exceção não amplia a
-autorização: nenhum outro caminho apaga `job`.
+administrativa em `src/core/db/retention.ts`: a poda anterior considera vagas
+fechadas; `expireOldJobsBatch` considera vagas observadas há mais de 14 dias.
+Ambas preservam candidaturas e outras interações conhecidas, vagas arquivadas e
+de origem humana, travam as linhas e conferem novamente o predicado antes do
+descarte. A expiração de 14 dias registra a identidade compacta na mesma
+transação e sincroniza com a observação para impedir reimportação da mesma
+publicação como vaga nova. Cada descarte preserva seu manifesto, mesmo se uma
+nova publicação repetir o fingerprint. Outro ID confiável na mesma fonte ou
+uma data de publicação posterior ao descarte permite republicação; a supressão
+baseada só em fingerprint dura 90 dias. Expiração administrativa não define `closedAt`. Nenhum caminho de
+ingestão apaga `job`.
 
 Origem: regra 3. Detalhes: [data-model.md](../../data-model.md) ("Vaga que some
 é fechada, não deletada"). Prova: `tests/db-retention.test.ts`,

@@ -40,7 +40,9 @@ export async function importProduction(sql: postgres.Sql, selection: ReturnType<
     }
     // Locks cover the empty-target check and the entire load, preventing races
     // with a mistakenly connected writer. No FK or trigger is disabled.
-    await tx.unsafe(`LOCK TABLE ${tables.map((t) => qualified(t.name)).sort().join(",")} IN ACCESS EXCLUSIVE MODE`);
+    await tx.unsafe(`LOCK TABLE ${[...tables.map((t) => qualified(t.name)), qualified("job_retention_tombstone")].sort().join(",")} IN ACCESS EXCLUSIVE MODE`);
+    const [markers] = await tx<{ n: number }[]>`SELECT count(*)::int AS n FROM production.job_retention_tombstone`;
+    if (markers!.n !== 0) throw new Error("Target has retention markers: legacy import would reintroduce expired vacancies");
     for (const table of tables) {
       const count = await tx.unsafe(`SELECT count(*) AS n FROM ${qualified(table.name)}`);
       if (Number(count[0]!.n) !== 0) throw new Error(`Target is not empty: ${table.name}`);

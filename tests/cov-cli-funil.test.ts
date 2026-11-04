@@ -24,18 +24,24 @@
  * Fronteira FORA: rede (nenhum caso aqui abre socket) e formatação de tabela.
  */
 import { eq } from "drizzle-orm";
+import { createHash } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { syncCandidateFromProfile } from "../src/core/candidate.ts";
 import {
   application,
   applicationEvent,
   job,
+  jobRetentionTombstone,
   mailMessage,
   mailSuggestion,
   source,
 } from "../src/core/db/schema.ts";
 import { releaseTestDb, useTestDb } from "./support/db.ts";
 import { banco, carregarCli, rodar } from "./cov-cli-harness.ts";
+import { databaseIdentity } from "../src/core/db/backup-attestation.ts";
 
 vi.mock("commander", async () => (await import("./cov-cli-harness.ts")).commanderMock());
 
@@ -369,7 +375,9 @@ describe("jho db prune", () => {
 
   it("`--days` chega ao domínio como número, não como a string do argv", async () => {
     const dozeDias = new Date(Date.now() - 12 * 86_400_000).toISOString();
-    await semearVaga({ id: "velha", fechadaEm: dozeDias });
+    const vagaId = await semearVaga({ id: "velha", fechadaEm: dozeDias });
+    await banco().insert(source).values({ id: "lever:teste", kind: "lever", handle: "teste", label: "Teste" });
+    await banco().update(job).set({ sourceId: "lever:teste" }).where(eq(job.id, vagaId));
 
     const r = await rodar("db", "prune", "--days", "7");
 
@@ -391,6 +399,47 @@ describe("jho db prune", () => {
     // chave estrangeira, e a candidatura é o dado irrecuperável.
     expect(r.out).toContain("pruned 0 closed job(s)");
     expect(await banco().select().from(job)).toHaveLength(1);
+  });
+});
+
+describe("jho db retention", () => {
+  it("não exclui sem --apply e recusa aplicação sem atestado de backup", async () => {
+    const id = await semearVaga({ id: "retention" });
+    await banco().insert(source).values({ id: "lever:retention", kind: "lever", handle: "retention", label: "Retention" });
+    await banco().update(job).set({ sourceId: "lever:retention", firstSeenAt: "2020-01-01T00:00:00.000Z" }).where(eq(job.id, id));
+    const dry = await rodar("db", "retention");
+    expect(dry.out).toContain("Somente inventário");
+    expect(await banco().select().from(job)).toHaveLength(1);
+    const refused = await rodar("db", "retention", "--apply");
+    expect((refused.erro as Error).message).toContain("backup-attestation");
+    expect(await banco().select().from(job)).toHaveLength(1);
+  });
+
+  it("aplica lote com atestado íntegro e deixa manifesto recuperável", async () => {
+    const id = await semearVaga({ id: "retention-apply" });
+    await banco().insert(source).values({ id: "lever:retention", kind: "lever", handle: "retention", label: "Retention" });
+    await banco().update(job).set({ sourceId: "lever:retention", firstSeenAt: "2020-01-01T00:00:00.000Z" }).where(eq(job.id, id));
+    const dir = await mkdtemp(join(tmpdir(), "retention-cli-"));
+    try {
+      const file = async (name: string) => {
+        await writeFile(join(dir, name), name);
+        return { path: name, sha256: createHash("sha256").update(name).digest("hex") };
+      };
+      const manifest = {
+        version: 1, database: databaseIdentity(process.env.DATABASE_URL!),
+        capturedAt: new Date(Date.now() - 120_000).toISOString(), restoreValidatedAt: new Date(Date.now() - 60_000).toISOString(),
+        data: await file("data.sql"), schema: await file("schema.sql"), restoreEvidence: await file("restore.txt"),
+      };
+      const manifestPath = join(dir, "attestation.json");
+      await writeFile(manifestPath, JSON.stringify(manifest));
+      const result = await rodar("db", "retention", "--apply", "--backup-attestation", manifestPath);
+      expect(result.erro).toBeUndefined();
+      expect(result.out).toContain("Total expirado nesta execução: 1");
+      expect(await banco().select().from(job)).toHaveLength(0);
+      const [marker] = await banco().select().from(jobRetentionTombstone);
+      expect(marker).toMatchObject({ originalJobId: id, sourceId: "lever:retention" });
+      expect(marker!.batchId).toBeTruthy();
+    } finally { await rm(dir, { recursive: true, force: true }); }
   });
 });
 

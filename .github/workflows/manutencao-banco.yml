@@ -12,7 +12,7 @@ permissions:
 
 on:
   schedule:
-    # Domingo 07:30 UTC, depois da varredura diária das 06:00 UTC.
+    # Domingo 07:30 UTC, depois da coleta semanal das 06:00 UTC.
     - cron: "30 7 * * 0"
   workflow_dispatch:
 
@@ -25,10 +25,11 @@ jobs:
     if: github.ref == 'refs/heads/main'
     environment: production
     runs-on: ubuntu-26.04
-    timeout-minutes: 20
+    timeout-minutes: 60
     env:
       DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
       DATABASE_CA_CERT: config/certs/supabase-ca.crt
+      DATABASE_MIGRATION_URL: ${{ secrets.SUPABASE_MIGRATION_URL }}
 
     steps:
       - uses: actions/checkout@v7
@@ -39,12 +40,67 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      - name: Validar credencial
+      - name: Validar credenciais antes de qualquer exclusão
+        env:
+          RETENTION_BACKUP_ENCRYPTION_KEY: ${{ secrets.RETENTION_BACKUP_ENCRYPTION_KEY }}
         run: |
-          if [ -z "$DATABASE_URL" ]; then
-            echo "::error::SUPABASE_DATABASE_URL ausente. Nenhuma limpeza executada."
+          if [ -z "$DATABASE_URL" ] || [ -z "$DATABASE_MIGRATION_URL" ]; then
+            echo "::error::SUPABASE_DATABASE_URL e SUPABASE_MIGRATION_URL são obrigatórios. Nenhuma limpeza executada."
             exit 1
           fi
+          node --no-warnings --input-type=module -e 'import { encryptionKey } from "./scripts/retention-backup.ts"; encryptionKey(process.env.RETENTION_BACKUP_ENCRYPTION_KEY)'
+
+      - name: Capturar snapshot e validar restauração isolada
+        id: backup
+        env:
+          RETENTION_BACKUP_ENCRYPTION_KEY: ${{ secrets.RETENTION_BACKUP_ENCRYPTION_KEY }}
+        run: node --no-warnings scripts/retention-backup.ts prepare
+
+      # Only authenticated ciphertext leaves the ephemeral runner. Keep the
+      # encryption key separately for at least the artifact retention period.
+      - name: Guardar backup criptografado por 90 dias
+        id: archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: retention-backup-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.backup.outputs.artifact }}
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+
+      - name: Baixar backup remoto para conferir integridade
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ steps.archive.outputs.artifact-id }}
+          path: ${{ runner.temp }}/retention-downloaded
+          merge-multiple: true
+
+      - name: Confirmar backup remoto antes da limpeza
+        env:
+          BACKUP_DIRECTORY: ${{ steps.backup.outputs.directory }}
+          RETENTION_BACKUP_ARTIFACT_ID: ${{ steps.archive.outputs.artifact-id }}
+        run: node --no-warnings scripts/retention-backup.ts verify-upload "$BACKUP_DIRECTORY" "$RUNNER_TEMP/retention-downloaded/backup.mjenc"
+
+      - name: Registrar interações e vagas protegidas antes da limpeza
+        id: capture
+        env:
+          BACKUP_DIRECTORY: ${{ steps.backup.outputs.directory }}
+        run: node --no-warnings scripts/retention-backup.ts capture-protection "$BACKUP_DIRECTORY/protection.json"
+
+      - name: Expirar vagas sem interação anteriores a 14 dias
+        env:
+          BACKUP_DIRECTORY: ${{ steps.backup.outputs.directory }}
+        run: pnpm jho db retention --apply --limit 100 --batches 1000 --backup-attestation "$BACKUP_DIRECTORY/attestation.json"
 
       - name: Limpar payloads reconstruíveis
         run: pnpm jho db cleanup --apply --closed-days 90 --page-html-days 0
+
+      - name: Validar preservação de todas as interações anteriores
+        if: always() && steps.capture.outcome == 'success'
+        env:
+          BACKUP_DIRECTORY: ${{ steps.backup.outputs.directory }}
+        run: node --no-warnings scripts/retention-backup.ts verify-protection "$BACKUP_DIRECTORY/protection.json"
+
+      - name: Remover plaintext do runner
+        if: always()
+        run: find "$RUNNER_TEMP" -maxdepth 1 -type d -name 'retention-backup-*' -exec rm -rf -- {} +

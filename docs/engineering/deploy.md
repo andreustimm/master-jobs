@@ -588,25 +588,66 @@ Vercel. O Fly pode ficar parado (`fly scale count 0`) até o próximo
 incidente — `auto_stop_machines` em `fly.toml` já reduz o custo entre
 failovers.
 
-## A varredura diária
+## A varredura semanal
 
 > **Pausa operacional:** o workflow permanece opt-in até concluir o corte para
 > Supabase, a importação seletiva e os gates de retenção. O incidente Turso de
 > 03/09/2026 é apenas o diagnóstico histórico; consulte os
 > [gates documentados](../operations/turso-quota-incident-2026-09-03.md).
 
-Quando habilitado, `.github/workflows/varredura.yml` roda `jobs sync`, `scrape
-queue`+`run` e `jobs recheck queue`+`run` contra **produção**, todo dia às
-06:00 UTC (03:00 em São Paulo), com `workflow_dispatch` para rodar à mão depois
-de mexer em `config/sources.yaml`.
+`pnpm jho db retention` e `pnpm jho db retention-inventory` estimam vagas com
+mais de 14 dias sem alterar dados. Para expirar um lote, use
+`pnpm jho db retention --apply --backup-attestation <arquivo> --limit 100 --batches 1`.
+Cada lote confirma uma transação e registra seu identificador e as identidades
+removidas em `production.job_retention_tombstone`; em interrupção, consulte a
+tabela e repita a operação. O limite é de 500 vagas por transação e 1.000
+transações por chamada. A rotina existente `db cleanup` continua limitada a
+vagas fechadas.
 
-**Agora é rede de segurança.** Desde a
-[ADR 0025](../adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md), a
-varredura de verdade roda na Vercel, fatiada e agendada pelo `pg_cron` do
-Supabase — a ~57 minutos por execução daqui (runner nos EUA, banco em São
-Paulo), o Actions não chegaria a "de hora em hora". Até a troca ser ativada
+Cada publicação descartada recebe uma linha própria com UUID no manifesto.
+Uma republicação com o mesmo fingerprint pode expirar novamente após 14 dias,
+preservando os IDs externos e os lotes dos descartes anteriores. No inventário,
+`alreadyMarked` conta as candidatas que compartilham fingerprint com um descarte
+anterior; esse número já está incluído em `potentiallyRemovable`.
+
+A ingestão usa o ID externo confiável dentro da mesma fonte para reconhecer uma
+publicação descartada. Outro ID confiável na mesma fonte permite uma publicação
+nova, assim como uma data de publicação posterior ao descarte, inclusive quando
+a fonte reutiliza o ID. Quando só o fingerprint identifica a vaga, a supressão
+dura 90 dias contados do descarte. Essa janela evita bloquear para sempre novas
+contratações com a mesma empresa, título e local, mas pode readmitir uma listagem
+antiga sem identidade confiável depois do prazo. Vagas com linha viva e inclusões
+de origem humana continuam prevalecendo sobre os marcadores.
+
+Antes do primeiro descarte e após mudanças no banco, crie um backup de esquema e
+dados e restaure-o em banco isolado; registre no relatório o resultado e as
+limitações da verificação. O atestado JSON usado pelo comando tem `version: 1`,
+`database` (`supabase:<project-ref>` ou `local:<nome-do-banco>`), `capturedAt`,
+`restoreValidatedAt` e três objetos `data`, `schema`, `restoreEvidence`, cada um
+com `path` e `sha256`. Caminhos relativos partem da pasta do atestado. O comando
+confere o banco, a idade de até 24 horas, a ordem dos horários e os hashes de
+três arquivos distintos. Esses controles comprovam a integridade dos arquivos e
+a declaração do operador; **não executam nem comprovam a restauração**. Guarde
+backup e relatório em diretório privado e nunca os inclua no Git.
+
+Compare contagens de dados protegidos e `pg_database_size` antes e depois. A
+exclusão libera páginas para reuso, mas pode não reduzir imediatamente o
+tamanho físico; qualquer operação de compactação exige avaliar espaço livre e
+locks na cópia restaurada antes de produção. O bloqueio por tráfego excedido é
+independente da redução do tamanho do banco.
+
+Quando habilitado, `.github/workflows/varredura.yml` roda a coleta completa
+contra **produção** às segundas às 06:00 UTC (03:00 em São Paulo), incluindo
+reconferência; nos demais dias, só a reconferência roda às 07:00 UTC. `workflow_dispatch` permite
+executar cada rotina à mão. `SUPABASE_CRAWL_ENABLED` controla ambos os horários.
+
+**Agendador alternativo.** A
+[ADR 0025](../adr/0025-varredura-fatiada-na-vercel-agendada-pelo-supabase.md)
+prevê execução fatiada na Vercel, agendada pelo `pg_cron` do Supabase. Até a troca ser ativada
 ([runbook](../operations.md#varredura-horária-ativar-o-agendador)), a execução
-diária continua como sempre. Depois dela, a variável de repositório
+semanal e a reconferência diária ficam no Actions. O SQL do `pg_cron` ainda
+prevê coleta mais frequente: não ativar o agendador alternativo até adaptá-lo e
+validar a política de coleta semanal. Depois da troca, a variável de repositório
 `VARREDURA_AGENDADOR=supabase` faz o disparo agendado não rodar nada; o
 `workflow_dispatch` continua, e é o caminho de volta se a Vercel parar.
 `tests/workflow-environment-isolation.test.ts` exige `crons` vazio no

@@ -315,17 +315,17 @@ describe("IT-011 fila, idempotência, cota e vaga alterada", () => {
     expect(await analysisQueueStatus()).toEqual({ succeeded: 1 });
   });
 
-  it("vaga apagada pela retenção leva a cadeia de tentativas junto", async () => {
+  it("retenção preserva a vaga e a cadeia de tentativas de análise", async () => {
     await requestJobAnalysis({ jobId, requestedBy: null, now: T0 });
     await processNextAnalysis(model(fakePort(() => "não é JSON")), { now: () => at(1000) });
     const [original] = await allRows();
     await retryJobAnalysis({ analysisId: original!.id, requestedBy: null, now: at(2000) });
-    // `retry_of` é `no action`: confere no fim do comando, quando as duas já
-    // saíram. Pelo caminho real de descarte, o único que apaga vaga.
     await db.update(job).set({ closedAt: "2026-01-01T00:00:00.000Z" }).where(eq(job.id, jobId));
     const deleted = await db.transaction((tx) => deleteClosedJobsWithoutApplication(tx, T0));
-    expect(deleted).toEqual([{ id: jobId }]);
-    expect(await allRows()).toEqual([]);
+    expect(deleted).toEqual([]);
+    const remaining = await allRows();
+    expect(remaining).toHaveLength(2);
+    expect(remaining.some((item) => item.retryOf === original!.id)).toBe(true);
   });
 });
 

@@ -10,7 +10,7 @@
 #
 # ## O que sobra para este arquivo
 #
-# - **Até a troca de agendador**, a execução diária continua como sempre: o
+# - **Até a troca de agendador**, a coleta é semanal e a reconferência diária: o
 #   agendamento no Supabase é passo humano (runbook em `docs/operations.md`), e
 #   desligar isto antes dele deixaria o acervo sem varredura nenhuma.
 # - **Depois da troca**, o dono define a variável de repositório
@@ -29,14 +29,13 @@ name: Varredura de vagas
 
 on:
   schedule:
-    # 06:00 UTC = 03:00 em São Paulo. Fora do horário comercial de quem hospeda
-    # as vagas, e o resultado está pronto quando o dia começa aqui.
-    - cron: "0 6 * * *"
+    # Coleta e reconferência às segundas; só reconferência nos outros dias.
+    - cron: "0 6 * * 1"
+    - cron: "0 7 * * 0,2-6"
   # Para rodar à mão depois de mexer em `config/sources.yaml`, sem esperar o dia,
   # e para a tela de operações do administrador pedir uma fatia só.
   #
-  # O padrão é `tudo`, que é o que a cron faz: um disparo sem escolha não pode
-  # significar menos do que a execução automática significa.
+  # O padrão é `tudo`: um disparo sem escolha executa a varredura completa.
   workflow_dispatch:
     inputs:
       rotina:
@@ -119,6 +118,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: O segredo existe?
+        id: preflight
         run: |
           if [ -z "$DATABASE_URL" ]; then
             echo "::error::SUPABASE_DATABASE_URL ausente. Nenhuma varredura executada."
@@ -160,9 +160,8 @@ jobs:
         continue-on-error: true
         timeout-minutes: 45
         if: >-
-          github.event_name != 'workflow_dispatch' ||
-          inputs.rotina == 'tudo' ||
-          inputs.rotina == 'sync'
+          github.event.schedule == '0 6 * * 1' ||
+          (github.event_name == 'workflow_dispatch' && (inputs.rotina == 'tudo' || inputs.rotina == 'sync'))
         run: pnpm jho jobs sync
 
       # 1b. Repetir as buscas por termo salvas. Depois do sync, que já gastou a
@@ -175,25 +174,22 @@ jobs:
         id: termos
         continue-on-error: true
         if: >-
-          github.event_name != 'workflow_dispatch' ||
-          inputs.rotina == 'tudo' ||
-          inputs.rotina == 'termos'
+          github.event.schedule == '0 6 * * 1' ||
+          (github.event_name == 'workflow_dispatch' && (inputs.rotina == 'tudo' || inputs.rotina == 'termos'))
         run: pnpm jho terms run
 
       # 2. Capturar a descrição das que valem a pena. O corte de fit evita gastar
       #    requisição com vaga que não seria lida de todo jeito.
       - name: Enfileirar captura
         if: >-
-          github.event_name != 'workflow_dispatch' ||
-          inputs.rotina == 'tudo' ||
-          inputs.rotina == 'termos'
+          github.event.schedule == '0 6 * * 1' ||
+          (github.event_name == 'workflow_dispatch' && (inputs.rotina == 'tudo' || inputs.rotina == 'termos'))
         run: pnpm jho scrape queue --min-fit 45
 
       - name: Capturar
         if: >-
-          github.event_name != 'workflow_dispatch' ||
-          inputs.rotina == 'tudo' ||
-          inputs.rotina == 'termos'
+          github.event.schedule == '0 6 * * 1' ||
+          (github.event_name == 'workflow_dispatch' && (inputs.rotina == 'tudo' || inputs.rotina == 'termos'))
         run: pnpm jho scrape run --limit 300
 
       # 3. Reconferir se o que já está no banco continua aberto. Depois da troca
@@ -202,16 +198,14 @@ jobs:
       #    haja dois agendadores ativos ao mesmo tempo.
       - name: Enfileirar reconferência
         if: >-
-          github.event_name != 'workflow_dispatch' ||
-          inputs.rotina == 'tudo' ||
-          inputs.rotina == 'recheck'
+          !cancelled() && steps.preflight.outcome == 'success' && (github.event_name == 'schedule' ||
+          (github.event_name == 'workflow_dispatch' && (inputs.rotina == 'tudo' || inputs.rotina == 'recheck')))
         run: pnpm jho jobs recheck queue
 
       - name: Reconferir
         if: >-
-          github.event_name != 'workflow_dispatch' ||
-          inputs.rotina == 'tudo' ||
-          inputs.rotina == 'recheck'
+          !cancelled() && steps.preflight.outcome == 'success' && (github.event_name == 'schedule' ||
+          (github.event_name == 'workflow_dispatch' && (inputs.rotina == 'tudo' || inputs.rotina == 'recheck')))
         run: pnpm jho jobs recheck run --max 400
 
       # 4. Repontuar quem pediu.
@@ -225,9 +219,8 @@ jobs:
       # `jho jobs rescore run` na mão.
       - name: Repontuar a fila
         if: >-
-          github.event_name != 'workflow_dispatch' ||
-          inputs.rotina == 'tudo' ||
-          inputs.rotina == 'rescore'
+          github.event.schedule == '0 6 * * 1' ||
+          (github.event_name == 'workflow_dispatch' && (inputs.rotina == 'tudo' || inputs.rotina == 'rescore'))
         run: pnpm jho jobs rescore run
 
       # 5. E garantir que ninguém ficou para trás.
@@ -237,9 +230,8 @@ jobs:
       # salvasse um currículo veria as vagas do dia.
       - name: Pontuar as vagas novas
         if: >-
-          github.event_name != 'workflow_dispatch' ||
-          inputs.rotina == 'tudo' ||
-          inputs.rotina == 'rescore'
+          github.event.schedule == '0 6 * * 1' ||
+          (github.event_name == 'workflow_dispatch' && (inputs.rotina == 'tudo' || inputs.rotina == 'rescore'))
         run: pnpm jho jobs score --every-candidate
 
       # 4. Olhar para as fontes.

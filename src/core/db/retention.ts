@@ -5,9 +5,8 @@
  * original API payload and successfully parsed page HTML are temporary input,
  * not product state. Keeping all three copies made the corpus hundreds of MB.
  *
- * User-owned application history is outside this routine. A closed job is only
- * removed when no application references it, preserving the repository's
- * irreversible-data invariant.
+ * User decisions and authored vacancies are outside this routine. A closed
+ * job is removed only when it has no protected interaction or human origin.
  *
  * Sign-up records (`auth_signup`, #464, ADR-009) are purged here too: a pending
  * sign-up older than 24 h can no longer be confirmed and still holds CV text,
@@ -15,13 +14,16 @@
  * audit window, so it goes after 30 days. The account itself lives in
  * `auth_user` and is untouched.
  */
+import { randomUUID } from "node:crypto";
 import {
   and,
+  eq,
   inArray,
   isNotNull,
   lt,
   lte,
   notInArray,
+  or,
   sql,
   type SQL,
   type SQLWrapper,
@@ -31,16 +33,23 @@ import {
   application,
   authSignup,
   job,
+  jobAnalysis,
   jobPage,
+  jobRetentionTombstone,
+  mailSuggestion,
   recruiterDirectoryQuery,
   recruiterInvite,
+  recruiterSuggestion,
+  scrapeTask,
   source,
+  verifyTask,
 } from "./schema.ts";
 import { MANUAL_SOURCE_KINDS } from "../sources/types.ts";
 
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
 export const DEFAULT_CLOSED_JOB_DAYS = 90;
+export const DEFAULT_JOB_RETENTION_DAYS = 14;
 export const DEFAULT_PAGE_HTML_DAYS = 0;
 /** Pending sign-up never confirmed: discarded after this (PRD, ADR-009). */
 export const SIGNUP_PENDING_HOURS = 24;
@@ -141,8 +150,119 @@ function payloadNeedsCompaction(descriptionHtml: SQLWrapper, raw: SQLWrapper): S
 type Transaction = Parameters<Parameters<DB["transaction"]>[0]>[0];
 
 /**
+ * User decisions and user-created vacancies survive every prune path.
+ * Protect periodic verification too: an existing task can become user-origin
+ * without changing its job FK, so that update would not lock the parent row.
+ */
+function hasNoHumanInteraction(id: SQLWrapper, sourceId: SQLWrapper, authorId: SQLWrapper, archivedAt: SQLWrapper): SQL {
+  const manualKinds = sql.join(MANUAL_SOURCE_KINDS.map((kind) => sql`${kind}`), sql`, `);
+  return sql`(
+    ${authorId} is null
+    and ${archivedAt} is null
+    and not exists (select 1 from ${source} s where s.id = ${sourceId} and s.kind in (${manualKinds}))
+    and not exists (select 1 from ${application} a where a.job_id = ${id})
+    and not exists (select 1 from ${jobAnalysis} a where a.job_id = ${id})
+    and not exists (select 1 from ${mailSuggestion} m where m.job_id = ${id})
+    and not exists (select 1 from ${recruiterSuggestion} r where r.job_id = ${id})
+    and not exists (select 1 from ${verifyTask} v where v.job_id = ${id})
+    and not exists (select 1 from ${scrapeTask} q where q.job_id = ${id})
+  )`;
+}
+
+/** Called only after row locks; rechecks eligibility in the DELETE statement. */
+async function deleteLockedJobs(tx: Transaction, ids: number[], eligible: SQL): Promise<{ id: number }[]> {
+  return tx.delete(job)
+    .where(and(sql`${job.id} = any(${`{${ids.join(",")}}`}::int[])`, eligible))
+    .returning({ id: job.id });
+}
+
+/** Read-only estimate. Earlier markers remain history and do not exempt a new publication. */
+export async function inventoryOldJobs(now = new Date()): Promise<{
+  older: number;
+  potentiallyRemovable: number;
+  protected: number;
+  alreadyMarked: number;
+}> {
+  const before = cutoff(now, DEFAULT_JOB_RETENTION_DAYS);
+  // Drizzle unqualifies columns in a single-table SELECT projection; explicit
+  // outer aliases keep correlated subqueries bound to the job, not their inner row.
+  const noInteraction = hasNoHumanInteraction(sql`"job"."id"`, sql`"job"."source_id"`, sql`"job"."posted_by_user_id"`, sql`"job"."archived_at"`);
+  const hasMarker = sql`exists (select 1 from ${jobRetentionTombstone} t where t.fingerprint = "job"."fingerprint")`;
+  const [row] = await getDb().select({
+    older: sql<number>`count(*)::int`,
+    potentiallyRemovable: sql<number>`count(*) filter (where ${noInteraction})::int`,
+    alreadyMarked: sql<number>`count(*) filter (where ${noInteraction} and ${hasMarker})::int`,
+  }).from(job).where(lt(job.firstSeenAt, before));
+  const older = Number(row?.older ?? 0);
+  const potentiallyRemovable = Number(row?.potentiallyRemovable ?? 0);
+  const alreadyMarked = Number(row?.alreadyMarked ?? 0);
+  return { older, potentiallyRemovable, alreadyMarked, protected: older - potentiallyRemovable };
+}
+
+/**
+ * Expires one bounded batch and records identities in the same transaction.
+ * The table lock conflicts with observation's lock: ingestion cannot read an
+ * absent tombstone and then insert after this transaction commits. Callers
+ * must separately enforce backup, manifest persistence and operational gates.
+ */
+export async function expireOldJobsBatch(options: { now?: Date; limit?: number } = {}): Promise<{
+  batchId: string;
+  jobs: { id: number; fingerprint: string; sourceId: string; externalId: string }[];
+}> {
+  const limit = options.limit ?? 100;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw new Error("limit deve estar entre 1 e 500.");
+  const now = options.now ?? new Date();
+  const batchId = randomUUID();
+  const before = cutoff(now, DEFAULT_JOB_RETENTION_DAYS);
+  const eligible = and(
+    lt(job.firstSeenAt, before),
+    hasNoHumanInteraction(job.id, job.sourceId, job.postedByUserId, job.archivedAt),
+  );
+  return getDb().transaction(async (tx) => {
+    await tx.execute(sql`set local lock_timeout = '5s'`);
+    await tx.execute(sql`lock table ${job} in share row exclusive mode`);
+    const locked = await tx.select({ id: job.id }).from(job).where(eligible).orderBy(job.id).limit(limit).for("update", { skipLocked: true });
+    if (!locked.length) return { batchId, jobs: [] };
+    // A fresh READ COMMITTED snapshot after the row locks observes interactions
+    // that committed while selection waited; the predicate is applied again.
+    const ids = locked.map((row) => row.id);
+    const selected = await tx.select({
+      id: job.id, fingerprint: job.fingerprint, sourceId: job.sourceId,
+      externalId: job.externalId, firstSeenAt: job.firstSeenAt,
+      externalUsable: sql<boolean>`(
+        btrim("job"."external_id") <> '' and "job"."external_id" = btrim("job"."external_id")
+        and not exists (select 1 from ${job} other where other.source_id = "job"."source_id"
+          and other.external_id = "job"."external_id" and other.id <> "job"."id")
+        and not exists (select 1 from ${jobRetentionTombstone} t where t.source_id = "job"."source_id"
+          and t.external_id = "job"."external_id" and t.fingerprint <> "job"."fingerprint")
+      )`,
+    }).from(job).where(and(inArray(job.id, ids), eligible));
+    if (!selected.length) return { batchId, jobs: [] };
+    // An external id reused by distinct postings must never suppress either
+    // solely by that id. Mark older tombstones ambiguous as well.
+    const ambiguous = selected.filter((row) => !row.externalUsable && row.externalId.trim());
+    if (ambiguous.length) {
+      await tx.update(jobRetentionTombstone).set({ externalUsable: false }).where(or(...ambiguous.map((row) => and(
+        eq(jobRetentionTombstone.sourceId, row.sourceId), eq(jobRetentionTombstone.externalId, row.externalId),
+      ))));
+    }
+    // Append a manifest row for each removed publication. An older posting
+    // with the same fingerprint keeps its own identity and batch evidence.
+    const inserted = await tx.insert(jobRetentionTombstone).values(selected.map((row) => ({
+        fingerprint: row.fingerprint, sourceId: row.sourceId, externalId: row.externalId,
+        externalUsable: row.externalUsable, firstSeenAt: row.firstSeenAt, expiredAt: now.toISOString(),
+        originalJobId: row.id, batchId,
+    }))).returning({ fingerprint: jobRetentionTombstone.fingerprint });
+    if (inserted.length !== selected.length) throw new Error("Retenção: manifesto incompleto, lote revertido.");
+    const removed = await deleteLockedJobs(tx, selected.map((row) => row.id), eligible!);
+    if (removed.length !== selected.length) throw new Error("Retenção concorrente: lote revertido por mudança de elegibilidade.");
+    return { batchId, jobs: selected.map(({ id, fingerprint, sourceId, externalId }) => ({ id, fingerprint, sourceId, externalId })) };
+  });
+}
+
+/**
  * The only authorized way to delete a job: closed before `closedBefore` and
- * without any application. Must run inside a transaction.
+ * without a protected interaction or human origin. Must run inside a transaction.
  *
  * Two statements on purpose. A single `DELETE ... WHERE NOT EXISTS
  * (application)` evaluates the predicate with the snapshot taken when the
@@ -165,7 +285,7 @@ export async function deleteClosedJobsWithoutApplication(
 ): Promise<{ id: number }[]> {
   const eligible = and(
     lt(job.closedAt, closedBefore),
-    sql`not exists (select 1 from ${application} a where a.job_id = ${job.id})`,
+    hasNoHumanInteraction(job.id, job.sourceId, job.postedByUserId, job.archivedAt),
   );
   const locked = await tx
     .select({ id: job.id })
@@ -174,12 +294,7 @@ export async function deleteClosedJobsWithoutApplication(
     .orderBy(job.id)
     .for("update");
   if (locked.length === 0) return [];
-  return tx
-    .delete(job)
-    // One array parameter, not one parameter per id: a large prune would
-    // otherwise hit the protocol's 65 535-parameter ceiling.
-    .where(and(sql`${job.id} = any(${`{${locked.map((row) => row.id).join(",")}}`}::int[])`, eligible))
-    .returning({ id: job.id });
+  return deleteLockedJobs(tx, locked.map((row) => row.id), eligible!);
 }
 
 /**
@@ -245,7 +360,7 @@ export async function runDatabaseCleanup(
       (
         select count(*) from production.job j
         where j.closed_at < ${closedBefore}
-        and not exists (select 1 from production.application a where a.job_id = j.id)
+        and ${hasNoHumanInteraction(sql`j.id`, sql`j.source_id`, sql`j.posted_by_user_id`, sql`j.archived_at`)}
       ) as closed_jobs
   `);
 

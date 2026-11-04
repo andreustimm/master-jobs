@@ -11,7 +11,8 @@ import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { and, desc, eq, ne } from "drizzle-orm";
 import { closeDb, getDb } from "./core/db/client.ts";
-import { runDatabaseCleanup } from "./core/db/retention.ts";
+import { expireOldJobsBatch, inventoryOldJobs, runDatabaseCleanup } from "./core/db/retention.ts";
+import { verifyBackupAttestation } from "./core/db/backup-attestation.ts";
 import { MigrationNeedsReview, runMigrations } from "./core/db/migrate.ts";
 import { listBoard, primaryScoreFilter } from "./contexts/matching/index.ts";
 import { pipelineCounts, setApplicationStatus } from "./contexts/pursuit/index.ts";
@@ -252,6 +253,58 @@ db.command("prune")
     await withDb(async () => {
       const removed = await pruneClosed(Number(opts.days));
       console.log(`${c.green("✓")} pruned ${removed} closed job(s)`);
+    });
+  });
+
+db.command("retention")
+  .description("Inventory or expire unprotected jobs older than 14 days")
+  .option("--apply", "expire eligible jobs; without this flag only inventory is shown")
+  .option("--backup-attestation <path>", "recent backup and restore-validation attestation")
+  .option("--limit <n>", "maximum jobs per transaction, 1–500", "100")
+  .option("--batches <n>", "maximum transactions to run, 1–1000", "1")
+  .action(async (opts: { apply?: boolean; backupAttestation?: string; limit: string; batches: string }) => {
+    const limit = Number(opts.limit);
+    const batches = Number(opts.batches);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500 || !Number.isInteger(batches) || batches < 1 || batches > 1000) {
+      throw new Error("Use --limit entre 1 e 500 e --batches entre 1 e 1000.");
+    }
+    if (opts.apply) {
+      if (!opts.backupAttestation) throw new Error("--apply exige --backup-attestation com backup e restauração validados.");
+      await verifyBackupAttestation(opts.backupAttestation);
+    }
+    await withDb(async () => {
+      const before = await inventoryOldJobs();
+      console.log(`Vagas anteriores a 14 dias: ${before.older}; protegidas: ${before.protected}; candidatas estimadas: ${before.potentiallyRemovable}; candidatas com descarte anterior do mesmo fingerprint: ${before.alreadyMarked}.`);
+      if (!opts.apply) {
+        console.log("Somente inventário: nenhum dado foi alterado.");
+        return;
+      }
+      let removed = 0;
+      for (let index = 0; index < batches; index++) {
+        const batch = await expireOldJobsBatch({ limit });
+        removed += batch.jobs.length;
+        console.log(`Lote ${batch.batchId}: ${batch.jobs.length} vaga(s); manifesto em job_retention_tombstone.`);
+        if (batch.jobs.length < limit) break;
+      }
+      console.log(`Total expirado nesta execução: ${removed}.`);
+      const after = await inventoryOldJobs();
+      console.log(`Candidatas estimadas restantes: ${after.potentiallyRemovable}; candidatas com descarte anterior do mesmo fingerprint: ${after.alreadyMarked}.`);
+      if (after.potentiallyRemovable > 0) {
+        throw new Error(`Retenção incompleta: ${after.potentiallyRemovable} candidata(s) restante(s). Confira locks e o limite de lotes antes de retomar com backup válido.`);
+      }
+    });
+  });
+
+db.command("retention-inventory")
+  .description("Estimate 14-day retention candidates without changing data")
+  .action(async () => {
+    await withDb(async () => {
+      const result = await inventoryOldJobs();
+      console.log(`Jobs older than 14 days: ${result.older}`);
+      console.log(`Protected by known interactions: ${result.protected}`);
+      console.log(`Eligible jobs sharing a fingerprint with an earlier expiry: ${result.alreadyMarked}`);
+      console.log(`Potentially removable (estimate only): ${result.potentiallyRemovable}`);
+      console.log("No data changed; reimport protection and final validation are required before deletion.");
     });
   });
 

@@ -114,7 +114,8 @@ it("keeps scheduled retention on the PostgreSQL runtime contract", () => {
   expect(workflow.jobs.limpar.env.DATABASE_CA_CERT).toBe("config/certs/supabase-ca.crt");
   expect(workflow.jobs.limpar.env.TURSO_DATABASE_URL).toBeUndefined();
   expect(workflow.jobs.limpar.env.TURSO_AUTH_TOKEN).toBeUndefined();
-  const validation = workflow.jobs.limpar.steps.find((s: { name?: string }) => s.name === "Validar credencial");
+  const validation = workflow.jobs.limpar.steps.find((s: { name?: string }) => s.name === "Validar credenciais antes de qualquer exclusão");
+  expect(validation).toBeDefined();
   expect(validation.run).toContain("DATABASE_URL");
 });
 
